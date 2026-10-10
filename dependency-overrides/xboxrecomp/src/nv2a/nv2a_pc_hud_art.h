@@ -38,7 +38,8 @@ static void pc_hud_icon(HDC dc,int left,int top,unsigned source,const char*label
 }
 static uint32_t*pc_hud_pixels(unsigned id,const unsigned*bindings,char labels[13][64],long dx,long dy,unsigned direction,int held,unsigned*w,unsigned*h){
  *w=id==1?128:256;*h=id==1?4096:256;unsigned sw=id==1?32:64,sh=id==1?1024:64;
- const uint32_t*base=(const uint32_t*)(id==1?pc_hud_buttons_pixels:pc_hud_orders_pixels);
+ if(id==1&&!pc_hud_load_pixels())return NULL;
+ const uint32_t*base=pc_hud_buttons_pixels;
  BITMAPINFO info={0};info.bmiHeader.biSize=sizeof(BITMAPINFOHEADER);info.bmiHeader.biWidth=*w;info.bmiHeader.biHeight=-(int)*h;info.bmiHeader.biPlanes=1;info.bmiHeader.biBitCount=32;info.bmiHeader.biCompression=BI_RGB;
  uint32_t*pixels=NULL;HDC dc=CreateCompatibleDC(NULL);HBITMAP bmp=CreateDIBSection(dc,&info,DIB_RGB_COLORS,(void**)&pixels,NULL,0);
  if(!dc||!bmp||!pixels){if(bmp)DeleteObject(bmp);if(dc)DeleteDC(dc);return NULL;}HGDIOBJ old=SelectObject(dc,bmp);

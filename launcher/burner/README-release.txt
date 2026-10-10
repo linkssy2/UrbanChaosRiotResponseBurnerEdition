@@ -1,4 +1,4 @@
-Urban Chaos: Riot Response - Burner Edition 0.01
+Urban Chaos: Riot Response - Burner Edition 0.02
 
 Windows x64 fan port using xboxrecomp and native PC engine components.
 Original gameplay and mission logic run through statically recompiled Xbox code.
@@ -17,7 +17,8 @@ these lighting options in Graphics, then press Apply. Stable 60 FPS is not guara
 Routine runtime logging and diagnostic recorders are disabled in this build.
 
 DATA
-No original disc image, game assets, videos or saves are included.
+No ISO, standalone Xbox executable, bulk game data, videos or saves are included.
+Original HUD artwork is generated locally from your imported game data. Your ISO is required.
 Import, settings and saves remain in %LOCALAPPDATA%\UrbanChaosBurnerEdition.
 Existing installations are reused. Create a new in-game profile for fresh progress.
 Only the supported disc revision is accepted. Windows x64 and a D3D11-capable GPU
@@ -25,3 +26,5 @@ are required. If the game exits unexpectedly, last-error.txt is saved in that fo
 
 This is an unofficial fan project, not an official release. Original game content
 belongs to its respective owners. Third-party notices are in licenses/.
+
+0.02 hotfix: accepts the verified USA/Europe retail disc executable alongside the previously supported copy. Includes the tested medic mouse-direction cue fix. Existing imported data and saves remain compatible.

@@ -1,7 +1,8 @@
 # Credits
 
 Original game: Rocksteady Studios / Eidos and the respective rights holders.
-This is an unofficial fan project; no original disc content is distributed.
+This is an unofficial fan project. Original game data, including HUD artwork,
+is imported locally from the user’s disc.
 
 Runtime/toolchain: [xboxrecomp by sp00nz](https://github.com/sp00nznet/xboxrecomp),
 with local title-specific modifications. Its component notices include xemu-derived

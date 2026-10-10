@@ -3,11 +3,16 @@ from pathlib import Path
 import argparse, hashlib, json, os, shutil, struct, subprocess, sys, time, uuid, zlib
 from collections import deque
 from xdvdfs import Xiso, XisoError
+import hud_import
 ROOT=Path(__file__).resolve().parent.parent
 BLOCK=1024*1024
 
 def sha(path):
     with open(path,'rb') as f:return hashlib.file_digest(f,'sha256').hexdigest()
+def supported_hash(name,digest,expected):
+    # This retail XBE differs only in certificate title/media fields; code and assets match.
+    return digest==expected or (name.lower()=='default.xbe' and digest=='c6f0c99ad57eafa2fc9caedb5ab2a7b192ff5fdde7e5faddc5e62a1730f044d1')
+
 def progress(message,percent=0):print(json.dumps({'message':message,'percent':percent}),flush=True)
 def check_cancel(path):
     if path.exists():raise RuntimeError('Import cancelled. Your existing game data was kept.')
@@ -113,7 +118,7 @@ def import_iso(iso_path,data,cancel):
                 if name.lower() not in entries or entries[name.lower()][1].size!=row['size']:raise ValueError('This ISO is not the supported Urban Chaos disc revision.')
             # Reject other executables/revisions before writing gigabytes.
             entry=entries['default.xbe'][1]
-            if hashlib.sha256(disc.read(entry)).hexdigest()!=required['Default.xbe']['sha256']:raise ValueError('Unsupported Xbox executable revision')
+            if not supported_hash('Default.xbe',hashlib.sha256(disc.read(entry)).hexdigest(),required['Default.xbe']['sha256']):raise ValueError('Unsupported Xbox executable revision')
             total=sum(r['size'] for r in required.values());done=0
             free=shutil.disk_usage(data).free
             if free<total+2*1024**3:raise ValueError('At least 6 GB of free space is needed for import.')
@@ -125,10 +130,11 @@ def import_iso(iso_path,data,cancel):
                         check_cancel(cancel);chunk=disc._f.read(min(BLOCK,left))
                         if not chunk:raise ValueError('Truncated ISO')
                         output.write(chunk);digest.update(chunk);left-=len(chunk);done+=len(chunk)
-                if digest.hexdigest()!=row['sha256']:raise ValueError('Disc verification failed: '+name)
+                if not supported_hash(name,digest.hexdigest(),row['sha256']):raise ValueError('Disc verification failed: '+name)
                 progress('Importing game files',int(done*82/total)+2)
         check_cancel(cancel);assets=stage/'hybrid-assets';assets.mkdir()
         material_catalog(game,assets/'1-01.ucmat',json.loads((ROOT/'tools/material-recipe.json').read_text()))
+        hud_import.prepare(game,assets/'pc-hud.bin',manifest,archive_entries)
         movie_convert(game,stage/'native-movies',cancel);check_cancel(cancel)
         (stage/'installed.json').write_text(json.dumps({'version':1,'disc_manifest':sha(ROOT/'tools/disc-manifest.json'),'files':len(required)}))
         install=data/'installed';backup=data/('.previous-'+uuid.uuid4().hex)
@@ -161,7 +167,8 @@ def launch(data):
     data=data.resolve();install=data/'installed';runtime=data/'runtime';runtime.mkdir(exist_ok=True)
     for name in ('saves','ShaderCache'):(data/name).mkdir(exist_ok=True)
     manifest=json.loads((ROOT/'tools/disc-manifest.json').read_text())
-    if sha(install/'game_files/Default.xbe')!=manifest['files']['Default.xbe']['sha256']:raise ValueError('Game executable verification failed; import the ISO again.')
+    if not supported_hash('Default.xbe',sha(install/'game_files/Default.xbe'),manifest['files']['Default.xbe']['sha256']):raise ValueError('Game executable verification failed; import the ISO again.')
+    hud_import.prepare(install/'game_files',install/'hybrid-assets/pc-hud.bin',manifest,archive_entries)
     for name in ('urban_chaos_riot_response_recompiled.exe','zlib1.dll'):
         source=ROOT/'runtime'/name;dest=runtime/name
         if not dest.is_file() or sha(dest)!=sha(source):shutil.copy2(source,dest)
@@ -169,6 +176,7 @@ def launch(data):
     if not ini.exists():shutil.copy2(ROOT/'runtime/xboxrecomp.ini',ini)
     env={k:v for k,v in os.environ.items() if not k.upper().startswith(('UCRR_','XBOX_LOG_'))}
     env.update(json.loads((ROOT/'tools/runtime-environment.json').read_text()))
+    env['UCRR_PC_HUD_PIXELS']=str(install/'hybrid-assets/pc-hud.bin')
     env.update(UCRR_HYBRID_GEO=str(install/'game_files/1-01.geo'),UCRR_HYBRID_MATERIALS=str(install/'hybrid-assets/1-01.ucmat'),UCRR_HYBRID_SHADERS=str(ROOT/'shaders'),UCRR_HYBRID_MOVIES=str(install/'native-movies'),UCRR_HYBRID_SAVE_DIR=str(data/'saves'),UCRR_SHADER_CACHE_DIR=str(data/'ShaderCache'))
     with open(os.devnull,'wb') as null:
         p=subprocess.Popen([str(runtime/'urban_chaos_riot_response_recompiled.exe')],cwd=install,env=env,stdout=null,stderr=subprocess.PIPE,creationflags=subprocess.CREATE_NO_WINDOW)

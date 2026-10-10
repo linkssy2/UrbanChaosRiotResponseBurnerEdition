@@ -6,8 +6,8 @@ static long pc_hud_dx,pc_hud_dy;static unsigned pc_hud_direction;
 static int pc_hud_held;
 static ULONGLONG pc_hud_refresh[2];
 static unsigned pc_hud_match(unsigned w,unsigned h,const void*source,size_t size){
- if(w==32&&h==1024&&size>=sizeof(pc_hud_buttons_source)&&!memcmp(source,pc_hud_buttons_source,sizeof(pc_hud_buttons_source)))return 1;
- if(w==64&&h==64&&size>=sizeof(pc_hud_orders_source)&&!memcmp(source,pc_hud_orders_source,sizeof(pc_hud_orders_source)))return 2;
+ if(w==32&&h==1024&&size>=32768&&pc_hud_source_hash(source,32768)==0xdd89ab98a03df6b3ull)return 1;
+ if(w==64&&h==64&&size>=4096&&pc_hud_source_hash(source,4096)==0x775d4d8634377583ull)return 2;
  return 0;
 }
 static void pc_hud_shutdown(void){for(unsigned i=0;i<2;++i)if(pc_hud_texture[i]){pc_hud_texture[i]->lpVtbl->Release(pc_hud_texture[i]);pc_hud_texture[i]=NULL;}}

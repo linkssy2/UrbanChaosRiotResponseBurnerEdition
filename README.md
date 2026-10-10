@@ -1,6 +1,6 @@
 # Urban Chaos: Riot Response — Burner Edition
 
-**Version 0.01 · Windows x64**
+**Version 0.02 · Windows x64**
 
 An unofficial PC port built with xboxrecomp and native PC engine components.
 Original gameplay and mission logic use statically recompiled Xbox code, with
@@ -9,11 +9,12 @@ it is not a complete ground-up rewrite.
 
 ## Install
 
-1. Download the **0.01 Win64 ZIP** from Releases and extract the entire folder.
+1. Download the **0.02 Win64 ZIP** from Releases and extract the entire folder.
 2. Run **Burner Edition Setup.exe** and select your supported original Xbox ISO.
 3. After import, run **Play Burner Edition.exe** for direct launch.
 
-No original game assets, ISO, Xbox executable, videos or saves are supplied.
+No ISO, standalone Xbox executable, bulk game data, videos or saves are supplied.
+Original HUD artwork is generated locally from the imported disc; it is not embedded in the release.
 Your disc is read locally. Imports, settings and saves live in
 `%LOCALAPPDATA%\UrbanChaosBurnerEdition`. Existing installations are reused.
 
@@ -25,7 +26,7 @@ these lighting options in Graphics, then choose **Apply**. Stable 60 FPS is not 
 Routine runtime logs and diagnostic recorders are disabled in the release.
 
 Mouse/keyboard and controller input are supported. Graphics and control changes
-use Apply. Version 0.01 is an early release; please report the mission, settings
+use Apply. Version 0.02 is an early release; please report the mission, settings
 and steps when reporting bugs. Do not attach game files or saves containing personal data.
 
 ## Development

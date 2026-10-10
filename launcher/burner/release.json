@@ -1,6 +1,6 @@
 {
-  "version": "0.01",
-  "package_directory": "build/burner-edition-0.01/package",
-  "runtime": "build/control-native-migration-20261008/burner-fence-freeze-fix-20261009/urban_chaos_riot_response_recompiled.exe",
-  "runtime_sha256": "844233e2a2733b09ec7e7fcf041efd38a736827330995deb2fbf13d4a26852e1"
+  "version": "0.02",
+  "package_directory": "build/burner-edition-0.02/package",
+  "runtime": "build/control-native-migration-20261008/burner-asset-free-20261010/urban_chaos_riot_response_recompiled.exe",
+  "runtime_sha256": "805383abe4f8c73c8259713a2e1f262f46d343ff4cbc5338e32fa7c4d8489a37"
 }

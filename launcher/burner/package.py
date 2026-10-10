@@ -34,7 +34,7 @@ for _ in range(count):
 assert at==len(data)
 recipe={'version':data[:8].decode(),'archive':'1-01.geo','archive_sha256':hashlib.sha256(raw).hexdigest(),'output_sha256':worker.sha(catalog),'records':rows}
 assert data[12:44].hex()==recipe['archive_sha256'];dump(S/'material-recipe.json',recipe)
-for name in ('import_game.py','disc-manifest.json','material-recipe.json'):copy(S/name,T/name)
+for name in ('import_game.py','hud_import.py','disc-manifest.json','material-recipe.json'):copy(S/name,T/name)
 copy(R/'third_party/xboxrecomp/tools/xiso/xdvdfs.py',T/'xdvdfs.py')
 env=json.loads((R/'build/hybrid-pause-handoff-fix-20261009/package/evidence.json').read_text())['launcher_environment']
 for k in list(env):
