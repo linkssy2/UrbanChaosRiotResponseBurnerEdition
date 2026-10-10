@@ -1,0 +1,6 @@
+cmake_minimum_required(VERSION 3.20)
+project(graphics_wait_freeze C)
+add_executable(check test.c)
+target_include_directories(check PRIVATE ../../src ../../src/recomp ../../third_party/xboxrecomp/src ../../third_party/xboxrecomp/src/kernel)
+target_compile_definitions(check PRIVATE RECOMP_GENERATED_CODE UCRR_GUEST_ADDRESS_SPLIT=1 _CRT_SECURE_NO_WARNINGS)
+target_compile_options(check PRIVATE /O2 /fp:precise /UNDEBUG)

@@ -1,0 +1,5 @@
+#ifndef MIGRATION_ANIMATION_LOCALS_GUEST_H
+#define MIGRATION_ANIMATION_LOCALS_GUEST_H
+int uc_migration_animation_locals(void);
+int uc_migration_animation_pose_matrix(void);
+#endif

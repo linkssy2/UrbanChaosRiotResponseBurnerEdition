@@ -1,0 +1,4 @@
+#ifndef MIGRATION_ANIMATION_CONTROLLER_POSE_GUEST_H
+#define MIGRATION_ANIMATION_CONTROLLER_POSE_GUEST_H
+int uc_migration_animation_controller_pose(void);
+#endif

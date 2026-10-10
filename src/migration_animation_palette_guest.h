@@ -1,0 +1,4 @@
+#ifndef UCRR_MIGRATION_ANIMATION_PALETTE_GUEST_H
+#define UCRR_MIGRATION_ANIMATION_PALETTE_GUEST_H
+int uc_migration_animation_palette(void);
+#endif

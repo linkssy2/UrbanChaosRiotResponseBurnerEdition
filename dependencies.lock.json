@@ -1,0 +1,15 @@
+{
+  "xboxrecomp": {
+    "url": "https://github.com/sp00nznet/xboxrecomp.git",
+    "commit": "14522228d296a7004adb02d6aec8335eee268cae",
+    "patch": "dependency-patches/xboxrecomp.patch",
+    "overrides": "dependency-overrides/xboxrecomp",
+    "isolated_files_verified": 242,
+    "line_endings": "CRLF normalized to LF for text comparison"
+  },
+  "JoltPhysics": {
+    "url": "https://github.com/jrouwe/JoltPhysics",
+    "version": "5.6.0",
+    "note": "Version read from local CMake project; exact commit not recorded."
+  }
+}

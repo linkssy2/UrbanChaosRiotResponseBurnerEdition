@@ -1,0 +1,4 @@
+#ifndef UC_MIGRATION_PARTICLES_FLARE_RECIPE_GUEST_H
+#define UC_MIGRATION_PARTICLES_FLARE_RECIPE_GUEST_H
+int uc_migration_particles_flare_recipe(unsigned entry);
+#endif

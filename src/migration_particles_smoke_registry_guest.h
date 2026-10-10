@@ -1,0 +1,4 @@
+#ifndef MIGRATION_PARTICLES_SMOKE_REGISTRY_GUEST_H
+#define MIGRATION_PARTICLES_SMOKE_REGISTRY_GUEST_H
+int uc_migration_particles_smoke_registry(unsigned entry);
+#endif

@@ -1,0 +1,8 @@
+#ifndef UCRR_MIGRATION_ANIMATION_STREAM_LIFECYCLE_GUEST_H
+#define UCRR_MIGRATION_ANIMATION_STREAM_LIFECYCLE_GUEST_H
+int uc_migration_animation_stream_create(void);
+int uc_migration_animation_stream_close(void);
+int uc_migration_animation_stream_destroy(void);
+int uc_migration_animation_stream_pool(void);
+int uc_migration_animation_stream_open(void);
+#endif

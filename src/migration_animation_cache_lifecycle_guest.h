@@ -1,0 +1,8 @@
+#ifndef MIGRATION_ANIMATION_CACHE_LIFECYCLE_GUEST_H
+#define MIGRATION_ANIMATION_CACHE_LIFECYCLE_GUEST_H
+int uc_migration_animation_cache_construct(void);
+int uc_migration_animation_cache_destroy(void);
+int uc_migration_animation_cache_create(void);
+int uc_migration_animation_clip_bind(void);
+int uc_migration_animation_clip_release(void);
+#endif

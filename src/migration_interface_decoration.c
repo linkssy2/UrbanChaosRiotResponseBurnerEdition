@@ -1,0 +1,27 @@
+#include "migration_interface_decoration.h"
+#include "recomp_types.h"
+#include "xbox_memory_layout.h"
+#include <stdlib.h>
+extern void sub_00065760(void),sub_00065550(void);
+#define DE_CALL(name,ret) do{PUSH32(g_esp,ret);sub_##name();}while(0)
+static int decoration_span(uint64_t p,unsigned n){return p>=0x10000&&p+n<=g_xbox_total_ram&&p+n<=0x80000000ull;}
+static void decoration_row(void){
+ g_esp-=32;SET_LO8(g_eax,MEM8(g_esp+44));g_xmm2=XMM_SCALAR(MEMF(g_esp+48));g_xmm3=XMM_SCALAR(MEMF(0x44fbcc));g_xmm1=XMM_SCALAR(MEMF(0x4e8394));int alternate=LO8(g_eax)!=0;SET_LO8(g_eax,(unsigned)-LO8(g_eax));PUSH32(g_esp,g_esi);PUSH32(g_esp,0);g_ecx=g_esp+52;PUSH32(g_esp,g_ecx);g_ecx=MEM32(0x51cf18);g_xmm1.f[0]-=g_xmm3.f[0];g_eax=(alternate?0xc0000000:0)+0xc0808080u;g_esi=g_eax;g_edx=g_esp+28;g_xmm1.f[0]+=g_xmm2.f[0];PUSH32(g_esp,g_edx);g_xmm0=g_xmm2;g_xmm0.f[0]+=g_xmm3.f[0];g_xmm3=XMM_SCALAR(MEMF(g_esp+52));g_eax=g_esp+40;MEMF(g_esp+16)=g_xmm1.f[0];PUSH32(g_esp,g_eax);g_xmm1=g_xmm3;g_xmm1.f[0]+=MEMF(g_esp+60);PUSH32(g_esp,g_ecx);MEMF(g_esp+32)=g_xmm0.f[0];MEMF(g_esp+64)=g_xmm1.f[0];MEM32(g_esp+68)=g_esi;MEMF(g_esp+40)=g_xmm0.f[0];MEMF(g_esp+44)=g_xmm1.f[0];MEMF(g_esp+48)=g_xmm2.f[0];MEMF(g_esp+52)=g_xmm3.f[0];DE_CALL(00065760,0x259407);
+ g_xmm0=XMM_SCALAR(MEMF(g_esp+24));PUSH32(g_esp,0);g_edx=g_esp+72;PUSH32(g_esp,g_edx);g_edx=MEM32(0x51cf0c);MEMF(g_esp+56)=g_xmm0.f[0];g_xmm0=XMM_SCALAR(MEMF(g_esp+72));g_eax=g_esp+56;PUSH32(g_esp,g_eax);MEMF(g_esp+64)=g_xmm0.f[0];g_xmm0=XMM_SCALAR(MEMF(g_esp+44));g_ecx=g_esp+52;PUSH32(g_esp,g_ecx);MEMF(g_esp+56)=g_xmm0.f[0];g_xmm0=XMM_SCALAR(MEMF(g_esp+76));PUSH32(g_esp,g_edx);MEM32(g_esp+88)=g_esi;MEMF(g_esp+64)=g_xmm0.f[0];DE_CALL(00065760,0x259458);
+ g_xmm0=XMM_ZERO();g_xmm1=XMM_SCALAR(MEMF(0x44bf94));PUSH32(g_esp,0);MEMF(g_esp+72)=MEMF(g_esp+68)=g_xmm0.f[0];g_xmm0=XMM_SCALAR(MEMF(0x4e8394));g_xmm0.f[0]+=MEMF(g_esp+96);PUSH32(g_esp,0);g_eax=g_esp+96;PUSH32(g_esp,g_eax);MEMF(g_esp+64)=g_xmm0.f[0];g_xmm0=XMM_SCALAR(MEMF(g_esp+96));g_ecx=g_esp+80;PUSH32(g_esp,g_ecx);MEMF(g_esp+72)=g_xmm0.f[0];g_xmm0=XMM_SCALAR(MEMF(g_esp+60));g_edx=g_esp+76;MEMF(g_esp+60)=g_xmm0.f[0];g_xmm0=XMM_SCALAR(MEMF(g_esp+96));PUSH32(g_esp,g_edx);g_eax=g_esp+72;MEM32(g_esp+108)=g_esi;MEMF(g_esp+92)=MEMF(g_esp+80)=g_xmm1.f[0];MEMF(g_esp+68)=g_xmm0.f[0];PUSH32(g_esp,g_eax);g_ecx=g_esp+68;g_edx=MEM32(0x51cf18);PUSH32(g_esp,g_ecx);PUSH32(g_esp,g_edx);DE_CALL(00065550,0x2594e0);g_esp+=72;POP32(g_esp,g_esi);g_esp+=32;g_recomp_zf=!g_esp;g_esp+=4;
+}
+static void decoration_arrow(void){
+ g_xmm2=XMM_SCALAR(MEMF(g_esp+20));g_eax=MEM32(g_esp+4);g_xmm0=g_xmm2;g_xmm0.f[0]*=MEMF(0x4859ec);g_esp-=72;g_xmm1=g_xmm0;g_xmm1.f[0]*=g_xmm2.f[0];g_xmm1.f[0]*=MEMF(0x44c1f8);
+ if(g_eax<=3){unsigned target=MEM32(g_eax*4+0x259a14);
+  switch(target){
+  case 0x259897:g_eax=MEM32(g_esp+88);g_xmm2=XMM_SCALAR(MEMF(g_esp+80));PUSH32(g_esp,0);g_ecx=g_esp+96;PUSH32(g_esp,g_ecx);g_ecx=MEM32(0x51cf1c);g_edx=g_esp+16;MEM32(g_esp+100)=g_eax;g_xmm3=g_xmm1;g_xmm3.f[0]+=g_xmm2.f[0];PUSH32(g_esp,g_edx);MEMF(g_esp+20)=g_xmm3.f[0];g_xmm3=XMM_SCALAR(MEMF(g_esp+96));g_eax=g_esp+28;PUSH32(g_esp,g_eax);MEMF(g_esp+28)=g_xmm3.f[0];g_xmm2.f[0]-=g_xmm1.f[0];g_xmm3.f[0]-=g_xmm0.f[0];PUSH32(g_esp,g_ecx);MEMF(g_esp+36)=g_xmm2.f[0];MEMF(g_esp+40)=g_xmm3.f[0];DE_CALL(00065760,0x2598ef);break;
+  case 0x2598f6:g_edx=MEM32(g_esp+88);g_xmm2=XMM_SCALAR(MEMF(g_esp+80));PUSH32(g_esp,0);g_eax=g_esp+80;PUSH32(g_esp,g_eax);g_eax=MEM32(0x51cf24);g_ecx=g_esp+32;MEM32(g_esp+84)=g_edx;PUSH32(g_esp,g_ecx);g_xmm3=g_xmm1;g_xmm3.f[0]+=g_xmm2.f[0];g_edx=g_esp+44;MEMF(g_esp+36)=g_xmm3.f[0];g_xmm3=XMM_SCALAR(MEMF(g_esp+96));PUSH32(g_esp,g_edx);g_xmm0.f[0]+=g_xmm3.f[0];g_xmm2.f[0]-=g_xmm1.f[0];PUSH32(g_esp,g_eax);MEMF(g_esp+48)=g_xmm0.f[0];MEMF(g_esp+52)=g_xmm2.f[0];MEMF(g_esp+56)=g_xmm3.f[0];DE_CALL(00065760,0x25994d);break;
+  case 0x259954:g_ecx=MEM32(g_esp+88);g_xmm2=XMM_SCALAR(MEMF(g_esp+80));g_xmm3=XMM_SCALAR(MEMF(g_esp+84));PUSH32(g_esp,0);g_edx=g_esp+4;PUSH32(g_esp,g_edx);g_edx=MEM32(0x51cf10);g_eax=g_esp+48;MEM32(g_esp+8)=g_ecx;PUSH32(g_esp,g_eax);g_ecx=g_esp+60;g_xmm4=g_xmm1;g_xmm4.f[0]+=g_xmm3.f[0];PUSH32(g_esp,g_ecx);MEMF(g_esp+56)=g_xmm2.f[0];g_xmm2.f[0]-=g_xmm0.f[0];g_xmm3.f[0]-=g_xmm1.f[0];PUSH32(g_esp,g_edx);MEMF(g_esp+64)=g_xmm4.f[0];MEMF(g_esp+68)=g_xmm2.f[0];MEMF(g_esp+72)=g_xmm3.f[0];DE_CALL(00065760,0x2599ac);break;
+  case 0x2599b3:g_eax=MEM32(g_esp+88);g_xmm2=XMM_SCALAR(MEMF(g_esp+80));PUSH32(g_esp,0);g_ecx=g_esp+8;PUSH32(g_esp,g_ecx);g_ecx=MEM32(0x51cf14);g_xmm0.f[0]+=g_xmm2.f[0];g_edx=g_esp+64;MEM32(g_esp+12)=g_eax;PUSH32(g_esp,g_edx);MEMF(g_esp+68)=g_xmm0.f[0];g_xmm0=XMM_SCALAR(MEMF(g_esp+96));g_eax=g_esp+76;g_xmm3=g_xmm1;g_xmm3.f[0]+=g_xmm0.f[0];PUSH32(g_esp,g_eax);g_xmm0.f[0]-=g_xmm1.f[0];PUSH32(g_esp,g_ecx);MEMF(g_esp+80)=g_xmm3.f[0];MEMF(g_esp+84)=g_xmm2.f[0];MEMF(g_esp+88)=g_xmm0.f[0];DE_CALL(00065760,0x259a0b);break;
+  }g_esp+=20;
+ }g_esp+=72;g_recomp_zf=!g_esp;g_esp+=4;
+}
+int migration_interface_decoration(unsigned op){
+ static int enabled=-1;if(enabled<0){const char*s=getenv("UCRR_NATIVE_INTERFACE_DECORATION");enabled=s&&!strcmp(s,"1");}if(!enabled||op>1)return 0;unsigned s=g_esp;if(s<0x10400||(s&3)||!decoration_span(s-1024,1052)||!decoration_span(0x51cf24,4))return 0;
+ if(op){unsigned index=MEM32(s+4);if(index<=3){unsigned target=MEM32(0x259a14+index*4);if(target!=0x259897&&target!=0x2598f6&&target!=0x259954&&target!=0x2599b3)return 0;}decoration_arrow();}else decoration_row();return 1;
+}

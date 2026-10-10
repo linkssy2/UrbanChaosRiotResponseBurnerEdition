@@ -1,0 +1,4 @@
+#ifndef MIGRATION_PHYSICS_CONSTRAINT_DATA_H
+#define MIGRATION_PHYSICS_CONSTRAINT_DATA_H
+int uc_migration_physics_constraint_data(unsigned entry);
+#endif

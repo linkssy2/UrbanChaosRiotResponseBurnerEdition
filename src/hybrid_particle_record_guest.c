@@ -1,0 +1,95 @@
+#include "hybrid_particle_record_guest.h"
+#include <stdlib.h>
+#include "recomp_types.h"
+#include "xbox_memory_layout.h"
+#include "../native/particle_plain.h"
+#include <string.h>
+static int enabled(void){static int flag=-1;if(flag<0){const char*v=getenv("UCRR_NATIVE_PARTICLE_RECORD");flag=v&&!strcmp(v,"1");}return flag;}
+static void*view(uint32_t p,unsigned n){return p>=0x10000u&&p<0x80000000u&&(uint64_t)p+n<=g_xbox_total_ram?(void*)XBOX_PTR(p):NULL;}
+static int disjoint(uint32_t a,unsigned n,uint32_t b,unsigned m){return(uint64_t)a+n<=b||(uint64_t)b+m<=a;}
+static int bounded(const void*p,unsigned n){const unsigned char*b=p;for(unsigned i=0;i<n;i++){uint32_t u;memcpy(&u,b+i*4,4);if((u&0x7fffffffu)>0x47800000u)return 0;}return 1;}
+/* Exactly the positive world-space239E20..239F67 phase. The original prologue,
+ * depth-plane setup and epilogue remain, as do all material and GPU services.
+ * Existing color sampling and the plain-particle formulas write only private
+ * records until commit. SIMD operation order retains all four live lanes.
+ * Worker0 is the pinned title configuration, not a synchronization lock. */
+int uc_hybrid_particle_record(uint32_t s,uint32_t frame){
+ if(!enabled()||!view(0x51c178,1)||MEM8(0x51c178)!=0||s!=g_esp||frame!=g_ebp||(s&15)||s!=((frame&~15u)-0x70u)||(_mm_getcsr()&~63u)!=0x1f80u||!view(s-16,0x80)||!view(frame,28)||!view(g_ebx,0x114))return 0;
+ uint32_t owner=g_ebx,desc=MEM32(owner+0x20),particles=MEM32(owner+0x10),env=MEM32(owner+0xac),n=MEM32(s+0x28),out=g_edi,gap=MEM32(s+0x20),matrix=MEM32(frame+0x10),position=out+gap;
+ if(n<16||n>39||MEM32(frame+4)!=0x9b4c4u||MEM32(owner)!=0x482f90||!view(desc,0xcc)||!view(env,16)||!view(matrix,64)||!view(0x482f90,16)||MEM32(0x482f9c)!=0x239c80||MEM8(desc+0x9c)||g_edx!=desc||g_ecx!=gap||MEM32(s+0x24)!=desc||MEM32(frame+0xc)!=n||MEM32(frame+0x18)!=out||MEM32(frame+0x14)!=position)return 0;
+ uint32_t start=MEM32(frame+8),capacity=MEM32(owner+0xc);
+ if(start>capacity||n>capacity-start||start>UINT32_MAX/32u||g_esi!=start*32u||(uint64_t)particles+start*32u+n*32u>UINT32_MAX)return 0;
+ uint32_t input=particles+start*32u;
+ const uint32_t read[][2]={{owner,0x114},{desc,0xcc},{env,16},{input,n*32},{matrix,64},{frame,28},{0x44bf94,4},{0x482f40,4},{0x4fe7d0,4},{0x482fbc,4},{0x51e4a0,16},{0x482f90,16},{0x51c178,1}};
+ const uint32_t write[][2]={{s-16,0x80},{position,n*16},{out,n*16}};
+ for(unsigned i=0;i<3;i++){if(!view(write[i][0],write[i][1]))return 0;for(unsigned j=0;j<i;j++)if(!disjoint(write[i][0],write[i][1],write[j][0],write[j][1]))return 0;for(unsigned j=0;j<13;j++)if(!view(read[j][0],read[j][1])||!disjoint(write[i][0],write[i][1],read[j][0],read[j][1]))return 0;}
+ if(MEM32(0x44bf94)!=0x3f800000||MEM32(0x482f40)!=0x43160000||MEM32(0x4fe7d0)!=0x3bda740e||MEM32(0x482fbc)!=0x37800080)return 0;
+ for(unsigned i=0;i<4;i++)if(MEM32(0x51e4a0+i*4)!=0x80000000u)return 0;
+ if(memcmp(g_xmm1.u,view(s+0x60,16),16))return 0;
+ if(!bounded(view(matrix,64),16)||!bounded(view(owner+0xbc,88),22)||!bounded(view(desc+0xb0,16),4)||!bounded(view(s+0x60,16),4))return 0;
+ for(unsigned i=0;i<n;i++)if(!bounded(view(input+i*32,16),4))return 0;
+ UCParticlePlainSprite records[39];unsigned csr=_mm_getcsr(),fade=!!MEM8(s+0x1b),normal=!(MEM8(desc+0xa6)&&MEM8(env+12));
+ const UCParticleColorCurve*c=(const UCParticleColorCurve*)view(owner+0xbc,88);
+ RecompXmm point=XMM_ZERO(),center=XMM_ZERO(),plane=XMM_MEM(s+0x60),x2=XMM_ZERO(),x3=XMM_ZERO(),x4=g_xmm4,x0;
+ float scale=1.f,depth=0,age=0;int zf=g_recomp_zf;
+ /* The retained prefix already chose near fade and derived this plane. Do
+  * not redo profile/visibility policy or load a separately prepared curve. */
+ for(unsigned i=0;i<n;i++){
+  const UCParticle*p=(const UCParticle*)view(input+i*32,32);memcpy(point.f,p->position,12);point.f[3]=1.f;center=point;x2=point;x3=XMM_SCALAR(p->radius);scale=1.f;
+  if(fade){x0=XMM_MUL(plane,point);x4=XMM_SHUFFLE(x0,x0,2);x2=XMM_SHUFFLE(plane,plane,3);x4.f[0]=x4.f[0]+x2.f[0];x2=XMM_SHUFFLE(x0,x0,1);x0.f[0]=x0.f[0]+x2.f[0];x2=XMM_SCALAR(150.f);x0.f[0]=x0.f[0]+x4.f[0];depth=x0.f[0];if((double)depth<150.){scale=depth*MEMF(0x4fe7d0);scale=scale*scale;}x3=XMM_SCALAR(scale*p->radius);}
+  center.f[3]=x3.f[0];memcpy(&records[i],center.f,16);
+  if(normal){age=(float)p->age*MEMF(0x482fbc);if(uc_particle_color_sample(c,age,records[i].color)){_mm_setcsr(csr);return 0;}records[i].color[3]=records[i].color[3]*scale;zf=age<=0?age==0:age>=1?age==1:c->hold[0]>age?0:age==c->hold[1];}
+  else memcpy(records[i].color,view(desc+0xb0,16),16);
+ }
+ const UCParticlePlainSprite*last=&records[n-1];
+ /* All stores below are admitted. Full output records are private, including
+  * any native status2 partial results, so decline never replays publication. */
+ for(unsigned i=0;i<n;i++){memcpy(view(position+i*16,16),&records[i],16);memcpy(view(out+i*16,16),records[i].color,16);}
+ MEMF(s+0x1c)=scale;MEM32(s+0x28)=0;XMM_STORE(s+0x40,point);XMM_STORE(s+0x50,center);if(fade)MEMF(s+0x2c)=depth;
+ if(normal){memcpy(view(s+0x30,16),last->color,16);MEM32(s-16)=frame;MEM32(s-12)=0x239f2b;MEM32(s-8)=s+0x30;MEMF(s-4)=age;g_ebp=s-16;g_recomp_zf=zf;}
+ g_eax=0;g_esi+=n*32;g_edi+=n*16;g_ecx=gap;g_edx=desc;memcpy(g_xmm0.f,last->color,16);g_xmm1=plane;g_xmm2=x2;g_xmm3=x3;g_xmm4=x4;
+ return 1;
+}
+
+/* Camera-relative239CC4..239D89 only. The source transform formula and
+ * native color sampler stage private records; retained scratch includes the
+ * original239F70's otherwise discarded fourth transformed coordinate. */
+int uc_hybrid_particle_record_camera(uint32_t s,uint32_t frame){
+ if(!enabled()||!view(0x51c178,1)||MEM8(0x51c178)!=0||s!=g_esp||frame!=g_ebp||(s&15)||s!=((frame&~15u)-0x70u)||(_mm_getcsr()&~63u)!=0x1f80u||!view(s-0x30,0xa0)||!view(frame,28)||!view(g_ebx,0x114))return 0;
+ uint32_t owner=g_ebx,desc=MEM32(owner+0x20),particles=MEM32(owner+0x10),env=MEM32(owner+0xac),n=MEM32(s+0x1c),out=g_edi,gap=MEM32(s+0x20),matrix=MEM32(frame+0x10),position=out+gap;
+ if(n<16||n>39||MEM32(frame+4)!=0x9b4c4u||MEM32(owner)!=0x482f90||!view(desc,0xcc)||!view(env,16)||!view(matrix,64)||!view(0x482f90,16)||MEM32(0x482f9c)!=0x239c80||!MEM8(desc+0x9c)||g_edx!=desc||g_ecx!=n||g_eax!=gap||MEM32(s+0x24)!=desc||MEM32(frame+0xc)!=n||MEM32(frame+0x18)!=out||MEM32(frame+0x14)!=position)return 0;
+ uint32_t start=MEM32(frame+8),capacity=MEM32(owner+0xc);
+ if(start>capacity||n>capacity-start||start>UINT32_MAX/32u||g_esi!=start*32u||(uint64_t)particles+start*32u+n*32u>UINT32_MAX)return 0;
+ uint32_t input=particles+start*32u;
+ const uint32_t read[][2]={{owner,0x114},{desc,0xcc},{env,16},{input,n*32},{matrix,64},{frame,28},{0x44bf94,4},{0x482fbc,4},{0x482f90,16},{0x51c178,1}};
+ const uint32_t write[][2]={{s-0x30,0xa0},{position,n*16},{out,n*16}};
+ for(unsigned i=0;i<3;i++){if(!view(write[i][0],write[i][1]))return 0;for(unsigned j=0;j<i;j++)if(!disjoint(write[i][0],write[i][1],write[j][0],write[j][1]))return 0;for(unsigned j=0;j<10;j++)if(!view(read[j][0],read[j][1])||!disjoint(write[i][0],write[i][1],read[j][0],read[j][1]))return 0;}
+ if(MEM32(0x44bf94)!=0x3f800000||MEM32(0x482fbc)!=0x37800080||!bounded(view(matrix,64),16)||!bounded(view(owner+0xbc,88),22)||!bounded(view(desc+0xb0,16),4))return 0;
+ for(unsigned i=0;i<n;i++)if(!bounded(view(input+i*32,16),4))return 0;
+ UCParticlePlainSprite records[39];unsigned csr=_mm_getcsr(),thermal=MEM8(env+12),normal=!(MEM8(desc+0xa6)&&thermal);
+ const UCParticleColorCurve*c=(const UCParticleColorCurve*)view(owner+0xbc,88);
+ RecompXmm rows[4],transformed=XMM_ZERO(),center=XMM_ZERO(),x0=XMM_ZERO(),x1=XMM_ZERO(),x2=XMM_ZERO(),x3=XMM_ZERO();memcpy(rows,view(matrix,64),64);
+ float age=0;int zf=0;
+ for(unsigned i=0;i<n;i++){
+  const UCParticle*p=(const UCParticle*)view(input+i*32,32);
+  x0=XMM_ZERO();memcpy(x0.f,p->position,12);
+  x1=XMM_SHUFFLE(x0,x0,0xaa);x2=XMM_MUL(rows[2],x1);x1=XMM_SHUFFLE(x0,x0,0x55);x3=XMM_MUL(rows[1],x1);
+  x1=rows[3];x3=XMM_ADD(x3,x2);x2=XMM_SHUFFLE(x0,x0,0);x0=XMM_MUL(rows[0],x2);x0=XMM_ADD(x0,x1);transformed=XMM_ADD(x0,x3);
+  center=transformed;center.f[3]=p->radius;memcpy(&records[i],center.f,16);
+  if(normal){
+   age=(float)p->age*MEMF(0x482fbc);if(uc_particle_color_sample(c,age,records[i].color)){_mm_setcsr(csr);return 0;}
+   x1=XMM_ZERO();
+   if(age>0&&age<1){x1=XMM_SCALAR(c->hold[0]);if(c->hold[0]>age){memcpy(x1.f,c->slope[0],16);x1=XMM_MUL(x1,XMM_SHUFFLE(XMM_SCALAR(age),XMM_SCALAR(age),0));}
+    else if(age>c->hold[1]){float t=age-c->hold[1];memcpy(x1.f,c->slope[1],16);x1=XMM_MUL(x1,XMM_SHUFFLE(XMM_SCALAR(t),XMM_SCALAR(t),0));}}
+   zf=age<=0?age==0:age>=1?age==1:c->hold[0]>age?0:age==c->hold[1];
+  }else memcpy(records[i].color,view(desc+0xb0,16),16);
+ }
+ const UCParticlePlainSprite*last=&records[n-1];
+ for(unsigned i=0;i<n;i++){memcpy(view(position+i*16,16),&records[i],16);memcpy(view(out+i*16,16),records[i].color,16);}
+ XMM_STORE(s-0x30,transformed);MEM32(s-20)=frame;MEM32(s-16)=0x239ce4;MEM32(s-12)=s+0x30;MEM32(s-8)=input+(n-1)*32;MEM32(s-4)=matrix;
+ MEM32(s+0x1c)=0;MEMF(s+0x28)=last->radius;memcpy(view(s+0x30,12),last->center,12);XMM_STORE(s+0x40,center);
+ if(normal){memcpy(view(s+0x60,16),last->color,16);MEM32(s-16)=frame;MEM32(s-12)=0x239d6e;MEM32(s-8)=s+0x60;MEMF(s-4)=age;g_ebp=s-16;g_ecx=owner+0xbc;g_edx=particles;}
+ else{g_ebp=s-20;g_ecx=env;g_edx=((s+0x30)&0xffffff00u)|thermal;}
+ g_recomp_zf=zf;g_eax=0;g_esi+=n*32;g_edi+=n*16;memcpy(g_xmm0.f,last->color,16);g_xmm1=x1;g_xmm2=x2;g_xmm3=x3;
+ return 1;
+}

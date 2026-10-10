@@ -1,0 +1,4 @@
+#ifndef UC_HYBRID_PARTICLE_PACKET_GUEST_H
+#define UC_HYBRID_PARTICLE_PACKET_GUEST_H
+int uc_hybrid_particle_packet(unsigned operation);
+#endif

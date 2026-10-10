@@ -1,0 +1,4 @@
+#ifndef MIGRATION_ANIMATION_CACHE_SEEK_GUEST_H
+#define MIGRATION_ANIMATION_CACHE_SEEK_GUEST_H
+int uc_migration_animation_cache_seek(void);
+#endif

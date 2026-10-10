@@ -1,0 +1,18 @@
+{
+  "title": "Urban Chaos - Riot Response",
+  "title_id": "0x534300F7",
+  "version": 3,
+  "region": "global",
+  "xbe_build_utc": "2006-04-05T03:38:45Z",
+  "xdk_build": 5849,
+  "entry_point": "0x00082027",
+  "kernel_thunk_table": "0x0044B260",
+  "kernel_import_count": 146,
+  "section_count": 17,
+  "iso_size": 3990028288,
+  "iso_sha256": "A14B95145A075908B1969FA35F5E1AF6E8657A7E5E1B7A555E54DCD9877E3245",
+  "xbe_size": 5283840,
+  "xbe_sha256": "B74AE76FDBF1EF5F95DCFABF4F94F3AA738E649ECAEF4068D8531E07071B5DAC",
+  "xboxrecomp_revision": "14522228d296a7004adb02d6aec8335eee268cae"
+}
+

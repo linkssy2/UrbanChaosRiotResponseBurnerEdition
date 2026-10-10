@@ -1,0 +1,5 @@
+Python 3.12: tools/python/LICENSE.txt; https://www.python.org/downloads/source/
+FFmpeg 8.1.2 shared build: tools/ffmpeg/LICENSE.txt and README.txt; source https://github.com/FFmpeg/FFmpeg/commit/38b88335f9
+xboxrecomp and its component notices: xboxrecomp.txt and xboxrecomp-notice.txt.
+Jolt Physics: JoltPhysics.txt.
+Launcher artwork was generated for Burner Edition from the local cover reference; it is not extracted disc content.

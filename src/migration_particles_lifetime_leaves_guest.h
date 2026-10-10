@@ -1,0 +1,4 @@
+#ifndef UC_MIGRATION_PARTICLES_LIFETIME_LEAVES_GUEST_H
+#define UC_MIGRATION_PARTICLES_LIFETIME_LEAVES_GUEST_H
+int uc_migration_particles_lifetime_leaves(unsigned entry);
+#endif

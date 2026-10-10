@@ -1,0 +1,1237 @@
+[
+  {
+    "start": "0x000813C2",
+    "name": "ucrr_open_success_continuation",
+    "reason": "Verified success-path continuation of sub_00081265 after NtCreateFile; it validates the create disposition and runs the shared RET 0x1C epilogue, but was previously emitted as an unresolved stub that left the guest stack inside the file-open frame"
+  },
+  {
+    "start": "0x00086B55",
+    "name": "ucrr_main_thread",
+    "reason": "PsCreateSystemThreadEx start routine observed during first boot trace"
+  },
+  {
+    "start": "0x00081FB3",
+    "name": "ucrr_crt_startup_callback",
+    "reason": "Main thread context callback observed as an unresolved ICALL"
+  },
+  {
+    "start": "0x003C6D59",
+    "name": "ucrr_xonline_startup",
+    "reason": "XONLINE startup routine observed as an unresolved ICALL during boot"
+  },
+  {
+    "start": "0x002DE295",
+    "name": "ucrr_critical_section_init_callback",
+    "reason": "Critical-section initialization callback observed as an unresolved ICALL during boot"
+  },
+  {
+    "start": "0x003CF792",
+    "name": "ucrr_xonline_callback_table_init",
+    "reason": "XONLINE callback-table initializer observed as an unresolved ICALL during boot"
+  },
+  {
+    "start": "0x001F0AC0",
+    "name": "ucrr_runtime_callback_001F0AC0",
+    "reason": "Repeated runtime callback target observed after heap initialization; original bytes begin a distinct function immediately after sub_001F0A80"
+  },
+  {
+    "start": "0x002E001A",
+    "name": "ucrr_set_allocator_global",
+    "reason": "Alternate entry tail-called by sub_002DFFF0; stores its argument into global 0x0051E6F4 and was previously emitted as an empty unresolved stub"
+  },
+  {
+    "start": "0x002DA220",
+    "name": "ucrr_heap_realloc_continuation",
+    "reason": "Verified continuation of sub_002DA170 reached by branches at 0x002DA1AD and 0x002DA253; the embedded helper at 0x002DA217 split the surrounding SEH function and previously left this block as an unresolved return stub"
+  },
+  {
+    "start": "0x002DFF20",
+    "name": "ucrr_aligned_free_thunk",
+    "reason": "Runtime indirect-call target observed during CRT initialization; verified five-byte tail-jump thunk to 0x00387DB7 followed by INT3 alignment padding"
+  },
+  {
+    "start": "0x00387DB7",
+    "name": "ucrr_aligned_free",
+    "reason": "Verified tail-jump destination of 0x002DFF20; frees the backing allocation stored immediately before a non-null aligned pointer and ends with RET at 0x00387DCB"
+  },
+  {
+    "start": "0x003EAC6D",
+    "name": "ucrr_d3d_format_case_003EAC6D",
+    "reason": "D3D vtable target observed after successful device creation; verified instruction-aligned alternate entry in the format conversion routine"
+  },
+  {
+    "start": "0x003EACB5",
+    "name": "ucrr_d3d_format_case_003EACB5",
+    "reason": "D3D vtable target observed after successful device creation; verified instruction-aligned alternate entry in the format conversion routine"
+  },
+  {
+    "start": "0x003EAD6F",
+    "name": "ucrr_d3d_format_default_003EAD6F",
+    "reason": "D3D vtable target observed after successful device creation; verified standalone eight-byte output writer ending in RET 8"
+  },
+  {
+    "start": "0x003EAC46",
+    "name": "ucrr_d3d_format_case_003EAC46",
+    "reason": "Verified instruction-aligned target in the ten-entry D3D format jump table at 0x003EACEC"
+  },
+  {
+    "start": "0x003EAC99",
+    "name": "ucrr_d3d_format_case_003EAC99",
+    "reason": "Verified instruction-aligned target in the ten-entry D3D format jump table at 0x003EACEC"
+  },
+  {
+    "start": "0x003EACA0",
+    "name": "ucrr_d3d_format_case_003EACA0",
+    "reason": "Verified instruction-aligned target in the ten-entry D3D format jump table at 0x003EACEC"
+  },
+  {
+    "start": "0x003EACA7",
+    "name": "ucrr_d3d_format_case_003EACA7",
+    "reason": "Verified instruction-aligned target in the ten-entry D3D format jump table at 0x003EACEC"
+  },
+  {
+    "start": "0x003EACAE",
+    "name": "ucrr_d3d_format_case_003EACAE",
+    "reason": "Verified instruction-aligned target in the ten-entry D3D format jump table at 0x003EACEC"
+  },
+  {
+    "start": "0x003EACBC",
+    "name": "ucrr_d3d_format_case_003EACBC",
+    "reason": "Verified instruction-aligned target in the ten-entry D3D format jump table at 0x003EACEC"
+  },
+  {
+    "start": "0x003EACC3",
+    "name": "ucrr_d3d_format_case_003EACC3",
+    "reason": "Verified instruction-aligned target in the ten-entry D3D format jump table at 0x003EACEC"
+  },
+  {
+    "start": "0x003EACCA",
+    "name": "ucrr_d3d_format_case_003EACCA",
+    "reason": "Verified instruction-aligned target in the ten-entry D3D format jump table at 0x003EACEC"
+  },
+  {
+    "start": "0x003EACD1",
+    "name": "ucrr_d3d_format_flag_003EACD1",
+    "reason": "D3D callback target observed immediately after device creation; verified OR-EAX-0x20 thunk ending in RET 8"
+  },
+  {
+    "start": "0x003EACD4",
+    "name": "ucrr_d3d_format_return_003EACD4",
+    "reason": "Verified RET 8 alternate entry reached by the bounds branch in sub_003EAC77; the unresolved placeholder previously consumed only the return address and leaked two arguments"
+  },
+  {
+    "start": "0x003EACD7",
+    "name": "ucrr_d3d_format_null_case_003EACD7",
+    "reason": "Verified instruction-aligned alternate entry reached when the secondary format argument is null; converges on RET 8"
+  },
+  {
+    "start": "0x003EACE5",
+    "name": "ucrr_d3d_format_flag_003EACE5",
+    "reason": "Verified secondary jump-table target at 0x003EAD34; OR-EAX-0x10 alternate entry ending in RET 8"
+  },
+  {
+    "start": "0x003EAD62",
+    "name": "ucrr_d3d_depth_writer_003EAD62",
+    "reason": "Verified instruction-aligned target in the D3D depth-format jump table at 0x003EAD98"
+  },
+  {
+    "start": "0x003EAD7C",
+    "name": "ucrr_d3d_depth_writer_003EAD7C",
+    "reason": "Verified instruction-aligned target in the D3D depth-format jump table at 0x003EAD98"
+  },
+  {
+    "start": "0x003EAD89",
+    "name": "ucrr_d3d_depth_writer_003EAD89",
+    "reason": "Verified instruction-aligned target in the D3D depth-format jump table at 0x003EAD98"
+  },
+  {
+    "start": "0x003F11ED",
+    "name": "ucrr_d3d_pixel_case_003F11ED",
+    "reason": "Verified instruction-aligned target in the six-entry D3D pixel-format jump table at 0x003F1264"
+  },
+  {
+    "start": "0x003F1207",
+    "name": "ucrr_d3d_pixel_case_003F1207",
+    "reason": "Verified instruction-aligned target in the six-entry D3D pixel-format jump table at 0x003F1264"
+  },
+  {
+    "start": "0x003F120E",
+    "name": "ucrr_d3d_pixel_case_003F120E",
+    "reason": "Verified instruction-aligned target in the six-entry D3D pixel-format jump table at 0x003F1264"
+  },
+  {
+    "start": "0x003F1222",
+    "name": "ucrr_d3d_pixel_case_003F1222",
+    "reason": "Verified instruction-aligned target in the six-entry D3D pixel-format jump table at 0x003F1264"
+  },
+  {
+    "start": "0x003F1229",
+    "name": "ucrr_d3d_pixel_case_003F1229",
+    "reason": "Verified instruction-aligned target in the six-entry D3D pixel-format jump table at 0x003F1264"
+  },
+  {
+    "start": "0x003F1233",
+    "name": "ucrr_d3d_pixel_case_003F1233",
+    "reason": "Verified instruction-aligned target in the six-entry D3D pixel-format jump table at 0x003F1264"
+  },
+  {
+    "start": "0x003F1300",
+    "name": "ucrr_d3d_state_loop_003F1300",
+    "reason": "Verified shared loop header reached by the initial jump and the back-edge in the split D3D state-table routine; the unresolved placeholder incorrectly consumed its caller return address"
+  },
+  {
+    "start": "0x003F133E",
+    "name": "ucrr_d3d_state_case_003F133E",
+    "reason": "Verified instruction-aligned target in the 26-entry D3D state jump table at 0x003F17D8"
+  },
+  {
+    "start": "0x003F1388",
+    "name": "ucrr_d3d_state_case_003F1388",
+    "reason": "Runtime-observed and verified instruction-aligned target in the 26-entry D3D state jump table at 0x003F17D8"
+  },
+  {
+    "start": "0x003F13A0",
+    "name": "ucrr_d3d_state_case_003F13A0",
+    "reason": "Verified instruction-aligned target in the 26-entry D3D state jump table at 0x003F17D8"
+  },
+  {
+    "start": "0x003F13B5",
+    "name": "ucrr_d3d_state_case_003F13B5",
+    "reason": "Verified instruction-aligned target in the 26-entry D3D state jump table at 0x003F17D8"
+  },
+  {
+    "start": "0x003F13BE",
+    "name": "ucrr_d3d_state_case_003F13BE",
+    "reason": "Verified instruction-aligned target in the 26-entry D3D state jump table at 0x003F17D8"
+  },
+  {
+    "start": "0x003F13C9",
+    "name": "ucrr_d3d_state_case_003F13C9",
+    "reason": "Verified instruction-aligned target in the 26-entry D3D state jump table at 0x003F17D8"
+  },
+  {
+    "start": "0x003F13E3",
+    "name": "ucrr_d3d_state_case_003F13E3",
+    "reason": "Verified instruction-aligned target in the 26-entry D3D state jump table at 0x003F17D8"
+  },
+  {
+    "start": "0x003F13EE",
+    "name": "ucrr_d3d_state_case_003F13EE",
+    "reason": "Verified instruction-aligned target in the 26-entry D3D state jump table at 0x003F17D8"
+  },
+  {
+    "start": "0x003F13F6",
+    "name": "ucrr_d3d_state_case_003F13F6",
+    "reason": "Verified instruction-aligned target in the 26-entry D3D state jump table at 0x003F17D8"
+  },
+  {
+    "start": "0x003F1411",
+    "name": "ucrr_d3d_state_case_003F1411",
+    "reason": "Verified instruction-aligned target in the 26-entry D3D state jump table at 0x003F17D8"
+  },
+  {
+    "start": "0x003F142C",
+    "name": "ucrr_d3d_state_case_003F142C",
+    "reason": "Verified instruction-aligned target in the 26-entry D3D state jump table at 0x003F17D8"
+  },
+  {
+    "start": "0x003F1458",
+    "name": "ucrr_d3d_state_case_003F1458",
+    "reason": "Verified instruction-aligned target shared by four slots in the 26-entry D3D state jump table at 0x003F17D8"
+  },
+  {
+    "start": "0x003F1489",
+    "name": "ucrr_d3d_state_case_003F1489",
+    "reason": "Verified instruction-aligned target in the 26-entry D3D state jump table at 0x003F17D8"
+  },
+  {
+    "start": "0x003F14AE",
+    "name": "ucrr_d3d_state_case_003F14AE",
+    "reason": "Verified instruction-aligned target in the 26-entry D3D state jump table at 0x003F17D8"
+  },
+  {
+    "start": "0x003F14EA",
+    "name": "ucrr_d3d_state_case_003F14EA",
+    "reason": "Verified instruction-aligned target in the 26-entry D3D state jump table at 0x003F17D8"
+  },
+  {
+    "start": "0x003F1516",
+    "name": "ucrr_d3d_state_case_003F1516",
+    "reason": "Verified instruction-aligned target in the 26-entry D3D state jump table at 0x003F17D8"
+  },
+  {
+    "start": "0x003F151D",
+    "name": "ucrr_d3d_state_case_003F151D",
+    "reason": "Verified instruction-aligned target in the 26-entry D3D state jump table at 0x003F17D8"
+  },
+  {
+    "start": "0x003F1549",
+    "name": "ucrr_d3d_state_case_003F1549",
+    "reason": "Verified instruction-aligned target in the 26-entry D3D state jump table at 0x003F17D8"
+  },
+  {
+    "start": "0x003F1587",
+    "name": "ucrr_d3d_state_case_003F1587",
+    "reason": "Verified instruction-aligned target shared by two slots in the 26-entry D3D state jump table at 0x003F17D8"
+  },
+  {
+    "start": "0x003F15B5",
+    "name": "ucrr_d3d_state_case_003F15B5",
+    "reason": "Verified instruction-aligned target in the 26-entry D3D state jump table at 0x003F17D8"
+  },
+  {
+    "start": "0x003F15FA",
+    "name": "ucrr_d3d_state_case_003F15FA",
+    "reason": "Verified instruction-aligned target in the 26-entry D3D state jump table at 0x003F17D8"
+  },
+  {
+    "start": "0x003F1623",
+    "name": "ucrr_d3d_state_case_003F1623",
+    "reason": "Verified instruction-aligned target in the 26-entry D3D state jump table at 0x003F17D8"
+  },
+  {
+    "start": "0x00272780",
+    "name": "ucrr_entity_vtable_callback_00272780",
+    "reason": "Runtime-observed indirect vtable target during 99-01.ent loading; verified function entry immediately after sub_002723E0, ending in RET at 0x002727AB"
+  },
+  {
+    "start": "0x0039E5CB",
+    "name": "ucrr_seh_frame_handler_0039E5CB",
+    "reason": "Runtime-observed exception-handler thunk stored by sub_00241880; loads scope table 0x004DF8A0 and tail-jumps to the shared C++ frame handler at 0x002D5D5B"
+  },
+  {
+    "start": "0x0042392C",
+    "name": "ucrr_dsound_addref_0042392C",
+    "reason": "Runtime-observed DSOUND callback; increments the reference count at argument+4 and returns the new count with RET 4"
+  },
+  {
+    "start": "0x00423939",
+    "name": "ucrr_dsound_release_00423939",
+    "reason": "Verified companion DSOUND callback immediately following 0x0042392C; clears the reference count, invokes the object's release method, and returns with RET 4"
+  },
+  {
+    "start": "0x004427A4",
+    "name": "ucrr_xpp_initialize_004427A4",
+    "reason": "Runtime-observed XPP initialization entry; clears the subsystem globals, allocates the initial pool, and configures the push-buffer state"
+  },
+  {
+    "start": "0x00442FA0",
+    "name": "ucrr_xpp_pool_initialize_00442FA0",
+    "reason": "Runtime-observed XPP pool initializer immediately after sub_00442E25; allocates and clears the timer/pool table and returns with RET 4"
+  },
+  {
+    "start": "0x00444A68",
+    "name": "ucrr_xpp_entry_initialize_00444A68",
+    "reason": "Runtime-observed XPP entry initializer; writes the four-byte FF/80/80/80 sentinel through ECX and returns"
+  },
+  {
+    "start": "0x0042423C",
+    "name": "ucrr_dsound_addref_gate_0042423C",
+    "reason": "Runtime-observed DSOUND vtable target immediately after sub_00424209; acquires the DSOUND global lock, increments the object reference count, and returns with RET 4"
+  },
+  {
+    "start": "0x0042CAB0",
+    "name": "ucrr_dsound_voice_update_0042CAB0",
+    "reason": "Runtime-observed DSOUND vtable target immediately after sub_0042CA63; synchronizes a six-channel voice object and returns at 0x0042CB07"
+  },
+  {
+    "start": "0x003DAB28",
+    "name": "ucrr_xnet_identity_callback_003DAB28",
+    "reason": "Runtime-observed XNET callback stored at 0x003DABB0 and 0x003DABDA; verified three-byte ECX-to-EAX identity thunk ending in RET"
+  },
+  {
+    "start": "0x00429CDE",
+    "name": "ucrr_dsound_callback_00429CDE",
+    "reason": "Runtime-observed DSOUND indirect-call target while opening the Dolby XMV; verified instruction-aligned function entry immediately after sub_00429C81, with its own control-flow region through 0x00429DCC"
+  },
+  {
+    "start": "0x00424455",
+    "name": "ucrr_dsound_callback_00424455",
+    "reason": "Runtime-observed DSOUND indirect-call target during XMV audio setup; verified instruction-aligned entry immediately after sub_00424417, beginning with the shared DSOUND lock helper and its own return paths"
+  },
+  {
+    "start": "0x00429703",
+    "name": "ucrr_dsound_callback_00429703",
+    "reason": "Runtime-observed DSOUND indirect-call target during XMV audio setup; verified instruction-aligned entry in the gap immediately after sub_004296C3 and before sub_00429732"
+  },
+  {
+    "start": "0x003F6A54",
+    "name": "ucrr_xmv_callback_003F6A54",
+    "reason": "Runtime-observed XMV indirect-call target while decoding the Dolby movie; also stored as callback data by sub_003F6AED and begins immediately after sub_003F69E0"
+  },
+  {
+    "start": "0x00429F29",
+    "name": "ucrr_dsound_callback_00429F29",
+    "reason": "Runtime-observed DSOUND indirect-call target during XMV playback; verified instruction-aligned entry exactly at the end of sub_00429E9B, filling the code region before sub_00429F8F"
+  },
+  {
+    "start": "0x003FD599",
+    "name": "ucrr_xmv_reconstruct_helper_003FD599",
+    "reason": "Directly called three times by the XMV picture-reconstruction routine; verified standard 55 8B EC prologue at 0x003FD599 after the linear sweep incorrectly consumed the leading 0x55 as the final byte of lookup-table data"
+  },
+  {
+    "start": "0x003FDDB1",
+    "name": "ucrr_xmv_motion_test_003FDDB1",
+    "reason": "Directly called by both XMV motion-compensation helpers; verified standard 55 8B EC prologue at 0x003FDDB1 after the linear sweep incorrectly consumed the leading 0x55 as the final byte of lookup-table data"
+  },
+  {
+    "start": "0x0042449C",
+    "name": "ucrr_dsound_method_0042449C",
+    "reason": "Runtime-observed DSOUND indirect-call target after corrected XMV playback crossed frame 26; also the destination of the direct jump at 0x00424A93 and begins immediately after the RET 4 at 0x00424499"
+  },
+  {
+    "start": "0x004244EA",
+    "name": "ucrr_dsound_method_004244EA",
+    "reason": "Verified adjacent DSOUND method entry immediately after the RET 4 at 0x004244E7; owns an independent lock, output-description, and RET 8 region through 0x0042454E"
+  },
+  {
+    "start": "0x00424551",
+    "name": "ucrr_dsound_method_00424551",
+    "reason": "Verified adjacent DSOUND method entry immediately after the RET 8 at 0x0042454E; owns an independent lock and voice-query region through the RET 4 at 0x0042459B"
+  },
+  {
+    "start": "0x0042459E",
+    "name": "ucrr_dsound_method_0042459E",
+    "reason": "Verified adjacent DSOUND method entry immediately after the RET 4 at 0x0042459B; owns an independent lock and voice-control region through the RET 4 at 0x004245E6"
+  },
+  {
+    "start": "0x004245E9",
+    "name": "ucrr_dsound_method_004245E9",
+    "reason": "Runtime-observed DSOUND indirect-call target after corrected XMV playback crossed frame 26; verified entry immediately after the RET 4 at 0x004245E6 with its own region through RET 8 at 0x00424637"
+  },
+  {
+    "start": "0x00429BF9",
+    "name": "ucrr_dsound_voice_callback_00429BF9",
+    "reason": "Runtime-observed DSOUND indirect-call target during sustained XMV playback; verified instruction-aligned entry immediately after sub_00429B15 returns and owns the voice state-transition region through 0x00429C80"
+  },
+  {
+    "start": "0x00385BBB",
+    "name": "ucrr_adjustor_thunk_00385BBB",
+    "reason": "Runtime-observed indirect-call target after the recovered DSOUND callbacks began running; verified two-instruction this-adjustor thunk that subtracts 4 from ECX and tail-jumps to 0x0042575B"
+  },
+  {
+    "start": "0x00385BC3",
+    "name": "ucrr_adjustor_thunk_00385BC3",
+    "reason": "Verified adjacent two-instruction this-adjustor thunk after sub_00385BBB; subtracts 8 from ECX and tail-jumps to 0x00428F41"
+  },
+  {
+    "start": "0x00429F74",
+    "name": "ucrr_dsound_voice_destructor_00429F74",
+    "reason": "Runtime-observed DSOUND indirect-call target after the recovered voice callbacks began running; verified discrete entry immediately after the RET 8 at 0x00429F71, with its own RET 4 at 0x00429F8C"
+  },
+  {
+    "start": "0x00426C1F",
+    "name": "ucrr_dsound_buffer_destructor_00426C1F",
+    "reason": "Runtime-observed DSOUND indirect-call target in the recovered XMV audio completion chain; verified discrete destructor entry immediately after the RET 8 at 0x00426C1C, with its own RET 4 at 0x00426C3D"
+  },
+  {
+    "start": "0x0042C56F",
+    "name": "ucrr_dsound_voice_callback_0042C56F",
+    "reason": "Runtime-observed DSOUND indirect-call target after enabling the missing APU stream service path; verified instruction-aligned entry immediately after the RET 8 at 0x0042C56C and owns the notifier and voice transition region through the RET at 0x0042C5B5"
+  },
+  {
+    "start": "0x0042C651",
+    "name": "ucrr_dsound_voice_packet_method_0042C651",
+    "reason": "Runtime-observed DSOUND indirect-call target during sustained XMV audio service; verified instruction-aligned entry immediately after the RET at 0x0042C650 and owns the 47-byte packet-field update and submission method through the RET 0x10 at 0x0042C67D"
+  },
+  {
+    "start": "0x0042CBCA",
+    "name": "ucrr_dsound_voice_mode_dispatch_0042CBCA",
+    "reason": "Runtime-observed DSOUND indirect-call target after corrected floating-point flags allowed full movie playback; verified instruction-aligned entry immediately after the RET 4 at 0x0042CBC7 and owns the six-way voice-mode dispatcher through the RET 8 at 0x0042CC16"
+  },
+  {
+    "start": "0x0042CC19",
+    "name": "ucrr_dsound_voice_destructor_0042CC19",
+    "reason": "Verified adjacent DSOUND destructor entry immediately after the RET 8 at 0x0042CC16; owns an independent teardown and optional-free sequence through the RET 4 at 0x0042CC31"
+  },
+  {
+    "start": "0x0024DFA0",
+    "name": "ucrr_frontend_resource_callback_0024DFA0",
+    "reason": "Runtime-observed indirect-call target immediately after the opening cinematic completed; verified instruction-aligned entry at the end of sub_0024DEE0, referenced as callback data by five front-end routines, and owns the independent 66-byte resource update method through the RET 8 at 0x0024DFDF"
+  },
+  {
+    "start": "0x00424283",
+    "name": "ucrr_dsound_release_gate_00424283",
+    "reason": "Runtime-observed DSOUND indirect-call target when Start+A crossed the title gate; verified independent method immediately after the RET 4 at 0x00424280, with its own saved registers, global-lock gate, release helper, and RET 4 at 0x004242CA"
+  },
+  {
+    "start": "0x00284490",
+    "name": "ucrr_frontend_bootstrap_callback_00284490",
+    "reason": "Runtime-observed indirect-call target during front-end initialization after title input succeeded; verified registered callback referenced by five data-immediate sites, with a distinct SEH prologue and complete control-flow region through the RET at 0x00284575"
+  },
+  {
+    "start": "0x004256C0",
+    "name": "ucrr_dsound_buffer_destructor_004256C0",
+    "reason": "Runtime-observed DSOUND vtable target after the recovered front-end bootstrap began running; verified independent destructor immediately after the RET 4 at 0x004256BD, calling the object release and optional delete helpers before its own RET 4 at 0x004256D8"
+  },
+  {
+    "start": "0x00427142",
+    "name": "ucrr_dsound_stream_destructor_00427142",
+    "reason": "Runtime-observed DSOUND vtable target during stable front-end initialization; verified independent 27-byte destructor immediately after the RET 0x0C at 0x0042713F, calling the stream release and optional delete helpers before RET 4 at 0x0042715A"
+  },
+  {
+    "start": "0x00424A84",
+    "name": "ucrr_dsound_adjustor_thunk_00424A84",
+    "reason": "Verified two-instruction adjustor thunk immediately after the RET 8 at 0x00424A81; subtracts 4 from its stack argument and tail-jumps to 0x00424455"
+  },
+  {
+    "start": "0x00424A8E",
+    "name": "ucrr_dsound_adjustor_thunk_00424A8E",
+    "reason": "Verified adjacent two-instruction adjustor thunk; subtracts 4 from its stack argument and tail-jumps to 0x0042449C before the next function at 0x00424A98"
+  },
+  {
+    "start": "0x0042509D",
+    "name": "ucrr_dsound_destructor_0042509D",
+    "reason": "Verified independent 25-byte DSOUND destructor immediately after sub_00425074 returns, with object release, optional delete, and RET 4 before sub_004250B8"
+  },
+  {
+    "start": "0x00425280",
+    "name": "ucrr_dsound_destructor_00425280",
+    "reason": "Verified independent 25-byte DSOUND destructor immediately after sub_00425256 returns, with object release, optional delete, and RET 4 before sub_0042529B"
+  },
+  {
+    "start": "0x004268DB",
+    "name": "ucrr_dsound_destructor_004268DB",
+    "reason": "Verified independent 26-byte DSOUND destructor immediately after sub_0042684C returns; restores its vtable, optionally deletes the object, and ends with RET 4"
+  },
+  {
+    "start": "0x00426991",
+    "name": "ucrr_dsound_destructor_00426991",
+    "reason": "Verified independent 25-byte DSOUND destructor immediately after sub_004268F7 returns, with release, optional delete, and RET 4 before sub_004269AC"
+  },
+  {
+    "start": "0x0042771F",
+    "name": "ucrr_dsound_global_init_0042771F",
+    "reason": "Verified standalone global registration callback after sub_004276DC; writes 0x00441C6C to global 0x00442348 and returns"
+  },
+  {
+    "start": "0x0042772A",
+    "name": "ucrr_dsound_global_init_0042772A",
+    "reason": "Verified adjacent standalone global registration callback; writes 0x00441C70 to global 0x00442344 and returns before sub_00427735"
+  },
+  {
+    "start": "0x00428DC6",
+    "name": "ucrr_dsound_callback_00428DC6",
+    "reason": "Verified callback entry referenced as data at 0x00429178; forwards its second argument to 0x00428999 and ends with RET 0x10"
+  },
+  {
+    "start": "0x00428DD2",
+    "name": "ucrr_dsound_callback_00428DD2",
+    "reason": "Verified adjacent callback entry referenced as data at 0x004291DE; adjusts its object pointer, sets the DSOUND initialized flag, invokes 0x00428504, and ends with RET 4"
+  },
+  {
+    "start": "0x00428F35",
+    "name": "ucrr_dsound_callback_00428F35",
+    "reason": "Verified callback entry referenced as data at 0x0042915A; forwards its second argument to 0x00428E99 and ends with RET 0x10 before sub_00428F41"
+  },
+  {
+    "start": "0x00429115",
+    "name": "ucrr_dsound_callback_00429115",
+    "reason": "Verified callback entry referenced as data at 0x004291A2; forwards its second argument to 0x00429079 and ends with RET 8 before sub_00429121"
+  },
+  {
+    "start": "0x0042A4DC",
+    "name": "ucrr_dsound_destructor_0042A4DC",
+    "reason": "Verified independent 25-byte DSOUND destructor immediately after a RET 8, with release, optional delete, and RET 4 before sub_0042A4F7"
+  },
+  {
+    "start": "0x0042A5E2",
+    "name": "ucrr_dsound_destructor_0042A5E2",
+    "reason": "Verified independent 25-byte DSOUND destructor immediately after a RET 4, with release, optional delete, and RET 4 before sub_0042A5FD"
+  },
+  {
+    "start": "0x0042A6E1",
+    "name": "ucrr_dsound_global_init_0042A6E1",
+    "reason": "Verified standalone global registration callback after a RET 4; writes 0x00441C74 to global 0x004423F0 and returns"
+  },
+  {
+    "start": "0x0042A6EC",
+    "name": "ucrr_dsound_global_init_0042A6EC",
+    "reason": "Verified adjacent standalone global registration callback; writes 0x00441C78 to global 0x004423EC and returns before sub_0042A6F7"
+  },
+  {
+    "start": "0x0042C043",
+    "name": "ucrr_dsound_destructor_0042C043",
+    "reason": "Verified independent 25-byte DSOUND destructor immediately after sub_0042BE3F's owning method returns, with optional delete and RET 4 before sub_0042C05E"
+  },
+  {
+    "start": "0x0042E5F5",
+    "name": "ucrr_dsound_destructor_0042E5F5",
+    "reason": "Verified independent 25-byte DSOUND destructor immediately after a RET 4, with release, optional delete, and RET 4 before sub_0042E610"
+  },
+  {
+    "start": "0x0042E8E5",
+    "name": "ucrr_dsound_callback_0042E8E5",
+    "reason": "Verified callback entry referenced as data at 0x0042ED29; calls 0x0042E77E, returns success in AL, and ends with RET 4 before sub_0042E8F3"
+  },
+  {
+    "start": "0x0042ED7A",
+    "name": "ucrr_dsound_callback_0042ED7A",
+    "reason": "Verified callback entry referenced as data at 0x0042EEDA; forwards its second argument to 0x0042EC4D, converts the result to a Boolean, and ends with RET 8"
+  },
+  {
+    "start": "0x0042ED8B",
+    "name": "ucrr_dsound_callback_0042ED8B",
+    "reason": "Verified adjacent callback entry referenced as data at 0x0042EEB0; forwards its second argument to 0x0042ED21 and ends with RET 0x10 before sub_0042ED97"
+  },
+  {
+    "start": "0x0042EE45",
+    "name": "ucrr_dsound_adjustor_callback_0042EE45",
+    "reason": "Verified callback entry referenced as data at 0x0042EF2B; adjusts its object pointer by -0x0C, calls 0x0042EDD6, and ends with RET 4 before sub_0042EE54"
+  },
+  {
+    "start": "0x002D65B6",
+    "name": "ucrr_crt_strchr",
+    "reason": "Verified 184-byte Xbox CRT strchr implementation tail-called by strstr at 0x002D7224; omission left an unresolved no-op stub that returned the search character as a pointer and caused a near-4-GiB memcpy during first-mission asset resolution"
+  },
+  {
+    "start": "0x003801D2",
+    "name": "ucrr_sse_minimum_reduction_003801D2",
+    "reason": "Verified standalone SSE reduction routine after the preceding function returns and its alignment padding; the scanner missed this true entry and instead seeded its internal loop continuation at 0x00380200"
+  },
+  {
+    "start": "0x000DDC40",
+    "name": "ucrr_entity_factory_thrownweapon_000ddc40",
+    "reason": "Factory referenced by the static entity registry for ThrownWeapon; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x000E38D0",
+    "name": "ucrr_entity_factory_entitycharacter_000e38d0",
+    "reason": "Factory referenced by the static entity registry for ENTITYcharacter; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x000E8D00",
+    "name": "ucrr_entity_factory_objective_000e8d00",
+    "reason": "Factory referenced by the static entity registry for Objective; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x000EDC80",
+    "name": "ucrr_entity_factory_woundedcivilian_000edc80",
+    "reason": "Factory referenced by the static entity registry for WoundedCivilian; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x000F1130",
+    "name": "ucrr_entity_factory_walkwithparcel_000f1130",
+    "reason": "Factory referenced by the static entity registry for WalkWithParcel; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x000F15B0",
+    "name": "ucrr_entity_factory_usefixedchaingun_000f15b0",
+    "reason": "Factory referenced by the static entity registry for UseFixedChaingun; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x000F3DB0",
+    "name": "ucrr_entity_factory_triggerrangedmessage_000f3db0",
+    "reason": "Factory referenced by the static entity registry for TriggerRangedMessage; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x000F4320",
+    "name": "ucrr_entity_factory_triggermessageifplayernotfollowing_000f4320",
+    "reason": "Factory referenced by the static entity registry for TriggerMessageIfPlayerNotFollowing; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x000F48E0",
+    "name": "ucrr_entity_factory_triggeredcamerashakeandrumble_000f48e0",
+    "reason": "Factory referenced by the static entity registry for TriggeredCameraShakeAndRumble; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x000F60B0",
+    "name": "ucrr_entity_factory_travelonvehicle_000f60b0",
+    "reason": "Factory referenced by the static entity registry for TravelOnVehicle; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x000F6AB0",
+    "name": "ucrr_entity_factory_throwprojectile_000f6ab0",
+    "reason": "Factory referenced by the static entity registry for ThrowProjectile; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x000FF7F0",
+    "name": "ucrr_entity_factory_testorderclient_000ff7f0",
+    "reason": "Factory referenced by the static entity registry for TestOrderClient; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x000FFAD0",
+    "name": "ucrr_entity_factory_testobstacle_000ffad0",
+    "reason": "Factory referenced by the static entity registry for TestObstacle; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x0010B1A0",
+    "name": "ucrr_entity_factory_standandshootbehaviour_0010b1a0",
+    "reason": "Factory referenced by the static entity registry for StandAndShootBehaviour; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x0010BD60",
+    "name": "ucrr_entity_factory_spherecollisionable_0010bd60",
+    "reason": "Factory referenced by the static entity registry for SphereCollisionable; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x0010BF40",
+    "name": "ucrr_entity_factory_speechatlocation_0010bf40",
+    "reason": "Factory referenced by the static entity registry for SpeechAtLocation; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x0010DDD0",
+    "name": "ucrr_entity_factory_spectatorcameramanager_0010ddd0",
+    "reason": "Factory referenced by the static entity registry for SpectatorCameraManager; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x0010FBA0",
+    "name": "ucrr_entity_factory_soundregionscript_0010fba0",
+    "reason": "Factory referenced by the static entity registry for SoundRegionScript; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x00111070",
+    "name": "ucrr_entity_factory_sound_00111070",
+    "reason": "Factory referenced by the static entity registry for Sound; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x00112600",
+    "name": "ucrr_entity_factory_smashdoor_00112600",
+    "reason": "Factory referenced by the static entity registry for SmashDoor; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x00112B10",
+    "name": "ucrr_entity_factory_smashbehaviour_00112b10",
+    "reason": "Factory referenced by the static entity registry for SmashBehaviour; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x001139A0",
+    "name": "ucrr_entity_factory_slowmotion_001139a0",
+    "reason": "Factory referenced by the static entity registry for SlowMotion; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x00114760",
+    "name": "ucrr_entity_factory_simplehelptext_00114760",
+    "reason": "Factory referenced by the static entity registry for SimpleHelpText; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x00117EC0",
+    "name": "ucrr_entity_factory_shootinghostagetaker_idleuntil_00117ec0",
+    "reason": "Factory referenced by the static entity registry for ShootingHostageTaker_IdleUntil; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x0011E2F0",
+    "name": "ucrr_entity_factory_shell_0011e2f0",
+    "reason": "Factory referenced by the static entity registry for Shell; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x00120940",
+    "name": "ucrr_entity_factory_scriptrunwhenobjectremoved_00120940",
+    "reason": "Factory referenced by the static entity registry for ScriptRunWhenObjectRemoved; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x00120C80",
+    "name": "ucrr_entity_factory_scriptcontroller_00120c80",
+    "reason": "Factory referenced by the static entity registry for ScriptController; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x00121010",
+    "name": "ucrr_entity_factory_saintsprophetbehaviour_00121010",
+    "reason": "Factory referenced by the static entity registry for SaintsProphetBehaviour; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x00121A60",
+    "name": "ucrr_entity_factory_saintsprophetattackbehaviour_00121a60",
+    "reason": "Factory referenced by the static entity registry for SaintsProphetAttackBehaviour; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x00129090",
+    "name": "ucrr_entity_factory_saintsavengergangleader_00129090",
+    "reason": "Factory referenced by the static entity registry for SaintsAvengerGangLeader; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x001299D0",
+    "name": "ucrr_entity_factory_saintsavengerbehaviour_001299d0",
+    "reason": "Factory referenced by the static entity registry for SaintsAvengerBehaviour; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x0012A6A0",
+    "name": "ucrr_entity_factory_saintsavengerattackbehaviour_0012a6a0",
+    "reason": "Factory referenced by the static entity registry for SaintsAvengerAttackBehaviour; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x0012E6B0",
+    "name": "ucrr_entity_factory_saintsapocalypsebehaviour_0012e6b0",
+    "reason": "Factory referenced by the static entity registry for SaintsApocalypseBehaviour; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x001301E0",
+    "name": "ucrr_entity_factory_saintsapocalypseattackbehaviour_001301e0",
+    "reason": "Factory referenced by the static entity registry for SaintsApocalypseAttackBehaviour; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x00132110",
+    "name": "ucrr_entity_factory_rpgprojectile_00132110",
+    "reason": "Factory referenced by the static entity registry for RPGProjectile; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x00132EA0",
+    "name": "ucrr_entity_factory_rpgattackfromcover_00132ea0",
+    "reason": "Factory referenced by the static entity registry for RPGAttackFromCover; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x00133450",
+    "name": "ucrr_entity_factory_rpgattack_00133450",
+    "reason": "Factory referenced by the static entity registry for RPGAttack; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x00136BD0",
+    "name": "ucrr_entity_factory_restrainedbehaviour_00136bd0",
+    "reason": "Factory referenced by the static entity registry for RestrainedBehaviour; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x00139790",
+    "name": "ucrr_entity_factory_rescue_dropzone_00139790",
+    "reason": "Factory referenced by the static entity registry for Rescue_DropZone; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x00139C30",
+    "name": "ucrr_entity_factory_removeallcollisionforever_00139c30",
+    "reason": "Factory referenced by the static entity registry for RemoveAllCollisionForever; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x0013A080",
+    "name": "ucrr_entity_factory_regionalsoundeffect_0013a080",
+    "reason": "Factory referenced by the static entity registry for RegionalSoundEffect; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x0013AB90",
+    "name": "ucrr_entity_factory_randomspeechonflag_0013ab90",
+    "reason": "Factory referenced by the static entity registry for RandomSpeechOnFlag; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x0013BDD0",
+    "name": "ucrr_entity_factory_randomflagsetter_0013bdd0",
+    "reason": "Factory referenced by the static entity registry for RandomFlagSetter; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x0013C130",
+    "name": "ucrr_entity_factory_randombehaviour_0013c130",
+    "reason": "Factory referenced by the static entity registry for RandomBehaviour; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x0013E080",
+    "name": "ucrr_entity_factory_playstartloopendanimbehaviour_0013e080",
+    "reason": "Factory referenced by the static entity registry for PlayStartLoopEndAnimBehaviour; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x0013E240",
+    "name": "ucrr_entity_factory_playsoundfromnearest_0013e240",
+    "reason": "Factory referenced by the static entity registry for PlaySoundFromNearest; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x001405E0",
+    "name": "ucrr_entity_factory_playerlineofsightcheck_001405e0",
+    "reason": "Factory referenced by the static entity registry for PlayerLineOfSightCheck; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x00146E30",
+    "name": "ucrr_entity_factory_patrol_00146e30",
+    "reason": "Factory referenced by the static entity registry for Patrol; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x001479C0",
+    "name": "ucrr_entity_factory_patriotmagnumgangleader_001479c0",
+    "reason": "Factory referenced by the static entity registry for PatriotMagnumGangLeader; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x00148BF0",
+    "name": "ucrr_entity_factory_patriotmagnumattackbehaviour_00148bf0",
+    "reason": "Factory referenced by the static entity registry for PatriotMagnumAttackBehaviour; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x0014B350",
+    "name": "ucrr_entity_factory_patriotmagnum_0014b350",
+    "reason": "Factory referenced by the static entity registry for PatriotMagnum; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x0014BEE0",
+    "name": "ucrr_entity_factory_patriotgrenadeattackbehaviour_0014bee0",
+    "reason": "Factory referenced by the static entity registry for PatriotGrenadeAttackBehaviour; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x0014E720",
+    "name": "ucrr_entity_factory_patriotgrenade_0014e720",
+    "reason": "Factory referenced by the static entity registry for PatriotGrenade; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x0014ED90",
+    "name": "ucrr_entity_factory_patriotassaultgangleader_0014ed90",
+    "reason": "Factory referenced by the static entity registry for PatriotAssaultGangLeader; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x00154F00",
+    "name": "ucrr_entity_factory_patriotassault_00154f00",
+    "reason": "Factory referenced by the static entity registry for PatriotAssault; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x00156850",
+    "name": "ucrr_entity_factory_particlesystem_00156850",
+    "reason": "Factory referenced by the static entity registry for ParticleSystem; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x00159CF0",
+    "name": "ucrr_entity_factory_openshutter_00159cf0",
+    "reason": "Factory referenced by the static entity registry for OpenShutter; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x0015DC00",
+    "name": "ucrr_entity_factory_occlusionregion_0015dc00",
+    "reason": "Factory referenced by the static entity registry for OcclusionRegion; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x0015DEA0",
+    "name": "ucrr_entity_factory_nocharactertype_0015dea0",
+    "reason": "Factory referenced by the static entity registry for NoCharacterType; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x0015DF20",
+    "name": "ucrr_entity_factory_nobehaviour_0015df20",
+    "reason": "Factory referenced by the static entity registry for NoBehaviour; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x0015F520",
+    "name": "ucrr_entity_factory_newscameraman_0015f520",
+    "reason": "Factory referenced by the static entity registry for NewsCameraman; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x00160070",
+    "name": "ucrr_entity_factory_newhostagetaker_burner_00160070",
+    "reason": "Factory referenced by the static entity registry for NewHostageTaker_Burner; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x00163580",
+    "name": "ucrr_entity_factory_movewalkbehaviour_00163580",
+    "reason": "Factory referenced by the static entity registry for MoveWalkBehaviour; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x00167F30",
+    "name": "ucrr_entity_factory_medicnosecondary_00167f30",
+    "reason": "Factory referenced by the static entity registry for MedicNoSecondary; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x001760F0",
+    "name": "ucrr_entity_factory_lightflash_001760f0",
+    "reason": "Factory referenced by the static entity registry for LightFlash; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x00176A40",
+    "name": "ucrr_entity_factory_lightfittingomnilight_00176a40",
+    "reason": "Factory referenced by the static entity registry for LightFittingOmniLight; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x00177780",
+    "name": "ucrr_entity_factory_lightfitting_00177780",
+    "reason": "Factory referenced by the static entity registry for LightFitting; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x00178CD0",
+    "name": "ucrr_entity_factory_liftshutter_00178cd0",
+    "reason": "Factory referenced by the static entity registry for LiftShutter; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x0017B3A0",
+    "name": "ucrr_entity_factory_joinplayersteam_0017b3a0",
+    "reason": "Factory referenced by the static entity registry for JoinPlayersTeam; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x0017B640",
+    "name": "ucrr_entity_factory_interestinglookpoint_0017b640",
+    "reason": "Factory referenced by the static entity registry for InterestingLookPoint; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x0017D580",
+    "name": "ucrr_entity_factory_intellicontroller_0017d580",
+    "reason": "Factory referenced by the static entity registry for IntelliController; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x001820B0",
+    "name": "ucrr_entity_factory_hostagesituationoverlay_001820b0",
+    "reason": "Factory referenced by the static entity registry for HostageSituationOverlay; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x0018EA20",
+    "name": "ucrr_entity_factory_gangleadercontroller_0018ea20",
+    "reason": "Factory referenced by the static entity registry for GangLeaderController; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x00191740",
+    "name": "ucrr_entity_factory_friendlywavecontroller_00191740",
+    "reason": "Factory referenced by the static entity registry for FriendlyWaveController; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x00195470",
+    "name": "ucrr_entity_factory_fogregioncontroller_00195470",
+    "reason": "Factory referenced by the static entity registry for FogRegionController; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x00196900",
+    "name": "ucrr_entity_factory_flagwatcher_00196900",
+    "reason": "Factory referenced by the static entity registry for FlagWatcher; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x0019B100",
+    "name": "ucrr_entity_factory_firemansmashbackofaxe_0019b100",
+    "reason": "Factory referenced by the static entity registry for FiremanSmashBackOfAxe; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x0019B6D0",
+    "name": "ucrr_entity_factory_firemanputdowncharacter_0019b6d0",
+    "reason": "Factory referenced by the static entity registry for FiremanPutDownCharacter; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x0019F960",
+    "name": "ucrr_entity_factory_firemandefendbehaviour_0019f960",
+    "reason": "Factory referenced by the static entity registry for FiremanDefendBehaviour; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x001A0960",
+    "name": "ucrr_entity_factory_firemancowerbehaviour_001a0960",
+    "reason": "Factory referenced by the static entity registry for FiremanCowerBehaviour; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x001A32D0",
+    "name": "ucrr_entity_factory_firemancarry_001a32d0",
+    "reason": "Factory referenced by the static entity registry for FiremanCarry; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x001A4B70",
+    "name": "ucrr_entity_factory_fireman_001a4b70",
+    "reason": "Factory referenced by the static entity registry for Fireman; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x001A5C00",
+    "name": "ucrr_entity_factory_firedamagesphere_001a5c00",
+    "reason": "Factory referenced by the static entity registry for FireDamageSphere; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x001A69D0",
+    "name": "ucrr_entity_factory_fadeinout_001a69d0",
+    "reason": "Factory referenced by the static entity registry for FadeInOut; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x001A7FA0",
+    "name": "ucrr_entity_factory_externalsniper_001a7fa0",
+    "reason": "Factory referenced by the static entity registry for ExternalSniper; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x001A83A0",
+    "name": "ucrr_entity_factory_exposuresettings_001a83a0",
+    "reason": "Factory referenced by the static entity registry for ExposureSettings; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x001A9800",
+    "name": "ucrr_entity_factory_emoteclearer_001a9800",
+    "reason": "Factory referenced by the static entity registry for EmoteClearer; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x001A9C50",
+    "name": "ucrr_entity_factory_envrumble_001a9c50",
+    "reason": "Factory referenced by the static entity registry for EnvRumble; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x001A9FA0",
+    "name": "ucrr_entity_factory_entityviewcamera_001a9fa0",
+    "reason": "Factory referenced by the static entity registry for EntityViewCamera; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x001ADE90",
+    "name": "ucrr_entity_factory_enablegenericspeech_001ade90",
+    "reason": "Factory referenced by the static entity registry for EnableGenericSpeech; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x001AEDF0",
+    "name": "ucrr_entity_factory_dynamicomnilight_001aedf0",
+    "reason": "Factory referenced by the static entity registry for DynamicOmniLight; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x001B1970",
+    "name": "ucrr_entity_factory_doorprop_001b1970",
+    "reason": "Factory referenced by the static entity registry for DoorProp; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x001B2480",
+    "name": "ucrr_entity_factory_dispatch_001b2480",
+    "reason": "Factory referenced by the static entity registry for Dispatch; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x001B3380",
+    "name": "ucrr_entity_factory_disablegenericspeech_001b3380",
+    "reason": "Factory referenced by the static entity registry for DisableGenericSpeech; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x001B3BE0",
+    "name": "ucrr_entity_factory_deletionregion_001b3be0",
+    "reason": "Factory referenced by the static entity registry for DeletionRegion; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x001B56A0",
+    "name": "ucrr_entity_factory_deadbehaviour_001b56a0",
+    "reason": "Factory referenced by the static entity registry for DeadBehaviour; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x001BCA60",
+    "name": "ucrr_entity_factory_copkeepgivingammo_001bca60",
+    "reason": "Factory referenced by the static entity registry for CopKeepGivingAmmo; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x001C1B70",
+    "name": "ucrr_entity_factory_cop_001c1b70",
+    "reason": "Factory referenced by the static entity registry for Cop; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x001C1EF0",
+    "name": "ucrr_entity_factory_complybehaviour_001c1ef0",
+    "reason": "Factory referenced by the static entity registry for ComplyBehaviour; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x001C2080",
+    "name": "ucrr_entity_factory_commandedsmashdoor_001c2080",
+    "reason": "Factory referenced by the static entity registry for CommandedSmashDoor; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x001C37F0",
+    "name": "ucrr_entity_factory_cleaverpickup_001c37f0",
+    "reason": "Factory referenced by the static entity registry for CleaverPickup; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x001C5650",
+    "name": "ucrr_entity_factory_civilian_001c5650",
+    "reason": "Factory referenced by the static entity registry for Civilian; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x001C5940",
+    "name": "ucrr_entity_factory_checkhealplayer_001c5940",
+    "reason": "Factory referenced by the static entity registry for CheckHealPlayer; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x001C67B0",
+    "name": "ucrr_entity_factory_characterspeechordispatch_001c67b0",
+    "reason": "Factory referenced by the static entity registry for CharacterSpeechOrDispatch; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x001C6E70",
+    "name": "ucrr_entity_factory_characterspeechcontroller_001c6e70",
+    "reason": "Factory referenced by the static entity registry for CharacterSpeechController; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x001C7C90",
+    "name": "ucrr_entity_factory_charactersaintsavenger_001c7c90",
+    "reason": "Factory referenced by the static entity registry for CharacterSaintsAvenger; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x001C7F40",
+    "name": "ucrr_entity_factory_charactersaintsapocalypse_001c7f40",
+    "reason": "Factory referenced by the static entity registry for CharacterSaintsApocalypse; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x001C81F0",
+    "name": "ucrr_entity_factory_characterpatriotmagnum_001c81f0",
+    "reason": "Factory referenced by the static entity registry for CharacterPatriotMagnum; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x001C84A0",
+    "name": "ucrr_entity_factory_characterpatriotgrenade_001c84a0",
+    "reason": "Factory referenced by the static entity registry for CharacterPatriotGrenade; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x001C8750",
+    "name": "ucrr_entity_factory_characterpatriotassault_001c8750",
+    "reason": "Factory referenced by the static entity registry for CharacterPatriotAssault; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x001C9950",
+    "name": "ucrr_entity_factory_characteremote_001c9950",
+    "reason": "Factory referenced by the static entity registry for CharacterEmote; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x001CA780",
+    "name": "ucrr_entity_factory_characterburnerbruteciv_001ca780",
+    "reason": "Factory referenced by the static entity registry for CharacterBurnerBruteCiv; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x001CAA30",
+    "name": "ucrr_entity_factory_characterburnerbrute_001caa30",
+    "reason": "Factory referenced by the static entity registry for CharacterBurnerBrute; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x001CACE0",
+    "name": "ucrr_entity_factory_characterburnerblazer_001cace0",
+    "reason": "Factory referenced by the static entity registry for CharacterBurnerBlazer; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x001CAF90",
+    "name": "ucrr_entity_factory_characterburnerbanger_001caf90",
+    "reason": "Factory referenced by the static entity registry for CharacterBurnerBanger; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x001CB210",
+    "name": "ucrr_entity_factory_character_001cb210",
+    "reason": "Factory referenced by the static entity registry for Character; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x001CBF80",
+    "name": "ucrr_entity_factory_chainsawdoor_001cbf80",
+    "reason": "Factory referenced by the static entity registry for ChainsawDoor; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x001CC950",
+    "name": "ucrr_entity_factory_carcrash_001cc950",
+    "reason": "Factory referenced by the static entity registry for CarCrash; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x001D0DC0",
+    "name": "ucrr_entity_factory_burnersbrutebehaviour_001d0dc0",
+    "reason": "Factory referenced by the static entity registry for BurnersBruteBehaviour; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x001D37E0",
+    "name": "ucrr_entity_factory_burnersblazerbehaviour_001d37e0",
+    "reason": "Factory referenced by the static entity registry for BurnersBlazerBehaviour; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x001D67D0",
+    "name": "ucrr_entity_factory_burnersbangergangleader_001d67d0",
+    "reason": "Factory referenced by the static entity registry for BurnersBangerGangLeader; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x001D6AA0",
+    "name": "ucrr_entity_factory_burnersbangerbehaviour_001d6aa0",
+    "reason": "Factory referenced by the static entity registry for BurnersBangerBehaviour; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x001DCFE0",
+    "name": "ucrr_entity_factory_bulletshooter_001dcfe0",
+    "reason": "Factory referenced by the static entity registry for BulletShooter; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x001E95E0",
+    "name": "ucrr_entity_factory_assignmentfailed_001e95e0",
+    "reason": "Factory referenced by the static entity registry for AssignmentFailed; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x001E97E0",
+    "name": "ucrr_entity_factory_assignmentcomplete_001e97e0",
+    "reason": "Factory referenced by the static entity registry for AssignmentComplete; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x001EA370",
+    "name": "ucrr_entity_factory_arrestcoparrester_001ea370",
+    "reason": "Factory referenced by the static entity registry for ArrestCopArrester; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x001EA500",
+    "name": "ucrr_entity_factory_areaonfire_001ea500",
+    "reason": "Factory referenced by the static entity registry for AreaOnFire; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x001EEC90",
+    "name": "ucrr_entity_factory_angularimpulse_001eec90",
+    "reason": "Factory referenced by the static entity registry for AngularImpulse; data-driven indirect-call target omitted by ordinary control-flow discovery"
+  },
+  {
+    "start": "0x000583B0",
+    "name": "ucrr_render_callback_000583b0",
+    "reason": "Verified runtime render callback and detected function entry that was absent from the generated dispatch table"
+  }
+]

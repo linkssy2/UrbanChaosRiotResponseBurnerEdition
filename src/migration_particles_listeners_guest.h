@@ -1,0 +1,4 @@
+#ifndef MIGRATION_PARTICLES_LISTENERS_GUEST_H
+#define MIGRATION_PARTICLES_LISTENERS_GUEST_H
+int uc_migration_particles_listeners(unsigned entry);
+#endif

@@ -1,0 +1,5 @@
+#ifndef MIGRATION_ANIMATION_DECODE_GUEST_H
+#define MIGRATION_ANIMATION_DECODE_GUEST_H
+int uc_migration_animation_decode32(void);
+int uc_migration_animation_decode48(void);
+#endif

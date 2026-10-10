@@ -1,0 +1,5 @@
+#ifndef MIGRATION_ANIMATION_CONTRIBUTION_GUEST_H
+#define MIGRATION_ANIMATION_CONTRIBUTION_GUEST_H
+int uc_migration_animation_contribution_node(void);
+int uc_migration_animation_contribution_add(void);
+#endif

@@ -1,0 +1,4 @@
+#ifndef UC_HYBRID_RESOURCE_PROVIDER_GUEST_H
+#define UC_HYBRID_RESOURCE_PROVIDER_GUEST_H
+int uc_hybrid_resource_provider_open(void);
+#endif

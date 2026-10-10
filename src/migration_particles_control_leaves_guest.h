@@ -1,0 +1,4 @@
+#ifndef UC_MIGRATION_PARTICLES_CONTROL_LEAVES_GUEST_H
+#define UC_MIGRATION_PARTICLES_CONTROL_LEAVES_GUEST_H
+int uc_migration_particles_control_leaves(unsigned entry);
+#endif

@@ -1,0 +1,5 @@
+#ifndef UCRR_MIGRATION_ANIMATION_WORLD_GUEST_H
+#define UCRR_MIGRATION_ANIMATION_WORLD_GUEST_H
+int uc_migration_animation_world(void);
+int uc_migration_animation_linked(void);
+#endif

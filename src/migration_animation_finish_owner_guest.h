@@ -1,0 +1,4 @@
+#ifndef MIGRATION_ANIMATION_FINISH_OWNER_GUEST_H
+#define MIGRATION_ANIMATION_FINISH_OWNER_GUEST_H
+int uc_migration_animation_finish_owner(void);
+#endif

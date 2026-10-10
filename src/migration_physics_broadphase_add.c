@@ -1,0 +1,50 @@
+/* Original batch endpoint quantization, sorting, merging and pair enumeration. */
+#include "migration_physics_broadphase_add.h"
+#include "recomp_types.h"
+#include "xbox_memory_layout.h"
+#include <stdlib.h>
+#include <string.h>
+void sub_002E00E0(void);void sub_00324470(void);void sub_00323F00(void);void sub_00327BF0(void);
+#define CALL(ret,fn) do{g_ebp=frame;PUSH32(g_esp,ret);fn();}while(0)
+static int span(uint32_t p,uint32_t n){return p>=0x10000&&p<0x80000000&&(uint64_t)p+n<=g_xbox_total_ram;}
+static int safe(uint32_t p,uint32_t n){return span(p,n)&&((uint64_t)p+n<=g_esp-2048||(uint64_t)g_esp+16<=p);}
+static int array(uint32_t p,unsigned stride){if(!safe(p,12))return 0;uint32_t n=MEM32(p+4),cap=MEM32(p+8)&0x3fffffff;return n<=cap&&cap<=65535&&(!cap||safe(MEM32(p),cap*stride));}
+static void add_batch(void){
+ uint32_t frame=g_ebp;PUSH32(g_esp,frame);frame=g_esp;g_ebp=frame;g_esp=(g_esp&~15u)-148;g_eax=MEM32(frame+12);PUSH32(g_esp,g_ebx);PUSH32(g_esp,g_esi);PUSH32(g_esp,g_edi);g_edi=g_ecx;MEM32(g_esp+68)=g_edi;
+ if((int32_t)MEM32(g_eax+4)>=1){
+  g_ecx=MEM32(g_edi+68);g_edx=MEM32(frame+8);g_esi=MEM32(g_edi+68);g_eax=MEM32(g_edi+72);g_ebx=g_edi+64;MEM32(g_esp+28)=g_ecx;g_ecx=MEM32(g_edx+4);g_esi+=g_ecx;g_eax&=0x3fffffff;MEM32(g_esp+24)=g_ecx;if((int32_t)g_eax<(int32_t)g_esi){g_eax*=2;if((int32_t)g_esi>=(int32_t)g_eax)g_eax=g_esi;PUSH32(g_esp,16);PUSH32(g_esp,g_eax);PUSH32(g_esp,g_ebx);CALL(0x328c38,sub_002E00E0);g_ecx=MEM32(g_esp+36);g_esp+=12;}
+  MEM32(g_ebx+4)=g_esi;g_eax=MEM32(g_edi+80);g_edx=MEM32(g_edi+92);MEM32(g_esp+84)=g_eax;g_eax=MEM32(g_edi+104);g_esi=g_edi+76;MEM32(g_esp+92)=g_eax;g_eax=MEM32(g_esi+8);g_ecx*=2;MEM32(g_esp+88)=g_edx;g_edx=MEM32(g_esi+4);g_ebx=g_ecx+g_edx;g_eax&=0x3fffffff;MEM32(g_esp+20)=g_edx;MEM32(g_esp+16)=g_ecx;
+  if((int32_t)g_eax<(int32_t)g_ebx){g_eax*=2;if((int32_t)g_ebx>=(int32_t)g_eax)g_eax=g_ebx;PUSH32(g_esp,4);PUSH32(g_esp,g_eax);PUSH32(g_esp,g_esi);CALL(0x328c87,sub_002E00E0);g_ecx=MEM32(g_esp+28);g_edx=MEM32(g_esp+32);g_esp+=12;}
+  g_eax=MEM32(g_esi);MEM32(g_esi+4)=g_ebx;g_edx=g_eax+g_edx*4;g_eax=MEM32(g_edi+96);g_esi=g_edi+88;MEM32(g_esp+44)=g_edx;g_edx=MEM32(g_esi+4);g_ebx=g_ecx+g_edx;g_eax&=0x3fffffff;MEM32(g_esp+20)=g_edx;
+  if((int32_t)g_eax<(int32_t)g_ebx){g_eax*=2;if((int32_t)g_ebx>=(int32_t)g_eax)g_eax=g_ebx;PUSH32(g_esp,4);PUSH32(g_esp,g_eax);PUSH32(g_esp,g_esi);CALL(0x328cc8,sub_002E00E0);g_ecx=MEM32(g_esp+28);g_edx=MEM32(g_esp+32);g_esp+=12;}
+  g_eax=MEM32(g_esi);MEM32(g_esi+4)=g_ebx;g_edx=g_eax+g_edx*4;g_eax=MEM32(g_edi+108);g_esi=g_edi+100;MEM32(g_esp+48)=g_edx;g_edx=MEM32(g_esi+4);g_ebx=g_ecx+g_edx;g_eax&=0x3fffffff;MEM32(g_esp+16)=g_edx;
+  if((int32_t)g_eax<(int32_t)g_ebx){g_eax*=2;if((int32_t)g_ebx>=(int32_t)g_eax)g_eax=g_ebx;PUSH32(g_esp,4);PUSH32(g_esp,g_eax);PUSH32(g_esp,g_esi);CALL(0x328d09,sub_002E00E0);g_edx=MEM32(g_esp+28);g_esp+=12;}
+  g_eax=MEM32(g_esi);g_ecx=g_eax+g_edx*4;g_eax=MEM32(g_esp+24);MEM32(g_esp+52)=g_ecx;g_ecx=0;MEM32(g_esi+4)=g_ebx;MEM32(g_esp+40)=g_ecx;
+  if((int32_t)g_eax>0){g_esi=MEM32(g_esp+44);g_ebx=MEM32(g_esp+48);g_eax=MEM32(g_esp+28);g_edx=MEM32(g_esp+48);g_ebx-=g_esi;MEM32(g_esp+16)=g_ecx;MEM32(g_esp+80)=g_ebx;g_ebx=MEM32(g_esp+52);g_ecx=g_eax<<4;g_ebx-=g_esi;MEM32(g_esp+20)=g_ecx;g_ecx=g_esi+4;g_esi=MEM32(g_esp+52);MEM32(g_esp+32)=g_ebx;g_ebx=MEM32(g_esp+48);g_edx+=6;g_esi-=g_ebx;MEM32(g_esp+36)=g_esi;
+   do{g_xmm4=XMM_MEM(g_edi+16);g_xmm0=XMM_MEM(g_edi+48);g_xmm3=XMM_MEM(0x505cc0);g_xmm2=XMM_MEM(0x49e020);g_xmm1=XMM_MEM(0x49e010);g_esi=MEM32(frame+12);g_esi=MEM32(g_esi);g_ebx=MEM32(g_esp+16);g_xmm5=XMM_MEM(g_esi+g_ebx);g_esi+=g_ebx;g_xmm5=XMM_ADD(g_xmm5,g_xmm4);g_xmm4=XMM_MEM(g_edi+32);g_xmm5=XMM_MUL(g_xmm5,g_xmm0);g_xmm5=XMM_MIN(g_xmm5,g_xmm3);g_xmm5=XMM_MAX(g_xmm5,g_xmm2);g_xmm5=XMM_ADD(g_xmm5,g_xmm1);XMM_STORE(g_esp+128,g_xmm5);g_xmm5=XMM_MEM(g_esi+16);
+    g_ebx=MEM32(g_esp+128)>>7;MEM16(g_esp+56)=(uint16_t)g_ebx;g_ebx=MEM32(g_esp+132)>>7;MEM16(g_esp+58)=(uint16_t)g_ebx;g_ebx=MEM32(g_esp+136)>>7;MEM16(g_esp+60)=(uint16_t)g_ebx;
+    g_xmm5=XMM_ADD(g_xmm5,g_xmm4);g_xmm5=XMM_MUL(g_xmm5,g_xmm0);g_xmm5=XMM_MIN(g_xmm5,g_xmm3);g_xmm5=XMM_MAX(g_xmm5,g_xmm2);g_xmm5=XMM_ADD(g_xmm5,g_xmm1);XMM_STORE(g_esp+144,g_xmm5);g_esi=MEM32(g_esp+144);g_ebx=MEM32(g_esp+148);g_esi>>=7;g_ebx>>=7;g_esi=(uint16_t)g_esi;MEM16(g_esp+74)=(uint16_t)g_ebx;g_ebx=MEM32(g_esp+152);g_esi|=1;g_ebx>>=7;MEM32(g_esp+112)=g_esi;g_esi=MEM16(g_esp+74);MEM16(g_esp+76)=(uint16_t)g_ebx;g_ebx=MEM32(g_esp+56);g_esi|=1;g_ebx&=0xfffe;MEM32(g_esp+116)=g_esi;g_esi=MEM16(g_esp+76);MEM32(g_esp+96)=g_ebx;g_ebx=MEM32(g_esp+58)&0xfffe;g_esi|=1;MEM32(g_esp+100)=g_ebx;g_ebx=MEM32(g_esp+60);MEM32(g_esp+120)=g_esi;g_esi=MEM32(frame+8);g_esi=MEM32(g_esi);g_ebx&=0xfffe;MEM32(g_esp+104)=g_ebx;g_ebx=MEM32(g_esp+40);g_esi=MEM32(g_esi+g_ebx*4);g_ebx=MEM32(g_esp+20);g_edi+=64;g_edi=MEM32(g_edi);MEM32(g_edi+g_ebx+12)=g_esi;g_edi=MEM32(g_esp+80);MEM32(g_esi)=g_eax;
+    SET_LO16(g_esi,MEM16(g_esp+96));MEM16(g_ecx-4)=(uint16_t)g_esi;SET_LO16(g_esi,MEM16(g_esp+112));MEM16(g_ecx-2)=(uint16_t)g_eax;MEM16(g_ecx)=(uint16_t)g_esi;SET_LO16(g_esi,MEM16(g_esp+100));MEM16(g_ecx+2)=(uint16_t)g_eax;MEM16(g_edx-6)=(uint16_t)g_esi;SET_LO16(g_esi,MEM16(g_esp+116));MEM16(g_edx-4)=(uint16_t)g_eax;MEM16(g_edi+g_ecx)=(uint16_t)g_esi;MEM16(g_edx)=(uint16_t)g_eax;g_edi=MEM32(g_esp+52);g_esi=MEM32(g_esp+40);SET_LO16(g_ebx,MEM16(g_esp+104));MEM16(g_edi+g_esi*8)=(uint16_t)g_ebx;g_ebx=MEM32(g_esp+32);MEM16(g_edi+g_esi*8+2)=(uint16_t)g_eax;SET_LO16(g_edi,MEM16(g_esp+120));MEM16(g_ebx+g_ecx)=(uint16_t)g_edi;g_edi=MEM32(g_esp+36);g_ebx=MEM32(g_esp+20);MEM16(g_edi+g_edx)=(uint16_t)g_eax;g_edi=MEM32(g_esp+16)+32;++g_esi;g_ebx+=16;MEM32(g_esp+16)=g_edi;g_edi=MEM32(g_esp+24);++g_eax;g_ecx+=8;g_edx+=8;uint32_t limit=g_edi;g_edi=MEM32(g_esp+68);MEM32(g_esp+40)=g_esi;MEM32(g_esp+20)=g_ebx;if((int32_t)g_esi>=(int32_t)limit)break;
+   }while(1);
+  }
+  g_edx=MEM32(g_edi+64);MEM32(g_esp+32)=g_edx;g_esi=0;do{g_ebx=MEM32(g_esp+24)*2;MEM8(g_esp+36)=0;if((int32_t)g_ebx>1){g_eax=MEM32(g_esp+36);g_edx=MEM32(g_esp+g_esi*4+44);PUSH32(g_esp,g_eax);g_ecx=g_ebx-1;PUSH32(g_esp,g_ecx);PUSH32(g_esp,0);PUSH32(g_esp,g_edx);CALL(0x328f55,sub_00324470);g_esp+=16;}++g_esi;}while((int32_t)g_esi<3);
+  g_eax=MEM32(g_esp+84);g_ecx=MEM32(0x51e6f4);g_edx=MEM32(g_ecx+32);g_eax=(g_eax*4+16)&~15u;g_esi=g_edx+g_eax;if(g_esi<=MEM32(g_ecx+44)){MEM32(g_ecx+32)=g_esi;MEM32(g_esp+20)=g_edx;}else{g_edx=MEM32(g_ecx);uint32_t saved=g_esp;PUSH32(g_esp,g_eax);uint32_t target=MEM32(g_edx+48);PUSH32(g_esp,0x328f8c);RECOMP_ICALL_SAFE(target,saved);MEM32(g_esp+20)=g_eax;}
+  g_eax=g_edi+76;g_esi=0;MEM32(g_esp+16)=g_eax;do{g_eax=MEM32(g_esp+20);g_ecx=MEM32(g_esp+g_esi*4+84);g_edx=MEM32(g_esp+32);PUSH32(g_esp,g_eax);PUSH32(g_esp,g_esi);PUSH32(g_esp,g_ebx);PUSH32(g_esp,g_ecx);g_ecx=MEM32(g_esp+32);PUSH32(g_esp,g_edx);CALL(0x328fba,sub_00323F00);g_ecx=MEM32(g_esp+16);++g_esi;g_ecx+=12;MEM32(g_esp+16)=g_ecx;}while((int32_t)g_esi<3);
+  g_ecx=MEM32(0x51e6f4);g_eax=MEM32(g_ecx+40);g_edx=MEM32(g_esp+20);MEM32(g_ecx+32)=g_edx;if(!g_eax||g_edx==g_eax){g_eax=MEM32(g_ecx);uint32_t saved=g_esp;PUSH32(g_esp,g_edx);uint32_t target=MEM32(g_eax+52);PUSH32(g_esp,0x328fe9);RECOMP_ICALL_SAFE(target,saved);}
+  g_eax=MEM32(g_edi+112);if(g_eax){g_ecx=0;if((int32_t)g_eax>0){g_edx=0;do{g_eax=MEM32(g_edi+120);g_eax=MEM16(g_edx+g_eax);g_esi=MEM32(g_edi+64);g_eax<<=4;MEM16(g_eax+g_esi+4)+=(uint16_t)g_ebx;MEM16(g_eax+g_esi+6)+=(uint16_t)g_ebx;g_eax+=g_esi;g_eax=MEM32(g_edi+112);++g_ecx;g_edx+=16;}while((int32_t)g_ecx<(int32_t)g_eax);}}
+  g_eax=MEM32(g_edi+68);g_ecx=MEM32(0x51e6f4);g_esi=MEM32(g_ecx+32);g_ebx=g_eax;g_eax=(uint32_t)((int32_t)g_eax>>5);g_eax=(g_eax*4+48)&~15u;g_edx=g_esi+g_eax;g_ebx=(uint32_t)((int32_t)g_ebx>>3);if(g_edx<=MEM32(g_ecx+44))MEM32(g_ecx+32)=g_edx;else{g_edx=MEM32(g_ecx);uint32_t saved=g_esp;PUSH32(g_esp,g_eax);uint32_t target=MEM32(g_edx+48);PUSH32(g_esp,0x329055);RECOMP_ICALL_SAFE(target,saved);g_esi=g_eax;}
+  g_ebx=(uint32_t)((int32_t)g_ebx>>4);g_xmm0=XMM_ZERO();g_eax=g_esi;if((int32_t)g_ebx>=0){++g_ebx;do{g_ecx=g_eax;g_eax+=16;--g_ebx;XMM_STORE(g_ecx,g_xmm0);}while(g_ebx);}g_eax=MEM32(g_esp+24);if((int32_t)g_eax>0){g_edx=MEM32(g_esp+28);MEM32(g_esp+28)=g_eax;do{g_ecx=g_edx&31;g_eax=(uint32_t)((int32_t)g_edx>>5);g_ebx=1u<<(uint8_t)g_ecx;MEM32(g_esi+g_eax*4)^=g_ebx;g_eax=MEM32(g_esp+28);++g_edx;--g_eax;MEM32(g_esp+28)=g_eax;}while(g_eax);}
+  PUSH32(g_esp,g_ecx);g_eax=g_esp;MEM8(g_eax)=1;g_eax=MEM32(frame+16);PUSH32(g_esp,g_eax);PUSH32(g_esp,g_esi);g_ecx=g_edi;CALL(0x3290b2,sub_00327BF0);g_ecx=MEM32(0x51e6f4);g_eax=MEM32(g_ecx+40);MEM32(g_ecx+32)=g_esi;if(!g_eax||g_esi==g_eax){g_edx=MEM32(g_ecx);uint32_t saved=g_esp;PUSH32(g_esp,g_esi);uint32_t target=MEM32(g_edx+52);PUSH32(g_esp,0x3290cc);RECOMP_ICALL_SAFE(target,saved);}
+ }
+ POP32(g_esp,g_edi);POP32(g_esp,g_esi);POP32(g_esp,g_ebx);g_esp=frame;POP32(g_esp,frame);g_esp+=16;
+}
+int uc_migration_physics_broadphase_add(unsigned entry){
+ static int enabled=-1;if(enabled<0){const char*v=getenv("UCRR_NATIVE_PHYSICS_BROADPHASE_ADD");enabled=v&&!strcmp(v,"1");}if(!enabled||entry!=0x328be0||!span(g_esp-2048,2064)||!safe(g_ecx,124)||!span(0x51e6f4,4)||!span(0x505cc0,16)||!span(0x49e010,32))return 0;
+ uint32_t handles=MEM32(g_esp+4),bounds=MEM32(g_esp+8),pairs=MEM32(g_esp+12);if(!array(handles,4)||!array(bounds,32)||!array(pairs,8)||MEM32(handles+4)!=MEM32(bounds+4)||!array(g_ecx+64,16))return 0;
+ uint32_t n=MEM32(handles+4),old=MEM32(g_ecx+68),allocator=MEM32(0x51e6f4);if(n>32766||n+old>65535||!safe(allocator,48)||!span(MEM32(allocator),56)||!safe(MEM32(allocator+32),old*8+64))return 0;
+ for(uint32_t i=0;i<n;i++)if(!safe(MEM32(MEM32(handles)+i*4),4))return 0;
+ for(unsigned axis=0;axis<3;axis++){uint32_t h=g_ecx+76+axis*12;if(!array(h,4))return 0;uint32_t p=MEM32(h),count=MEM32(h+4);if(count<2||count+n*2>65535||MEM16(p)!=0||MEM16(p+(count-1)*4)!=65535)return 0;for(uint32_t i=0;i<count;i++)if(MEM16(p+i*4+2)>=old)return 0;}
+ uint32_t partitions=MEM32(g_ecx+112),p=MEM32(g_ecx+120);if(partitions>65535||!safe(p,partitions*16))return 0;for(uint32_t i=0;i<partitions;i++)if(MEM16(p+i*16)>=old)return 0;
+ add_batch();return 1;
+}
+#undef CALL

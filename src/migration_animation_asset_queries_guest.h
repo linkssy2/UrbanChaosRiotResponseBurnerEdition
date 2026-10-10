@@ -1,0 +1,6 @@
+#ifndef MIGRATION_ANIMATION_ASSET_QUERIES_GUEST_H
+#define MIGRATION_ANIMATION_ASSET_QUERIES_GUEST_H
+int uc_migration_animation_key_mask_count(void);
+int uc_migration_animation_asset_state(void);
+int uc_migration_animation_controller_state(void);
+#endif
