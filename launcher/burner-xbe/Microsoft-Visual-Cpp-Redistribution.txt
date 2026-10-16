@@ -1,0 +1,24 @@
+Microsoft Visual C++2015-2022 runtime
+
+The app-local msvcp140.dll, vcruntime140.dll and vcruntime140_1.dll are unmodified
+Microsoft redistributable components from the installed Visual Studio2022
+Build Tools folder:
+VC/Redist/MSVC/14.44.35112/x64/Microsoft.VC143.CRT
+
+Copyright Microsoft Corporation. These files retain their original signatures
+and version resources. They are not covered by this project's open-source
+license. They accompany the application and are not a standalone runtime offer.
+
+The original installed Visual Studio redistribution notice is included as
+Microsoft-Visual-Studio-Redist.txt. The Microsoft runtime's original English
+end-user terms, taken without modification from the matching local
+vc_redist.x64.exe, are Microsoft-Visual-Cpp-Runtime-license.rtf.
+
+Microsoft's redistribution list linked by the installed notice:
+https://aka.ms/vs/17/redist.txt
+The official Visual Studio2022 redistribution list includes the unmodified
+Visual C++ runtime files under VC/redist (excluding debug_nonredist):
+https://learn.microsoft.com/en-us/visualstudio/releases/2022/redistribution
+
+The Windows Universal C Runtime and Direct3D12 are supplied by Windows10/11;
+this package does not copy Windows system DLLs.

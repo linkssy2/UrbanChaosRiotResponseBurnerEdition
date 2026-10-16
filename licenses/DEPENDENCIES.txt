@@ -1,5 +1,13 @@
-Python 3.12: tools/python/LICENSE.txt; https://www.python.org/downloads/source/
-FFmpeg 8.1.2 shared build: tools/ffmpeg/LICENSE.txt and README.txt; source https://github.com/FFmpeg/FFmpeg/commit/38b88335f9
-xboxrecomp and its component notices: xboxrecomp.txt and xboxrecomp-notice.txt.
-Jolt Physics: JoltPhysics.txt.
+Current 0.03 runtime:
+- XboxXBERecomp by TGP482: XboxXBERecomp.txt (MIT), pinned in dependencies.lock.json.
+- XboxXBERecomp dependencies: XboxXBERecomp-third-party.txt (Zydis, toml++, Dear ImGui and SDL).
+- Reused sp00nznet/xboxrecomp helpers/importer: xboxrecomp.txt, xboxrecomp-notice.txt and LGPL-2.1.txt.
+- Embedded Python and zlib: their unmodified notices accompany the binary release.
+- Microsoft Visual C++ runtime: redistribution notices accompany the binary release and are maintained in launcher/burner-xbe/.
+
+Historical runtime/source notices (not all components are used by 0.03):
+- FFmpeg 8.1.2: shared build source https://github.com/FFmpeg/FFmpeg/commit/38b88335f9; the historical package included its notices.
+- Jolt Physics: JoltPhysics.txt (earlier standalone-native work).
+
 Launcher artwork was generated for Burner Edition from the local cover reference; it is not extracted disc content.
+Original game content is not licensed or supplied by this project.

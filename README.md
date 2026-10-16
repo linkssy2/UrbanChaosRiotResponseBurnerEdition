@@ -1,37 +1,33 @@
 # Urban Chaos: Riot Response — Burner Edition
 
-**Version 0.02 · Windows x64**
+**PC port · Version 0.03 · Windows x64**
 
-An unofficial PC port built with xboxrecomp and native PC engine components.
-Original gameplay and mission logic use statically recompiled Xbox code, with
-PC rendering, input and menu improvements. This is a hybrid recompilation;
-it is not a complete ground-up rewrite.
+An unofficial PC port powered by [XboxXBERecomp by TGP482](https://github.com/TGP482/XboxXBERecomp), with native Direct3D 12 rendering and statically recompiled original Xbox gameplay. Earlier Burner Edition work and retained helpers use [xboxrecomp by sp00nz](https://github.com/sp00nznet/xboxrecomp).
+
+## What's new
+
+- New rendering/runtime foundation, with improved performance in testing.
+- Game-style mouse menus, keyboard/controller rebinding, profile management and PC button prompts.
+- Widescreen, resolution scaling, MSAA, filtering, lighting, fog and ragdoll options.
+- Dialogue/prompt, audio, fog and HUD fixes; English, French, Italian and German language selection in **Options → Language** (restart required).
+- Updated ISO setup and direct Play launcher, bundled C++ runtime DLLs, and routine diagnostics disabled.
 
 ## Install
 
-1. Download the **0.02 Win64 ZIP** from Releases and extract the entire folder.
-2. Run **Burner Edition Setup.exe** and select your supported original Xbox ISO.
-3. After import, run **Play Burner Edition.exe** for direct launch.
+1. Download the **0.03 Windows x64 ZIP** from [Releases](https://github.com/linkssy2/UrbanChaosRiotResponseBurnerEdition/releases/latest) and extract the entire folder.
+2. Run **Burner Edition Setup.exe** and select your supported original Xbox ISO or XISO.
+3. After import, use **Play Burner Edition.exe** to launch directly.
 
-No ISO, standalone Xbox executable, bulk game data, videos or saves are supplied.
-Original HUD artwork is generated locally from the imported disc; it is not embedded in the release.
-Your disc is read locally. Imports, settings and saves live in
-`%LOCALAPPDATA%\UrbanChaosBurnerEdition`. Existing installations are reused.
+Requires Windows 10/11 x64 and a Direct3D 12-capable GPU. No original game assets, Xbox executable, ISO, videos or saves are supplied. Menu fonts, HUD artwork, textures and audio come from your imported disc. Keep the extracted package together.
 
-## Performance
+Existing verified game imports are reused. This runtime keeps its settings and saves in `%LOCALAPPDATA%\UrbanChaosBurnerEdition\xbe-runtime`; older releases' saves/settings are preserved separately and are **not automatically migrated**. Setup includes **Open Saves**.
 
-**Dynamic scenery lighting and character lighting can cause slowdowns**, especially
-with multiple characters and effects. Lower Character lighting quality or disable
-these lighting options in Graphics, then choose **Apply**. Stable 60 FPS is not guaranteed.
-Routine runtime logs and diagnostic recorders are disabled in the release.
+## Notes
 
-Mouse/keyboard and controller input are supported. Graphics and control changes
-use Apply. Version 0.02 is an early release; please report the mission, settings
-and steps when reporting bugs. Do not attach game files or saves containing personal data.
+Dynamic scenery lighting and character lighting can still cause slowdowns, especially during busy scenes and explosions. Effects and retained ragdolls also affect performance; stable 60 FPS is not guaranteed. Adjust Graphics settings and choose **Apply**.
+
+Custom PC settings/control descriptions remain in English. Spanish is not present in the supported disc's text/voice banks. Routine logs and diagnostic captures are disabled; a failed launch can leave a small error report.
 
 ## Development
 
-See [the code map](docs/CODE_MAP.md), [source/build limits](docs/BUILDING.md) and
-[credits](CREDITS.md). Generated game code and local research/build artifacts
-are intentionally excluded. The source snapshot is for inspection and contribution;
-a standalone reconstruction of the complete release build is not yet provided.
+See [the code map](docs/CODE_MAP.md), [runtime maintenance](docs/XBE-RUNTIME-MAINTENANCE.md), [source/build notes](docs/BUILDING.md) and [credits](CREDITS.md). Generated game code, disc assets and private research/build outputs are excluded. The maintained source is provided for inspection and contribution; the standalone rebuild pipeline still needs work.
