@@ -13,7 +13,7 @@ from disc import Disc, XisoError, BLOCK, sha, supported_hash, progress, check_ca
 
 ROOT = Path(__file__).resolve().parent.parent
 RUNTIME_NAME = 'UrbanChaosXbeTrial.exe'
-RUNTIME_FILES = (RUNTIME_NAME, 'zlib1.dll', 'msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll')
+RUNTIME_FILES = (RUNTIME_NAME, 'zlib1.dll', 'libusb-1.0.dll', 'msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll')
 
 
 def manifest():
@@ -83,7 +83,7 @@ def import_iso(iso_path, data, cancel):
         check_cancel(cancel)
         (stage / 'installed.json').write_text(json.dumps({
             'version': 1, 'disc_manifest': sha(ROOT / 'tools/disc-manifest.json'),
-            'files': len(required), 'importer': 'burner-xbe-0.03'}))
+            'files': len(required), 'importer': 'burner-xbe-0.04'}))
         install = data / 'installed'
         backup = data / ('.previous-' + uuid.uuid4().hex)
         if install.exists():

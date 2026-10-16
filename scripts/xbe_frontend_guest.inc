@@ -164,7 +164,7 @@ extern "C" void ucrr_native_frontend_publish(const UcHybridFrontendSnapshot* sou
     TrialFrontendPublish(frame);
 }
 static bool FrontendGuestOwns(uint32_t owner,uint32_t kind){
-    return (kind==UC_HF_LEVELS||kind==UC_HF_PROFILES||kind==TRIAL_HF_NAME||
+    return (kind==UC_HF_LEVELS||kind==UC_HF_REWARD_BROWSER||kind==UC_HF_PROFILES||kind==TRIAL_HF_NAME||
         (kind==UC_HF_DIALOG&&FrontendDeleteDialog(owner))||GraphicsMenuKind(owner))&&TrialFrontendOwns(owner,kind);
 }
 
@@ -215,8 +215,38 @@ static bool FrontendNameQuery(){
 static void FrontendListEnter(){
     if(!GraphicsMenuKind(menu_owner))TrialFrontendPublish({});
 }
+extern int xbox_KeyboardMode();
+static void FrontendRewardSidebar(){
+    const uint32_t owner=g_esi;
+    if(!xbox_KeyboardMode()||!hf_settled()||!menu_pointer_readable(owner,0x34)||
+       MEM32(owner)!=0x485F14||!TrialFrontendPresents(owner,UC_HF_REWARD_BROWSER))return;
+    const unsigned count=MEM32(owner+0x18),selected=MEM32(owner+4);
+    const uint32_t records=MEM32(owner+0x2C);
+    if(!count||count>55||selected>=count||!menu_pointer_readable(records,count*44)||g_esp<0x10200)return;
+    const X86Context saved=*regs;const uint32_t scratch=(g_esp-128)&~15u;
+    if(!menu_pointer_readable(scratch-32,160))return;
+    auto draw=[&](uint32_t texture,float x,float y,float w,float h,uint32_t color){
+        MEMF(scratch)=x;MEMF(scratch+4)=y;MEMF(scratch+8)=x+w;MEMF(scratch+12)=y+h;MEM32(scratch+16)=color;
+        g_esp=scratch;
+        if(texture)kernel::CallGuest(*regs,0x65760,{texture,scratch,scratch+8,scratch+16,0});
+        else kernel::CallGuest(*regs,0x656D0,{scratch,scratch+8,scratch+16});
+    };
+    // Same opaque sidebar as level select; keep the original detail panel intact.
+    draw(0,0,73,47,306,0xff000000);draw(0,46,73,1,306,0xff858b89);
+    const unsigned first=selected/TrialRewardsPerPage*TrialRewardsPerPage;
+    for(unsigned i=first;i<std::min(count,first+TrialRewardsPerPage);++i){
+        const uint32_t record=records+i*44;
+        const uint32_t art=MEM8(record+0x28)?MEM32(record+0x14):0x4FF4BC;
+        if(!menu_pointer_readable(art,24))continue;
+        const uint32_t texture=MEM32(art+16);if(!texture)continue;
+        const auto r=TrialLevelBounds(i-first,TrialRewardsPerPage);const float size=std::min(24.f,r.h-2);
+        if(i==selected)draw(0,r.x,r.y,r.w,r.h,0xff3d4444);
+        draw(texture,r.x+2,r.y+1,size,size,0xffffffff);
+    }
+    *regs=saved;
+}
 static bool FrontendLevelReady(){
-    return hf_settled()&&level_owner&&menu_pointer_readable(level_owner,0x118)&&
+    return xbox_KeyboardMode()&&hf_settled()&&level_owner&&menu_pointer_readable(level_owner,0x118)&&
         MEM32(level_owner)==0x4885FC&&MEM32(level_owner+0xEC)>0&&MEM32(level_owner+0xEC)<=17;
 }
 static bool FrontendBadge(){

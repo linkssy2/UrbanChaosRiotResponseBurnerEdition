@@ -1,4 +1,4 @@
-Urban Chaos: Riot Response - Burner Edition 0.03
+Urban Chaos: Riot Response - Burner Edition 0.04
 
 PC PORT
 Windows x64 PC port using XboxXBERecomp by TGP482, with native Direct3D12 rendering,
@@ -26,6 +26,13 @@ disc's text/voice banks, regardless of some ISO filenames.
 Custom PC settings and controls descriptions remain in English.
 
 NOTES
+Switch 2 USB support is experimental: the native SDL USB driver and libusb DLL
+are included, with Nintendo button prompts. Bluetooth is not implemented.
+A data-capable USB cable and a Windows-compatible USB device driver are needed;
+this package does not install or replace system drivers. Hardware testing is
+still pending. Original controller menus remain; mouse users get clickable
+level and rewards browsers.
+
 Requires Windows 10/11 x64 and a Direct3D12-capable GPU. The required Microsoft
 Visual C++ runtime DLLs are included beside the game; no system installer runs.
 Dynamic scenery lighting, character lighting, effects and retained ragdolls can

@@ -1,20 +1,19 @@
 # Urban Chaos: Riot Response — Burner Edition
 
-**PC port · Version 0.03 · Windows x64**
+**PC port · Version 0.04 · Windows x64**
 
 An unofficial PC port powered by [XboxXBERecomp by TGP482](https://github.com/TGP482/XboxXBERecomp), with native Direct3D 12 rendering and statically recompiled original Xbox gameplay. Earlier Burner Edition work and retained helpers use [xboxrecomp by sp00nz](https://github.com/sp00nznet/xboxrecomp).
 
 ## What's new
 
-- New rendering/runtime foundation, with improved performance in testing.
-- Game-style mouse menus, keyboard/controller rebinding, profile management and PC button prompts.
-- Widescreen, resolution scaling, MSAA, filtering, lighting, fog and ragdoll options.
-- Dialogue/prompt, audio, fog and HUD fixes; English, French, Italian and German language selection in **Options → Language** (restart required).
-- Updated ISO setup and direct Play launcher, bundled C++ runtime DLLs, and routine diagnostics disabled.
+- Controller navigation fixes, including new-game difficulty and PC settings.
+- PlayStation/Nintendo button symbols, corrected Xbox prompts, and automatic mouse-pointer hiding for controller use.
+- Original controller menus and a matching mouse-friendly Rewards sidebar.
+- Experimental Switch 2 USB support; hardware testing is pending and Bluetooth is unsupported. A compatible Windows USB driver may be required; setup does not install system drivers.
 
 ## Install
 
-1. Download the **0.03 Windows x64 ZIP** from [Releases](https://github.com/linkssy2/UrbanChaosRiotResponseBurnerEdition/releases/latest) and extract the entire folder.
+1. Download the **0.04 Windows x64 ZIP** from [Releases](https://github.com/linkssy2/UrbanChaosRiotResponseBurnerEdition/releases/latest) and extract the entire folder.
 2. Run **Burner Edition Setup.exe** and select your supported original Xbox ISO or XISO.
 3. After import, use **Play Burner Edition.exe** to launch directly.
 

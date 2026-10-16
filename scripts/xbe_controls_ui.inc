@@ -136,7 +136,7 @@ void ControlsUi(const ImGuiViewport* view,bool paused){
     }else if(controls_capture_action>=0){
         canvas.Center(control_names[controls_capture_action],40,133,560,23,white,true);
         canvas.Center(controls_device?"Press a controller button or move a stick":"Press a key, mouse button or mouse wheel",40,188,560,16,white);
-        canvas.Center("Release the opening input first. Escape cancels.",50,219,540,12,muted);
+        canvas.Center(trial_controller::CancelHint(),50,219,540,12,muted);
         // Act on mouse-down here, before consuming a captured left click. This
         // keeps the visible Cancel/Clear targets usable while binding Mouse Left.
         ImGui::EndDisabled();
@@ -174,6 +174,10 @@ void ControlsUi(const ImGuiViewport* view,bool paused){
         const unsigned pages=(ControlsCount()+7)/8;controls_page=std::min(controls_page,pages-1);
         canvas.Text("ACTION",61,118,11,muted);canvas.Center("PRIMARY",337,118,115,11,muted);canvas.Center("SECONDARY",465,118,115,11,muted);
         const unsigned start=controls_page*8,count=std::min(8u,ControlsCount()-start);
+        if(ready&&(events&64)&&focus>=1&&focus<=count*2){
+            ControlsBinding(start+(focus-1)/2,(focus-1)%2)=0;
+            message="Binding cleared. Apply to save.";
+        }
         if(focus>count*2&&focus<=16)focus=17;
         for(unsigned row=0;row<count;++row){
             const unsigned action=start+row;const float y=138+row*20.f;
@@ -184,7 +188,7 @@ void ControlsUi(const ImGuiViewport* view,bool paused){
                 if(canvas.Hit("binding",x,y,115,20)||(accept&&focus==index))ControlsBegin(action,slot);
                 if(ImGui::IsItemHovered()&&PointerMoved())focus=index;
                 const unsigned source=ControlsBinding(action,slot);
-                canvas.Center(controls_device?xbox_ControllerSourceName(source):xbox_KeyboardSourceName(source),x+4,y+3,107,12,focus==index?white:muted);
+                canvas.Center(controls_device?trial_controller::Label(source):xbox_KeyboardSourceName(source),x+4,y+3,107,12,focus==index?white:muted);
                 ImGui::PopID();
             }
         }
@@ -215,8 +219,11 @@ void ControlsUi(const ImGuiViewport* view,bool paused){
         if(back)ControlsBack();
     }
     canvas.Center(!message.empty()?message.c_str():ControlsDirty()?"Changes not applied.":"",30,429,580,11,IM_COL32(207,217,219,255));
-    if(controls_capture_action>=0)FooterPrompts(canvas,{{VK_ESCAPE,"Cancel"}});
+    if(controls_capture_action>=0){
+        if(xbox_KeyboardMode())FooterPrompts(canvas,{{VK_ESCAPE,"Cancel"}});
+        else canvas.Center("START + BACK TO CANCEL",40,452,560,12,muted);
+    }
     else if(xbox_KeyboardMode())FooterPrompts(canvas,{{13,"Select"},{VK_RBUTTON,confirm_back?"Keep editing":"Back"}});
-    else FooterPrompts(canvas,{{0x103,"Navigate"},{0x101,"Select"},{0x102,"Back"}});
+    else FooterPrompts(canvas,{{0x103,"Navigate"},{0x101,"Select"},{0x104,"Clear binding"},{0x102,"Back"}});
     ImGui::EndDisabled();EndMenu();
 }

@@ -8,10 +8,10 @@ import sys
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
-VERSION = '0.03'
+VERSION = '0.04'
 SDK = REPO / 'build/upstream-review-xboxxbe-20261014'
 RUNTIME_NAME = 'UrbanChaosXbeTrial.exe'
-RUNTIME_FILES = (RUNTIME_NAME, 'zlib1.dll', 'msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll')
+RUNTIME_FILES = (RUNTIME_NAME, 'zlib1.dll', 'libusb-1.0.dll', 'msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll')
 VS = Path('C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools')
 CRT = VS / 'VC/Redist/MSVC/14.44.35112/x64/Microsoft.VC143.CRT'
 PYTHON_FILES = ('python.exe', 'python312.dll', 'python3.dll', 'python312.zip',
@@ -32,6 +32,9 @@ def sources(runtime):
         'tools/xdvdfs.py': REPO / 'third_party/xboxrecomp/tools/xiso/xdvdfs.py',
         'runtime/' + RUNTIME_NAME: runtime,
         'runtime/zlib1.dll': runtime.parent / 'zlib1.dll',
+        'runtime/libusb-1.0.dll': runtime.parent / 'libusb-1.0.dll',
+        'licenses/libusb-COPYING.txt': REPO / '.tools/libusb-1.0.29/COPYING',
+        'licenses/libusb-1.0.29.tar.bz2': REPO / '.tools/libusb-1.0.29/libusb-1.0.29.tar.bz2',
         'cover.png': HERE.parent / 'burner/cover.png',
         'README.txt': HERE / 'README-release.txt',
         'licenses/XboxXBERecomp.txt': SDK / 'LICENSE',
@@ -106,6 +109,7 @@ def assemble(runtime, expected_sha256, output):
         'XboxXBERecomp by TGP482: https://github.com/TGP482/XboxXBERecomp (MIT).\n'
         'Earlier port and retained import/input helpers: xboxrecomp by sp00nz (MIT); associated notices included.\n'
         'SDL3, Dear ImGui and toml++ notices: XboxXBERecomp-third-party.txt.\n'
+        'libusb 1.0.29 (LGPL-2.1-or-later): unmodified upstream Windows DLL; license and corresponding source archive included. https://github.com/libusb/libusb/releases/tag/v1.0.29\n'
         'Python3.12 and included OpenSSL: tools/python/LICENSE.txt. zlib: zlib.txt.\n'
         'Microsoft Visual C++2015-2022 runtime: app-local DLLs from the official VS2022 Redist folder; Microsoft-Visual-Cpp-Redistribution.txt and accompanying Microsoft notices.\n'
         'Direct3D12, XAudio2 and other Windows components are supplied by Windows.\n'

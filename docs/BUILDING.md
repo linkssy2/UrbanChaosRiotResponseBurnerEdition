@@ -67,3 +67,7 @@ with both supported disc layouts, staged import/reuse and dependency audits;
 the user tested the candidate and reported smooth gameplay. This is not a clean
 Windows VM qualification, a fresh source-only game build, or an exhaustive
 campaign and multilingual audio acceptance test.
+
+
+### 0.04 USB controller dependency
+Run `python scripts/setup_xbe_libusb.py` before the current runtime build (requires 7-Zip on PATH). This fetches and verifies pinned libusb 1.0.29 headers, DLL/import library, license and source. The build checks that SDL's libusb backend is enabled. It does not install Windows USB drivers. Switch 2 USB hardware validation remains pending; Bluetooth is unsupported.

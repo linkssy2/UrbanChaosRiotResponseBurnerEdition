@@ -20,7 +20,7 @@ RECONCILE = r'''static void ReconcileCapture(){
     bool want=focused()&&gameplay&&!menu_mode&&!TrialGraphicsOpen();
     if(captured!=want){captured=want;dx=dy=0;}
     if(want){RECT r;GetClientRect(game_window,&r);MapWindowPoints(game_window,nullptr,(POINT*)&r,2);ClipCursor(&r);SetCursor(nullptr);}
-    else{ClipCursor(nullptr);SetCursor(focused()?TrialMenuCursor():LoadCursor(nullptr,IDC_ARROW));}
+    else{ClipCursor(nullptr);SetCursor(focused()?(xbox_KeyboardMode()?TrialMenuCursor():nullptr):LoadCursor(nullptr,IDC_ARROW));}
 }'''
 
 

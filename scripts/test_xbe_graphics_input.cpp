@@ -220,6 +220,9 @@ int main(){
     intro_gate={};test_focused=false;TrialMenuRightButton(true);TrialMenuRightButton(false);
     assert(!menu_right_pending);test_focused=true;assert(Neutral(Poll(0)));
     ReleaseAll();
+    ReleaseAll();menu_mode=true;physical_keys[VK_RETURN]=true;
+    assert(Poll(0).analog[0]==255); // Original difficulty modal consumes A.
+    ReleaseAll();assert(!Poll(0).analog[0]);
     // Detection must run before a native menu consumes the physical pad.
     ReleaseAll();menu_mode=true;
     for(bool native_menu:{false,true})for(unsigned control=0;control<12;++control){

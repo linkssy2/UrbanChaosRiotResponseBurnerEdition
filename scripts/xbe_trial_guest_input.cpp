@@ -71,6 +71,15 @@ int TrialGuestHook(X86Context& ctx,uint8_t* base,unsigned op){
     case 29:FrontendNameEnter();break;
     case 30:result=FrontendNameInput();break;
     case 31:FrontendNameLeave();break;
+    case 33:FrontendRewardSidebar();break;
+    case 32:{
+        // Retain the retail panel builder and all unlock/save decisions.
+        const X86Context saved=ctx;
+        if(ucrr_rewards_hover()){
+            ctx.ecx=saved.esi;kernel::CallGuest(ctx,0x25B460,{});
+        }
+        ctx=saved;break;
+    }
     }
     _mm_setcsr(csr);return result;
 }

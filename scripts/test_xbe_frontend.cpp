@@ -27,6 +27,8 @@ static bool FrontendGuestOwns(uint32_t,uint32_t);
 static TrialFrontendFrame published;
 static TrialFrontendPresentation presentation;
 static bool name_keyboard_mode=true;
+int xbox_KeyboardMode(){return name_keyboard_mode;}
+bool TrialFrontendPresents(uint32_t owner,uint32_t kind){return presentation.Presents(owner,kind);}
 static UcHybridFrontendAction queued;
 static TrialFrontendNameActionData name_queued;
 bool TrialFrontendTakeName(TrialFrontendNameActionData& a){if(!name_queued.identity.kind)return false;a=name_queued;name_queued={};return true;}
@@ -308,10 +310,10 @@ static void Check(){
     panel_open=true;Sample(0,0,255);Sample(0,0,255,255);Sample(0);
     Sample(8,0,0,255);Sample(0,0,0,255);Sample(0);
     // Fresh A/directions belong to the settings widgets, not parent rows.
-    Sample(0,1,255,0,-20000,20000);Sample(0);
-    Sample(0,10,255,0,20000,-20000);Sample(0);
+    Sample(21,1,255,0,-20000,20000);Sample(0);
+    Sample(38,10,255,0,20000,-20000);Sample(0);
     Sample(0,16);Sample(0);Sample(0,0,0,30);Sample(8,0,0,31);
-    Sample(0);Sample(8,1,255,255,-20000,0);Sample(0);
+    Sample(0);Sample(29,1,255,255,-20000,0);Sample(0);
 
     // Controls owns distinct directions and confirmation for its binding
     // rows, pager and footer, with the same opening-input neutral gate.
@@ -636,9 +638,40 @@ int main(){
         assert(badge.texture==MEM32(MEM32(g_esp+4)+(completed<4?20:16)));
         if(completed<4){uint32_t branch=completion_table[completed];uint32_t slot=branch==0x26F621?0x51D0DC:branch==0x26F653?0x51D0E0:0x51D0E4;assert(draws.back().texture==MEM32(slot));}
     }
+    name_keyboard_mode=false;draws.clear();assert(!FrontendLevelReady()&&!FrontendBadge()&&draws.empty());
+    name_keyboard_mode=true;
     draws.clear();MEM32(g_esp)=0x27591E;assert(!FrontendBadge()&&draws.empty());
     MEM32(g_esp)=0x27092C;MEM8(level_owner+0x28+12*level_draw_index)=0;assert(!FrontendBadge());
     MEM8(level_owner+0x28+12*level_draw_index)=1;MEM8(0x600014)=1;assert(!FrontendBadge());
+    // The reward browser retains the title's filtered records and locked labels.
+    MEM8(0x600014)=0;constexpr uint32_t reward=0x650000,records=0x651000,text=0x652000;
+    MEM32(reward)=0x485F14;MEM32(reward+0x18)=2;MEM32(reward+0x2C)=records;
+    MEM32(reward+0x14)=0x2715D0;MEM32(0x485A18)=0x17;
+    std::strcpy(reinterpret_cast<char*>(ram+text),"Reward fixture");
+    for(unsigned i=0;i<2;++i){MEM32(records+44*i+0x18)=text;MEM32(records+44*i+0x1C)=text;}
+    MEM32(0x600004)=reward;menu_pointer_begin(0x600000);g_esi=reward;
+    assert(!ucrr_rewards_hover());menu_pointer_end();assert(published.source.kind==UC_HF_REWARD_BROWSER);
+    MEM32(0x4FF4BC+16)=0x620100;MEM8(records+0x28)=1;MEM32(records+0x14)=0x653000;MEM32(0x653010)=0x620200;
+    menu_pointer_begin(0x600000);g_esi=reward;g_esp=0x700000;draws.clear();
+    const auto reward_context=context;FrontendRewardSidebar();
+    assert(!std::memcmp(&context,&reward_context,sizeof(context))&&draws.size()==5);
+    assert(draws[0].x==0&&draws[0].right==47&&draws[0].bottom==379);
+    assert(draws[3].texture==0x620200&&draws[4].texture==0x620100);
+    assert(draws[3].right-draws[3].x==24&&draws[3].bottom-draws[3].y==24);
+    for(unsigned i=0;i<TrialRewardsPerPage;++i){
+        const auto reward_bounds=TrialLevelBounds(i,TrialRewardsPerPage),level_bounds=TrialLevelBounds(i,4);
+        assert(reward_bounds.x==level_bounds.x&&reward_bounds.y==level_bounds.y&&reward_bounds.h==level_bounds.h);
+    }
+    assert(draws[3].x==10&&draws[3].y==95&&draws[4].y==125);
+    name_keyboard_mode=false;draws.clear();FrontendRewardSidebar();assert(draws.empty());name_keyboard_mode=true;
+    ucrr_rewards_hover();menu_pointer_end();
+    auto reward_snapshot=published.source;
+    queued={reward_snapshot.epoch,reward_snapshot.screen,reward,reward_snapshot.rows[1].row,1,UC_HF_ACTIVATE};
+    menu_pointer_begin(0x600000);g_esi=reward;assert(ucrr_rewards_hover()&&MEM32(reward+4)==1);menu_pointer_end();
+    reward_snapshot=published.source;
+    queued={reward_snapshot.epoch,reward_snapshot.screen,reward,0,0,UC_HF_BACK};
+    menu_pointer_begin(0x600000);g_esi=reward;ucrr_rewards_hover();MEM32(g_esp)=0x25CCEE;MEM32(g_esp+4)=0x17;
+    assert(hf_back_query());menu_pointer_end();
     // Entry/return clicks and Escape remain suppressed until a neutral frame.
     TrialFrontendReleaseGate gate;assert(!gate.Accept(1,true));assert(!gate.Accept(1,true));
     assert(!gate.Accept(1,false));assert(gate.Accept(1,true));

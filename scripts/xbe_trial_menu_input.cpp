@@ -215,8 +215,11 @@ bool TrialInputMessage(void*,uint32_t msg,uintptr_t wp,intptr_t lp,intptr_t* res
 void TrialInputPad(int port,input::Pad& pad){
     std::lock_guard guard(input_lock);
     if(port<0||port>=4)return;
-    if(port==0&&controls_capture.active)
-        controls_capture.Sample(RawKeyboardSource(),trial_controls::ControllerSource(pad),focused());
+    if(port==0&&controls_capture.active){
+        // A chord cancels capture without reserving any single bindable button.
+        if(focused()&&(pad.buttons&48)==48)controls_capture.Cancel();
+        else controls_capture.Sample(RawKeyboardSource(),trial_controls::ControllerSource(pad),focused());
+    }
     const bool menu_right_back=port==0&&TrialMenuRightBack();
     if(port==0)pad.connected=true;
     intro_gate.Pad(port,pad.buttons,pad.analog,focused());
@@ -230,7 +233,7 @@ void TrialInputPad(int port,input::Pad& pad){
         }
         intro_gate.Keyboard(intro_keys,focused());
     }
-    if(port==0&&focused())TrialFrontendPad(pad.buttons,pad.analog[0],pad.analog[1],pad.lx,pad.ly);
+    if(port==0&&focused())TrialFrontendPad(pad.buttons|(pad.analog[2]>30?0x100u:0u)|(pad.analog[3]>30?0x200u:0u),pad.analog[0],pad.analog[1],pad.lx,pad.ly);
     if(graphics_release_pending[port]&&!TrialGraphicsOpen()){
         bool held=pad.buttons!=0;for(auto value:pad.analog)held|=value!=0;
         held|=std::abs(int(pad.lx))>7849||std::abs(int(pad.ly))>7849||
@@ -266,6 +269,8 @@ void TrialInputPad(int port,input::Pad& pad){
         }
         if(escape){keys.wButtons|=16;escape_pause_held=true;}
     }else if(escape&&!escape_pause_held)keys.bAnalogButtons[1]=255;
+    // Original modal screens consume A, not Start. Keep Enter as menu confirm.
+    if(menu_mode&&keyboard_key_down(VK_RETURN))keys.bAnalogButtons[0]=255;
     if(menu_right_back)keys.bAnalogButtons[1]=255;
     pad.buttons|=keys.wButtons;
     for(unsigned i=0;i<8;i++)pad.analog[i]=std::max(pad.analog[i],keys.bAnalogButtons[i]);

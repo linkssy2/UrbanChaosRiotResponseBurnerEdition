@@ -294,6 +294,7 @@ void FrontendUi(const TrialFrontendFrame& f,const ImGuiViewport* view,bool inter
     const auto& src=f.source;
     const bool levels=src.kind==UC_HF_LEVELS;
     const bool profiles=src.kind==UC_HF_PROFILES;
+    const bool rewards=src.kind==UC_HF_REWARD_BROWSER;
     // Graphics belongs to Options in both the front end and pause flow. Keep
     // the original main/pause rows instead of adding a second shortcut there.
     const bool graphics=src.kind==UC_HF_LIST&&f.list_kind==3;
@@ -331,13 +332,13 @@ void FrontendUi(const TrialFrontendFrame& f,const ImGuiViewport* view,bool inter
         if((events&2)||ImGui::IsKeyPressed(ImGuiKey_RightArrow)||ImGui::IsKeyPressed(ImGuiKey_DownArrow)||ImGui::IsKeyPressed(ImGuiKey_Tab))choose((focus+1)%count);
         if((events&4)||ImGui::IsKeyPressed(ImGuiKey_Enter,false)||ImGui::IsKeyPressed(ImGuiKey_Space,false))activate(focus);
         if(!quit_open&&((events&8)||ImGui::IsMouseClicked(1,false)||ImGui::IsKeyPressed(ImGuiKey_Q,false)||ImGui::IsKeyPressed(ImGuiKey_Escape,false)))FrontendAction(f,UC_HF_BACK);
-        if(levels&&ImGui::IsKeyPressed(ImGuiKey_D,false))FrontendAction(f,UC_HF_DIFFICULTY);
-        if(levels&&ImGui::IsKeyPressed(ImGuiKey_R,false))FrontendAction(f,UC_HF_REWARDS);
+        if(levels&&((events&128)||ImGui::IsKeyPressed(ImGuiKey_D,false)))FrontendAction(f,UC_HF_DIFFICULTY);
+        if(levels&&((events&64)||ImGui::IsKeyPressed(ImGuiKey_R,false)))FrontendAction(f,UC_HF_REWARDS);
         if(profiles&&ImGui::IsKeyPressed(ImGuiKey_Delete,false))remove_profile();
     }
     BeginMenu("Game menu rows",view);MenuCanvas canvas(view);
     // Keep the original title and moving panel, covering only its old footer.
-    const float top=levels||profiles?382.f:std::clamp(f.row_top-5.f,379.f,400.f);
+    const float top=levels||profiles||rewards?382.f:std::clamp(f.row_top-5.f,379.f,400.f);
     canvas.Footer(top);
     ImGui::BeginDisabled(!ready||quit_open);
     if(profiles){
@@ -352,6 +353,26 @@ void FrontendUi(const TrialFrontendFrame& f,const ImGuiViewport* view,bool inter
         const bool enabled[]={src.rows[profile_slot].enabled!=0,(f.profile_delete_mask&(1u<<profile_slot))!=0,true};
         RowStrip(canvas,labels,enabled,3,398,focus>=src.count?focus-src.count:3,
             [&](unsigned i){choose(src.count+i);},[&](unsigned i){activate(src.count+i);});
+    }else if(rewards){
+        const unsigned page=src.selected/TrialRewardsPerPage,pages=(src.count+TrialRewardsPerPage-1)/TrialRewardsPerPage;
+        for(unsigned slot=0;slot<TrialRewardsPerPage&&page*TrialRewardsPerPage+slot<src.count;++slot){
+            const unsigned index=page*TrialRewardsPerPage+slot;const auto r=TrialLevelBounds(slot,TrialRewardsPerPage);
+            ImGui::PushID(int(index));
+            if(canvas.Hit("reward",r.x,r.y,r.w,r.h))activate(index);
+            if(ImGui::IsItemHovered()&&PointerMoved())choose(index);
+            ImGui::PopID();
+        }
+        const char* labels[]={"Previous","Back","Next"};
+        const bool enabled[]={page>0,true,page+1<pages};
+        RowStrip(canvas,labels,enabled,3,398,3,[](unsigned){},[&](unsigned i){
+            if(i==1)FrontendAction(f,UC_HF_BACK);
+            else choose((i==0?page-1:page+1)*TrialRewardsPerPage);
+        });
+        canvas.Center(f.labels[src.selected],50,432,540,12,muted);
+        if(ready&&ImGui::GetIO().MouseWheel!=0){
+            if(ImGui::GetIO().MouseWheel<0&&page+1<pages)choose((page+1)*TrialRewardsPerPage);
+            else if(ImGui::GetIO().MouseWheel>0&&page)choose((page-1)*TrialRewardsPerPage);
+        }
     }else if(levels){
         for(unsigned i=0;i<src.count;++i){
             auto r=TrialLevelBounds(i,src.count);ImGui::PushID(int(i));
@@ -376,7 +397,8 @@ void FrontendUi(const TrialFrontendFrame& f,const ImGuiViewport* view,bool inter
     if(xbox_KeyboardMode()){
         if(levels)FooterPrompts(canvas,{{1,"Deploy"},{'D',"Difficulty"},{'R',"Rewards"},{VK_RBUTTON,"Back"}});
         else FooterPrompts(canvas,{{1,"Select"},{13,"Select"},{VK_RBUTTON,"Back"}});
-    }else FooterPrompts(canvas,{{0x103,"Navigate"},{0x101,"Select"},{0x102,"Back"}});
+    }else if(levels)FooterPrompts(canvas,{{0x101,"Deploy"},{0x105,"Difficulty"},{0x104,"Rewards"},{0x102,"Back"}});
+    else FooterPrompts(canvas,{{0x103,"Navigate"},{0x101,"Select"},{0x102,"Back"}});
     ImGui::EndDisabled();EndMenu();
 }
 
@@ -470,7 +492,7 @@ void SettingsUi(const ImGuiViewport* view,bool paused){
     const bool ready=gate.Accept(generation,UiHeld());
     const unsigned events=frontend_events.exchange(0);
     const bool back=ready&&((events&8)||ImGui::IsMouseClicked(1,false)||ImGui::IsKeyPressed(ImGuiKey_Escape,false)||ImGui::IsKeyPressed(ImGuiKey_Q,false));
-    const bool enter=ready&&(ImGui::IsKeyPressed(ImGuiKey_Enter,false)||ImGui::IsKeyPressed(ImGuiKey_Space,false));
+    const bool enter=ready&&((events&4)||ImGui::IsKeyPressed(ImGuiKey_Enter,false)||ImGui::IsKeyPressed(ImGuiKey_Space,false));
     ImGui::BeginDisabled(!ready);
     if(confirm_back){
         canvas.Center("Apply your changes?",40,163,560,24,white,true);
@@ -482,8 +504,8 @@ void SettingsUi(const ImGuiViewport* view,bool paused){
             else{confirm_back=false;++navigation_generation;frontend_events=0;}
         };
         if(ready){
-            if(ImGui::IsKeyPressed(ImGuiKey_LeftArrow))confirmation=(confirmation+2)%3;
-            if(ImGui::IsKeyPressed(ImGuiKey_RightArrow)||ImGui::IsKeyPressed(ImGuiKey_Tab))confirmation=(confirmation+1)%3;
+            if(((events&16)||ImGui::IsKeyPressed(ImGuiKey_LeftArrow)))confirmation=(confirmation+2)%3;
+            if(((events&32)||ImGui::IsKeyPressed(ImGuiKey_RightArrow))||ImGui::IsKeyPressed(ImGuiKey_Tab))confirmation=(confirmation+1)%3;
             if(enter)activate(confirmation);
         }
         RowStrip(canvas,labels,nullptr,3,257,confirmation,[&](unsigned i){confirmation=i;},activate);
@@ -492,14 +514,14 @@ void SettingsUi(const ImGuiViewport* view,bool paused){
         focus=std::min(focus,total-1);
         int delta=0;
         if(ready){
-            if(ImGui::IsKeyPressed(ImGuiKey_UpArrow))focus=(focus+total-1)%total;
-            if(ImGui::IsKeyPressed(ImGuiKey_DownArrow)||ImGui::IsKeyPressed(ImGuiKey_Tab))focus=(focus+1)%total;
+            if(((events&1)||ImGui::IsKeyPressed(ImGuiKey_UpArrow)))focus=(focus+total-1)%total;
+            if(((events&2)||ImGui::IsKeyPressed(ImGuiKey_DownArrow))||ImGui::IsKeyPressed(ImGuiKey_Tab))focus=(focus+1)%total;
             if(focus<rows){
-                if(ImGui::IsKeyPressed(ImGuiKey_LeftArrow))delta=-1;
-                if(ImGui::IsKeyPressed(ImGuiKey_RightArrow)||enter)delta=1;
+                if(((events&16)||ImGui::IsKeyPressed(ImGuiKey_LeftArrow)))delta=-1;
+                if(((events&32)||ImGui::IsKeyPressed(ImGuiKey_RightArrow))||enter)delta=1;
             }else{
-                if(ImGui::IsKeyPressed(ImGuiKey_LeftArrow))focus=rows+(focus+2-rows)%3;
-                if(ImGui::IsKeyPressed(ImGuiKey_RightArrow))focus=rows+(focus+1-rows)%3;
+                if(((events&16)||ImGui::IsKeyPressed(ImGuiKey_LeftArrow)))focus=rows+(focus+2-rows)%3;
+                if(((events&32)||ImGui::IsKeyPressed(ImGuiKey_RightArrow)))focus=rows+(focus+1-rows)%3;
             }
         }
         const unsigned keyboard_row=focus;
@@ -572,7 +594,7 @@ void SettingsUi(const ImGuiViewport* view,bool paused){
     if(xbox_KeyboardMode()){
         if(confirm_back)FooterPrompts(canvas,{{13,"Select"},{VK_RBUTTON,"Keep editing"}});
         else FooterPrompts(canvas,{{37,""},{39,"Change"},{13,"Select"},{VK_RBUTTON,"Back"}});
-    }else FooterPrompts(canvas,{{1,"Select"},{0x102,confirm_back?"Keep editing":"Back"}});
+    }else FooterPrompts(canvas,{{0x103,"Navigate"},{0x101,"Select"},{0x102,confirm_back?"Keep editing":"Back"}});
     if(back)RequestBack();
     ImGui::EndDisabled();EndMenu();
 }
@@ -581,14 +603,19 @@ void SettingsUi(const ImGuiViewport* view,bool paused){
 }
 
 void TrialFrontendPublish(const TrialFrontendFrame& frame){
-    const bool active=TrialFrontendSupported(frame)&&(frame.source.kind!=TRIAL_HF_NAME||xbox_KeyboardMode());bool changed;
+    // Original profile/name/level screens suit a pad. Keep added settings and
+    // desktop actions reachable in the shared main, pause and options lists.
+    const bool native=xbox_KeyboardMode()||frame.source.kind==UC_HF_LIST||frame.delete_dialog;
+    const bool active=TrialFrontendSupported(frame)&&native;bool changed;
     {std::lock_guard lock(context_lock);
         changed=frontend_active.load()!=active;
         if(changed||frontend.source.epoch!=frame.source.epoch||frontend.source.owner!=frame.source.owner||
            frontend.source.screen!=frame.source.screen||frontend.source.kind!=frame.source.kind){
             frontend_action={};frontend_name_action={};frontend_events=0;++navigation_generation;
         }
-        frontend=frame;frontend_active=active;frontend_presentation.Publish(frame,active);
+        frontend=frame;frontend_active=active;
+        if(!native)frontend_presentation={};
+        else frontend_presentation.Publish(frame,active);
     }
     if(changed)TrialGraphicsInputChanged();
 }
@@ -620,11 +647,11 @@ bool TrialFrontendTakeName(TrialFrontendNameActionData& action){
     action=frontend_name_action;frontend_name_action={};return true;
 }
 void TrialFrontendPad(uint32_t buttons,uint8_t confirm,uint8_t back,int16_t x,int16_t y){
-    const bool controls=PanelOpen()&&(settings_page==1||settings_page==2);
+    const bool controls=PanelOpen();
     const unsigned mask=(controls?((buttons&1)||y>16000?1:0)|((buttons&2)||y<-16000?2:0)|
         ((buttons&4)||x<-16000?16:0)|((buttons&8)||x>16000?32:0):
         ((buttons&5)||x<-16000||y>16000?1:0)|((buttons&10)||x>16000||y<-16000?2:0))|
-        (confirm>30?4:0)|(back>30?8:0);
+        (confirm>30?4:0)|(back>30?8:0)|((buttons&0x100)?64:0)|((buttons&0x200)?128:0);
     static uint64_t epoch=0;static unsigned previous=0;static bool released=false,panel_mode=false;
     std::lock_guard lock(context_lock);
     if(!frontend_active){epoch=0;released=false;previous=mask;frontend_events=0;return;}
@@ -633,7 +660,7 @@ void TrialFrontendPad(uint32_t buttons,uint8_t confirm,uint8_t back,int16_t x,in
         epoch=navigation_generation;panel_mode=panel;released=false;previous=mask;frontend_events=0;
     }
     if(!mask)released=true;
-    if(released)frontend_events.fetch_or((mask&~previous)&(panel?(controls?63u:8u):15u));
+    if(released)frontend_events.fetch_or((mask&~previous)&(panel?127u:255u));
     previous=mask;
 }
 

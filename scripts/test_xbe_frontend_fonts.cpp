@@ -108,6 +108,16 @@ int main(){
                 visible+=atlas->TexPixelsRGBA32[y*atlas->TexWidth+x]>>24?1:0;
         CHECK(visible>100);
     }
+    float previous_uv[4]{};CHECK(TrialMenuIconUV(0x101,previous_uv));
+    for(unsigned family=1;family<=3;++family){
+        trial_controller::family=family;
+        for(unsigned code=0x101;code<=0x105;++code){
+            float uv[4]{};CHECK(TrialMenuIconUV(code,uv));
+            CHECK(uv[2]>uv[0]&&uv[3]>uv[1]);
+            if(code==0x101){CHECK(std::memcmp(previous_uv,uv,sizeof(uv)));std::memcpy(previous_uv,uv,sizeof(uv));}
+        }
+    }
+    trial_controller::family=0;
     float missing_uv[4]{};CHECK(!TrialMenuIconUV(0,missing_uv));
     std::puts("Font fixture: actual glyph draw");
     atlas->SetTexID(ImTextureID(1));io.DisplaySize=ImVec2(1280,720);io.DeltaTime=1.f/60;

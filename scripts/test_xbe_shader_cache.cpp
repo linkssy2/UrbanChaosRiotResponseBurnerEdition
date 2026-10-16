@@ -113,6 +113,13 @@ int main(){
     CHECK(compile_calls==5);Pipeline(vs,ps);
 
     auto& store=cache::Active();ComPtr<ID3DBlob> missed;
+    unsigned warmed=0;
+    store.Warm([&](const std::string& src,const std::string& entry,const std::string& profile,ID3DBlob* code){
+        ++warmed;ComPtr<ID3DBlob> expected;
+        CHECK(store.Load(src,entry.c_str(),profile.c_str(),D3DCOMPILE_OPTIMIZATION_LEVEL1,0,&expected));
+        CHECK(Bytes(expected.Get())==Bytes(code));
+    });
+    CHECK(warmed==5&&compile_calls==5);
     CHECK(!store.Load(source,"first","vs_5_0",D3DCOMPILE_OPTIMIZATION_LEVEL3,0,&missed));
     CHECK(!store.Load(source,"first","vs_5_0",D3DCOMPILE_OPTIMIZATION_LEVEL1,1,&missed));
     auto changed=identity;changed.contract[3]^=1;
@@ -137,7 +144,19 @@ int main(){
         std::fstream file(path,std::ios::binary|std::ios::in|std::ios::out);CHECK(file);
         NvShaderDiskHeader header{};file.read(reinterpret_cast<char*>(&header),sizeof(header));
         header.contract[1]^=1;file.seekp(0);file.write(reinterpret_cast<const char*>(&header),sizeof(header));
-    }fallback();
+    }
+    warmed=0;store.Warm([&](const auto&,const auto&,const auto&,ID3DBlob*){++warmed;});
+    CHECK(warmed==4&&compile_calls==5);
+    fallback();
+    // Warm-up parses untrusted length-prefixed keys before the normal cache load.
+    for(const std::string bad:{"999999999999999:","1:","-1:","0:"}){
+        std::fstream file(path,std::ios::binary|std::ios::in|std::ios::out);CHECK(file);
+        file.seekp(sizeof(NvShaderDiskHeader)+std::string("UC-D3D12-DXBC-1:").size()+64);
+        file.write(bad.data(),bad.size());file.close();
+        warmed=0;const auto before=compile_calls;
+        store.Warm([&](const auto&,const auto&,const auto&,ID3DBlob*){++warmed;});
+        CHECK(warmed==4&&compile_calls==before);fallback();
+    }
     {std::ofstream file(path,std::ios::binary|std::ios::trunc);file<<"truncated";}fallback();
     {
         std::fstream file(path,std::ios::binary|std::ios::in|std::ios::out);CHECK(file);

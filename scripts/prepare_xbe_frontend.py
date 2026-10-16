@@ -16,7 +16,7 @@ def prepare(area):
         s=next(s for s in sections if s[1]<=va and va+n<=s[1]+s[4])
         return image[s[3]+va-s[1]:s[3]+va-s[1]+n]
     for va,data in [(0x270927,'e884e8ffff'),(0x270949,'e862e7ffff'),
-                    (0x26f1b0,'558bec83e4f0'),(0x17b39,'8bf1')]:
+                    (0x26f1b0,'558bec83e4f0'),(0x17b39,'8bf1'),(0x25c71f,'8bf157'),(0x25c89e,'e87d7a0100')]:
         assert read(va,len(bytes.fromhex(data)))==bytes.fromhex(data),hex(va)
     # Profile I/O warnings use these two original localized presentation paths.
     # Retain original string lookup, glyph layout, callbacks and text-bank data.

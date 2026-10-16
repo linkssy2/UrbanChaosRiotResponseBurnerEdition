@@ -65,6 +65,44 @@ struct Store {
         std::filesystem::create_directories(path,error);
         if(!error)directory=path.string();
     }
+    void Warm(const WarmSink& sink) const {
+        if(directory.empty()||!compiler.valid)return;
+        size_t visited=0,total=0;
+        for(const auto& item:std::filesystem::directory_iterator(directory)) {
+            if(++visited>2048||total>=64*1024*1024)break;
+            if(item.is_symlink()||!item.is_regular_file()||item.path().extension()!=".bin")continue;
+            std::ifstream file(item.path(),std::ios::binary);
+            NvShaderDiskHeader h{};
+            if(!file.read(reinterpret_cast<char*>(&h),sizeof(h))||h.magic!=0x5343564E||h.version!=1||
+               !h.source_bytes||h.source_bytes>2*1024*1024||!h.code_bytes||h.code_bytes>16*1024*1024||
+               h.contract[1]!=D3DCOMPILE_OPTIMIZATION_LEVEL1||h.contract[2]!=0)continue;
+            total+=size_t(h.source_bytes)+h.code_bytes;
+            if(total>64*1024*1024)break;
+            std::string key(h.source_bytes,'\0');
+            if(!file.read(key.data(),key.size()))continue;
+            constexpr const char* prefix="UC-D3D12-DXBC-1:";
+            if(key.compare(0,std::strlen(prefix),prefix)!=0)continue;
+            size_t at=std::strlen(prefix)+64;
+            auto part=[&](std::string& value,size_t limit){
+                size_t n=0,digits=0;
+                while(at<key.size()&&key[at]>='0'&&key[at]<='9'){
+                    if(++digits>7)return false;
+                    n=n*10+size_t(key[at++]-'0');if(n>limit)return false;
+                }
+                if(!digits||at>=key.size()||key[at++]!=':'||n>key.size()-at)return false;
+                value=key.substr(at,n);at+=n;return value.find('\0')==std::string::npos;
+            };
+            std::string entry,profile,source;
+            if(!part(entry,128)||!part(profile,128)||!part(source,2*1024*1024)||at!=key.size())continue;
+            std::string expected;std::array<uint32_t,6> contract{};
+            if(!Key(source,entry.c_str(),profile.c_str(),h.contract[1],h.contract[2],expected,contract)||
+               expected!=key||std::memcmp(contract.data(),h.contract,sizeof(h.contract)))continue;
+            ComPtr<ID3DBlob> code;
+            // Use the normal validated reader: malformed records never invoke the compiler.
+            if(Load(source,entry.c_str(),profile.c_str(),h.contract[1],h.contract[2],&code))
+                sink(source,entry,profile,code.Get());
+        }
+    }
     bool Key(const std::string& source,const char* entry,const char* profile,
              uint32_t flags,uint32_t effect_flags,std::string& key,std::array<uint32_t,6>& contract) const {
         if(directory.empty()||!compiler.valid||!entry||!profile||source.size()>2*1024*1024-1024||
@@ -116,6 +154,9 @@ Store& Active() {
 bool Load(const std::string& source,const char* entry,const char* profile,
           uint32_t flags,uint32_t effect_flags,ID3DBlob** code) noexcept {
     try{return Active().Load(source,entry,profile,flags,effect_flags,code);}catch(...){return false;}
+}
+void Warm(const WarmSink& sink) noexcept {
+    try{Active().Warm(sink);}catch(...){/* Optional warm-up; demand loading remains available. */}
 }
 void Save(const std::string& source,const char* entry,const char* profile,
           uint32_t flags,uint32_t effect_flags,ID3DBlob* code) noexcept {

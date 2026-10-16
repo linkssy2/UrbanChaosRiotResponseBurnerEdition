@@ -60,6 +60,22 @@ try:
  renderer_path.write_text(renderer_source)
  from prepare_xbe_filter_check import prepare as prepare_filter_check
  prepare_filter_check(AREA)
+ # Let SDL select its supported Windows backends, including XInput Xbox pads.
+ controller_source=(SDK/'runtime/core/input.cpp').read_text()
+ for hint in ('SDL_HINT_JOYSTICK_WGI','SDL_HINT_JOYSTICK_RAWINPUT','SDL_HINT_XINPUT_ENABLED','SDL_HINT_JOYSTICK_DIRECTINPUT'):
+  import re
+  controller_source,n=re.subn(r'    SDL_SetHint\('+hint+r', "[01]"\);\n','',controller_source)
+  assert n==1,hint
+ for name in ('xbe_controller_style.h','xbe_controller_device.h'):
+  (AREA/'src/compat'/name).write_text((ROOT/'scripts'/name).read_text())
+ controller_source=controller_source.replace('#include "core/input.h"','#include "core/input.h"\n#include "xbe_controller_device.h"')
+ controller_source=controller_source.replace('    SDL_SetHint(SDL_HINT_JOYSTICK_THREAD, "1");',
+  '    SDL_SetHint("SDL_GAMECONTROLLER_USE_BUTTON_LABELS", "0"); // Keep physical face positions consistent.\n    SDL_SetHint(SDL_HINT_JOYSTICK_THREAD, "1");')
+ controller_source=controller_source.replace('            p.connected = true;',
+  '            p.connected = true;\n            if(port==0)trial_controller::family.store(trial_controller::Identify(SDL_GetRealGamepadType(pad)));')
+ controller_source=controller_source.replace('        g_pads[i] = nullptr;',
+  '        g_pads[i] = nullptr;\n        if(i==0)trial_controller::family.store(trial_controller::Xbox);')
+ (AREA/'src/compat/input.cpp').write_text(controller_source)
  from prepare_xbe_input import prepare as prepare_input
  prepare_input()
  from prepare_xbe_event_callback import prepare as prepare_event_callback
@@ -248,6 +264,8 @@ int main(){uint32_t r=0;if(uc_ds_ref(r,false)!=0||uc_ds_ref(r,true)!=1||uc_ds_re
   info=info.replace('L"Urban Chaos XboxXBERecomp Integration"','L"Urban Chaos: Riot Response - Burner Edition"')
   info=info.replace('.short_title = L"UrbanChaosXbeTrial"','.short_title = L"Burner Edition"')
  (AREA/'src/common/game_info.cpp').write_text(info)
+ from prepare_xbe_frame_costs import prepare as prepare_frame_costs
+ prepare_frame_costs(AREA)
  from prepare_xbe_release import prepare as prepare_release
  prepare_release(SDK, AREA)
  from prepare_xbe_release_assets import prepare as prepare_release_assets
@@ -282,6 +300,8 @@ list(FILTER XBE_RUNTIME_SOURCES EXCLUDE REGEX "/runtime/gpu/d3d12.cpp$")
 list(FILTER XBE_RUNTIME_SOURCES EXCLUDE REGEX "/runtime/gpu/vertex.cpp$")
 list(FILTER XBE_RUNTIME_SOURCES EXCLUDE REGEX "/runtime/gpu/shaders.cpp$")
 list(FILTER XBE_RUNTIME_SOURCES EXCLUDE REGEX "/runtime/kernel/xboxkrnl.cpp$")
+list(FILTER XBE_RUNTIME_SOURCES EXCLUDE REGEX "/runtime/core/input.cpp$")
+list(APPEND XBE_HOST_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/compat/input.cpp")
 list(FILTER XBE_RUNTIME_SOURCES EXCLUDE REGEX "/runtime/core/log.cpp$")
 list(FILTER XBE_RUNTIME_SOURCES EXCLUDE REGEX "/runtime/gpu/render_thread.cpp$")
 list(FILTER XBE_RUNTIME_SOURCES EXCLUDE REGEX "/runtime/app/(settings|main|game_files)[.]cpp$")
@@ -298,6 +318,9 @@ list(APPEND XBE_HOST_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/compat/shaders.cpp
 list(APPEND XBE_HOST_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/compat/dsound.cpp")
 list(APPEND XBE_HOST_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/compat/xaudio2.cpp" "${CMAKE_CURRENT_SOURCE_DIR}/src/compat/xbe_audio_loop.cpp")
 list(APPEND XBE_HOST_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/compat/d3d8.cpp" "${CMAKE_CURRENT_SOURCE_DIR}/src/compat/d3d12.cpp")
+add_executable(test_controller_device "'''+(ROOT/'scripts/test_xbe_controller_device.cpp').as_posix()+'''" src/compat/input.cpp "'''+(SDK/'runtime/core/log.cpp').as_posix()+'''")
+target_include_directories(test_controller_device PRIVATE "'''+(SDK/'runtime').as_posix()+'''")
+target_link_libraries(test_controller_device PRIVATE SDL3::SDL3)
 add_executable(test_device_refs src/compat/test_device_refs.cpp)
 add_executable(test_event_callback src/compat/test_event_callback.cpp)
 target_include_directories(test_event_callback PRIVATE "'''+(SDK/'runtime').as_posix()+'''" generated/game)
@@ -331,6 +354,9 @@ target_link_libraries(test_msaa PRIVATE d3d12 dxgi d3dcompiler)
 add_executable(test_perf src/compat/test_perf.cpp "'''+(SDK/'runtime/core/log.cpp').as_posix()+'''")
 target_include_directories(test_perf PRIVATE "'''+(SDK/'runtime').as_posix()+'''")
 target_compile_definitions(test_perf PRIVATE NDEBUG)
+add_executable(test_frame_reuse src/compat/test_xbe_frame_reuse.cpp)
+add_executable(test_readback_reuse src/compat/test_xbe_readback_reuse.cpp)
+target_link_libraries(test_readback_reuse PRIVATE d3d12 dxgi)
 add_executable(test_shader_cache src/compat/test_shader_cache.cpp)
 target_include_directories(test_shader_cache PRIVATE src/compat "'''+(SDK/'runtime').as_posix()+'''")
 target_link_libraries(test_shader_cache PRIVATE bcrypt d3d12 dxgi d3dcompiler)
@@ -418,18 +444,28 @@ if(UC_BURNER_RELEASE)
     target_compile_definitions(UrbanChaosXbeTrial PRIVATE UC_BURNER_RELEASE)
 endif()
 target_compile_definitions(UrbanChaosXbeTrial PRIVATE UC_PRESENT_SURFACE_LAYOUT=2)
-target_link_libraries(UrbanChaosXbeTrial PRIVATE bcrypt gdi32 xinput uc_native_texture)
+target_link_libraries(UrbanChaosXbeTrial PRIVATE SDL3::SDL3 bcrypt gdi32 xinput uc_native_texture)
 target_include_directories(UrbanChaosXbeTrial PRIVATE "'''+ROOT.as_posix()+'''" src/compat src/common)
 ''')
  clang=Path('C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/Llvm/x64/bin')
  deps=['-DFETCHCONTENT_SOURCE_DIR_'+name.upper()+'='+str(AREA/'out/_deps'/(name+'-src')) for name in ('zydis','tomlplusplus','imgui','sdl3')]
+ from setup_xbe_libusb import prepare as prepare_libusb
+ deps+=prepare_libusb(AREA)
  run('configure-game-msvc',['cmake','-S',AREA,'-B',AREA/'out-msvc','-G','Ninja','-DUC_BURNER_RELEASE='+('ON' if RELEASE else 'OFF'),'-DCMAKE_C_COMPILER='+str(clang/'clang.exe'),'-DCMAKE_CXX_COMPILER='+str(clang/'clang++.exe'),'-DCMAKE_BUILD_TYPE=RelWithDebInfo','-DCMAKE_C_FLAGS=-march=x86-64-v2','-DCMAKE_CXX_FLAGS=-march=x86-64-v2',*deps])
+ config=(AREA/'out-msvc/_deps/sdl3-build/include-config-relwithdebinfo/build_config/SDL_build_config.h').read_text()
+ assert '#define HAVE_LIBUSB 1' in config,'Switch 2 USB driver would be silently omitted'
  run('build-game-msvc',['cmake','--build',AREA/'out-msvc','--target','UrbanChaosXbeTrial','test_device_refs','test_pc_keyboard','test_pc_camera','test_pc_memory','test_coroutines','test_voice_mode','test_stream_factory','test_io_apc','test_recorded_draws','test_visibility','test_inline_draws','test_resource_refs','test_shader_state','test_cursor','test_target60','test_signed_lighting','test_depth_alias','test_audio_rolloff','test_audio_cone','test_audio_factors','test_audio_pitch','test_stream_status','test_audio_loop','test_audio_routing','test_heap_probe','test_graphics_menu_context','test_graphics_input','test_graphics_settings','test_target_resize','test_smooth_fog','-j','4'])
  run('build-interface-fixtures',['cmake','--build',AREA/'out-msvc','--target','test_release_assets','test_language','test_release','test_prompt_handoff','test_event_callback','test_shader_cache','test_perf','test_controls','test_msaa','test_effect_settings','test_ragdoll_settings','test_filter','test_intro_skip','test_conversation_skip','test_health_pulse','test_pc_prompts','test_frontend','test_level_details','test_frontend_fonts','test_menu_style','-j','4'])
+ run('build-controller-device',['cmake','--build',AREA/'out-msvc','--target','test_controller_device','-j','4'])
+ run('test-controller-device',[AREA/'out-msvc/test_controller_device.exe'])
  run('test-language',[AREA/'out-msvc/test_language.exe'])
  run('test-release',[AREA/'out-msvc/test_release.exe'])
  run('test-release-assets',[AREA/'out-msvc/test_release_assets.exe',AREA/'assets/Default.xbe',ROOT/'game_files/Default.xbe'])
  run('test-event-callback',[AREA/'out-msvc/test_event_callback.exe'])
+ run('build-frame-reuse',['cmake','--build',AREA/'out-msvc','--target','test_frame_reuse','test_readback_reuse','-j','4'])
+ run('test-frame-reuse',[AREA/'out-msvc/test_frame_reuse.exe'])
+ run('test-readback-reuse',[AREA/'out-msvc/test_readback_reuse.exe'])
+ run('test-readback-reuse-hardware',[AREA/'out-msvc/test_readback_reuse.exe','hardware'])
  run('test-shader-cache',[AREA/'out-msvc/test_shader_cache.exe'])
  run('test-perf-disabled',[AREA/'out-msvc/test_perf.exe','disabled'])
  run('test-perf-enabled',[AREA/'out-msvc/test_perf.exe','enabled'])
@@ -485,3 +521,4 @@ target_include_directories(UrbanChaosXbeTrial PRIVATE "'''+ROOT.as_posix()+'''" 
  report['release_diagnostics_removed']=RELEASE
  report['runtime_sha256']=hashlib.sha256((AREA/'out-msvc/UrbanChaosXbeTrial.exe').read_bytes()).hexdigest()
 finally:save()
+

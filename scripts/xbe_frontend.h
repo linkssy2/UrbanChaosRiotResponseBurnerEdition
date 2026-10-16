@@ -42,6 +42,8 @@ inline TrialLevelRect TrialLevelBounds(unsigned index,unsigned count) {
     const float step=std::min(30.f,276.f/std::max(1u,count));
     return {8.f,94.f+step*index,36.f,step};
 }
+// Nine rows retain level select's full-size 24px icons and 30px spacing.
+constexpr unsigned TrialRewardsPerPage=9;
 inline bool TrialFrontendSupported(const TrialFrontendFrame& f) {
     const auto& s=f.source;
     if(!s.epoch||!s.screen||!s.owner||!s.count||s.selected>=s.count||
@@ -55,7 +57,8 @@ inline bool TrialFrontendSupported(const TrialFrontendFrame& f) {
         s.rows[0].callback==0x284580&&s.rows[1].callback==0x284310;
     return (s.kind==TRIAL_HF_NAME&&s.count==1&&f.name_capacity==15)||
            (s.kind==UC_HF_LIST&&f.list_kind>=1&&f.list_kind<=3&&s.count<=20)||
-           (s.kind==UC_HF_LEVELS&&s.count<=17);
+           (s.kind==UC_HF_LEVELS&&s.count<=17)||
+           (s.kind==UC_HF_REWARD_BROWSER&&s.count<=55);
 }
 // Keep copied presentation through a title transition; revoke input separately.
 struct TrialFrontendPresentation {

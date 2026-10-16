@@ -45,7 +45,7 @@ class BurnerLauncher : Form {
         import=MakeButton("SELECT XBOX ISO",async(s,e)=>await Import());panel.Controls.Add(import);
         panel.Controls.Add(MakeButton("OPEN SAVES",(s,e)=>{Directory.CreateDirectory(Path.Combine(Data,"xbe-runtime","hdd"));Process.Start("explorer.exe",Quote(Path.Combine(Data,"xbe-runtime","hdd")));}));
         cancel=MakeButton("QUIT",(s,e)=>{if(busy&&!running){File.WriteAllText(cancelPath,"");status.Text="Cancelling import...";cancel.Enabled=false;}else Close();});panel.Controls.Add(cancel);
-        panel.Controls.Add(new Label{Text="v0.03  |  Windows x64 / Direct3D 12\nGame data is imported locally. No disc files are included.",Dock=DockStyle.Fill,Font=new Font("Segoe UI",9),ForeColor=Color.FromArgb(138,143,138),TextAlign=ContentAlignment.BottomLeft});
+        panel.Controls.Add(new Label{Text="v0.04  |  Windows x64 / Direct3D 12\nGame data is imported locally. No disc files are included.",Dock=DockStyle.Fill,Font=new Font("Segoe UI",9),ForeColor=Color.FromArgb(138,143,138),TextAlign=ContentAlignment.BottomLeft});
         Shown+=async(s,e)=>await RefreshReady();FormClosing+=(s,e)=>{if(busy){e.Cancel=true;status.Text=running?"Close the game before exiting the launcher.":"Use Cancel Import to stop safely.";}};
     }
     async Task RefreshReady(){bool ready=await Ready();play.Enabled=ready;status.Text=ready?"READY TO PLAY\nYour imported game data is available.":"SELECT YOUR XBOX ISO\nChoose the supported Urban Chaos: Riot Response disc image.";}

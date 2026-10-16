@@ -21,17 +21,17 @@ INPUT=r'''
 bool TrialPromptSnapshot(unsigned id,TrialPromptInput& out,unsigned variant){
     std::lock_guard guard(input_lock);out={};
     if(!xbox_KeyboardMode()){
-        // Controller remapping applies only to gameplay. Menu controls and the
-        // orders direction diagram retain their original controller artwork.
-        if(id!=1||!gameplay||menu_mode)return false;
+        if(id!=1)return false;
         controller_init();
-        if(!InterlockedCompareExchange(&controller_custom,0,0))return false;
-        bool changed=false;out.controller=true;
+        out.family=trial_controller::family.load();
+        const bool remap=gameplay&&!menu_mode&&InterlockedCompareExchange(&controller_custom,0,0);
+        if(!out.family&&!remap)return false;
+        bool changed=out.family!=0;out.controller=true;
         for(unsigned action=0;action<12;++action){
-            unsigned source=xbox_ControllerBinding(action,0);
-            if(!source)source=xbox_ControllerBinding(action,1);
+            unsigned source=remap?xbox_ControllerBinding(action,0):action+1;
+            if(remap&&!source)source=xbox_ControllerBinding(action,1);
             out.bindings[action]=source;
-            std::snprintf(out.labels[action],sizeof(out.labels[action]),"%s",xbox_ControllerSourceName(source));
+            std::snprintf(out.labels[action],sizeof(out.labels[action]),"%s",trial_controller::Label(source,out.family));
             changed|=source!=action+1;
         }
         return changed;
@@ -115,6 +115,10 @@ bool TrialPromptArtwork(unsigned id,const uint8_t* source,const TrialPromptInput
         for(unsigned row=0;row<32;++row){
             const int action=pc_hud_actions[row];if(action<0)continue;
             const unsigned source=input.bindings[action];if(!source||source>12)continue;
+            if(input.family){
+                TrialControllerGlyph(image+row*128*128,source,input.family);
+                continue;
+            }
             for(unsigned y=0;y<128;++y)for(unsigned x=0;x<128;++x)
                 image[(row*128+y)*128+x]=pc_hud_buttons_pixels[(rows[source-1]*32+y/4)*32+x/4];
         }
@@ -158,14 +162,18 @@ static int pc_hud_load_pixels(){return pc_hud_supplied;}''')
     input_source=once(input_source,old,'')
     input_source=once(input_source,'    if(port==0)pad.connected=true;',
         '''    if(port==0)pad.connected=true;
-    if(port==0&&focused()&&uc_pc_prompts::ControllerActive(pad))InterlockedExchange(&keyboard_mode,0);''')
+    if(port==0&&focused()&&uc_pc_prompts::ControllerActive(pad)&&InterlockedExchange(&keyboard_mode,0))PostMessage(game_window,kCapture,0,0);''')
     input_source=once(input_source,'    if(TrialGraphicsMessage(msg,wp,lp)){', '''    static uc_pc_prompts::PointerActivity pointer_activity;
-    if(focused()&&(msg==WM_KEYDOWN||msg==WM_SYSKEYDOWN))xbox_KeyboardNoteInput();
+    auto note_pointer_input=[&]{
+        const bool changed=!xbox_KeyboardMode();xbox_KeyboardNoteInput();
+        if(changed)PostMessage(game_window,kCapture,0,0);
+    };
+    if(focused()&&(msg==WM_KEYDOWN||msg==WM_SYSKEYDOWN))note_pointer_input();
     if(!focused()||captured)pointer_activity.Reset();
     else if(msg==WM_MOUSEMOVE){
-        if(pointer_activity.Move(short(LOWORD(lp)),short(HIWORD(lp))))xbox_KeyboardNoteInput();
+        if(pointer_activity.Move(short(LOWORD(lp)),short(HIWORD(lp))))note_pointer_input();
     }else if(msg==WM_LBUTTONDOWN||msg==WM_RBUTTONDOWN||msg==WM_MBUTTONDOWN||
-             msg==WM_XBUTTONDOWN||msg==WM_MOUSEWHEEL||msg==WM_MOUSEHWHEEL)xbox_KeyboardNoteInput();
+             msg==WM_XBUTTONDOWN||msg==WM_MOUSEWHEEL||msg==WM_MOUSEHWHEEL)note_pointer_input();
     if(TrialGraphicsMessage(msg,wp,lp)){''')
     graphics_source=once(graphics_source,'#include "gpu/texture.h"','#include "gpu/texture.h"\n#include "xbe_pc_prompts.h"')
     graphics_source=once(graphics_source,'    uint32_t levels = 1;\n', '    uint32_t levels = 1;\n    unsigned pc_prompt_id = 0;\n')

@@ -18,8 +18,8 @@ extern "C" {
 int native_hud_keycap(uint32_t*,unsigned,const char*,const char*);
 
 namespace {
-constexpr unsigned icon_codes[]={13,'Q','D','R',37,39,1,27,2,0x101,0x102,0x103,0x104,0x105};
-std::array<std::array<float,4>,14> icon_uv{};
+constexpr unsigned icon_codes[]={13,'Q','D','R',37,39,1,27,2,0x101,0x102,0x103,0x104,0x105,0x201,0x202,0x203,0x204,0x205,0x301,0x302,0x303,0x304,0x305,0x401,0x402,0x403,0x404,0x405};
+std::array<std::array<float,4>,29> icon_uv{};
 bool icons_ready=false;
 using Archive=std::unique_ptr<UCArchive,decltype(&uc_archive_close)>;
 struct Bytes {UCArchiveBytes value{};~Bytes(){uc_archive_bytes_free(&value);}};
@@ -90,16 +90,24 @@ bool TrialLoadFrontendFonts(ImFontAtlas* atlas,const std::filesystem::path& game
     if(bt.format!=UC_TEXTURE_BC3_UNORM||bt.width!=32||bt.height!=1024)return false;
     std::vector<uint32_t> button_pixels(32*1024);
     uc_pc_prompts::DecodeBc3(bt.mips[0].data,32,1024,button_pixels.data());
-    std::array<std::vector<uint32_t>,14> icons;
+    std::array<std::vector<uint32_t>,29> icons;
     const char* labels[]={"ENTER","Q","D","R","<",">","","ESC",""};
     for(unsigned i=0;i<9;++i){
         icons[i].resize(128*128);
         if(!native_hud_keycap(icons[i].data(),icon_codes[i],labels[i],nullptr))return false;
     }
-    const unsigned rows[]={1,4,5,2,3};
+    // Original button strip: A, Y, X, B, then the direction pad.
+    const unsigned rows[]={1,4,5,3,2};
     for(unsigned i=9;i<14;++i)
         icons[i].assign(button_pixels.begin()+rows[i-9]*1024,button_pixels.begin()+(rows[i-9]+1)*1024);
-    ImFont* fonts[2]{};int rectangles[2]{},icon_rectangles[14]{};
+    for(unsigned family=1;family<=3;++family)for(unsigned i=0;i<5;++i){
+        auto& pixels=icons[14+(family-1)*5+i];pixels.resize(128*128);
+        const unsigned sources[]={1,2,0,3,4};
+        if(i==2){for(unsigned y=0;y<128;++y)for(unsigned x=0;x<128;++x)
+            pixels[y*128+x]=button_pixels[(5*32+y/4)*32+x/4];}
+        else TrialControllerGlyph(pixels.data(),sources[i],family);
+    }
+    ImFont* fonts[2]{};int rectangles[2]{},icon_rectangles[29]{};
     static const ImWchar seed_range[]={'?','?',0};
     for(unsigned i=0;i<2;++i){
         // ImGui requires a builder-owned font record. Its single seed glyph is
@@ -110,7 +118,7 @@ bool TrialLoadFrontendFonts(ImFontAtlas* atlas,const std::filesystem::path& game
         fonts[i]=atlas->AddFontDefault(&cfg);
         rectangles[i]=atlas->AddCustomRectRegular(data[i].width,data[i].height);
     }
-    for(unsigned i=0;i<14;++i)icon_rectangles[i]=atlas->AddCustomRectRegular(i<9?128:32,i<9?128:32);
+    for(unsigned i=0;i<29;++i)icon_rectangles[i]=atlas->AddCustomRectRegular((i<9||i>=14)?128:32,(i<9||i>=14)?128:32);
     // The largest original atlas needs room for ImGui's packing padding too.
     atlas->TexDesiredWidth=std::max(atlas->TexDesiredWidth,1024);
     if(!atlas->Build())return false;
@@ -139,7 +147,7 @@ bool TrialLoadFrontendFonts(ImFontAtlas* atlas,const std::filesystem::path& game
         }
         font->BuildLookupTable();
     }
-    for(unsigned i=0;i<14;++i){
+    for(unsigned i=0;i<29;++i){
         const auto* r=atlas->GetCustomRectByIndex(icon_rectangles[i]);
         for(unsigned y=0;y<r->Height;++y)for(unsigned x=0;x<r->Width;++x){
             const uint32_t c=icons[i][size_t(y)*r->Width+x];
@@ -151,7 +159,8 @@ bool TrialLoadFrontendFonts(ImFontAtlas* atlas,const std::filesystem::path& game
 }
 
 bool TrialMenuIconUV(unsigned code,float (&uv)[4]){
-    if(icons_ready)for(unsigned i=0;i<14;++i)if(icon_codes[i]==code){
+    if(code>=0x101&&code<=0x105)code+=trial_controller::family.load()*0x100;
+    if(icons_ready)for(unsigned i=0;i<29;++i)if(icon_codes[i]==code){
         std::copy(icon_uv[i].begin(),icon_uv[i].end(),uv);return true;
     }
     return false;

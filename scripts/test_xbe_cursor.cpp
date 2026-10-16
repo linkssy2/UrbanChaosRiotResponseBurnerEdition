@@ -16,6 +16,8 @@ static bool clipped = false;
 static RECT observed_clip{};
 static bool focused() { return foreground; }
 static bool graphics_open=false;
+static bool keyboard_active=true;
+static int xbox_KeyboardMode(){return keyboard_active;}
 static bool TrialGraphicsOpen() { return graphics_open; }
 // GENERATED_CURSOR
 
@@ -76,5 +78,9 @@ int main() {
     graphics_open=true;ReconcileCapture();assert(!captured && !clipped && observed_cursor==shield);
     graphics_open=false;ReconcileCapture();assert(captured && clipped && !observed_cursor);
     menu_mode=true;ReconcileCapture();assert(!captured && observed_cursor==shield);
+    keyboard_active=false;ReconcileCapture();assert(!captured&&!clipped&&!observed_cursor);
+    graphics_open=true;ReconcileCapture();assert(!observed_cursor);
+    keyboard_active=true;ReconcileCapture();assert(observed_cursor==shield);
+    keyboard_active=false;foreground=false;ReconcileCapture();assert(observed_cursor==LoadCursor(nullptr,IDC_ARROW));
     std::puts("existing shield artwork/hotspot/cache and startup, gameplay, pause, resume, focus-loss transitions passed");
 }

@@ -212,7 +212,7 @@ static void CheckVisualHandoff(const TrialFrontendFrame& f){
     // Every supported page shares this lifecycle. A settled original menu
     // (Rewards, Objectives, confirmation or a legacy settings child) must
     // reveal its own pixels rather than retain an unrelated native footer.
-    for(unsigned kind:{unsigned(UC_HF_NONE),unsigned(UC_HF_DIALOG),unsigned(UC_HF_REWARD_BROWSER),unsigned(UC_HF_LIST)}){
+    for(unsigned kind:{unsigned(UC_HF_NONE),unsigned(UC_HF_DIALOG),unsigned(UC_HF_LIST)}){
         TrialFrontendPublish(f);TrialFrontendPublish(transition);
         auto original=f;original.source.kind=kind;original.list_kind=0;original.delete_dialog=false;
         TrialFrontendPublish(original);DrawFrame();
@@ -574,6 +574,35 @@ static void CheckSize(unsigned width,unsigned height){
     ImGui::GetIO().AddKeyEvent(ImGuiKey_Enter,false);Settle();EmptyAction();
     Key(ImGuiKey_Enter);action=Take();CHECK(action.kind==UC_HF_ACTIVATE);
 
+    // The actual Graphics UI must consume controller navigation and Apply.
+    OpenGraphics(options);keyboard_mode=0;
+    auto pad=[&](unsigned buttons,unsigned a=0,unsigned b=0){
+        TrialFrontendPad(0,0,0,0,0);DrawFrame();TrialFrontendPad(buttons,a,b,0,0);DrawFrame();
+        TrialFrontendPad(0,0,0,0,0);Settle();};
+    // Select a known row with mouse once, then operate entirely by controller.
+    Move(0,0);ClickPoint(hits[7].a.x+2,hits[7].a.y+2);const bool old_fps=draft_fps;
+    pad(8);CHECK(draft_fps!=old_fps);pad(4);CHECK(draft_fps==old_fps);
+    for(unsigned i=0;i<7;++i)pad(2); // FPS row 7 -> Apply row 14.
+    const auto saved=applied;pad(0,255);CHECK(applied==saved+1);
+    pad(0,0,255);CHECK(!PanelOpen());EmptyAction();keyboard_mode=1;
+    Publish(levels);pad(0x200);action=Take();CHECK(action.kind==UC_HF_DIFFICULTY);
+    pad(0x100);action=Take();CHECK(action.kind==UC_HF_REWARDS);
+    keyboard_mode=0;Publish(levels);CHECK(!TrialFrontendOwns(levels.source.owner,UC_HF_LEVELS));
+    CHECK(!frontend_presentation.visible);DrawFrame();CHECK(hits.empty());
+    auto controller_slide=levels;controller_slide.source.source_kind|=UC_HF_TRANSITION;
+    Publish(controller_slide);CHECK(!frontend_presentation.visible);
+    keyboard_mode=1;Publish(levels);CHECK(TrialFrontendOwns(levels.source.owner,UC_HF_LEVELS));
+    auto rewards=MakeList(1);rewards.list_kind=0;rewards.source.kind=UC_HF_REWARD_BROWSER;rewards.source.count=55;
+    for(unsigned i=0;i<55;++i){rewards.source.rows[i].row=0x4000+i*44;rewards.source.rows[i].enabled=1;
+        std::snprintf(rewards.labels[i],sizeof(rewards.labels[i]),"Reward %u",i+1);}
+    Publish(rewards);CHECK(hits.size()==12);Click(3);action=Take();CHECK(action.index==3&&action.kind==UC_HF_ACTIVATE);
+    Click(11);action=Take();CHECK(action.kind==UC_HF_SELECT&&action.index==9);
+    rewards.source.selected=54;++rewards.source.epoch;Publish(rewards);CHECK(hits.size()==4);Click(0);action=Take();CHECK(action.index==54);
+    for(unsigned i=0;i<1;++i){const auto r=TrialLevelBounds(i,TrialRewardsPerPage);
+        CHECK(hits[i].a.x==r.x*width/640.f&&hits[i].a.y==r.y*height/480.f);}
+    RightClick();action=Take();CHECK(action.kind==UC_HF_BACK);
+    keyboard_mode=0;Publish(rewards);CHECK(hits.empty()&&!frontend_presentation.visible);
+    keyboard_mode=1;
     CheckControls(options);CheckLanguage(options);CheckProfilesAndName();CheckQuit(main);
     CheckVisualHandoff(main);CheckVisualHandoff(pause);CheckVisualHandoff(options);CheckVisualHandoff(levels);
 
@@ -596,6 +625,6 @@ int main(){
     CheckLegacyFogSettings();CHECK(applied==8);
     const unsigned before_ui=applied;
     CheckSize(640,480);CheckSize(1920,1080);CheckSize(2560,1440);
-    CHECK(input_changes>10&&applied==before_ui+18&&frames>100);
+    CHECK(input_changes>10&&applied==before_ui+21&&frames>100);
     ImGui::DestroyContext();std::puts("PASS actual menu UI + original fonts offline; no live scene or visual parity claim");
 }

@@ -29,7 +29,7 @@ static unsigned xbox_KeyboardBinding(unsigned action,unsigned slot){return bindi
 static void controller_init(){}
 static unsigned xbox_ControllerBinding(unsigned action,unsigned slot){return controller_bindings[action][slot];}
 static const char* xbox_ControllerSourceName(unsigned source){
-    static const char* names[]={"Unbound","A","B","X","Y","LB","RB","LT","RT","Start","Back","LS click","RS click","D-pad Up","D-pad Down","D-pad Left","D-pad Right","LS Left","LS Right","LS Up","LS Down","RS Left","RS Right","RS Up","RS Down"};
+    static const char* names[]={"Unbound","A","B","X","Y","RB","LB","LT","RT","Start","Back","LS click","RS click","D-pad Up","D-pad Down","D-pad Left","D-pad Right","LS Left","LS Right","LS Up","LS Down","RS Left","RS Right","RS Up","RS Down"};
     return source<=24?names[source]:"Invalid";
 }
 static const char* xbox_KeyboardSourceName(unsigned source){static char key[8];std::snprintf(key,sizeof(key),"%c",source);return key;}
@@ -144,6 +144,23 @@ static void ControllerSnapshotChecks(){
     keyboard_mode=true;CHECK(TrialPromptSnapshot(1,out)&&!out.controller&&out.bindings[0]=='R');
     controller_custom=0;
 }
+static void FamilyChecks(){
+    keyboard_mode=false;menu_mode=true;controller_custom=0;
+    TrialPromptInput prior{};
+    for(unsigned family=1;family<=3;++family){
+        trial_controller::family=family;TrialPromptInput out;
+        CHECK(TrialPromptSnapshot(1,out)&&out.controller&&out.family==family);
+        CHECK(out.bindings[0]==1&&!std::strcmp(out.labels[0],trial_controller::Label(1,family)));
+        CHECK(!uc_pc_prompts::Equal(prior,out));prior=out;
+        CHECK(!TrialPromptSnapshot(2,out));
+        uint32_t glyph[128*128]{};TrialControllerGlyph(glyph,1,family);
+        CHECK(std::count_if(std::begin(glyph),std::end(glyph),[](uint32_t c){return c!=0;})>100);
+    }
+    CHECK(!std::strcmp(trial_controller::Label(5,trial_controller::PS5),"R1"));
+    CHECK(!std::strcmp(trial_controller::Label(10,trial_controller::PS5),"Create"));
+    CHECK(!std::strcmp(trial_controller::Label(3,trial_controller::Nintendo),"Y"));
+    trial_controller::family=0;keyboard_mode=true;menu_mode=false;
+}
 static void GateChecks(){
     std::vector<uint8_t> mem(512);uint8_t* base=mem.data();
     for(bool pc:{false,true})for(unsigned available:{0u,1u,2u})for(uint32_t target:{UINT32_MAX,0u,42u}){
@@ -224,6 +241,6 @@ static void ArtworkChecks(){
     CHECK(source==before);
 }
 int main(){
-    SnapshotChecks();ControllerSnapshotChecks();GateChecks();ArtworkChecks();PromptContextChecks();
+    SnapshotChecks();ControllerSnapshotChecks();FamilyChecks();GateChecks();ArtworkChecks();PromptContextChecks();
     std::puts("PASS PC prompt production snapshot/input binding assembly, exact BC3 atlas conversion, untouched original rows, binding/hold/drag/release artwork, controller remap row copies/direction badges/default and menu bypass, original medic gate, cinematic Skip producer, reward Continue literal footer and queued R/F glyph identity through original record selector/emitter; no live GPU claim");
 }

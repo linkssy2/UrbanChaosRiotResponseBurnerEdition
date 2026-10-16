@@ -9,6 +9,15 @@ def transform(source):
         assert source.count('uc_xbe_shader_cache::Save(') == 1
         return source
     source = once(source, '#include "core/diag.h"', '#include "core/diag.h"\n#include "xbe_shader_cache.h"')
+    source = once(source, '    LoadSettings();', '''    uc_xbe_shader_cache::Warm([this](const std::string& src,const std::string& entry,const std::string& profile,ID3DBlob* code){
+        uint64_t seed=Hash(profile.data(),profile.size());
+        seed=Hash(entry.data(),entry.size(),seed);
+        blobs_[Hash(src.data(),src.size(),seed)]=code;
+    });
+    // Built-in presentation variants are known before any title draw.
+    EnsureBlitPipeline(DXGI_FORMAT_B8G8R8A8_UNORM,false);
+    EnsureBlitPipeline(DXGI_FORMAT_B8G8R8A8_UNORM,true);
+    LoadSettings();''')
     source = once(source, '    uint64_t shaders = 0;\n', '    uint64_t shaders = 0;\n    uint64_t shader_disk_hits = 0;\n')
     old = function(source, 'ID3DBlob* D3D12Backend::Compile(')
     new = once(old, '    ComPtr<ID3DBlob> err;\n', '''    if (uc_xbe_shader_cache::Load(src, entry, profile, D3DCOMPILE_OPTIMIZATION_LEVEL1, 0, &code)) {

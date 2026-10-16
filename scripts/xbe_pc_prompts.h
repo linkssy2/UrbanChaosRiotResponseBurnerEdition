@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <cstring>
 #include <vector>
+#include "xbe_controller_style.h"
 
 struct TrialPromptInput {
     unsigned bindings[13]{};
@@ -12,6 +13,7 @@ struct TrialPromptInput {
     unsigned direction=0;
     bool held=false;
     bool controller=false;
+    unsigned family=0;
 };
 bool TrialPromptSnapshot(unsigned id,TrialPromptInput& out,unsigned variant=0);
 bool TrialPromptArtwork(unsigned id,const uint8_t* source,const TrialPromptInput& input,
@@ -49,7 +51,7 @@ struct PointerActivity {
 inline bool Equal(const TrialPromptInput& a,const TrialPromptInput& b) {
     return !std::memcmp(a.bindings,b.bindings,sizeof(a.bindings))&&
            !std::memcmp(a.labels,b.labels,sizeof(a.labels))&&a.x==b.x&&a.y==b.y&&
-           a.direction==b.direction&&a.held==b.held&&a.controller==b.controller;
+           a.direction==b.direction&&a.held==b.held&&a.controller==b.controller&&a.family==b.family;
 }
 // Same BC3 byte conversion as launcher/burner/hud_import.py, performed once
 // from the title's own verified live texture. Unmapped atlas rows stay original.
