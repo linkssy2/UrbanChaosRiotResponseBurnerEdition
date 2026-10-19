@@ -11,6 +11,7 @@
 #include <mutex>
 #include "kernel/kernel.h"
 #include "../common/xbe_intro_skip.h"
+#include "../common/xbe_menu_key_taps.h"
 namespace kernel {
 static std::array<uint8_t,0x800000> memory{};
 uint8_t* g_base=memory.data();
@@ -23,6 +24,7 @@ bool IsCommitted(uint32_t page){return page<kernel::memory.size()&&page!=denied;
 namespace {
 std::recursive_mutex input_lock;
 trial_intro::Gate intro_gate;
+trial_input::MenuKeyTaps menu_key_taps;
 bool click_pending=false,test_focused=true,test_graphics=false;
 bool focused(){return test_focused;}
 bool TrialGraphicsOpen(){return test_graphics;}
@@ -85,6 +87,20 @@ static void Physical(unsigned source,bool down){
     if(source==0)intro_gate.Key(1,down,true);
     else if(source==1)intro_gate.Key(2,down,true);
     else{std::array<uint8_t,8> analog{};intro_gate.Pad(int(source-2),down?16u:0u,analog,true);}
+}
+static void MenuTapHandoff(){
+    intro_gate={};menu_key_taps.Clear();
+    menu_key_taps.Event('F',true,false,true);menu_key_taps.Event('F',false,false,true);
+    TrialIntroMovie(0,0,false,false); // An ownerless context must preserve menu input.
+    menu_key_taps.Begin();assert(menu_key_taps.Retained('F'));
+    menu_key_taps.Event('W',true,false,true);menu_key_taps.Event('W',false,false,true);
+    TrialIntroMovie(screen,1,true,false); // Clear both published F and queued W.
+    assert(!menu_key_taps.Retained('F'));
+    TrialIntroClose(screen);menu_key_taps.Begin();
+    assert(!menu_key_taps.Retained('F')&&!menu_key_taps.Retained('W'));menu_key_taps.End();
+    menu_key_taps.Event('F',true,false,true);menu_key_taps.Event('F',false,false,true);
+    menu_key_taps.Begin();assert(menu_key_taps.Retained('F'));
+    menu_key_taps.GuestPortPolled(0);menu_key_taps.End();menu_key_taps.Clear();
 }
 static void Lifecycle(){
     const char* names[]={"dolby","EidosLogo","RockLogo","intro_12_edit"};
@@ -161,4 +177,4 @@ static void Guards(){
     intro_gate={};Ready("dolby",0);Physical(0,true);
     assert(Tick(.016f)==0x2723b0&&g_base[screen+0x17]&&!intro_gate.owner);
 }
-int main(){Lifecycle();Guards();std::puts("intro skip: original delays/fades/EOF/ABI, all startup movies, keyboard/mouse/four pads and release handoff passed");}
+int main(){MenuTapHandoff();Lifecycle();Guards();std::puts("intro skip: original delays/fades/EOF/ABI, all startup movies, keyboard/mouse/four pads and menu tap/release handoff passed");}

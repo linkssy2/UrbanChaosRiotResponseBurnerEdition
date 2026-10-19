@@ -31,6 +31,7 @@ bool D3D12Backend::CreateMatchedColor(Target& t,uint32_t samples) {
     if(FAILED(dev_->CreateCommittedResource(&hp,D3D12_HEAP_FLAG_NONE,&desc,
         D3D12_RESOURCE_STATE_RENDER_TARGET,&clear,IID_PPV_ARGS(&image))))return false;
     t.res=std::move(image);t.state=D3D12_RESOURCE_STATE_RENDER_TARGET;
+    t.samples=ext_ ? 0 : samples;
     return true;
 }
 

@@ -16,6 +16,7 @@
 #include "xbe_controls_capture.h"
 #include "scripts/xbe_pc_prompts.h"
 #include "scripts/xbe_intro_skip.h"
+#include "scripts/xbe_menu_key_taps.h"
 
 namespace {
 // GENERATED_STATE
@@ -42,6 +43,7 @@ BOOL TestPostMessage(HWND,UINT,WPARAM,LPARAM){++capture_posts;return TRUE;}
 // GENERATED_CHANGED
 // GENERATED_RIGHT_BACK
 // GENERATED_PUBLISH
+// GENERATED_MENU_KEYS
 // GENERATED_PAD
 // GENERATED_CONTROL_STICK
 
@@ -292,6 +294,54 @@ int main(){
     physical_keys['W']=physical_keys['D']=true;menu_mode=true;
     assert(Poll(0).lx==32767&&Poll(0).ly==32767);
     menu_mode=false;test_focused=false;assert(Neutral(Poll(0)));
+    ReleaseAll();
+    // A press and release between polls must reach the original title once.
+    gameplay=false;menu_mode=false;captured=false;
+    menu_key_taps.Event(VK_RETURN,true,false,true);
+    menu_key_taps.Event(VK_RETURN,false,false,true);
+    assert(Neutral(Poll(0))); // device discovery cannot consume the tap
+    intro_gate.held[0]=intro_gate.consumed[0]=true; // released intro press
+    TrialMenuKeysBegin();
+    assert(Poll(0).buttons&16);
+    assert(!intro_gate.consumed[0]);
+    assert(Poll(0).buttons&16); // stable for this original input pass
+    TrialMenuKeysEnd();TrialMenuKeysBegin();assert(Neutral(Poll(0)));TrialMenuKeysEnd();
+    menu_mode=true;
+    menu_key_taps.Event(VK_RETURN,true,false,true);menu_key_taps.Event(VK_RETURN,false,false,true);
+    TrialMenuKeysBegin();assert(Poll(0).analog[0]==255);TrialMenuKeysEnd();
+    TrialMenuKeysReset();TrialMenuKeysBegin();assert(Neutral(Poll(0)));TrialMenuKeysEnd();
+    gameplay=true;menu_mode=false;
+    menu_key_taps.Event(VK_RETURN,true,false,true);menu_key_taps.Event(VK_RETURN,false,false,true);
+    TrialMenuKeysBegin();assert(Neutral(Poll(0)));TrialMenuKeysEnd();
+    // Gameplay keeps a brief real key press for one original input update.
+    // This neither lengthens physical holds nor invents movement between taps.
+    gameplay=false;menu_mode=true;
+    menu_key_taps.Event('W',true,false,true);menu_key_taps.Event('W',false,false,true);
+    TrialGameplay();TrialMenuKeysBegin();assert(Neutral(Poll(0)));TrialMenuKeysEnd();
+    menu_key_taps.Event('W',true,false,true);menu_key_taps.Event('W',false,false,true);
+    assert(Neutral(Poll(0)));
+    TrialMenuKeysBegin();assert(Poll(0).ly==32767);assert(Poll(0).ly==32767);TrialMenuKeysEnd();
+    TrialMenuKeysBegin();assert(Neutral(Poll(0)));TrialMenuKeysEnd();
+    menu_key_taps.Event('W',true,false,true);menu_key_taps.Event('W',false,false,true);
+    menu_key_taps.Event('D',true,false,true);menu_key_taps.Event('D',false,false,true);
+    TrialMenuKeysBegin();auto tapped_diagonal=Poll(0);
+    assert(tapped_diagonal.lx==23169&&tapped_diagonal.ly==23169);TrialMenuKeysEnd();
+    TrialMenuKeysBegin();assert(Neutral(Poll(0)));TrialMenuKeysEnd();
+    // A pause/resume handoff cannot carry an old key into its new owner.
+    menu_key_taps.Event(VK_ESCAPE,true,false,true);menu_key_taps.Event(VK_ESCAPE,false,false,true);
+    TrialMenuKeysBegin();assert(Poll(0).buttons&16);TrialMenuKeysEnd();
+    TrialMenuKeysBegin();assert(Neutral(Poll(0)));TrialMenuKeysEnd();
+    menu_key_taps.Event('W',true,false,true);menu_key_taps.Event('W',false,false,true);
+    ucrr_host_menu_mode(1);TrialMenuKeysBegin();assert(Neutral(Poll(0)));TrialMenuKeysEnd();
+    menu_key_taps.Event('R',true,false,true);menu_key_taps.Event('R',false,false,true);
+    ucrr_host_menu_mode(0);TrialMenuKeysBegin();assert(Neutral(Poll(0)));TrialMenuKeysEnd();
+    for(bool native_owner:{false,true}){
+        menu_key_taps.Event('W',true,false,true);menu_key_taps.Event('W',false,false,true);
+        test_open=native_owner;test_focused=native_owner;
+        TrialMenuKeysBegin();assert(Neutral(Poll(0)));TrialMenuKeysEnd();
+        test_open=false;test_focused=true;
+        TrialMenuKeysBegin();assert(Neutral(Poll(0)));TrialMenuKeysEnd();
+    }
     ReleaseAll();
     std::puts("graphics input: actual pad/keyboard ownership, focus, all ports, held keys/clicks/sticks and release handoff passed");
 }

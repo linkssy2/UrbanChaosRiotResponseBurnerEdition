@@ -1,0 +1,2438 @@
+{
+  "version": 1,
+  "assets": [
+    {
+      "name": "frontend\\frt_content\\lc_medal01smg.tga",
+      "width": 64,
+      "height": 64,
+      "format": 15,
+      "source_bytes": 5456,
+      "source_sha256": "8e4bd48a0a51636631acb616e4337ae38a268cf196525b4afd1fc31857344d94",
+      "png": "039-lc_medal01smg-restored.png",
+      "png_sha256": "20d29cd8701bc76e022818bb51909856ed4d6fe92f52c9aa825974de53564c50",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "png",
+      "placement": "source_bounds"
+    },
+    {
+      "name": "frontend\\frt_content\\lc_medal04.tga",
+      "width": 64,
+      "height": 64,
+      "format": 15,
+      "source_bytes": 5456,
+      "source_sha256": "1d874e58b8ffb466c5452430ba8b37eb24913756201de21ef04729c328fba173",
+      "png": "040-lc_medal04-restored.png",
+      "png_sha256": "e7d9c51e0147d9fa8ccdca2cb16181a3789a72c24282c4f95c5dfd0cdeae28de",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "png",
+      "placement": "source_bounds"
+    },
+    {
+      "name": "frontend\\frt_content\\lc_medal03.tga",
+      "width": 64,
+      "height": 64,
+      "format": 15,
+      "source_bytes": 5456,
+      "source_sha256": "e459c7eaae9542c25cfeacef39d62cc77dbb1166cfc01beb5fcd8b83e5547633",
+      "png": "041-lc_medal03-restored.png",
+      "png_sha256": "0a6564138c18930249101ba6786eed5fea393dcb4c49b824a622f108b736b496",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "png",
+      "placement": "source_bounds"
+    },
+    {
+      "name": "frontend\\frt_content\\lc_medal02.tga",
+      "width": 64,
+      "height": 64,
+      "format": 15,
+      "source_bytes": 5456,
+      "source_sha256": "a678c6b98fc3de5013ba2c340216bebcdebd29aa903bddc186fc22591c677f35",
+      "png": "042-lc_medal02-restored.png",
+      "png_sha256": "8241a5e25e38f6b031a70a1576174436875c3a5a7c69bc7a421b57715d93363d",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "png",
+      "placement": "source_bounds"
+    },
+    {
+      "name": "frontend\\frt_content\\lc_medal01.tga",
+      "width": 64,
+      "height": 64,
+      "format": 15,
+      "source_bytes": 5456,
+      "source_sha256": "bf042c2c583e99ebfe90001fb045b839a19fcb0db3c80ced89bdad0f0ea577a4",
+      "png": "043-lc_medal01-restored.png",
+      "png_sha256": "5fe955ee9a5c58e88b56efe2f68a12bf3bfe89b9a5f95427fe55722c17af0e90",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "png",
+      "placement": "source_bounds"
+    },
+    {
+      "name": "frontend\\frt_content\\reward_star.tga",
+      "width": 256,
+      "height": 256,
+      "format": 15,
+      "source_bytes": 87376,
+      "source_sha256": "1ccc22c9521bbc0537db9170e51cd946daa6284c56647b2ba9bffdd3d0a91abf",
+      "png": "179-reward_star-restored.png",
+      "png_sha256": "20178ffca06c9decaf6ba90ef228f8ef8614bd5a465ff330e3ec23b68a1f636f",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "png",
+      "placement": "source_bounds"
+    },
+    {
+      "name": "hud\\hud_badge_tzero.tga=nomipmap",
+      "width": 64,
+      "height": 64,
+      "format": 15,
+      "source_bytes": 4096,
+      "source_sha256": "262d53450af9532736a63f4e7cf5f6fa0c31518bfc78b4d9e0be37c32346ad2f",
+      "png": "211-hud_badge_tzero-restored.png",
+      "png_sha256": "d18488f9ce79487695ddf9466af8ac8fd289364a6c095fb5ef3e2b1b072ede66",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "png",
+      "placement": "source_bounds"
+    },
+    {
+      "name": "hud\\hud_badge_burners.tga=nomipmap",
+      "width": 64,
+      "height": 64,
+      "format": 15,
+      "source_bytes": 4096,
+      "source_sha256": "1c97da8131b090b90f88071c7c01c091109f9e9370c2a84aea2488f20d616b9a",
+      "png": "212-hud_badge_burners-restored.png",
+      "png_sha256": "a083da69a4f77826b6597ac852d5ca2d30c213c03aefbb71be94634ff3c7ac40",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "png",
+      "placement": "source_bounds"
+    },
+    {
+      "name": "hud\\hud_weapons_o_minigun.tga=nomipmap",
+      "width": 64,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 2048,
+      "source_sha256": "64047e3b9a3ab7f625ca7bf237d5155f36033b66f775ad7617d56fb9e4f362e3",
+      "png": "289-hud_weapons_o_minigun-restored.png",
+      "png_sha256": "9f401daa76446ff319b08ba4e27dc394fe5dfe93257913887d7fdc3027b3bc40",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "png",
+      "placement": "source_bounds"
+    },
+    {
+      "name": "hud\\hud_weapons_o_pistol.tga=nomipmap",
+      "width": 64,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 2048,
+      "source_sha256": "0b12f96770a86750c7319e251d898db3cddaabec5f105fa7d8c9faa5f4f18df6",
+      "png": "290-hud_weapons_o_pistol-restored.png",
+      "png_sha256": "4e8c191c9619cc2a32741852654af5426017c199ffe587c0f5e42cf375a93152",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "png",
+      "placement": "source_bounds"
+    },
+    {
+      "name": "hud\\hud_weapons_o_pistol2.tga=nomipmap",
+      "width": 64,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 2048,
+      "source_sha256": "e9ae18944303563769947cdabd4c75c938f81ecec98a2d816e5134fc229555f3",
+      "png": "291-hud_weapons_o_pistol2-restored.png",
+      "png_sha256": "a8fbee1b72cdd1db402b2403e996df3a8d601f03ff767dceb4609b0b6c10dacb",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "png",
+      "placement": "source_bounds"
+    },
+    {
+      "name": "hud\\hud_weapons_o_pistol3.tga=nomipmap",
+      "width": 64,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 2048,
+      "source_sha256": "dac413d1e3c6b8f6c28c4d44027b16163a08f8c1ca7ffa5f1a10cae530630c74",
+      "png": "292-hud_weapons_o_pistol3-restored.png",
+      "png_sha256": "a4d341075be8879dd7ed8c62a07ed0615e5d03192dc592297665e7dc3488c0f9",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "png",
+      "placement": "source_bounds"
+    },
+    {
+      "name": "hud\\hud_weapons_o_policeassault.tga=nomipmap",
+      "width": 64,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 2048,
+      "source_sha256": "d09cef2a31bce40b2e706f5311d6246866972612720ec64563d80d2fa4179203",
+      "png": "293-hud_weapons_o_policeassault-restored.png",
+      "png_sha256": "9d7536cc36bcc834982855d77b69e6d64a08f69efda4a43774199d78862a7c12",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "png",
+      "placement": "source_bounds"
+    },
+    {
+      "name": "hud\\hud_weapons_o_policeassault2.tga=nomipmap",
+      "width": 64,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 2048,
+      "source_sha256": "7c6cd7bc8fe8c8c744efd63abf9181079963c4c583d5da394b2aa50d7be8498f",
+      "png": "294-hud_weapons_o_policeassault2-restored.png",
+      "png_sha256": "0e618caba20db2c537b8122552c6253ceeb535def49a4d81dd1c78c9e35fc724",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "png",
+      "placement": "source_bounds"
+    },
+    {
+      "name": "hud\\hud_weapons_o_policeassault3.tga=nomipmap",
+      "width": 64,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 2048,
+      "source_sha256": "dc4a6ee2195461ed2281e995f5ba2c55946dee77ac62aab67c142680f456689a",
+      "png": "295-hud_weapons_o_policeassault3-restored.png",
+      "png_sha256": "4c37d8acf17f3e6396cbc461623ee988244b999febd51124dab11485e62353f7",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "png",
+      "placement": "source_bounds"
+    },
+    {
+      "name": "hud\\hud_weapons_o_policeshotgun.tga=nomipmap",
+      "width": 64,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 2048,
+      "source_sha256": "a9ccfd9ae163aafdee36f1d5cf30c715d9ecd149bc60faacfaa6c2a47659e62f",
+      "png": "296-hud_weapons_o_policeshotgun-restored.png",
+      "png_sha256": "f4aa25b09dc4ed32f47d944f41d2ae3cd393fa1f92b764f5b9ca4ab5cdc926ea",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "png",
+      "placement": "source_bounds"
+    },
+    {
+      "name": "hud\\hud_weapons_o_policeshotgun2.tga=nomipmap",
+      "width": 64,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 2048,
+      "source_sha256": "d553618d8a07e5dd22f4bfc8032a70a93323e6fdb371f070f6e445b35b075eee",
+      "png": "297-hud_weapons_o_policeshotgun2-restored.png",
+      "png_sha256": "e1a349c1b0d2c51bd47c2b41e8e9815bdecbc40f5b1d4c3e6aa0d1974c8ac364",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "png",
+      "placement": "source_bounds"
+    },
+    {
+      "name": "hud\\hud_weapons_o_policeshotgun3.tga=nomipmap",
+      "width": 64,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 2048,
+      "source_sha256": "d553618d8a07e5dd22f4bfc8032a70a93323e6fdb371f070f6e445b35b075eee",
+      "png": "297-hud_weapons_o_policeshotgun2-restored.png",
+      "png_sha256": "e1a349c1b0d2c51bd47c2b41e8e9815bdecbc40f5b1d4c3e6aa0d1974c8ac364",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "png",
+      "placement": "source_bounds"
+    },
+    {
+      "name": "hud\\hud_weapons_o_taser.tga=nomipmap",
+      "width": 64,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 2048,
+      "source_sha256": "45d4b9ed6b10cfecf7ae4cd0205f5f30fc12c1ab14c2d5085e119227ec7ab15d",
+      "png": "298-hud_weapons_o_taser-restored.png",
+      "png_sha256": "613bedf20a05f277eb746aab30f82b689d73527b2aadc6d2eafb06d171472cb8",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "png",
+      "placement": "source_bounds"
+    },
+    {
+      "name": "hud\\hud_weapons_o_taser2.tga=nomipmap",
+      "width": 64,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 2048,
+      "source_sha256": "45d4b9ed6b10cfecf7ae4cd0205f5f30fc12c1ab14c2d5085e119227ec7ab15d",
+      "png": "298-hud_weapons_o_taser-restored.png",
+      "png_sha256": "613bedf20a05f277eb746aab30f82b689d73527b2aadc6d2eafb06d171472cb8",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "png",
+      "placement": "source_bounds"
+    },
+    {
+      "name": "hud\\hud_weapons_o_molotov.tga=nomipmap",
+      "width": 64,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 2048,
+      "source_sha256": "344d714b498637df08507fc2d11074ba8eaad92785ee76a7392e3f36ea22d7f4",
+      "png": "230-hud_weapons_o_molotov-restored.png",
+      "png_sha256": "89fb43a1fd600f84fe1357902c85c629f44684dd5f557f4ae4c53d369da15c7a",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "png",
+      "placement": "source_bounds"
+    },
+    {
+      "name": "hud\\hud_weapons_o_nailbomb.tga=nomipmap",
+      "width": 64,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 2048,
+      "source_sha256": "50e2f59e568f17de65b3f8885db59866e85e3c1cbb6ecd8d03f299f96d5b0063",
+      "png": "231-hud_weapons_o_nailbomb-restored.png",
+      "png_sha256": "1bf14d9aa94d029ccdc02bd093fe46a070a66b3f89cf1f9a4dd11c65b0b31e38",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "png",
+      "placement": "source_bounds"
+    },
+    {
+      "name": "hud\\hud_ammo_grenadelauncher.tga=nomipmap",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1024,
+      "source_sha256": "56eccb1711ff188aff8db8a4ab5bf6c1f25849e5aba7e6818593885d3c254a15",
+      "png": "232-hud_ammo_grenadelauncher-restored.png",
+      "png_sha256": "55aaecf883349858783ef5944996dc6f55c51ec0dacf8fb81bb89b4021498400",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "png",
+      "placement": "source_bounds"
+    },
+    {
+      "name": "hud\\hud_weapons_o_grenadelauncher.tga=nomipmap",
+      "width": 64,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 2048,
+      "source_sha256": "76c731a90b722ec5492b9017235fa8dbec0c812d27b5cccea4694cd5d7c3006d",
+      "png": "233-hud_weapons_o_grenadelauncher-restored.png",
+      "png_sha256": "cf5a86588c41d4cb077a157f5fd4d989ee9ea8ba9e6e7345d786736495b46228",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "png",
+      "placement": "source_bounds"
+    },
+    {
+      "name": "hud\\hud_weapons_o_cleaver.tga=nomipmap",
+      "width": 64,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 2048,
+      "source_sha256": "516c73b8e4c8ce873a94fed82a8db319a6a0f620b17bb59a4c9f53157c351834",
+      "png": "234-hud_weapons_o_cleaver-restored.png",
+      "png_sha256": "1c877ec896140d405164aa6f882b8fa3291d2017a202159b35fdca87fab854e1",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "png",
+      "placement": "source_bounds"
+    },
+    {
+      "name": "hud\\hud_weapons_o_chainsaw.tga=nomipmap",
+      "width": 64,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 2048,
+      "source_sha256": "161c03366ada24e50214aad52f7aaa4634eefd3a0753bce4b23e8fa2d9ef53d0",
+      "png": "235-hud_weapons_o_chainsaw-restored.png",
+      "png_sha256": "f963f7de11cc5df7e082f9e187e8dc3a091987d18c421572d1db7a2775612212",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "png",
+      "placement": "source_bounds"
+    },
+    {
+      "name": "hud\\hud_ammo_magnum.tga=nomipmap",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1024,
+      "source_sha256": "3e76481b90e425baab406ba4288c72ba6ba22a266320d315a37af430222bf32f",
+      "png": "236-hud_ammo_magnum-restored.png",
+      "png_sha256": "21e5513599ee5ec623b61b71a03518470356a7ecb5a92a8df820db8c481f1679",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "png",
+      "placement": "source_bounds"
+    },
+    {
+      "name": "hud\\hud_weapons_o_magnum.tga=nomipmap",
+      "width": 64,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 2048,
+      "source_sha256": "0911dc172a1a182d4595affc922b91e35a84b90558c9ee1f2cd01ec21b7ac776",
+      "png": "237-hud_weapons_o_magnum-restored.png",
+      "png_sha256": "6c1f7d62b570ac2f8ae245758cad2237e0b4380ba3ab60f10c81f03d8da4299a",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "png",
+      "placement": "source_bounds"
+    },
+    {
+      "name": "hud\\hud_ammo_machinepistol.tga=nomipmap",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1024,
+      "source_sha256": "6bfd1ea48c87a0a07c860b561e867f925d9ac81eae3df9e108acb50f30ebe6ce",
+      "png": "239-hud_ammo_machinepistol-restored.png",
+      "png_sha256": "4ce882e3ab8b628e4a4aa4c6e14c2d4635138838b81095b8957e782b161d0636",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "png",
+      "placement": "source_bounds"
+    },
+    {
+      "name": "hud\\hud_weapons_o_machinepistol.tga=nomipmap",
+      "width": 64,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 2048,
+      "source_sha256": "f7b0b66cbd9054b1f2b87de062f956f36f871e885ac11142befb7717bfca69ad",
+      "png": "240-hud_weapons_o_machinepistol-restored.png",
+      "png_sha256": "6861711a846eda17ab71de14447c6c7eea91662775ea2c1688d75ec32a3e28f9",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "png",
+      "placement": "source_bounds"
+    },
+    {
+      "name": "hud\\hud_weapons_o_gangshotgun.tga=nomipmap",
+      "width": 64,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 2048,
+      "source_sha256": "91b48c5d23a54b476aa8cec7f3fe8572147d82531c580d0b5ba40db6a24fe3bc",
+      "png": "241-hud_weapons_o_gangshotgun-restored.png",
+      "png_sha256": "061f5c4b9c0dccb77eb881ac2c3a3b65061a50d5b463e572062e142f2f47ea56",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "png",
+      "placement": "source_bounds"
+    },
+    {
+      "name": "hud\\hud_weapons_o_gangassault.tga=nomipmap",
+      "width": 64,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 2048,
+      "source_sha256": "70afc82c378a81bc67b604481fd4183606ba30b92f17104620198d9c80ab6ca4",
+      "png": "242-hud_weapons_o_gangassault-restored.png",
+      "png_sha256": "e5e69593c54405a95ef689240bb1bc1dcad061a5f13d58a3e35e2e22551f7b2f",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "png",
+      "placement": "source_bounds"
+    },
+    {
+      "name": "hud\\hud_weapons_o_smokegrenade.tga=nomipmap",
+      "width": 64,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 2048,
+      "source_sha256": "bc9bf16a9618ff0b8497cceac22485a69f7b8252dcc96a4774726e6b94e7d279",
+      "png": "243-hud_weapons_o_smokegrenade-restored.png",
+      "png_sha256": "4747a015e6af73058cac5ba42d99261a84bea4490fbc53182146c9dd5aa6d9d6",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "png",
+      "placement": "source_bounds"
+    },
+    {
+      "name": "hud\\hud_weapons_o_riotgrenade.tga=nomipmap",
+      "width": 64,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 2048,
+      "source_sha256": "d8addf50cde4646e0793aec0ac93bd8f34b0f6c01da007b30ceb869a89e26b3d",
+      "png": "244-hud_weapons_o_riotgrenade-restored.png",
+      "png_sha256": "5a02614628b303d0f66af92f1949cf1bc3e228a12217d334250825a5d7c1ab79",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "png",
+      "placement": "source_bounds"
+    },
+    {
+      "name": "hud\\hud_ammo_assaultrifle.tga=nomipmap",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1024,
+      "source_sha256": "13eabb26728c5f3d0c33d764ee55b9730bd9d6e3c5fa6b51db014a7ca5bdb0a8",
+      "png": "245-hud_ammo_assaultrifle-restored.png",
+      "png_sha256": "e941714084923abdd7da5449d764e78be0ab59acce87d2bf8dac9ee559b760b7",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "png",
+      "placement": "source_bounds"
+    },
+    {
+      "name": "hud\\hud_ammo_shotgun.tga=nomipmap",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1024,
+      "source_sha256": "8139e912d7e327c411bf625c90c0d5a6a72b4c94a045a3e6b06019f9681e3b43",
+      "png": "246-hud_ammo_shotgun-restored.png",
+      "png_sha256": "a9eda5ce6fc0e0904e4049be15bf6f4405d282dde1122c383502fb860f38281f",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "png",
+      "placement": "source_bounds"
+    },
+    {
+      "name": "hud\\hud_ammo_pistol.tga=nomipmap",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1024,
+      "source_sha256": "ad3a7eba8d75d654ee6611ada98a2009bcab78e35a9a9db3c34705653b2b086b",
+      "png": "247-hud_ammo_pistol-restored.png",
+      "png_sha256": "dd7df6a96b3bb766b8913dac53962e5a6188b14e33f8bcbc19d2115f7a91f609",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "png",
+      "placement": "source_bounds"
+    },
+    {
+      "name": "hud\\hud_ammo_assaultgrenade.tga=nomipmap",
+      "width": 16,
+      "height": 16,
+      "format": 15,
+      "source_bytes": 256,
+      "source_sha256": "f24745c70d9490df8bebae9a0de4dcedb69c58db31d72109e6677c631c7b96b3",
+      "png": "254-hud_ammo_assaultgrenade-restored.png",
+      "png_sha256": "dd4ceb4928ec0c4f4fde665d3f4a72dec754c18255902c117653a14f1b047530",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "png",
+      "placement": "source_bounds"
+    },
+    {
+      "name": "hud\\hud_weapons_altflashon.tga=nomipmap",
+      "width": 64,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 2048,
+      "source_sha256": "2d136606525eea2b00914031cc8bc1c50d9eac6f870e2d530f2715540c9574b5",
+      "png": "255-hud_weapons_altflashon-restored.png",
+      "png_sha256": "0b41b1e5d5915cf568aaae636cd67dc7b52291329e246207dcc74c0fbe9ff529",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "png",
+      "placement": "source_bounds"
+    },
+    {
+      "name": "hud\\hud_weapons_altflashoff.tga=nomipmap",
+      "width": 64,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 2048,
+      "source_sha256": "dd18dc8be3e3d6637c7c91c4c9c8802b99063c446862413215bd365493230173",
+      "png": "256-hud_weapons_altflashoff-restored.png",
+      "png_sha256": "bbcceb269ec511453e56c0835e6d5f09dc0b05b5cb8a53a9f36ba4264ba7c096",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "png",
+      "placement": "source_bounds"
+    },
+    {
+      "name": "frontend\\frt_content\\level_image_es%24b%.tga",
+      "width": 256,
+      "height": 256,
+      "format": 15,
+      "source_bytes": 87376,
+      "source_sha256": "34d802fb3a8cb9c175878b5707251bd17642a59e0d82b2fe2e5b1e1c7145ea4a",
+      "png": "046-level_image_es_24b-restored.png",
+      "png_sha256": "34cc6f371a770a8f1026601c8a313b7f7bea552f09031b9bc28f851fefaada83",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\level_image_essm.tga",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1360,
+      "source_sha256": "618425f1ed4590eaec5ac31f39c2c6789c80231756a4537fc93a39e158152400",
+      "png": "046-level_image_es_24b-restored.png",
+      "png_sha256": "34cc6f371a770a8f1026601c8a313b7f7bea552f09031b9bc28f851fefaada83",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\level_image_essmg.tga",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1360,
+      "source_sha256": "274d730640cc87db254e2c07e935d57aa112326fbfd1e28d8e9e758e3408dc05",
+      "png": "046-level_image_es_24b-restored.png",
+      "png_sha256": "34cc6f371a770a8f1026601c8a313b7f7bea552f09031b9bc28f851fefaada83",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source",
+      "color": "source_chroma"
+    },
+    {
+      "name": "frontend\\frt_content\\level_image_11%24b%.tga",
+      "width": 256,
+      "height": 256,
+      "format": 15,
+      "source_bytes": 87376,
+      "source_sha256": "2f7b0ced3d37b87c8dfe1c7e77ef60758f28b02ae57cb1440fa433fed2bb0195",
+      "png": "049-level_image_11_24b-restored.png",
+      "png_sha256": "637534ee006b830ac957d9d547b6ab50095ff69a9bdd2fa9659f8f7e07cf37b1",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\level_image_11sm.tga",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1360,
+      "source_sha256": "682cc0c87ce85c579d2c160984d57667e43a7c5cec5da7ffd66729bfb232d854",
+      "png": "049-level_image_11_24b-restored.png",
+      "png_sha256": "637534ee006b830ac957d9d547b6ab50095ff69a9bdd2fa9659f8f7e07cf37b1",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\level_image_11smg.tga",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1360,
+      "source_sha256": "cf0182f11cb776c4f4672643eb54c944b92250a796bef2e0944ff1d51974de3c",
+      "png": "049-level_image_11_24b-restored.png",
+      "png_sha256": "637534ee006b830ac957d9d547b6ab50095ff69a9bdd2fa9659f8f7e07cf37b1",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source",
+      "color": "source_chroma"
+    },
+    {
+      "name": "frontend\\frt_content\\level_image_09%24b%.tga",
+      "width": 256,
+      "height": 256,
+      "format": 15,
+      "source_bytes": 87376,
+      "source_sha256": "355418b718a7e208532e85aaa2674c8bbf9c8501899337b34ac15b0e0b27e515",
+      "png": "055-level_image_09_24b-restored.png",
+      "png_sha256": "2d577f8919d6676ffc2ceb90711ce75dbd9c92a66b1cc1c05b2592a29ce83c5f",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\level_image_09sm.tga",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1360,
+      "source_sha256": "bea1433c127a99e93b9ff75c8d17c394427679f8ff2af8b8d2d7f0eb69c47276",
+      "png": "055-level_image_09_24b-restored.png",
+      "png_sha256": "2d577f8919d6676ffc2ceb90711ce75dbd9c92a66b1cc1c05b2592a29ce83c5f",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\level_image_09smg.tga",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1360,
+      "source_sha256": "6fb47e3765281ba9a6b2328c417904aa0cf7afdc2c67607295a65cd790362897",
+      "png": "055-level_image_09_24b-restored.png",
+      "png_sha256": "2d577f8919d6676ffc2ceb90711ce75dbd9c92a66b1cc1c05b2592a29ce83c5f",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source",
+      "color": "source_chroma"
+    },
+    {
+      "name": "frontend\\frt_content\\level_image_08%24b%.tga",
+      "width": 256,
+      "height": 256,
+      "format": 15,
+      "source_bytes": 87376,
+      "source_sha256": "62eab4fd087e1a0955e70ba1239fadc434e1fd81bd3f20cdf3d1031e6ebf4a16",
+      "png": "058-level_image_08_24b-restored.png",
+      "png_sha256": "308a0d177b6756b3ecb2826707cf199801e6812a4ecb7c3245671373a991a42d",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\level_image_08sm.tga",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1360,
+      "source_sha256": "16816887806b56fe539f23a618a4a5edb5a5c08cfc173aa7235584185cab905e",
+      "png": "058-level_image_08_24b-restored.png",
+      "png_sha256": "308a0d177b6756b3ecb2826707cf199801e6812a4ecb7c3245671373a991a42d",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\level_image_08smg.tga",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1360,
+      "source_sha256": "6fdc33f298f024e661ee693434bbbc20135a1768c7a93dccec09f01c1375583f",
+      "png": "058-level_image_08_24b-restored.png",
+      "png_sha256": "308a0d177b6756b3ecb2826707cf199801e6812a4ecb7c3245671373a991a42d",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source",
+      "color": "source_chroma"
+    },
+    {
+      "name": "frontend\\frt_content\\level_image_07%24b%.tga",
+      "width": 256,
+      "height": 256,
+      "format": 15,
+      "source_bytes": 87376,
+      "source_sha256": "3796a3f235ec4a6f7a96be7d148e59478bbb38a39fd939ef31d2ecc4733c2fcd",
+      "png": "061-level_image_07_24b-restored.png",
+      "png_sha256": "72382e15dbe1f1e00d2e26b5d5f2810893e9d3c3abd03085a13a51603be81453",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\level_image_07sm.tga",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1360,
+      "source_sha256": "1567047097803427ba182df179510ad6a5d00347d35e1aa33331fd3e1711732e",
+      "png": "061-level_image_07_24b-restored.png",
+      "png_sha256": "72382e15dbe1f1e00d2e26b5d5f2810893e9d3c3abd03085a13a51603be81453",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\level_image_07smg.tga",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1360,
+      "source_sha256": "2accb6c1e0f292265159ae42146d74c218e8388f7c1f3558abdb6dd8e2b1c681",
+      "png": "061-level_image_07_24b-restored.png",
+      "png_sha256": "72382e15dbe1f1e00d2e26b5d5f2810893e9d3c3abd03085a13a51603be81453",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source",
+      "color": "source_chroma"
+    },
+    {
+      "name": "frontend\\frt_content\\level_image_06%24b%.tga",
+      "width": 256,
+      "height": 256,
+      "format": 15,
+      "source_bytes": 87376,
+      "source_sha256": "957463026f91db511defc4f8c9aceaf0d872373d2312fc43a205c6dd3b1cf531",
+      "png": "064-level_image_06_24b-restored.png",
+      "png_sha256": "06147d4434fe138791816d8b40926e55c161d62069d72847847f0a37b9c4b964",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\level_image_06sm.tga",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1360,
+      "source_sha256": "09615a72a8f3fdb1182b6c1539d7db177dcf7e40bf1987d03739835c5f6040bb",
+      "png": "064-level_image_06_24b-restored.png",
+      "png_sha256": "06147d4434fe138791816d8b40926e55c161d62069d72847847f0a37b9c4b964",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\level_image_06smg.tga",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1360,
+      "source_sha256": "ec9df5e7939ed8576306c834f585c0783ff4aa66cf55e8bafbbdf558a9324a3c",
+      "png": "064-level_image_06_24b-restored.png",
+      "png_sha256": "06147d4434fe138791816d8b40926e55c161d62069d72847847f0a37b9c4b964",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source",
+      "color": "source_chroma"
+    },
+    {
+      "name": "frontend\\frt_content\\level_image_05%24b%.tga",
+      "width": 256,
+      "height": 256,
+      "format": 15,
+      "source_bytes": 87376,
+      "source_sha256": "c82bcdc9e2df5325d4d21e03a062f45b4814b8448f765d322d9ff4d6f71d9388",
+      "png": "067-level_image_05_24b-restored.png",
+      "png_sha256": "7ad878309056e86d1c806825bea57d17c634c554c364952db079ee5f77ee3bac",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\level_image_05sm.tga",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1360,
+      "source_sha256": "846d338c29b1e000206305203d8577bfbeddec9c0821d82842084f71c912d264",
+      "png": "067-level_image_05_24b-restored.png",
+      "png_sha256": "7ad878309056e86d1c806825bea57d17c634c554c364952db079ee5f77ee3bac",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\level_image_05smg.tga",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1360,
+      "source_sha256": "a2679415ef3c42914748297ae9c38815a296624047b0439975638e73f9efc57c",
+      "png": "067-level_image_05_24b-restored.png",
+      "png_sha256": "7ad878309056e86d1c806825bea57d17c634c554c364952db079ee5f77ee3bac",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source",
+      "color": "source_chroma"
+    },
+    {
+      "name": "frontend\\frt_content\\level_image_04%24b%.tga",
+      "width": 256,
+      "height": 256,
+      "format": 15,
+      "source_bytes": 87376,
+      "source_sha256": "dabdd658c49be37a8b18cb2099ca752365f45dcd2ca99d2cd573db940b20ae69",
+      "png": "070-level_image_04_24b-restored.png",
+      "png_sha256": "394532f800e1d3d515eee57f95c0b777706ad12caa56e0c1ed935b11833ba84f",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\level_image_04sm.tga",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1360,
+      "source_sha256": "206e507ec000c0197e338fadaab60bd090b1fabe0da5d65e3d6fb530883c8d7d",
+      "png": "070-level_image_04_24b-restored.png",
+      "png_sha256": "394532f800e1d3d515eee57f95c0b777706ad12caa56e0c1ed935b11833ba84f",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\level_image_04smg.tga",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1360,
+      "source_sha256": "839655fd3f02029e2ccd8dd10a02e8acb8ab57011630025cb7274a4939bef20c",
+      "png": "070-level_image_04_24b-restored.png",
+      "png_sha256": "394532f800e1d3d515eee57f95c0b777706ad12caa56e0c1ed935b11833ba84f",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source",
+      "color": "source_chroma"
+    },
+    {
+      "name": "frontend\\frt_content\\level_image_03%24b%.tga",
+      "width": 256,
+      "height": 256,
+      "format": 15,
+      "source_bytes": 87376,
+      "source_sha256": "de725c426b6ad373049903a921ff3879514977606b8bee0513fdd5c1a218fe87",
+      "png": "073-level_image_03_24b-restored.png",
+      "png_sha256": "ebaad1afbed86f6942965ca71b85b51fa2fdd8ac73ea591dbc253cf5596056eb",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\level_image_03sm.tga",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1360,
+      "source_sha256": "8ba3d8dbd7c4ce576e6673dfed02b0c3b5bd988eac56db6ab7f408d73a3672d4",
+      "png": "073-level_image_03_24b-restored.png",
+      "png_sha256": "ebaad1afbed86f6942965ca71b85b51fa2fdd8ac73ea591dbc253cf5596056eb",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\level_image_03smg.tga",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1360,
+      "source_sha256": "a3ad1c592c6d0b2f4a00f2af089c3a651d0718985deb09b38e4f58f887309a5c",
+      "png": "073-level_image_03_24b-restored.png",
+      "png_sha256": "ebaad1afbed86f6942965ca71b85b51fa2fdd8ac73ea591dbc253cf5596056eb",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source",
+      "color": "source_chroma"
+    },
+    {
+      "name": "frontend\\frt_content\\level_image_02%24b%.tga",
+      "width": 256,
+      "height": 256,
+      "format": 15,
+      "source_bytes": 87376,
+      "source_sha256": "7738deb642a3c33fa1d240ed35a16de48ebb023d653f5332cd30ab483473a6ea",
+      "png": "077-level_image_02_24b-restored.png",
+      "png_sha256": "acdb77a4f453ce9ba9bbbd2380f7fb96ebcdc15d99bd6929b671fa6fde4be356",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\level_image_02sm.tga",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1360,
+      "source_sha256": "e65abff94ffd56d558d1db89e215714d8e091596a86a725664e3ab03824f36fc",
+      "png": "077-level_image_02_24b-restored.png",
+      "png_sha256": "acdb77a4f453ce9ba9bbbd2380f7fb96ebcdc15d99bd6929b671fa6fde4be356",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\level_image_02smg.tga",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1360,
+      "source_sha256": "b7c88c7c7b9878e1e552757671e9d41785f9dedefaa8874bbbf4e43d7a4fe2cb",
+      "png": "077-level_image_02_24b-restored.png",
+      "png_sha256": "acdb77a4f453ce9ba9bbbd2380f7fb96ebcdc15d99bd6929b671fa6fde4be356",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source",
+      "color": "source_chroma"
+    },
+    {
+      "name": "frontend\\frt_content\\reward_image_assaultclip_fade%24b%.tga",
+      "width": 256,
+      "height": 256,
+      "format": 15,
+      "source_bytes": 87376,
+      "source_sha256": "4b453c0f76b4c2f7b948db6d19f02aaabef27f1ef39008fe41ce604856eb9afe",
+      "png": "118-reward_image_assaultclip_fade_24b-restored.png",
+      "png_sha256": "4f6f0cc48f4de2250a59a4981b3fd8959c8486b172be033b2a96036b1d1ba9a1",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\reward_image_assaultclip_fadesm.tga",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1360,
+      "source_sha256": "bf929fce76c6f0296851fc7d072010d977cbd1d24effec7dc5f978fc2887ceb2",
+      "png": "118-reward_image_assaultclip_fade_24b-restored.png",
+      "png_sha256": "4f6f0cc48f4de2250a59a4981b3fd8959c8486b172be033b2a96036b1d1ba9a1",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\reward_image_assaultclip_fadesmg.tga",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1360,
+      "source_sha256": "1ba8199b587996d1685781b2115f9824477c31838a742a8855c90d56eb401c0e",
+      "png": "118-reward_image_assaultclip_fade_24b-restored.png",
+      "png_sha256": "4f6f0cc48f4de2250a59a4981b3fd8959c8486b172be033b2a96036b1d1ba9a1",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source",
+      "color": "source_chroma"
+    },
+    {
+      "name": "frontend\\frt_content\\reward_image_shotgunclip_fade%24b%.tga",
+      "width": 256,
+      "height": 256,
+      "format": 15,
+      "source_bytes": 87376,
+      "source_sha256": "1e747835de4e6a4cc30b18870c79250c9dd73d8fcf8f55431ce025150dadf89f",
+      "png": "121-reward_image_shotgunclip_fade_24b-restored.png",
+      "png_sha256": "6eff72dc22155784fd5561dc093cfcde8e9d7356e64c765c3176a8f0af353638",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\reward_image_shotgunclip_fadesm.tga",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1360,
+      "source_sha256": "f3dd380d2c7f75a97677d86da8915f7af440648483c91c1ab024eadbdd883539",
+      "png": "121-reward_image_shotgunclip_fade_24b-restored.png",
+      "png_sha256": "6eff72dc22155784fd5561dc093cfcde8e9d7356e64c765c3176a8f0af353638",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\reward_image_shotgunclip_fadesmg.tga",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1360,
+      "source_sha256": "5ef9678154826229095865d6793c12933e79cc1b8442fb84f8b31134b05f6751",
+      "png": "121-reward_image_shotgunclip_fade_24b-restored.png",
+      "png_sha256": "6eff72dc22155784fd5561dc093cfcde8e9d7356e64c765c3176a8f0af353638",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source",
+      "color": "source_chroma"
+    },
+    {
+      "name": "frontend\\frt_content\\reward_image_pistolclip_fade%24b%.tga",
+      "width": 256,
+      "height": 256,
+      "format": 15,
+      "source_bytes": 87376,
+      "source_sha256": "b170bd767c8f8ecad5feafaf9387718512242a4ac527a8aa853d9908701e2f35",
+      "png": "124-reward_image_pistolclip_fade_24b-restored.png",
+      "png_sha256": "4d9c67f1755aba035c10e3a2324069a3426da5e477a9a2f3b6d2fcd017aa6df2",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\reward_image_pistolclip_fadesm.tga",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1360,
+      "source_sha256": "53414a86fc916d6c1de69e6522f8ea551ff5d75e53b3321bea7eb27eb0153a1d",
+      "png": "124-reward_image_pistolclip_fade_24b-restored.png",
+      "png_sha256": "4d9c67f1755aba035c10e3a2324069a3426da5e477a9a2f3b6d2fcd017aa6df2",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\reward_image_pistolclip_fadesmg.tga",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1360,
+      "source_sha256": "47f066b6ba579dca75c0c91be3d226e19e01c790efc4aac2c73d28add0725fd7",
+      "png": "124-reward_image_pistolclip_fade_24b-restored.png",
+      "png_sha256": "4d9c67f1755aba035c10e3a2324069a3426da5e477a9a2f3b6d2fcd017aa6df2",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source",
+      "color": "source_chroma"
+    },
+    {
+      "name": "frontend\\frt_content\\reward_image_taserrange_fade%24b%.tga",
+      "width": 256,
+      "height": 256,
+      "format": 15,
+      "source_bytes": 87376,
+      "source_sha256": "1e9448e47b48c8a4721ae3843da036d49eddbcf39a1083a769adcf9fd3e412b5",
+      "png": "127-reward_image_taserrange_fade_24b-restored.png",
+      "png_sha256": "19f09f9cb7124dc6f4b8181aec1c705cb19613c18071bcc32296d5ce100bd712",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\reward_image_taserrange_fadesm.tga",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1360,
+      "source_sha256": "34badf2b60588a510bccc56e6a4184de9e5ad81206b8b34edfa419c8c1ba25bf",
+      "png": "127-reward_image_taserrange_fade_24b-restored.png",
+      "png_sha256": "19f09f9cb7124dc6f4b8181aec1c705cb19613c18071bcc32296d5ce100bd712",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\reward_image_taserrange_fadesmg.tga",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1360,
+      "source_sha256": "da8fd4dd2409e6653baccb9ca49de82d336e162845d9da39c91b094f4cd7e36d",
+      "png": "127-reward_image_taserrange_fade_24b-restored.png",
+      "png_sha256": "19f09f9cb7124dc6f4b8181aec1c705cb19613c18071bcc32296d5ce100bd712",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source",
+      "color": "source_chroma"
+    },
+    {
+      "name": "frontend\\frt_content\\reward_image_thermovision_fade%24b%.tga",
+      "width": 256,
+      "height": 256,
+      "format": 15,
+      "source_bytes": 87376,
+      "source_sha256": "2a5dfce47b66b7502c9d7ca79968b8ce8823e140fe61dd4324e75eb7b710b348",
+      "png": "132-reward_image_thermovision_fade_24b-restored.png",
+      "png_sha256": "8015406f2f2da03a4f20fd1ec0d060298eefd1297df256d0382bb4cb8805f174",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\reward_image_thermovision_fadesm.tga",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1360,
+      "source_sha256": "c638612f9e7ea4b448a392157c1bde161a4eb4c177043f603c3eced0c1c00feb",
+      "png": "132-reward_image_thermovision_fade_24b-restored.png",
+      "png_sha256": "8015406f2f2da03a4f20fd1ec0d060298eefd1297df256d0382bb4cb8805f174",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\reward_image_chaingun_fade%24b%.tga",
+      "width": 256,
+      "height": 256,
+      "format": 15,
+      "source_bytes": 87376,
+      "source_sha256": "e9005f7c1713f690e607d6f24dc4e2c34c34fdcee83dfd929aa03885e8509a07",
+      "png": "135-reward_image_chaingun_fade_24b-restored.png",
+      "png_sha256": "68ddee74f93f1c327d7cd96e82d26b67c84c9a7514847ad1d32a0bcc7ebee8c4",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\reward_image_chaingun_fadesm.tga",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1360,
+      "source_sha256": "685eec3ede8a5714642b9313220f824900e2f25b08cb79181e36d167363713ba",
+      "png": "135-reward_image_chaingun_fade_24b-restored.png",
+      "png_sha256": "68ddee74f93f1c327d7cd96e82d26b67c84c9a7514847ad1d32a0bcc7ebee8c4",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\reward_image_chaingun_fadesmg.tga",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1360,
+      "source_sha256": "38ef82f386c41b5dd1a4658eeb2e10314d099a6e7ca77c07739a492b1a55c25a",
+      "png": "135-reward_image_chaingun_fade_24b-restored.png",
+      "png_sha256": "68ddee74f93f1c327d7cd96e82d26b67c84c9a7514847ad1d32a0bcc7ebee8c4",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source",
+      "color": "source_chroma"
+    },
+    {
+      "name": "frontend\\frt_content\\reward_image_riotgrenade_fade%24b%.tga",
+      "width": 256,
+      "height": 256,
+      "format": 15,
+      "source_bytes": 87376,
+      "source_sha256": "0685af28619570c285fbff357e2d36de9253c4bc2b49d8c9091793a87879fdfa",
+      "png": "138-reward_image_riotgrenade_fade_24b-restored.png",
+      "png_sha256": "f61c216f572f20009514c94c32b05c15d04670d25be9d5e87b56d061c9a50374",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\reward_image_riotgrenade_fadesm.tga",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1360,
+      "source_sha256": "3feb98b75df86b8449613b4767bb79e9e2edf1ce94bbb1ca9117f9811451801a",
+      "png": "138-reward_image_riotgrenade_fade_24b-restored.png",
+      "png_sha256": "f61c216f572f20009514c94c32b05c15d04670d25be9d5e87b56d061c9a50374",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\reward_image_riotgrenade_fadesmg.tga",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1360,
+      "source_sha256": "34db5d103e6281b7ce637a4d83fe9f7a8b73a536324b5f376b6b728358bfdcf0",
+      "png": "138-reward_image_riotgrenade_fade_24b-restored.png",
+      "png_sha256": "f61c216f572f20009514c94c32b05c15d04670d25be9d5e87b56d061c9a50374",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source",
+      "color": "source_chroma"
+    },
+    {
+      "name": "frontend\\frt_content\\reward_image_csgrenade_fade%24b%.tga",
+      "width": 256,
+      "height": 256,
+      "format": 15,
+      "source_bytes": 87376,
+      "source_sha256": "81060823057960ec0c6ae7ad3c6de18d60e24ab0decf7a108a92caf3db6a4d8b",
+      "png": "141-reward_image_csgrenade_fade_24b-restored.png",
+      "png_sha256": "e9b50029294a592809e25ff2cabf07281af0d72bb656abb72cf849ef3e7ad213",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\reward_image_csgrenade_fadesm.tga",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1360,
+      "source_sha256": "56911c7b69fdbeab4218bead788fba8e12106fe5c992d6ade2301805ff9dc859",
+      "png": "141-reward_image_csgrenade_fade_24b-restored.png",
+      "png_sha256": "e9b50029294a592809e25ff2cabf07281af0d72bb656abb72cf849ef3e7ad213",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\reward_image_csgrenade_fadesmg.tga",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1360,
+      "source_sha256": "9b0ada9dc70c3cd0119e6159b4cbb6eb3afa93e2a251724cb089d6d76314a697",
+      "png": "141-reward_image_csgrenade_fade_24b-restored.png",
+      "png_sha256": "e9b50029294a592809e25ff2cabf07281af0d72bb656abb72cf849ef3e7ad213",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source",
+      "color": "source_chroma"
+    },
+    {
+      "name": "frontend\\frt_content\\reward_image_terrormode_fade%24b%.tga",
+      "width": 256,
+      "height": 256,
+      "format": 15,
+      "source_bytes": 87376,
+      "source_sha256": "a24aefc0df86bcef7ac9b129c58dff501a4b9c492bea24f9b3d8569033324147",
+      "png": "144-reward_image_terrormode_fade_24b-restored.png",
+      "png_sha256": "0678b50d3ca6b9ad7a7b64ce911a680c0f0a5dee03aeb16a92762bac1c10d628",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\reward_image_terrormode_fadesm.tga",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1360,
+      "source_sha256": "5154c6843cebf560010d78912787160f7117acb1da4f91ab773e92cf171c5e6f",
+      "png": "144-reward_image_terrormode_fade_24b-restored.png",
+      "png_sha256": "0678b50d3ca6b9ad7a7b64ce911a680c0f0a5dee03aeb16a92762bac1c10d628",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\reward_image_terrormode_fadesmg.tga",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1360,
+      "source_sha256": "ee32ac03dfc326c146818da4380be953a8b655030a6d4d2004795ab0f56a5788",
+      "png": "144-reward_image_terrormode_fade_24b-restored.png",
+      "png_sha256": "0678b50d3ca6b9ad7a7b64ce911a680c0f0a5dee03aeb16a92762bac1c10d628",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source",
+      "color": "source_chroma"
+    },
+    {
+      "name": "frontend\\frt_content\\reward_image_shieldmk3_fade%24b%.tga",
+      "width": 256,
+      "height": 256,
+      "format": 15,
+      "source_bytes": 87376,
+      "source_sha256": "3a876e7d357731a0b0331fb37f5b31cbce4e5dfbd9ec6e7efeea9b475229f369",
+      "png": "147-reward_image_shieldmk3_fade_24b-restored.png",
+      "png_sha256": "7d8d31c2ff750f547caabba1bc14637d2b7e15abdc64355194f5c82141e4593c",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\reward_image_shieldmk3_fadesm.tga",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1360,
+      "source_sha256": "470a5eacae3546e08639fb97583af9d821b312e4d077946cfedacd2491d0add6",
+      "png": "147-reward_image_shieldmk3_fade_24b-restored.png",
+      "png_sha256": "7d8d31c2ff750f547caabba1bc14637d2b7e15abdc64355194f5c82141e4593c",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\reward_image_shieldmk3_fadesmg.tga",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1360,
+      "source_sha256": "7f57ca6aa6dbadb17f8dea6d89bf2fa81de8069ba0d04152d59775a88a39b253",
+      "png": "147-reward_image_shieldmk3_fade_24b-restored.png",
+      "png_sha256": "7d8d31c2ff750f547caabba1bc14637d2b7e15abdc64355194f5c82141e4593c",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source",
+      "color": "source_chroma"
+    },
+    {
+      "name": "frontend\\frt_content\\reward_image_pistolmk3_fade%24b%.tga",
+      "width": 256,
+      "height": 256,
+      "format": 15,
+      "source_bytes": 87376,
+      "source_sha256": "903e67b30b396cceb5135eb31b12b12c322bc045578e545d30aeb2c4c10666ad",
+      "png": "150-reward_image_pistolmk3_fade_24b-restored.png",
+      "png_sha256": "272ad383b0408cb673ffa9f977d0322aaa442f8a548cc15a2527902d0474f68b",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\reward_image_pistolmk3_fadesm.tga",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1360,
+      "source_sha256": "d869e94cde658f0cf4c2c6f27fd73b7a9cda05304f3a98a24c243221ae2539a7",
+      "png": "150-reward_image_pistolmk3_fade_24b-restored.png",
+      "png_sha256": "272ad383b0408cb673ffa9f977d0322aaa442f8a548cc15a2527902d0474f68b",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\reward_image_pistolmk3_fadesmg.tga",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1360,
+      "source_sha256": "ad0f4a91f5b523f1d907fb10c6b2858e86303d6047a6ca3d1b0dafbde1a05cec",
+      "png": "150-reward_image_pistolmk3_fade_24b-restored.png",
+      "png_sha256": "272ad383b0408cb673ffa9f977d0322aaa442f8a548cc15a2527902d0474f68b",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source",
+      "color": "source_chroma"
+    },
+    {
+      "name": "frontend\\frt_content\\reward_image_pistolup_fade%24b%.tga",
+      "width": 256,
+      "height": 256,
+      "format": 15,
+      "source_bytes": 87376,
+      "source_sha256": "773437ed2f13c5b13a44bfdc630968d738500bb0016bf088a1c3eff515b38bf9",
+      "png": "153-reward_image_pistolup_fade_24b-restored.png",
+      "png_sha256": "221fd4a3104b38e5e5974ab6bd0fc74622ba8824891ec918e6984b2729ebfbf4",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\reward_image_pistolup_fadesm.tga",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1360,
+      "source_sha256": "84ec8ac7aa9ab656a6180d61c9cae13f0ec0447ef7b76e41cc2fb0f11a1b97cd",
+      "png": "153-reward_image_pistolup_fade_24b-restored.png",
+      "png_sha256": "221fd4a3104b38e5e5974ab6bd0fc74622ba8824891ec918e6984b2729ebfbf4",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\reward_image_pistolup_fadesmg.tga",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1360,
+      "source_sha256": "050a49e24d629e8c643b133c22057c522aa11d20051bc009f293e1d08b2360d2",
+      "png": "153-reward_image_pistolup_fade_24b-restored.png",
+      "png_sha256": "221fd4a3104b38e5e5974ab6bd0fc74622ba8824891ec918e6984b2729ebfbf4",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source",
+      "color": "source_chroma"
+    },
+    {
+      "name": "frontend\\frt_content\\reward_image_health50_fade%24b%.tga",
+      "width": 256,
+      "height": 256,
+      "format": 15,
+      "source_bytes": 87376,
+      "source_sha256": "4f47dd2fec18a4b982058c70ff84a1a6068b401d5b18000cbe630462e1641d5b",
+      "png": "156-reward_image_health50_fade_24b-restored.png",
+      "png_sha256": "e44f6c54844174f0193d7b3ac2e2c44a768629aea8411d5843a474bb6caeeaef",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\reward_image_health50_fadesm.tga",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1360,
+      "source_sha256": "e7cbfb5878c7f3437dbbfec99497f6aef35621a60585aa3ff29f9ee3616e4174",
+      "png": "156-reward_image_health50_fade_24b-restored.png",
+      "png_sha256": "e44f6c54844174f0193d7b3ac2e2c44a768629aea8411d5843a474bb6caeeaef",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\reward_image_health50_fadesmg.tga",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1360,
+      "source_sha256": "4814c0dfa73d5f51c25a42d7d2d0c3e1998b32b1d41d43a14874d36e18ef6c48",
+      "png": "156-reward_image_health50_fade_24b-restored.png",
+      "png_sha256": "e44f6c54844174f0193d7b3ac2e2c44a768629aea8411d5843a474bb6caeeaef",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source",
+      "color": "source_chroma"
+    },
+    {
+      "name": "frontend\\frt_content\\reward_image_tasermk2_fade%24b%.tga",
+      "width": 256,
+      "height": 256,
+      "format": 15,
+      "source_bytes": 87376,
+      "source_sha256": "43e348170c25982ce2d7c4245d2a5aa79961fd6e63470bcd291167bd02a7735f",
+      "png": "159-reward_image_tasermk2_fade_24b-restored.png",
+      "png_sha256": "14d000c4447b3f479dbdcad8d8f2ec9cdc7e42f5e229034010d44b23f033e6de",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\reward_image_tasermk2_fadesm.tga",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1360,
+      "source_sha256": "6fec1f101a855624c8aa4f6381af660edd514a84156c3f490fc51e665cb46377",
+      "png": "159-reward_image_tasermk2_fade_24b-restored.png",
+      "png_sha256": "14d000c4447b3f479dbdcad8d8f2ec9cdc7e42f5e229034010d44b23f033e6de",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\reward_image_tasermk2_fadesmg.tga",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1360,
+      "source_sha256": "ab27f2fa70d8ff3fb7560f4feb7300f21f4e05c96f466a24e08978ecff80191f",
+      "png": "159-reward_image_tasermk2_fade_24b-restored.png",
+      "png_sha256": "14d000c4447b3f479dbdcad8d8f2ec9cdc7e42f5e229034010d44b23f033e6de",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source",
+      "color": "source_chroma"
+    },
+    {
+      "name": "frontend\\frt_content\\reward_image_assaultmk3_fade%24b%.tga",
+      "width": 256,
+      "height": 256,
+      "format": 15,
+      "source_bytes": 87376,
+      "source_sha256": "fb6c8fac30fcd47f815edcacd060578826fe89549af48b193213c0d47ebe95aa",
+      "png": "162-reward_image_assaultmk3_fade_24b-restored.png",
+      "png_sha256": "e256dc3b8783328995ea26dd45facc9d15b6616d630d7a3c24c2aafa46000de8",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\reward_image_assaultmk3_fadesm.tga",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1360,
+      "source_sha256": "d6acc4b733f516f3b9080728f1718334e878d9f09058f9da56266362df8a1324",
+      "png": "162-reward_image_assaultmk3_fade_24b-restored.png",
+      "png_sha256": "e256dc3b8783328995ea26dd45facc9d15b6616d630d7a3c24c2aafa46000de8",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\reward_image_assaultmk3_fadesmg.tga",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1360,
+      "source_sha256": "23977f4c4b6cf0727a0e3477a78776cd8eb5d7af8ad896ebc7c6b225543ee6b3",
+      "png": "162-reward_image_assaultmk3_fade_24b-restored.png",
+      "png_sha256": "e256dc3b8783328995ea26dd45facc9d15b6616d630d7a3c24c2aafa46000de8",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source",
+      "color": "source_chroma"
+    },
+    {
+      "name": "frontend\\frt_content\\reward_image_assaultup_fade%24b%.tga",
+      "width": 256,
+      "height": 256,
+      "format": 15,
+      "source_bytes": 87376,
+      "source_sha256": "b02573975f7aed20096167c7d3cbfff945863bee3903c1a6691ba5c1a263ab79",
+      "png": "165-reward_image_assaultup_fade_24b-restored.png",
+      "png_sha256": "6f9b5d724be1a7d9f9b7c792f2172c7f538ac4b1a7f6b2e9c017ca58732837c2",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\reward_image_assaultup_fadesm.tga",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1360,
+      "source_sha256": "992e6ecae27988da301a6fcd4d087c4d66a8460ecb3bb63a5a1e9e87d060f56c",
+      "png": "165-reward_image_assaultup_fade_24b-restored.png",
+      "png_sha256": "6f9b5d724be1a7d9f9b7c792f2172c7f538ac4b1a7f6b2e9c017ca58732837c2",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\reward_image_assaultup_fadesmg.tga",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1360,
+      "source_sha256": "f7c98f7c3e3fb7d21b55cc446dd40b46219d79a0b33e0aa08e3950914a38255c",
+      "png": "165-reward_image_assaultup_fade_24b-restored.png",
+      "png_sha256": "6f9b5d724be1a7d9f9b7c792f2172c7f538ac4b1a7f6b2e9c017ca58732837c2",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source",
+      "color": "source_chroma"
+    },
+    {
+      "name": "frontend\\frt_content\\reward_image_assault_fade%24b%.tga",
+      "width": 256,
+      "height": 256,
+      "format": 15,
+      "source_bytes": 87376,
+      "source_sha256": "8e431ee1599341266dc66eb325e49f9e5f3545c43dc85284ec8df249b02d6f5e",
+      "png": "168-reward_image_assault_fade_24b-restored.png",
+      "png_sha256": "c31fdf10c892cbae5959f8bf5e6b2a6522290fe3e11b37b5fd62334451353009",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\reward_image_assault_fadesm.tga",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1360,
+      "source_sha256": "31cb31d44e775a0b48727c76120fb2ef985c39f81f8c64d294b38cf75ad7e72d",
+      "png": "168-reward_image_assault_fade_24b-restored.png",
+      "png_sha256": "c31fdf10c892cbae5959f8bf5e6b2a6522290fe3e11b37b5fd62334451353009",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\reward_image_assault_fadesmg.tga",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1360,
+      "source_sha256": "363ccc94d80cd650bf8bda08011bf95a54674822ae816c79f0a218b3030e2419",
+      "png": "168-reward_image_assault_fade_24b-restored.png",
+      "png_sha256": "c31fdf10c892cbae5959f8bf5e6b2a6522290fe3e11b37b5fd62334451353009",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source",
+      "color": "source_chroma"
+    },
+    {
+      "name": "frontend\\frt_content\\reward_image_shotgunmk3_fade%24b%.tga",
+      "width": 256,
+      "height": 256,
+      "format": 15,
+      "source_bytes": 87376,
+      "source_sha256": "2d95daed234aa4c2746b3e2deef5236090ac9cdd12dbab1cb401c942412436fd",
+      "png": "171-reward_image_shotgunmk3_fade_24b-restored.png",
+      "png_sha256": "4640840178928c138869368146d72a43fa7ff280054562b631c63454a2936741",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\reward_image_shotgunmk3_fadesm.tga",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1360,
+      "source_sha256": "62ae7117e84a03211edc34c8beda4303fa0c915ff47b6ed44fd0201b15fc4816",
+      "png": "171-reward_image_shotgunmk3_fade_24b-restored.png",
+      "png_sha256": "4640840178928c138869368146d72a43fa7ff280054562b631c63454a2936741",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\reward_image_shotgunmk3_fadesmg.tga",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1360,
+      "source_sha256": "d33eb07f679fcaa2d7a6773451ce49747f33a11c2f094675b1885eabbe929c7c",
+      "png": "171-reward_image_shotgunmk3_fade_24b-restored.png",
+      "png_sha256": "4640840178928c138869368146d72a43fa7ff280054562b631c63454a2936741",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source",
+      "color": "source_chroma"
+    },
+    {
+      "name": "frontend\\frt_content\\reward_image_shotgunup_fade%24b%.tga",
+      "width": 256,
+      "height": 256,
+      "format": 15,
+      "source_bytes": 87376,
+      "source_sha256": "e342fae5b1536ad0307f5ae832114ecc1cad20b3983ec33ddc0686e76e2473bf",
+      "png": "174-reward_image_shotgunup_fade_24b-restored.png",
+      "png_sha256": "ca873b06a4f366eda6cb615a04e64a5a6261de963ec4435ce0b1e18e356b9264",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\reward_image_shotgunup_fadesm.tga",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1360,
+      "source_sha256": "e7a7d0a4aa11375634c37f2c8c519fd832bac49919dc92368ce0e3832412fe8c",
+      "png": "174-reward_image_shotgunup_fade_24b-restored.png",
+      "png_sha256": "ca873b06a4f366eda6cb615a04e64a5a6261de963ec4435ce0b1e18e356b9264",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\reward_image_shotgunup_fadesmg.tga",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1360,
+      "source_sha256": "b93412c959e60cdb2940e2c9847fa6e4fc53554eca5d96e8c5104fdd134b07fe",
+      "png": "174-reward_image_shotgunup_fade_24b-restored.png",
+      "png_sha256": "ca873b06a4f366eda6cb615a04e64a5a6261de963ec4435ce0b1e18e356b9264",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source",
+      "color": "source_chroma"
+    },
+    {
+      "name": "frontend\\frt_content\\reward_image_shotgun_fade%24b%.tga",
+      "width": 256,
+      "height": 256,
+      "format": 15,
+      "source_bytes": 87376,
+      "source_sha256": "a2680ff0d0d95f1b40de09870e89249be348e1820daae42f2a6179f98612e06d",
+      "png": "177-reward_image_shotgun_fade_24b-restored.png",
+      "png_sha256": "287a9ff9ca66f08c94f09a71c2d1208bc3fd936d6685cca8ecd47bc3d29101e1",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\reward_image_shotgun_fadesm.tga",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1360,
+      "source_sha256": "f36ca131be002e930e81985b925e5798bb61ef4f56a51ff7853d641fd7437c24",
+      "png": "177-reward_image_shotgun_fade_24b-restored.png",
+      "png_sha256": "287a9ff9ca66f08c94f09a71c2d1208bc3fd936d6685cca8ecd47bc3d29101e1",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\reward_image_shotgun_fadesmg.tga",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1360,
+      "source_sha256": "f866569c66f53530a0e254ec98d75e2ebc33f2d506064a8ae55e946cc4d5e1ec",
+      "png": "177-reward_image_shotgun_fade_24b-restored.png",
+      "png_sha256": "287a9ff9ca66f08c94f09a71c2d1208bc3fd936d6685cca8ecd47bc3d29101e1",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source",
+      "color": "source_chroma"
+    },
+    {
+      "name": "frontend\\frt_content\\reward_image_es_fade%24b%.tga",
+      "width": 256,
+      "height": 256,
+      "format": 15,
+      "source_bytes": 87376,
+      "source_sha256": "02d684e3cda9f4a08e0b7311a2cf16a1141b96aeb22ac8dc8e240e00bb32567e",
+      "png": "180-reward_image_es_fade_24b-restored.png",
+      "png_sha256": "2cef99297950287ef3c8c3ceddb1d01c22d32e637afe410aeed6d42a291e1be4",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_backdrops\\frt_backdrop_memory.tga",
+      "width": 512,
+      "height": 512,
+      "format": 12,
+      "source_bytes": 174760,
+      "source_sha256": "822f4d6c80ba2cba82fbd64013507e37e106cf029b00b6106d842358fcbd6e65",
+      "png": "192-frt_backdrop_memory-restored.png",
+      "png_sha256": "0773214a448aae3f28cf8771fdceb7e3aef846720d1613001feed37a58eff794",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\level_image_01%24b%.tga",
+      "width": 256,
+      "height": 256,
+      "format": 15,
+      "source_bytes": 87376,
+      "source_sha256": "b1564aa152f3f8bedd2f4a2ca6516dd625a0dcc3f019606ef7f4d282e12aea72",
+      "png": "202-level_image_01_24b-restored.png",
+      "png_sha256": "79404b45517cf4a2c5e8030027e88124c949ec9c309b1f1c1d2b4603275849a6",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\level_image_01sm.tga",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1360,
+      "source_sha256": "604daeb83939dd9f962a2c1f325eb99538620658034663194d5463be08bb66c7",
+      "png": "202-level_image_01_24b-restored.png",
+      "png_sha256": "79404b45517cf4a2c5e8030027e88124c949ec9c309b1f1c1d2b4603275849a6",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_content\\level_image_01smg.tga",
+      "width": 32,
+      "height": 32,
+      "format": 15,
+      "source_bytes": 1360,
+      "source_sha256": "8ae9a1e85c68e5a1467048039e0c5084be5238eef9d1f2529c6c49f7812f7fb3",
+      "png": "202-level_image_01_24b-restored.png",
+      "png_sha256": "79404b45517cf4a2c5e8030027e88124c949ec9c309b1f1c1d2b4603275849a6",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source",
+      "color": "source_chroma"
+    },
+    {
+      "name": "frontend\\frt_backdrops\\frt_loading03%32b%.tga",
+      "width": 512,
+      "height": 512,
+      "format": 12,
+      "source_bytes": 174760,
+      "source_sha256": "26a8d6207da576efa05b5ecbd32b97036c4ab264622a58911ffa86d376f8450c",
+      "png": "203-frt_loading03_32b-restored.png",
+      "png_sha256": "eb3ae7ab9f82605a1f15cbbce192ae66001320c1d233726af7958c284dd78aca",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_backdrops\\frt_loading02%32b%.tga",
+      "width": 512,
+      "height": 512,
+      "format": 12,
+      "source_bytes": 174760,
+      "source_sha256": "19ff843b1eaf882a3f993fcf1a36763ec788fe7912e214553560e24f58ba54ba",
+      "png": "204-frt_loading02_32b-restored.png",
+      "png_sha256": "a93bb07302a9d4dd436719190778861fd3f09079119143071ec63e546bd5e1b5",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_backdrops\\frt_loading01%32b%.tga",
+      "width": 512,
+      "height": 512,
+      "format": 12,
+      "source_bytes": 174760,
+      "source_sha256": "56c8b016b266ff837564b44783e7af586b1b8b6db7fb41a223fb977a40551563",
+      "png": "205-frt_loading01_32b-restored.png",
+      "png_sha256": "024b5f5957d65c6a1c1d434616bc7c9237b76a1cd7029c047a200b903a2c00bb",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_backdrops\\frt_loading00%32b%.tga",
+      "width": 512,
+      "height": 512,
+      "format": 12,
+      "source_bytes": 174760,
+      "source_sha256": "425e990dc283f40d3a4cb91aa94981258d10e71e34ffd24c80c435147d98dac3",
+      "png": "206-frt_loading00_32b-restored.png",
+      "png_sha256": "688e6c46bd4cbfbd41c1c6cf63113f265716d3e5e52bd5e6529e899fec5c74c4",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    },
+    {
+      "name": "frontend\\frt_backdrops\\frt_backdrop_rcgeneric.tga",
+      "width": 512,
+      "height": 512,
+      "format": 12,
+      "source_bytes": 174760,
+      "source_sha256": "425e990dc283f40d3a4cb91aa94981258d10e71e34ffd24c80c435147d98dac3",
+      "png": "206-frt_loading00_32b-restored.png",
+      "png_sha256": "688e6c46bd4cbfbd41c1c6cf63113f265716d3e5e52bd5e6529e899fec5c74c4",
+      "crop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "alpha": "source"
+    }
+  ]
+}

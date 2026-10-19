@@ -1,0 +1,35 @@
+Historical 0.05-rc4 preparation notes (superseded by CHANGES-0.05.md)
+
+Portable launchers keep imported files, settings, profiles and shader cache in
+GameData beside the EXEs. Both setup and direct Play resolve that location from
+the launcher path, independent of shortcut working directories. Move the whole
+folder together. Play never falls back to the old AppData installation.
+
+The first explicit ISO import can copy compatible old XBE-runtime saves,
+settings and cache into this folder. Original data stays untouched. Existing
+portable state takes priority; failed/cancelled import never replaces it.
+The runtime is the unchanged, hash-qualified RC3 executable. This candidate
+rebuilds the launchers and tests the portable import/launch paths only.
+
+Pause Quit uses the native mouse menu frame and wide Yes/No rows. Original
+localized choices, warning, confirmation/back sounds and callbacks remain.
+Controller mode uses the original modal. Text suppression is limited to the
+qualified original pause Quit dialog and accepted native presentation.
+
+Weapon FOV is separate from world camera FOV. The 50-150% control defaults to
+100%, preserving each authored weapon view. It scales only the first-person
+model projection copy; Apply saves it without changing world view or animation.
+The original depth range and projection restoration remain authoritative.
+
+Health-bar borders/backing receive the existing 4x alpha-aware filter. They do
+not have restored replacement artwork. Health fill and ECG geometry/timing
+remain unchanged by this candidate.
+
+Offline checks and package audits are recorded outside the release ZIP.
+Portable import, migration, folder relocation, rollback and compiled direct
+launcher checks passed using synthetic data and harmless worker processes.
+Real user data was not modified. Fresh-PC and portable gameplay checks remain
+pending. Use a short, writable path; the inherited game runtime has Windows
+path-length and non-ASCII path limitations.
+Live visual acceptance of these changes is pending; no game was launched.
+No original disc payloads or diagnostic captures are distributed.

@@ -5,15 +5,20 @@ also checks the compiled direct launcher against an isolated harmless worker.
 """
 from pathlib import Path
 import argparse
+import copy
 import hashlib
 import io
 import json
 import os
 import shutil
+import stat
 import struct
 import subprocess
 import sys
 import tempfile
+from unittest.mock import patch
+from types import SimpleNamespace
+import zlib
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
@@ -25,6 +30,13 @@ import package as packager
 
 def digest(data):
     return hashlib.sha256(data).hexdigest()
+
+
+def png_bytes(width=8, height=8):
+    def chunk(name, data):
+        return struct.pack('>I', len(data)) + name + data + struct.pack('>I', zlib.crc32(name + data))
+    return (b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', width, height, 8, 6, 0, 0, 0)) +
+            chunk(b'IDAT', zlib.compress((b'\0' + b'\x13\x35\xc9\xff' * width) * height)) + chunk(b'IEND', b''))
 
 
 def make_iso(path, files, base=0):
@@ -71,6 +83,12 @@ def expect_error(fn, exception=Exception):
     except exception:
         return
     raise AssertionError('Expected rejection')
+
+
+def file_snapshot(directory):
+    """Small fixture bytes only; never follows a user installation."""
+    return {path.relative_to(directory).as_posix(): path.read_bytes()
+            for path in directory.rglob('*') if path.is_file()}
 
 
 def check_worker(tmp):
@@ -199,6 +217,82 @@ def check_worker(tmp):
         assert not any(k.startswith(('XBE_', 'XBOX_LOG_')) or
                        (k.startswith('UCRR_') and k != 'UCRR_GAME_ASSETS') for k in kwargs['env'])
         assert not (data / 'last-error.txt').exists()
+        # New art is copied beside the runtime, while packages without it still work.
+        (package / 'runtime/hd-ui').mkdir()
+        png = png_bytes()
+        source_art = package / 'runtime/hd-ui/restored.png'
+        source_art.write_bytes(png)
+        art = {'hd-ui/restored.png': digest(png)}
+        def write_runtime(artwork=art):
+            (package / 'tools/runtime-manifest.json').write_text(json.dumps(
+                {'version': packager.VERSION, 'files': runtime, 'artwork': artwork}))
+        write_runtime()
+        worker.launch(data)
+        dest_art = state / 'hd-ui/restored.png'
+        assert dest_art.read_bytes() == png
+        worker.launch(data)
+        assert dest_art.read_bytes() == png and not list(state.rglob('.update-*'))
+        launched = len(seen)
+        for invalid in (None, [], 'art', {'hd-ui/../bad.png': '0'*64}, {'hd-ui/sub/a.png': '0'*64},
+                        {'hd-ui/a\\b.png': '0'*64}, {'hd-ui/x:ads.png': '0'*64}, {'hd-ui/CON.png': '0'*64},
+                        {'runtime/a.png': '0'*64}, {'hd-ui/a.dll': '0'*64}, {'hd-ui/a.PNG': '0'*64},
+                        {'hd-ui/' + 'a'*128 + '.png': '0'*64}, {'hd-ui/restored.png': None},
+                        {'hd-ui/restored.png': 'A'*64}, {**art, 'hd-ui/RESTORED.png': digest(png)}):
+            write_runtime(invalid)
+            expect_error(lambda: worker.launch(data), ValueError)
+            assert len(seen) == launched and dest_art.read_bytes() == png
+        write_runtime()
+        source_art.write_bytes(b'corrupt')
+        expect_error(lambda: worker.launch(data), ValueError)
+        source_art.unlink()
+        expect_error(lambda: worker.launch(data), ValueError)
+        source_art.write_bytes(png)
+        # Size is checked before hashing or copying the package file.
+        with source_art.open('wb') as file:
+            file.seek(worker.ARTWORK_LIMIT)
+            file.write(b'x')
+        expect_error(lambda: worker.launch(data), ValueError)
+        source_art.write_bytes(png)
+        linked = worker.linked
+        worker.linked = lambda path: path == state / 'hd-ui' or linked(path)
+        try:
+            expect_error(lambda: worker.launch(data), ValueError)
+        finally:
+            worker.linked = linked
+        assert len(seen) == launched and dest_art.read_bytes() == png
+        # Failure after a staged copy leaves the old approved image and saves intact.
+        update = png_bytes(12, 12)
+        source_art.write_bytes(update)
+        write_runtime({'hd-ui/restored.png': digest(update)})
+        copy_file = worker.shutil.copy2
+        def corrupt_copy(source, target):
+            if Path(source) == source_art:
+                Path(target).write_bytes(b'incomplete')
+                return target
+            return copy_file(source, target)
+        worker.shutil.copy2 = corrupt_copy
+        try:
+            expect_error(lambda: worker.launch(data), ValueError)
+        finally:
+            worker.shutil.copy2 = copy_file
+        assert dest_art.read_bytes() == png and not list(state.rglob('.update-*'))
+        replace = worker.os.replace
+        def failed_art_replace(source, target):
+            if Path(target) == dest_art:
+                raise OSError('fixture: artwork replace failed')
+            return replace(source, target)
+        worker.os.replace = failed_art_replace
+        try:
+            expect_error(lambda: worker.launch(data), OSError)
+        finally:
+            worker.os.replace = replace
+        assert dest_art.read_bytes() == png and not list(state.rglob('.update-*'))
+        worker.launch(data)
+        assert dest_art.read_bytes() == update
+        assert (state / 'settings.toml').read_bytes() == b'user-settings'
+        assert (state / 'xboxrecomp.ini').read_bytes() == b'user-controls'
+        assert (state / 'hdd/profile').read_bytes() == b'user-save'
+        expect_error(lambda: worker.launch(tmp / 'not-imported'), ValueError)
         class Failed(Process):
             def __init__(self, args, **kwargs):
                 super().__init__(args, **kwargs)
@@ -239,7 +333,197 @@ def check_worker(tmp):
             'malformed_revision_cancel_and_corruption_rejected': True,
             'prior_install_and_both_save_trees_preserved': True,
             'runtime_copy_and_environment_verified': True, 'bounded_failure_report': True,
+            'restored_artwork_verified_and_atomically_copied': True,
+            'artwork_corruption_paths_and_copy_failures_rejected': True,
             'gameplay_launched': False, 'real_user_data_modified': False}
+
+
+def check_portable(tmp):
+    """Run real import/copy/rollback paths against a private legacy fixture."""
+    base = tmp / 'portable-check'
+    template = base / 'template'
+    (template / 'tools').mkdir(parents=True)
+    (template / 'runtime').mkdir()
+    assets = {'Default.xbe': b'portable fixture executable', 'scene.ent': b'portable fixture level'}
+    (template / 'tools/disc-manifest.json').write_text(json.dumps({'version': 1, 'files': {
+        name: {'size': len(value), 'sha256': digest(value)} for name, value in assets.items()}}))
+    for name in worker.RUNTIME_FILES:
+        (template / 'runtime' / name).write_bytes(('harmless-' + name).encode())
+    (template / 'tools/runtime-manifest.json').write_text(json.dumps({'version': packager.VERSION,
+        'files': {name: worker.sha(template / 'runtime' / name) for name in worker.RUNTIME_FILES}}))
+    iso = base / 'original.iso'
+    make_iso(iso, assets)
+    cancel = base / 'cancel'
+    legacy = Path(os.environ['LOCALAPPDATA']) / 'UrbanChaosBurnerEdition'
+    old_root = worker.ROOT
+    worker.ROOT = template
+    try:
+        worker.import_iso(iso, legacy, cancel)
+        state = {
+            'settings.toml': b'old graphics settings', 'xboxrecomp.ini': b'old controls',
+            'hdd/E/save.dat': b'old progress', 'hdd2/E/player2.dat': b'old second player',
+            'shader-cache/d3d12/cache.bin': b'old shader cache',
+        }
+        for name, content in {**state, 'UrbanChaosXbeTrial.exe': b'never migrate an executable',
+                              'logs/old.log': b'never migrate diagnostics'}.items():
+            path = legacy / 'xbe-runtime' / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(content)
+        legacy_before = file_snapshot(legacy)
+
+        def new_package(name):
+            package = base / name
+            shutil.copytree(template, package)
+            worker.ROOT = package
+            return package, package / 'GameData'
+
+        def assert_state(data, expected=state):
+            for name, content in expected.items():
+                assert (data / 'xbe-runtime' / name).read_bytes() == content, name
+
+        package, data = new_package('first portable package')
+        # Status and Play never quietly choose the legacy installation.
+        with patch.object(worker.subprocess, 'Popen') as spawn:
+            assert not worker.ready(data)
+            expect_error(lambda: worker.launch(data), ValueError)
+            spawn.assert_not_called()
+        assert not data.exists() and file_snapshot(legacy) == legacy_before
+        worker.import_iso(iso, data, cancel)
+        assert worker.ready(data)
+        assert_state(data)
+        assert file_snapshot(data / 'xbe-runtime') == state
+        assert file_snapshot(legacy) == legacy_before
+        assert not list(data.glob('.import-*'))
+
+        # Move everything, then resolve the runtime and disc relative to its new home.
+        before_move = file_snapshot(package)
+        moved = base / 'moved portable package'
+        package.rename(moved)
+        worker.ROOT = moved
+        data = moved / 'GameData'
+        assert file_snapshot(moved) == before_move and not package.exists()
+        launches = []
+        class Process:
+            def __init__(self, args, **kwargs):
+                launches.append((args, kwargs))
+                self.stderr = io.BytesIO()
+            def wait(self):
+                return 0
+        with patch.object(worker.subprocess, 'Popen', Process):
+            assert worker.ready(data)
+            worker.launch(data)
+        argv, options = launches[-1]
+        assert Path(argv[0]) == data / 'xbe-runtime' / worker.RUNTIME_NAME
+        assert options['cwd'] == data / 'xbe-runtime'
+        assert options['env']['UCRR_GAME_ASSETS'] == str(data / 'installed/game_files')
+        assert_state(data)
+        assert file_snapshot(legacy) == legacy_before
+
+        # Repair uses current portable state even when old metadata is damaged.
+        newest = {name: b'new portable ' + content for name, content in state.items()}
+        for name, content in newest.items():
+            (data / 'xbe-runtime' / name).write_bytes(content)
+        marker = legacy / 'installed/installed.json'
+        marker_before = marker.read_bytes()
+        marker.write_text('{damaged old metadata')
+        damaged_before = file_snapshot(legacy)
+        worker.import_iso(iso, data, cancel)
+        assert_state(data, newest)
+        assert file_snapshot(legacy) == damaged_before
+        marker.write_bytes(marker_before)
+
+        # A failed migration never publishes partial state or changes the source.
+        original_copy = shutil.copy2
+        original_rename = Path.rename
+        for failure in ('copy', 'cancel-copy', 'runtime-rename', 'install-rename',
+                        'cancel-published', 'cancel-installed'):
+            _, target = new_package('failure-' + failure)
+            target.mkdir()
+            # A prior verified import without an XBE runtime must also roll back.
+            shutil.copytree(legacy / 'installed', target / 'installed')
+            target_before = file_snapshot(target)
+            touched = []
+            def copy_state(source, destination, *args, **kwargs):
+                if Path(source) == legacy / 'xbe-runtime/hdd/E/save.dat':
+                    touched.append('copy')
+                    if failure == 'copy':
+                        raise OSError('fixture: state copy failed')
+                    result = original_copy(source, destination, *args, **kwargs)
+                    if failure == 'cancel-copy':
+                        cancel.touch()
+                    return result
+                return original_copy(source, destination, *args, **kwargs)
+            def rename_state(source, destination):
+                destination = Path(destination)
+                if destination == target / 'xbe-runtime':
+                    touched.append('publish')
+                    if failure == 'runtime-rename':
+                        raise OSError('fixture: runtime publication failed')
+                    result = original_rename(source, destination)
+                    if failure == 'cancel-published':
+                        cancel.touch()
+                    return result
+                if source.name.startswith('.import-') and destination == target / 'installed':
+                    if failure == 'install-rename':
+                        raise OSError('fixture: install publication failed')
+                    result = original_rename(source, destination)
+                    if failure == 'cancel-installed':
+                        cancel.touch()
+                    return result
+                return original_rename(source, destination)
+            try:
+                with patch.object(shutil, 'copy2', copy_state), patch.object(Path, 'rename', rename_state):
+                    expect_error(lambda: worker.import_iso(iso, target, cancel),
+                                 RuntimeError if failure.startswith('cancel-') else OSError)
+            finally:
+                if cancel.exists():
+                    cancel.unlink()
+            assert touched and file_snapshot(target) == target_before, failure
+            assert not (target / 'xbe-runtime').exists(), failure
+            assert not list(target.glob('.import-*')), failure
+            assert file_snapshot(legacy) == legacy_before, failure
+
+        # Validate migration identity before copying any old settings or saves.
+        for bad_marker in (b'{broken', json.dumps({'disc_manifest': '0' * 64}).encode()):
+            _, target = new_package('bad-marker-' + digest(bad_marker)[:8])
+            marker.write_bytes(bad_marker)
+            before = file_snapshot(legacy)
+            expect_error(lambda: worker.import_iso(iso, target, cancel), ValueError)
+            assert not (target / 'installed').exists() and not (target / 'xbe-runtime').exists()
+            assert file_snapshot(legacy) == before and not list(target.glob('.import-*'))
+        marker.write_bytes(marker_before)
+
+        # Simulate lstat's link/reparse evidence, preserving the real path validator.
+        # This needs no Windows symlink privilege and touches no outside directory.
+        lstat = Path.lstat
+        def redirect_info(path, suspect, junction=False):
+            if path == suspect:
+                return SimpleNamespace(st_mode=stat.S_IFDIR if junction else stat.S_IFLNK,
+                                       st_file_attributes=0x400 if junction else 0)
+            return lstat(path)
+        for index, suspect in enumerate((legacy, legacy.parent, legacy / 'xbe-runtime',
+                                        legacy / 'xbe-runtime/hdd', legacy / 'xbe-runtime/hdd/E/save.dat')):
+            _, target = new_package('linked-source-' + str(index))
+            with patch.object(Path, 'lstat', lambda path, p=suspect, j=bool(index % 2):
+                              redirect_info(path, p, j)):
+                expect_error(lambda: worker.import_iso(iso, target, cancel), ValueError)
+            assert not (target / 'installed').exists() and not (target / 'xbe-runtime').exists()
+            assert file_snapshot(legacy) == legacy_before and not list(target.glob('.import-*'))
+        for name in ('GameData', 'GameData/xbe-runtime'):
+            package, target = new_package('linked-target-' + name.replace('/', '-'))
+            suspect = package / name
+            with patch.object(Path, 'lstat', lambda path: redirect_info(path, suspect, True)):
+                expect_error(lambda: worker.import_iso(iso, target, cancel), ValueError)
+            assert not (target / 'installed').exists() and not (target / 'xbe-runtime').exists()
+            assert file_snapshot(legacy) == legacy_before and not list(target.glob('.import-*'))
+    finally:
+        worker.ROOT = old_root
+    return {'portable_first_import_migration_and_source_preservation': True,
+            'portable_status_and_play_never_fall_back_to_legacy': True,
+            'portable_move_assets_saves_settings_cache_and_cwd': True,
+            'portable_repair_prefers_current_state': True,
+            'portable_migration_cancel_copy_commit_rollback': True,
+            'portable_migration_identity_and_reparse_rejections': True}
 
 
 def check_asset_audit(tmp):
@@ -258,6 +542,24 @@ def check_asset_audit(tmp):
         (package / name).write_bytes(b'fixture-launcher-code')
     allowed = {p.relative_to(package).as_posix() for p in package.rglob('*') if p.is_file()} - packager.LAUNCHERS
     assert packager.audit(package, allowed)['original_payload_files_in_package'] == 0
+    artwork = package / 'runtime/hd-ui/restored.png'
+    artwork.parent.mkdir()
+    png = png_bytes()
+    artwork.write_bytes(png)
+    allowed.add('runtime/hd-ui/restored.png')
+    manifest_path = package / 'tools/runtime-manifest.json'
+    info = json.loads(manifest_path.read_text())
+    info['artwork'] = {'hd-ui/restored.png': digest(png)}
+    manifest_path.write_text(json.dumps(info))
+    assert packager.audit(package, allowed)['restored_artwork_files'] == 1
+    artwork.write_bytes(b'bad-art')
+    expect_error(lambda: packager.audit(package, allowed), ValueError)
+    artwork.write_bytes(png)
+    for invalid in (None, [], {}, {'hd-ui/../restored.png': digest(png)}, {'hd-ui/restored.png': '0'*64}):
+        broken = dict(info, artwork=invalid)
+        manifest_path.write_text(json.dumps(broken))
+        expect_error(lambda: packager.audit(package, allowed), ValueError)
+    manifest_path.write_text(json.dumps(info))
     leaked = package / 'forgotten.bin'
     leaked.write_bytes(disc_payload)
     expect_error(lambda: packager.audit(package, allowed), ValueError)
@@ -270,17 +572,119 @@ def check_asset_audit(tmp):
     expect_error(lambda: packager.audit(package, allowed), ValueError)
 
 
+def check_artwork_manifest(tmp):
+    directory = tmp / 'approved-artwork'
+    directory.mkdir()
+    png = png_bytes()
+    path = directory / 'restored.png'
+    path.write_bytes(png)
+    row = {'name': 'hud\\fixture.tga', 'width': 2, 'height': 2, 'format': 15,
+           'source_bytes': 16, 'source_sha256': digest(b'original-mip-data'),
+           'png': path.name, 'png_sha256': digest(png), 'crop': [0, 0, 0, 0], 'alpha': 'source'}
+    manifest = directory / 'manifest.json'
+    def write(rows=None, version=1):
+        manifest.write_text(json.dumps({'version': version, 'assets': [row] if rows is None else rows}))
+    write()
+    plan, artwork = packager.artwork_sources(directory)
+    assert plan == {'runtime/hd-ui/restored.png': path}
+    assert artwork == {'hd-ui/restored.png': digest(png)}
+    alias = dict(row, name='frontend\\same-texture.tga')
+    write([row, alias])
+    assert packager.artwork_sources(directory) == (plan, artwork)
+    write([dict(row, placement='canvas')])
+    assert packager.artwork_sources(directory) == (plan, artwork)
+    write([dict(row, alpha='png', placement='source_bounds')])
+    assert packager.artwork_sources(directory) == (plan, artwork)
+    write([dict(row, alpha='png', placement='source_bounds', crop=[0, 0, 4, 5])])
+    assert packager.artwork_sources(directory) == (plan, artwork)
+    for leaf in ('lc_medal01.tga', 'lc_medal02.tga', 'lc_medal03.tga', 'lc_medal04.tga',
+                 'lc_medal01smg.tga', 'reward_star.tga'):
+        write([dict(row, name='frontend\\frt_content\\'+leaf, alpha='png', placement='source_bounds')])
+        assert packager.artwork_sources(directory) == (plan, artwork)
+    for bad in (dict(row, placement='source_bounds'),
+                dict(alias, alpha='png', placement='source_bounds'),
+                dict(row, placement=None), dict(row, placement='unknown')):
+        write([bad])
+        expect_error(lambda: packager.artwork_sources(directory), ValueError)
+    write([dict(row, alpha='png'), dict(row, alpha='png', placement='source_bounds')])
+    expect_error(lambda: packager.artwork_sources(directory), ValueError)
+    changes = {'name': ('../escape', 'hud\\..\\escape.tga', 'HUD\\fixture.tga'),
+               'width': (0, -1, True, 1025), 'height': (0, 1025), 'format': (0, 14, True),
+               'source_bytes': (0, 2*1024*1024+1), 'source_sha256': ('0', 'A'*64, None),
+               'png_sha256': ('0'*64, None), 'png': ('../restored.png', 'x.dll', 'x.PNG', 'NUL.png', 'x/y.png'),
+               'alpha': ('unknown', None), 'color': ('unknown', None, 'source_chroma'), 'crop': ([0, 0, 0, 1], [1, 0, 8, 8], [0, 0, 4, 5],
+                                                 [0, 0, 3, 3], [True, 0, 8, 8], [0, 0, 8], None)}
+    for field, values in changes.items():
+        for value in values:
+            bad = copy.deepcopy(row)
+            bad[field] = value
+            write([bad])
+            expect_error(lambda: packager.artwork_sources(directory), ValueError)
+    write([row], True)
+    expect_error(lambda: packager.artwork_sources(directory), ValueError)
+    write([dict(row, extra='unapproved')])
+    expect_error(lambda: packager.artwork_sources(directory), ValueError)
+    write([row, dict(alias, crop=[0, 0, 4, 4])])
+    expect_error(lambda: packager.artwork_sources(directory), ValueError)
+    write([row, dict(alias, png='RESTORED.png')])
+    expect_error(lambda: packager.artwork_sources(directory), ValueError)
+    write()
+    path.write_bytes(b'corrupt')
+    expect_error(lambda: packager.artwork_sources(directory), ValueError)
+    path.unlink()
+    expect_error(lambda: packager.artwork_sources(directory), ValueError)
+    path.write_bytes(png)
+    assert packager.artwork_sources(directory) == (plan, artwork)
+    # Explicit blue-thumbnail treatment is opt-in; legacy/default PNG colors
+    # and shared master images remain valid. All identities are still pinned.
+    blue_png = png_bytes(128, 128)
+    path.write_bytes(blue_png)
+    blue = dict(row, name='frontend\\frt_content\\level_image_01smg.tga', width=32,
+                height=32, png_sha256=digest(blue_png), color='source_chroma')
+    write([blue])
+    assert packager.artwork_sources(directory)[1] == {'hd-ui/restored.png': digest(blue_png)}
+    reward = dict(blue, name='frontend\\frt_content\\reward_image_assault_fadesmg.tga')
+    write([reward])
+    assert packager.artwork_sources(directory)[1] == {'hd-ui/restored.png': digest(blue_png)}
+    for bad in (dict(blue, width=64), dict(blue, alpha='png'), dict(blue, name='hud\\smg.tga'),
+                dict(blue, name='frontend\\frt_content\\level_image_01sm.tga'),
+                dict(blue, name='frontend\\frt_content\\icons\\smg.tga')):
+        write([bad])
+        expect_error(lambda: packager.artwork_sources(directory), ValueError)
+    write([blue, dict(blue, color='png')])
+    expect_error(lambda: packager.artwork_sources(directory), ValueError)
+
+
 def check_compiled_direct(package, tmp):
     harness = tmp / 'direct-harness'
     (harness / 'tools').mkdir(parents=True)
     shutil.copy2(package / 'Play Burner Edition.exe', harness / 'Play Burner Edition.exe')
     shutil.copytree(package / 'tools/python', harness / 'tools/python')
     (harness / 'tools/import_game.py').write_text(
-        "from pathlib import Path\nimport sys\n"
-        "if sys.argv[1]=='launch':Path(__file__).with_name('launched.txt').write_text('ok')\n")
-    result = subprocess.run([str(harness / 'Play Burner Edition.exe')], timeout=20,
-                            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
-    assert result.returncode == 0 and (harness / 'tools/launched.txt').read_text() == 'ok'
+        "from pathlib import Path\nimport json,sys\n"
+        "root=Path(__file__).resolve().parent.parent\n"
+        "data=Path(sys.argv[sys.argv.index('--data')+1]).resolve()\n"
+        "assert data==root/'GameData'\nassert Path.cwd()==root\n"
+        "with (root/'tools/worker-events.jsonl').open('a',encoding='utf-8') as f:\n"
+        " f.write(json.dumps({'action':sys.argv[1],'data':str(data),'cwd':str(Path.cwd())})+'\\n')\n"
+        "if sys.argv[1]=='launch':(data/'launched.txt').write_text('harmless worker')\n")
+    (harness / 'GameData').mkdir()
+    (harness / 'GameData/save.fixture').write_bytes(b'portable saved progress')
+    unrelated = tmp / 'unrelated-launch-directory'
+    unrelated.mkdir()
+    for current in (harness, tmp / 'moved direct harness'):
+        if current != harness:
+            harness.rename(current)
+        result = subprocess.run([str(current / 'Play Burner Edition.exe')], cwd=unrelated,
+                                timeout=20, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+        assert result.returncode == 0
+        assert (current / 'GameData/launched.txt').read_text() == 'harmless worker'
+        assert (current / 'GameData/save.fixture').read_bytes() == b'portable saved progress'
+        events = [json.loads(line) for line in (current / 'tools/worker-events.jsonl').read_text().splitlines()]
+        assert [event['action'] for event in events[-2:]] == ['status', 'launch']
+        assert all(Path(event['data']) == current / 'GameData' and Path(event['cwd']) == current
+                   for event in events[-2:])
+    assert not harness.exists() and not list(unrelated.iterdir())
 
 
 def main():
@@ -290,12 +694,18 @@ def main():
     args = parser.parse_args()
     with tempfile.TemporaryDirectory(prefix='burner-xbe-test-', dir=REPO / 'build') as directory:
         tmp = Path(directory)
-        result = check_worker(tmp)
-        check_asset_audit(tmp)
-        result['strict_asset_allowlist_negative_cases'] = True
-        if args.package:
-            check_compiled_direct(args.package.resolve(), tmp)
-            result['compiled_direct_exe_with_stub_worker'] = True
+        # A first-import migration must never inspect the real user's AppData.
+        with patch.dict(os.environ, {'LOCALAPPDATA': str(tmp / 'isolated-appdata')}):
+            result = check_worker(tmp)
+            result.update(check_portable(tmp))
+            check_asset_audit(tmp)
+            check_artwork_manifest(tmp)
+            result['strict_asset_allowlist_negative_cases'] = True
+            result['approved_artwork_schema_hashes_crop_and_aliases_verified'] = True
+            if args.package:
+                check_compiled_direct(args.package.resolve(), tmp)
+                result['compiled_direct_exe_with_stub_worker'] = True
+                result['compiled_direct_portable_data_cwd_and_move_verified'] = True
     args.evidence.parent.mkdir(parents=True, exist_ok=True)
     args.evidence.write_text(json.dumps(result, indent=2) + '\n')
     print('PASS: verified ISO import, rollback, rejection, isolated runtime launch and bounded error handling')

@@ -1,0 +1,747 @@
+{
+  "version": 1,
+  "original_images_included": false,
+  "method": "AI-assisted reference restoration with original geometry/alpha retained by runtime policies.",
+  "live_appearance_verified": false,
+  "assets": [
+    {
+      "file": "hd-ui/039-lc_medal01smg-restored.png",
+      "sha256": "20d29cd8701bc76e022818bb51909856ed4d6fe92f52c9aa825974de53564c50",
+      "original_texture_names": [
+        "frontend\\frt_content\\lc_medal01smg.tga"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Faithfully restore the reference pale blue and silver medal with blue folded ribbon and plain pale circular metal face, no emblem or text added. Preserve exact original proportions and blue ribbon fold shapes. Crisp metallic bevels. Output a square 1024x1024 RGBA sprite on a fully transparent background, centered with the same proportional padding as reference. This is a restoration of existing game artwork, not a redesign. Only the supplied object; no backdrop, checkerboard, new writing, flourishes, or shadow outside its original silhouette."
+    },
+    {
+      "file": "hd-ui/040-lc_medal04-restored.png",
+      "sha256": "e7d9c51e0147d9fa8ccdca2cb16181a3789a72c24282c4f95c5dfd0cdeae28de",
+      "original_texture_names": [
+        "frontend\\frt_content\\lc_medal04.tga"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Faithfully restore the reference golden medal with folded gold ribbon and the tiny dark human head cameo inside its round face. Preserve the exact portrait emblem, silhouette, original colors, ribbon angles and circular medal proportions. Crisp metallic bevels, not a new portrait. Output a square 1024x1024 RGBA sprite on a fully transparent background, centered with the same proportional padding as reference. This is a restoration of existing game artwork, not a redesign. Only the supplied object; no backdrop, checkerboard, new writing, flourishes, or shadow outside its original silhouette."
+    },
+    {
+      "file": "hd-ui/041-lc_medal03-restored.png",
+      "sha256": "0a6564138c18930249101ba6786eed5fea393dcb4c49b824a622f108b736b496",
+      "original_texture_names": [
+        "frontend\\frt_content\\lc_medal03.tga"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Faithfully restore the reference round bronze medical medal with pale green folded ribbon and small embossed medical cross on round metal face. Preserve exact silhouette, colors, material, ribbon angles, circular medal proportions and cross design. Crisp metallic bevels. Output a square 1024x1024 RGBA sprite on a fully transparent background, centered with the same proportional padding as reference. Restore existing artwork rather than redesigning it. No text, extra symbols, checkerboard, floor shadow or border."
+    },
+    {
+      "file": "hd-ui/042-lc_medal02-restored.png",
+      "sha256": "8241a5e25e38f6b031a70a1576174436875c3a5a7c69bc7a421b57715d93363d",
+      "original_texture_names": [
+        "frontend\\frt_content\\lc_medal02.tga"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Faithfully restore the reference round silver marksman medal with muted red folded ribbon and a small embossed silver side-view pistol on the dark circular face. Preserve exact silhouette, red color, material, ribbon folds, pistol orientation and shape. Crisp metallic bevels. Output a square 1024x1024 RGBA sprite on a fully transparent background, centered with the same proportional padding as reference. Restore existing artwork rather than redesigning it. No text, extra symbols, checkerboard, floor shadow or border."
+    },
+    {
+      "file": "hd-ui/043-lc_medal01-restored.png",
+      "sha256": "5fe955ee9a5c58e88b56efe2f68a12bf3bfe89b9a5f95427fe55722c17af0e90",
+      "original_texture_names": [
+        "frontend\\frt_content\\lc_medal01.tga"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Faithfully restore the reference round silver medal with pale blue folded ribbon and small embossed five-point silver star in the round face. Preserve exact silhouette, blue color, metal colors, original ribbon folds, circular medal proportions and star orientation. Crisp metallic bevels. Output a square 1024x1024 RGBA sprite on a fully transparent background, centered with the same proportional padding as reference. Restore existing artwork rather than redesigning it. No text, extra symbols, checkerboard, floor shadow or border."
+    },
+    {
+      "file": "hd-ui/046-level_image_es_24b-restored.png",
+      "sha256": "34cc6f371a770a8f1026601c8a313b7f7bea552f09031b9bc28f851fefaada83",
+      "original_texture_names": [
+        "frontend\\frt_content\\level_image_es%24b%.tga",
+        "frontend\\frt_content\\level_image_essm.tga",
+        "frontend\\frt_content\\level_image_essmg.tga"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Use case: precise-object-edit. This original square game-menu photograph texture is the edit target, not merely inspiration. Restore this exact image at high resolution, preserving its composition, camera, object silhouettes and positions, crop, lighting, color palette, fine horizontal scanlines and faded textured border. Keep all existing scene/background content; transparency is only for original transparent edge/gutter areas, never remove the photographed background. Reconstruct compressed detail conservatively, in the same gritty 2000s game appearance. Do not add objects, lettering, badges, new figures, a new frame, logos, bloom or cinematic redesign. Flat square texture image only. Preserve alpha treatment. This target is the gold circular emergency mission medallion: preserve exact five-point star centered on oval perspective face, raised outer ring with original decorative dash pattern, gold metallic reflections, blue-silver reflection on right/lower face and burnt orange square background. No added text, numerals, insignia or altered star geometry."
+    },
+    {
+      "file": "hd-ui/049-level_image_11_24b-restored.png",
+      "sha256": "637534ee006b830ac957d9d547b6ab50095ff69a9bdd2fa9659f8f7e07cf37b1",
+      "original_texture_names": [
+        "frontend\\frt_content\\level_image_11%24b%.tga",
+        "frontend\\frt_content\\level_image_11sm.tga",
+        "frontend\\frt_content\\level_image_11smg.tga"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Use case: precise-object-edit. This original square game-menu photograph texture is the edit target, not merely inspiration. Restore this exact image at high resolution, preserving its composition, camera, object silhouettes and positions, crop, lighting, color palette, fine horizontal scanlines and faded textured border. Keep all existing scene/background content; transparency is only for original transparent edge/gutter areas, never remove the photographed background. Reconstruct compressed detail conservatively, in the same gritty 2000s game appearance. Do not add objects, lettering, badges, new figures, a new frame, logos, bloom or cinematic redesign. Flat square texture image only. Preserve alpha treatment. Keep original two-person city-at-night collage: large masked man cropped at right with gloved hand raised at top, smaller dark-shirted man with blue jeans at left holding the long dark weapon diagonally, lit skyscrapers at left and orange glow center. Preserve poses and original geometric hockey mask red stripe pattern."
+    },
+    {
+      "file": "hd-ui/055-level_image_09_24b-restored.png",
+      "sha256": "2d577f8919d6676ffc2ceb90711ce75dbd9c92a66b1cc1c05b2592a29ce83c5f",
+      "original_texture_names": [
+        "frontend\\frt_content\\level_image_09%24b%.tga",
+        "frontend\\frt_content\\level_image_09sm.tga",
+        "frontend\\frt_content\\level_image_09smg.tga"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Use case: precise-object-edit. This original square game-menu photograph texture is the edit target, not merely inspiration. Restore this exact image at high resolution, preserving its composition, camera, object silhouettes and positions, crop, lighting, color palette, fine horizontal scanlines and faded textured border. Keep all existing scene/background content; transparency is only for original transparent edge/gutter areas, never remove the photographed background. Reconstruct compressed detail conservatively, in the same gritty 2000s game appearance. Do not add objects, lettering, badges, new figures, a new frame, logos, bloom or cinematic redesign. Flat square texture image only. Preserve alpha treatment. Keep the two original dark masked armed men in a leafy tree-lined setting with warm fire/sunlight behind them: smaller man on left, larger cropped man on right, existing yellow straps/markings and dark tactical clothing. Preserve exactly the number of figures and their poses."
+    },
+    {
+      "file": "hd-ui/058-level_image_08_24b-restored.png",
+      "sha256": "308a0d177b6756b3ecb2826707cf199801e6812a4ecb7c3245671373a991a42d",
+      "original_texture_names": [
+        "frontend\\frt_content\\level_image_08%24b%.tga",
+        "frontend\\frt_content\\level_image_08sm.tga",
+        "frontend\\frt_content\\level_image_08smg.tga"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Use case: precise-object-edit. This original square game-menu photograph texture is the edit target, not merely inspiration. Restore this exact image at high resolution, preserving its composition, camera, object silhouettes and positions, crop, lighting, color palette, fine horizontal scanlines and faded textured border. Keep all existing scene/background content; transparency is only for original transparent edge/gutter areas, never remove the photographed background. Reconstruct compressed detail conservatively, in the same gritty 2000s game appearance. Do not add objects, lettering, badges, new figures, a new frame, logos, bloom or cinematic redesign. Flat square texture image only. Preserve alpha treatment. Keep original collage composition: large armed figure in dark protective police gear on right facing left, pale industrial bridge structure at top and several tiny dark figures at lower left. Preserve orange forearm across center, dark gun aimed left, the original face/helmet orientation, grey-blue palette."
+    },
+    {
+      "file": "hd-ui/061-level_image_07_24b-restored.png",
+      "sha256": "72382e15dbe1f1e00d2e26b5d5f2810893e9d3c3abd03085a13a51603be81453",
+      "original_texture_names": [
+        "frontend\\frt_content\\level_image_07%24b%.tga",
+        "frontend\\frt_content\\level_image_07sm.tga",
+        "frontend\\frt_content\\level_image_07smg.tga"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Use case: precise-object-edit. This original square game-menu photograph texture is the edit target, not merely inspiration. Restore this exact image at high resolution, preserving its composition, camera, object silhouettes and positions, crop, lighting, color palette, fine horizontal scanlines and faded textured border. Keep all existing scene/background content; transparency is only for original transparent edge/gutter areas, never remove the photographed background. Reconstruct compressed detail conservatively, in the same gritty 2000s game appearance. Do not add objects, lettering, badges, new figures, a new frame, logos, bloom or cinematic redesign. Flat square texture image only. Preserve alpha treatment. Keep the single large masked armed man leaning forward in the narrow brick alley, short red hair or head covering at top, black ribbed respirator over mouth, red/brown short sleeves and black vest, foreground gun at lower left. Maintain exact pose and weapon silhouette."
+    },
+    {
+      "file": "hd-ui/064-level_image_06_24b-restored.png",
+      "sha256": "06147d4434fe138791816d8b40926e55c161d62069d72847847f0a37b9c4b964",
+      "original_texture_names": [
+        "frontend\\frt_content\\level_image_06%24b%.tga",
+        "frontend\\frt_content\\level_image_06sm.tga",
+        "frontend\\frt_content\\level_image_06smg.tga"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Use case: precise-object-edit. This original square game-menu photograph texture is the edit target, not merely inspiration. Restore this exact image at high resolution, preserving its composition, camera, object silhouettes and positions, crop, lighting, color palette, fine horizontal scanlines and faded textured border. Keep all existing scene/background content; transparency is only for original transparent edge/gutter areas, never remove the photographed background. Reconstruct compressed detail conservatively, in the same gritty 2000s game appearance. Do not add objects, lettering, badges, new figures, a new frame, logos, bloom or cinematic redesign. Flat square texture image only. Preserve alpha treatment. Keep the blue-uniform policeman dominating right foreground, another blue-uniform officer center background, dark armed figure at left, flames at far left and industrial building. Preserve original poses, framing, blue-grey clothing and warm fire."
+    },
+    {
+      "file": "hd-ui/067-level_image_05_24b-restored.png",
+      "sha256": "7ad878309056e86d1c806825bea57d17c634c554c364952db079ee5f77ee3bac",
+      "original_texture_names": [
+        "frontend\\frt_content\\level_image_05%24b%.tga",
+        "frontend\\frt_content\\level_image_05sm.tga",
+        "frontend\\frt_content\\level_image_05smg.tga"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Use case: precise-object-edit. This original square game-menu photograph texture is the edit target, not merely inspiration. Restore this exact image at high resolution, preserving its composition, camera, object silhouettes and positions, crop, lighting, color palette, fine horizontal scanlines and faded textured border. Keep all existing scene/background content; transparency is only for original transparent edge/gutter areas, never remove the photographed background. Reconstruct compressed detail conservatively, in the same gritty 2000s game appearance. Do not add objects, lettering, badges, new figures, a new frame, logos, bloom or cinematic redesign. Flat square texture image only. Preserve alpha treatment. Keep industrial scaffolding behind the two original masked figures: the smaller left foreground figure raises a chainsaw, while the large right figure has the same white mask with red vertical center marking. Preserve grey-green daylight and original poses; no extra face holes or new symbols."
+    },
+    {
+      "file": "hd-ui/070-level_image_04_24b-restored.png",
+      "sha256": "394532f800e1d3d515eee57f95c0b777706ad12caa56e0c1ed935b11833ba84f",
+      "original_texture_names": [
+        "frontend\\frt_content\\level_image_04%24b%.tga",
+        "frontend\\frt_content\\level_image_04sm.tga",
+        "frontend\\frt_content\\level_image_04smg.tga"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Use case: precise-object-edit. This original square game-menu photograph texture is the edit target, not merely inspiration. Restore this exact image at high resolution, preserving its composition, camera, object silhouettes and positions, crop, lighting, color palette, fine horizontal scanlines and faded textured border. Keep all existing scene/background content; transparency is only for original transparent edge/gutter areas, never remove the photographed background. Reconstruct compressed detail conservatively, in the same gritty 2000s game appearance. Do not add objects, lettering, badges, new figures, a new frame, logos, bloom or cinematic redesign. Flat square texture image only. Preserve alpha treatment. Keep large masked gunman at right foreground, gun pointed left across lower center, burning city buildings and arched streetlamp behind. Preserve white hockey mask shape with red stripe and existing eye holes, warm yellow/orange sepia palette."
+    },
+    {
+      "file": "hd-ui/073-level_image_03_24b-restored.png",
+      "sha256": "ebaad1afbed86f6942965ca71b85b51fa2fdd8ac73ea591dbc253cf5596056eb",
+      "original_texture_names": [
+        "frontend\\frt_content\\level_image_03%24b%.tga",
+        "frontend\\frt_content\\level_image_03sm.tga",
+        "frontend\\frt_content\\level_image_03smg.tga"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Use case: precise-object-edit. This original square game-menu photograph texture is the edit target, not merely inspiration. Restore this exact image at high resolution (ideally1024x1024) while preserving its composition, camera, object silhouettes/positions, crop, lighting, color palette, fine horizontal scanlines and faded textured border. Keep all existing scene/background content; transparency is only for the original transparent edge/gutter areas, never remove the photographed background. Reconstruct compressed detail conservatively, with the same gritty2000s game appearance. Do not add objects, lettering, badges, new figures, a new frame, logos, bloom or cinematic redesign. Flat texture image only. Preserve existing alpha treatment and square canvas. Retain the red-hooded hockey-mask figure at lower left, the dark raised-arm figure on the right, and the hot yellow/orange backlight. Preserve the original mask hole pattern and figure proportions."
+    },
+    {
+      "file": "hd-ui/077-level_image_02_24b-restored.png",
+      "sha256": "acdb77a4f453ce9ba9bbbd2380f7fb96ebcdc15d99bd6929b671fa6fde4be356",
+      "original_texture_names": [
+        "frontend\\frt_content\\level_image_02%24b%.tga",
+        "frontend\\frt_content\\level_image_02sm.tga",
+        "frontend\\frt_content\\level_image_02smg.tga"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Use case: precise-object-edit. This original square game-menu photograph texture is the edit target, not merely inspiration. Restore this exact image at high resolution, preserving its composition, camera, object silhouettes and positions, crop, lighting, color palette, fine horizontal scanlines and faded textured border. Keep all existing scene/background content; transparency is only for original transparent edge/gutter areas, never remove the photographed background. Reconstruct compressed detail conservatively, in the same gritty 2000s game appearance. Do not add objects, lettering, badges, new figures, a new frame, logos, bloom or cinematic redesign. Flat square texture image only. Preserve alpha treatment. Keep snowy industrial canal scene, burning vehicle at lower left, railings and receding walkway in center/right, helicopter at upper right. Cold grey/blue environment and warm fire."
+    },
+    {
+      "file": "hd-ui/118-reward_image_assaultclip_fade_24b-restored.png",
+      "sha256": "4f6f0cc48f4de2250a59a4981b3fd8959c8486b172be033b2a96036b1d1ba9a1",
+      "original_texture_names": [
+        "frontend\\frt_content\\reward_image_assaultclip_fade%24b%.tga",
+        "frontend\\frt_content\\reward_image_assaultclip_fadesm.tga",
+        "frontend\\frt_content\\reward_image_assaultclip_fadesmg.tga"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Use case: precise-object-edit. Edit target is this exact square original game reward-picture texture. Restore at higher resolution while preserving the exact layout, camera, crop, weapon/equipment silhouette and proportions, number/positions of ammunition and objects, palette, cool circuitry backdrop, scanlines and thin faded border. This is restoration of an existing gritty 2000s game menu texture, not a redesign or new product photograph. Do not add lettering, new objects, logos, labels or new hardware details that alter the weapon. Keep the existing image background; transparency only at original faded edge/gutter. Preserve square canvas and alpha treatment. Keep submachine gun/assault rifle diagonally across center with barrel upper left and stock lower right, dark magazine at lower center, enlarged dark weapon fragments at top/right, brass cartridges standing at left and upper center."
+    },
+    {
+      "file": "hd-ui/121-reward_image_shotgunclip_fade_24b-restored.png",
+      "sha256": "6eff72dc22155784fd5561dc093cfcde8e9d7356e64c765c3176a8f0af353638",
+      "original_texture_names": [
+        "frontend\\frt_content\\reward_image_shotgunclip_fade%24b%.tga",
+        "frontend\\frt_content\\reward_image_shotgunclip_fadesm.tga",
+        "frontend\\frt_content\\reward_image_shotgunclip_fadesmg.tga"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Use case: precise-object-edit. Edit target is this exact square original game reward-picture texture. Restore at higher resolution while preserving the exact layout, camera, crop, weapon/equipment silhouette and proportions, number/positions of ammunition and objects, palette, cool circuitry backdrop, scanlines and thin faded border. This is restoration of an existing gritty 2000s game menu texture, not a redesign or new product photograph. Do not add lettering, new objects, logos, labels or new hardware details that alter the weapon. Keep the existing image background; transparency only at original faded edge/gutter. Preserve square canvas and alpha treatment. Keep black shotgun fragments across top, two large black rectangular magazines angled through center, red and brass shotgun shells scattered at lower left/right over dark blue circuit background. Existing tiny shell markings must remain subtle and indistinct, not become new readable branding."
+    },
+    {
+      "file": "hd-ui/124-reward_image_pistolclip_fade_24b-restored.png",
+      "sha256": "4d9c67f1755aba035c10e3a2324069a3426da5e477a9a2f3b6d2fcd017aa6df2",
+      "original_texture_names": [
+        "frontend\\frt_content\\reward_image_pistolclip_fade%24b%.tga",
+        "frontend\\frt_content\\reward_image_pistolclip_fadesm.tga",
+        "frontend\\frt_content\\reward_image_pistolclip_fadesmg.tga"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Use case: precise-object-edit. Edit target is this exact square original game reward-picture texture. Restore at higher resolution while preserving the exact layout, camera, crop, weapon/equipment silhouette and proportions, number/positions of ammunition and objects, palette, cool circuitry backdrop, scanlines and thin faded border. This is restoration of an existing gritty 2000s game menu texture, not a redesign or new product photograph. Do not add lettering, new objects, logos, labels or new hardware details that alter the weapon. Keep the existing image background; transparency only at original faded edge/gutter. Preserve square canvas and alpha treatment. Keep the silver-and-black pistol large across upper/right center facing left, two upright brass rounds near lower left and several horizontal brass pistol rounds across bottom. Preserve existing dark gun grip, silver slide shape and original placement."
+    },
+    {
+      "file": "hd-ui/127-reward_image_taserrange_fade_24b-restored.png",
+      "sha256": "19f09f9cb7124dc6f4b8181aec1c705cb19613c18071bcc32296d5ce100bd712",
+      "original_texture_names": [
+        "frontend\\frt_content\\reward_image_taserrange_fade%24b%.tga",
+        "frontend\\frt_content\\reward_image_taserrange_fadesm.tga",
+        "frontend\\frt_content\\reward_image_taserrange_fadesmg.tga"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Use case: precise-object-edit. Edit target is this exact square original game reward-picture texture. Restore at higher resolution while preserving the exact layout, camera, crop, weapon/equipment silhouette and proportions, number/positions of ammunition and objects, palette, cool circuitry backdrop, scanlines and thin faded border. This is restoration of an existing gritty 2000s game menu texture, not a redesign or new product photograph. Do not add lettering, new objects, logos, labels or new hardware details that alter the weapon. Keep the existing image background; transparency only at original faded edge/gutter. Preserve square canvas and alpha treatment. Keep the blue-toned armored figure leaning backward at left, vivid white/cyan zigzag electricity crossing diagonally through center, cyan tipped taser device angled at upper right and enlarged silver-and-black taser edge at lower right. Preserve the existing zigzag shape and cool blue circuitry background."
+    },
+    {
+      "file": "hd-ui/132-reward_image_thermovision_fade_24b-restored.png",
+      "sha256": "8015406f2f2da03a4f20fd1ec0d060298eefd1297df256d0382bb4cb8805f174",
+      "original_texture_names": [
+        "frontend\\frt_content\\reward_image_thermovision_fade%24b%.tga",
+        "frontend\\frt_content\\reward_image_thermovision_fadesm.tga"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Use case: precise-object-edit. Edit target is this exact square original game reward-picture texture. Restore at higher resolution while preserving the exact layout, camera, crop, weapon/equipment silhouette and proportions, number/positions of ammunition and objects, palette, cool circuitry backdrop, scanlines and thin faded border. This is restoration of an existing gritty 2000s game menu texture, not a redesign or new product photograph. Do not add lettering, new objects, logos, labels or new hardware details that alter the weapon. Keep the existing image background; transparency only at original faded edge/gutter. Preserve square canvas and alpha treatment. Preserve the close-up dark gas mask dominating left-center, two reflective glass eye windows, circular respirator filter at bottom, and purple/yellow thermal-vision face silhouette on right. Keep this gas-mask shape and cool silver-blue / violet palette, no text or new symbols."
+    },
+    {
+      "file": "hd-ui/135-reward_image_chaingun_fade_24b-restored.png",
+      "sha256": "68ddee74f93f1c327d7cd96e82d26b67c84c9a7514847ad1d32a0bcc7ebee8c4",
+      "original_texture_names": [
+        "frontend\\frt_content\\reward_image_chaingun_fade%24b%.tga",
+        "frontend\\frt_content\\reward_image_chaingun_fadesm.tga",
+        "frontend\\frt_content\\reward_image_chaingun_fadesmg.tga"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Use case: precise-object-edit. Edit target is this exact square original game reward-picture texture. Restore at higher resolution while preserving the exact layout, camera, crop, weapon/equipment silhouette and proportions, number/positions of ammunition and objects, palette, cool circuitry backdrop, scanlines and thin faded border. This is restoration of an existing gritty 2000s game menu texture, not a redesign or new product photograph. Do not add lettering, new objects, logos, labels or new hardware details that alter the weapon. Keep the existing image background; transparency only at original faded edge/gutter. Preserve square canvas and alpha treatment. Preserve the exact bulky black rotary chaingun with multiple metal barrels angled toward upper-left, gold ammunition belt curling in at upper-right, chunky black receiver at center/lower-right, and loose brass/green rounds at lower-left. Keep same gun model and proportions."
+    },
+    {
+      "file": "hd-ui/138-reward_image_riotgrenade_fade_24b-restored.png",
+      "sha256": "f61c216f572f20009514c94c32b05c15d04670d25be9d5e87b56d061c9a50374",
+      "original_texture_names": [
+        "frontend\\frt_content\\reward_image_riotgrenade_fade%24b%.tga",
+        "frontend\\frt_content\\reward_image_riotgrenade_fadesm.tga",
+        "frontend\\frt_content\\reward_image_riotgrenade_fadesmg.tga"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Use case: precise-object-edit. Edit target is this exact square original game reward-picture texture. Restore at higher resolution while preserving the exact layout, camera, crop, weapon/equipment silhouette and proportions, number/positions of ammunition and objects, palette, cool circuitry backdrop, scanlines and thin faded border. This is restoration of an existing gritty 2000s game menu texture, not a redesign or new product photograph. Do not add lettering, new objects, logos, labels or new hardware details that alter the weapon. Keep the existing image background; transparency only at original faded edge/gutter. Preserve square canvas and alpha treatment. Preserve the single teal bulb-shaped riot grenade angled from lower-left to upper-right, olive metal lever/pin at upper-right, dark diagonal label across its lower-left side. Label text must remain exactly \"STING BALL\" (S T I N G space B A L L), white condensed letters following same diagonal. Retain original blue circuitry and darkened edges."
+    },
+    {
+      "file": "hd-ui/141-reward_image_csgrenade_fade_24b-restored.png",
+      "sha256": "e9b50029294a592809e25ff2cabf07281af0d72bb656abb72cf849ef3e7ad213",
+      "original_texture_names": [
+        "frontend\\frt_content\\reward_image_csgrenade_fade%24b%.tga",
+        "frontend\\frt_content\\reward_image_csgrenade_fadesm.tga",
+        "frontend\\frt_content\\reward_image_csgrenade_fadesmg.tga"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Use case: precise-object-edit. Edit target is this exact square original game reward-picture texture. Restore at higher resolution while preserving the exact layout, camera, crop, weapon/equipment silhouette and proportions, number/positions of ammunition and objects, palette, cool circuitry backdrop, scanlines and thin faded border. This is restoration of an existing gritty 2000s game menu texture, not a redesign or new product photograph. Do not add lettering, new objects, logos, labels or new hardware details that alter the weapon. Keep the existing image background; transparency only at original faded edge/gutter. Preserve square canvas and alpha treatment. Preserve single diagonal white smoke grenade can, blue bands at top and bottom, olive fuse/lever at upper-left, pale enlarged duplicate can fragment in background right. Main label EXACT: \"SMOKE\". Under it, if readable, exact smaller line \"RIOT DISPERSING GRENADE\" and tiny \"DANGER\"; all remaining microprint must stay blurred and unreadable, not invented words. Preserve can angle and size."
+    },
+    {
+      "file": "hd-ui/144-reward_image_terrormode_fade_24b-restored.png",
+      "sha256": "0678b50d3ca6b9ad7a7b64ce911a680c0f0a5dee03aeb16a92762bac1c10d628",
+      "original_texture_names": [
+        "frontend\\frt_content\\reward_image_terrormode_fade%24b%.tga",
+        "frontend\\frt_content\\reward_image_terrormode_fadesm.tga",
+        "frontend\\frt_content\\reward_image_terrormode_fadesmg.tga"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Use case: precise-object-edit. Edit target is this exact square original game reward-picture texture. Restore at higher resolution while preserving the exact layout, camera, crop, weapon/equipment silhouette and proportions, number/positions of ammunition and objects, palette, cool circuitry backdrop, scanlines and thin faded border. This is restoration of an existing gritty 2000s game menu texture, not a redesign or new product photograph. Do not add lettering, new objects, logos, labels or new hardware details that alter the weapon. Keep the existing image background; transparency only at original faded edge/gutter. Preserve square canvas and alpha treatment. Preserve one masked man leaning forward in center, black/dark-blue short sleeve shirt, gloved hands holding two bright white cleavers at lower left and center, orange/red flames behind him with faint portrait fragments. Keep exact pose and original mask with vertical vent and dark eye holes; original horror reward collage, no new elements."
+    },
+    {
+      "file": "hd-ui/147-reward_image_shieldmk3_fade_24b-restored.png",
+      "sha256": "7d8d31c2ff750f547caabba1bc14637d2b7e15abdc64355194f5c82141e4593c",
+      "original_texture_names": [
+        "frontend\\frt_content\\reward_image_shieldmk3_fade%24b%.tga",
+        "frontend\\frt_content\\reward_image_shieldmk3_fadesm.tga",
+        "frontend\\frt_content\\reward_image_shieldmk3_fadesmg.tga"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Use case: precise-object-edit. Edit target is this exact square original game reward-picture texture. Restore at higher resolution while preserving the exact layout, camera, crop, weapon/equipment silhouette and proportions, number/positions of ammunition and objects, palette, cool circuitry backdrop, scanlines and thin faded border. This is restoration of an existing gritty 2000s game menu texture, not a redesign or new product photograph. Do not add lettering, new objects, logos, labels or new hardware details that alter the weapon. Keep the existing image background; transparency only at original faded edge/gutter. Preserve square canvas and alpha treatment. Preserve transparent rectangular riot shield tilted down left over a close-up shield fragment at right, ribbed blue panels, metal frame, curved handle at upper-right and faint red/white shapes below. Preserve the EXACT original upside-down/mirrored stencil on the small shield; do not reorient, replace or invent letters. It is an upside-down T-ZERO stencil, so its displayed upside-down glyph arrangement must match the reference."
+    },
+    {
+      "file": "hd-ui/150-reward_image_pistolmk3_fade_24b-restored.png",
+      "sha256": "272ad383b0408cb673ffa9f977d0322aaa442f8a548cc15a2527902d0474f68b",
+      "original_texture_names": [
+        "frontend\\frt_content\\reward_image_pistolmk3_fade%24b%.tga",
+        "frontend\\frt_content\\reward_image_pistolmk3_fadesm.tga",
+        "frontend\\frt_content\\reward_image_pistolmk3_fadesmg.tga"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Use case: precise-object-edit. Edit target is this exact square original game reward-picture texture. Restore at higher resolution while preserving the exact layout, camera, crop, weapon/equipment silhouette and proportions, number/positions of ammunition and objects, palette, cool circuitry backdrop, scanlines and thin faded border. This is restoration of an existing gritty 2000s game menu texture, not a redesign or new product photograph. Do not add lettering, new objects, logos, labels or new hardware details that alter the weapon. Keep the existing image background; transparency only at original faded edge/gutter. Preserve square canvas and alpha treatment. Preserve silver-and-black pistol pointing left at upper center, larger cropped matching pistol grip at far right, brass rounds at lower left, existing small green and cyan accents and silver angular slide. Keep exact weapon silhouette and original cool blue circuitry background; no new markings."
+    },
+    {
+      "file": "hd-ui/153-reward_image_pistolup_fade_24b-restored.png",
+      "sha256": "221fd4a3104b38e5e5974ab6bd0fc74622ba8824891ec918e6984b2729ebfbf4",
+      "original_texture_names": [
+        "frontend\\frt_content\\reward_image_pistolup_fade%24b%.tga",
+        "frontend\\frt_content\\reward_image_pistolup_fadesm.tga",
+        "frontend\\frt_content\\reward_image_pistolup_fadesmg.tga"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Use case: precise-object-edit. Edit target is this exact square original game reward-picture texture. Restore at higher resolution while preserving the exact layout, camera, crop, weapon/equipment silhouette and proportions, number/positions of ammunition and objects, palette, cool circuitry backdrop, scanlines and thin faded border. This is restoration of an existing gritty 2000s game menu texture, not a redesign or new product photograph. Do not add lettering, new objects, logos, labels or new hardware details that alter the weapon. Keep the existing image background; transparency only at original faded edge/gutter. Preserve square canvas and alpha treatment. Preserve exact unscoped silver-and-black pistol pointing left at upper center, larger cropped matching pistol grip at far right, brass pistol rounds in original positions at lower-left, existing green muzzle and cyan accents. Keep angular slide and weapon proportions, no new markings or attachments."
+    },
+    {
+      "file": "hd-ui/156-reward_image_health50_fade_24b-restored.png",
+      "sha256": "e44f6c54844174f0193d7b3ac2e2c44a768629aea8411d5843a474bb6caeeaef",
+      "original_texture_names": [
+        "frontend\\frt_content\\reward_image_health50_fade%24b%.tga",
+        "frontend\\frt_content\\reward_image_health50_fadesm.tga",
+        "frontend\\frt_content\\reward_image_health50_fadesmg.tga"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Use case: precise-object-edit. Edit target is this exact square original game reward-picture texture. Restore at higher resolution while preserving the exact layout, camera, crop, weapon/equipment silhouette and proportions, number/positions of ammunition and objects, palette, cool circuitry backdrop, scanlines and thin faded border. This is restoration of an existing gritty 2000s game menu texture, not a redesign or new product photograph. Do not add lettering, new objects, logos, labels or new hardware details that alter the weapon. Keep the existing image background; transparency only at original faded edge/gutter. Preserve square canvas and alpha treatment. Preserve this abstract ghosted medical/x-ray reward collage exactly: translucent pale human ribcage and skull/head fragments blended over blue-black circuitry, pale metallic capsule/equipment shapes across lower center, soft cyan-white highlights and dense scanlines. Do not reinterpret it as a new portrait or invent clear symbols; retain the source's layered indistinct appearance and image balance."
+    },
+    {
+      "file": "hd-ui/159-reward_image_tasermk2_fade_24b-restored.png",
+      "sha256": "14d000c4447b3f479dbdcad8d8f2ec9cdc7e42f5e229034010d44b23f033e6de",
+      "original_texture_names": [
+        "frontend\\frt_content\\reward_image_tasermk2_fade%24b%.tga",
+        "frontend\\frt_content\\reward_image_tasermk2_fadesm.tga",
+        "frontend\\frt_content\\reward_image_tasermk2_fadesmg.tga"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Use case: precise-object-edit. Edit target is this exact square original game reward-picture texture. Restore at higher resolution while preserving the exact layout, camera, crop, weapon/equipment silhouette and proportions, number/positions of ammunition and objects, palette, cool circuitry backdrop, scanlines and thin faded border. This is restoration of an existing gritty 2000s game menu texture, not a redesign or new product photograph. Do not add lettering, new objects, logos, labels or new hardware details that alter the weapon. Keep the existing image background; transparency only at original faded edge/gutter. Preserve square canvas and alpha treatment. Keep the enlarged silver-and-black taser diagonally from upper-left toward bottom-center, yellow panel at top and exact white label \"STUN\" at center, blue electrical zigzag across right with smaller cyan taser at upper-right. Preserve both silhouettes and diagonal crop. No new labels."
+    },
+    {
+      "file": "hd-ui/162-reward_image_assaultmk3_fade_24b-restored.png",
+      "sha256": "e256dc3b8783328995ea26dd45facc9d15b6616d630d7a3c24c2aafa46000de8",
+      "original_texture_names": [
+        "frontend\\frt_content\\reward_image_assaultmk3_fade%24b%.tga",
+        "frontend\\frt_content\\reward_image_assaultmk3_fadesm.tga",
+        "frontend\\frt_content\\reward_image_assaultmk3_fadesmg.tga"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Use case: precise-object-edit. Edit target is this exact square original game reward-picture texture. Restore at higher resolution while preserving the exact layout, camera, crop, weapon/equipment silhouette and proportions, number/positions of ammunition and objects, palette, cool circuitry backdrop, scanlines and thin faded border. This is restoration of an existing gritty 2000s game menu texture, not a redesign or new product photograph. Do not add lettering, new objects, logos, labels or new hardware details that alter the weapon. Keep the existing image background; transparency only at original faded edge/gutter. Preserve square canvas and alpha treatment. Keep the scoped black/grey assault weapon horizontally across upper-middle, barrel pointing left, vertical foregrip, magazine and stock matching original, dark enlarged weapon fragments above, brass cartridges along left and lower-left. Preserve exact attachment layout and circuitry/scanline background."
+    },
+    {
+      "file": "hd-ui/165-reward_image_assaultup_fade_24b-restored.png",
+      "sha256": "6f9b5d724be1a7d9f9b7c792f2172c7f538ac4b1a7f6b2e9c017ca58732837c2",
+      "original_texture_names": [
+        "frontend\\frt_content\\reward_image_assaultup_fade%24b%.tga",
+        "frontend\\frt_content\\reward_image_assaultup_fadesm.tga",
+        "frontend\\frt_content\\reward_image_assaultup_fadesmg.tga"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Use case: precise-object-edit. Edit target is this exact square original game reward-picture texture. Restore at higher resolution while preserving the exact layout, camera, crop, weapon/equipment silhouette and proportions, number/positions of ammunition and objects, palette, cool circuitry backdrop, scanlines and thin faded border. This is restoration of an existing gritty 2000s game menu texture, not a redesign or new product photograph. Do not add lettering, new objects, logos, labels or new hardware details that alter the weapon. Keep the existing image background; transparency only at original faded edge/gutter. Preserve square canvas and alpha treatment. Keep the black/grey assault weapon horizontally across upper-middle with long barrel left, vertical foregrip, short stock right, no scope; enlarged dark gun fragments above/behind and pointed brass rounds clustered at left/lower-left. Preserve exact small weapon attachments, magazine shape and source proportions."
+    },
+    {
+      "file": "hd-ui/168-reward_image_assault_fade_24b-restored.png",
+      "sha256": "c31fdf10c892cbae5959f8bf5e6b2a6522290fe3e11b37b5fd62334451353009",
+      "original_texture_names": [
+        "frontend\\frt_content\\reward_image_assault_fade%24b%.tga",
+        "frontend\\frt_content\\reward_image_assault_fadesm.tga",
+        "frontend\\frt_content\\reward_image_assault_fadesmg.tga"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Use case: precise-object-edit. Edit target is this exact square original game reward-picture texture. Restore at higher resolution while preserving the exact layout, camera, crop, weapon/equipment silhouette and proportions, number/positions of ammunition and objects, palette, cool circuitry backdrop, scanlines and thin faded border. This is restoration of an existing gritty 2000s game menu texture, not a redesign or new product photograph. Do not add lettering, new objects, logos, labels or new hardware details that alter the weapon. Keep the existing image background; transparency only at original faded edge/gutter. Preserve square canvas and alpha treatment. Keep the basic black/grey assault weapon horizontally across center with barrel left, vertical foregrip, short stock right, no scope; large enlarged dark receiver/magazine fragments above and below, pointed brass rounds clustered at left and top. Preserve this basic version's exact original attachments and silhouette, distinct from scoped/upgraded variants."
+    },
+    {
+      "file": "hd-ui/171-reward_image_shotgunmk3_fade_24b-restored.png",
+      "sha256": "4640840178928c138869368146d72a43fa7ff280054562b631c63454a2936741",
+      "original_texture_names": [
+        "frontend\\frt_content\\reward_image_shotgunmk3_fade%24b%.tga",
+        "frontend\\frt_content\\reward_image_shotgunmk3_fadesm.tga",
+        "frontend\\frt_content\\reward_image_shotgunmk3_fadesmg.tga"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Use case: precise-object-edit. Edit target is this exact square original game reward-picture texture. Restore at higher resolution while preserving the exact layout, camera, crop, weapon/equipment silhouette and proportions, number/positions of ammunition and objects, palette, cool circuitry backdrop, scanlines and thin faded border. This is restoration of an existing gritty 2000s game menu texture, not a redesign or new product photograph. Do not add lettering, new objects, logos, labels or new hardware details that alter the weapon. Keep the existing image background; transparency only at original faded edge/gutter. Preserve square canvas and alpha treatment. Keep upgraded black/grey shotgun angled from upper-left barrel toward lower-right stock, large rectangular magazine slanted downward at center, original circular cyan-green indicator on upper receiver, black ribbed fore-end, enlarged trigger/receiver fragments at top and left and red/brass shells along bottom. Preserve exact weapon geometry and attachments."
+    },
+    {
+      "file": "hd-ui/174-reward_image_shotgunup_fade_24b-restored.png",
+      "sha256": "ca873b06a4f366eda6cb615a04e64a5a6261de963ec4435ce0b1e18e356b9264",
+      "original_texture_names": [
+        "frontend\\frt_content\\reward_image_shotgunup_fade%24b%.tga",
+        "frontend\\frt_content\\reward_image_shotgunup_fadesm.tga",
+        "frontend\\frt_content\\reward_image_shotgunup_fadesmg.tga"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Use case: precise-object-edit. Edit target is this exact square original game reward-picture texture. Restore at higher resolution while preserving the exact layout, camera, crop, weapon/equipment silhouette and proportions, number/positions of ammunition and objects, palette, cool circuitry backdrop, scanlines and thin faded border. This is restoration of an existing gritty 2000s game menu texture, not a redesign or new product photograph. Do not add lettering, new objects, logos, labels or new hardware details that alter the weapon. Keep the existing image background; transparency only at original faded edge/gutter. Preserve square canvas and alpha treatment. Keep shotgun horizontally across upper half, barrel pointing left, vertical rectangular box magazine descending at center, pistol grip and skeleton stock right, subtle green round indicator. Preserve scattered red/brass shotgun shells on left/bottom and dark receiver fragments in blue circuitry background. No added scope, labels or new parts."
+    },
+    {
+      "file": "hd-ui/177-reward_image_shotgun_fade_24b-restored.png",
+      "sha256": "287a9ff9ca66f08c94f09a71c2d1208bc3fd936d6685cca8ecd47bc3d29101e1",
+      "original_texture_names": [
+        "frontend\\frt_content\\reward_image_shotgun_fade%24b%.tga",
+        "frontend\\frt_content\\reward_image_shotgun_fadesm.tga",
+        "frontend\\frt_content\\reward_image_shotgun_fadesmg.tga"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Use case: precise-object-edit. Edit target is this exact square original game reward-picture texture. Restore at higher resolution while preserving the exact layout, camera, crop, weapon/equipment silhouette and proportions, number/positions of ammunition and objects, palette, cool circuitry backdrop, scanlines and thin faded border. This is restoration of an existing gritty 2000s game menu texture, not a redesign or new product photograph. Do not add lettering, new objects, logos, labels or new hardware details that alter the weapon. Keep the existing image background; transparency only at original faded edge/gutter. Preserve square canvas and alpha treatment. Keep basic black/grey shotgun horizontally across center, barrel left, rectangular magazine descending center, pistol grip and skeleton stock right, green round indicator on receiver. Preserve enlarged dark trigger/receiver fragment along top and red/brass shotgun shells below/left with enlarged dark round shell mouth at lower-right. Exact original silhouette, no new attachments."
+    },
+    {
+      "file": "hd-ui/179-reward_star-restored.png",
+      "sha256": "20178ffca06c9decaf6ba90ef228f8ef8614bd5a465ff330e3ec23b68a1f636f",
+      "original_texture_names": [
+        "frontend\\frt_content\\reward_star.tga"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Faithfully restore this beveled five-point metallic gold star. Preserve the reference exact five-point star shape, upward top point, faceted bevels and alternating light yellow and dark bronze faces, thin silver rim, original lighting from upper left. No extra ornaments or background. Output a square 1024x1024 RGBA sprite on a fully transparent background, centered with the same proportional padding as reference. Restore existing artwork rather than redesigning it. No text, extra symbols, checkerboard, floor shadow or border."
+    },
+    {
+      "file": "hd-ui/180-reward_image_es_fade_24b-restored.png",
+      "sha256": "2cef99297950287ef3c8c3ceddb1d01c22d32e637afe410aeed6d42a291e1be4",
+      "original_texture_names": [
+        "frontend\\frt_content\\reward_image_es_fade%24b%.tga"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Use case: precise-object-edit. Edit target is this exact square original game reward-picture texture. Restore at higher resolution while preserving the exact layout, camera, crop, weapon/equipment silhouette and proportions, number/positions of ammunition and objects, palette, cool circuitry backdrop, scanlines and thin faded border. This is restoration of an existing gritty 2000s game menu texture, not a redesign or new product photograph. Do not add lettering, new objects, logos, labels or new hardware details that alter the weapon. Keep the existing image background; transparency only at original faded edge/gutter. Preserve square canvas and alpha treatment. Preserve the gold circular emergency reward medallion: exact five-point star centered on oval perspective face, raised outer ring with decorative dashes, metallic gold reflections and blue-silver reflection lower/right on face. Burnt orange square textured background and fine scanlines. No text, numerals, new insignia or altered star geometry."
+    },
+    {
+      "file": "hd-ui/192-frt_backdrop_memory-restored.png",
+      "sha256": "0773214a448aae3f28cf8771fdceb7e3aef846720d1613001feed37a58eff794",
+      "original_texture_names": [
+        "frontend\\frt_backdrops\\frt_backdrop_memory.tga"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Use case: precise-object-edit. Edit target: the attached original 512x512 menu backdrop texture from Urban Chaos Riot Response. Create a high-resolution restoration of this exact texture for a PC game, ideally 2048x2048. Preserve the square texture coordinates and exact composition: solid black horizontal area at the top and bottom, the American flag/star field on the left, the translucent industrial/emergency imagery centered behind it, the cool cyan/teal right side, original red-white-blue and dark grey palette, and the fine horizontal scanline treatment. Retain the original relative placement, crop, brightness balance, and all negative space. Restore only compressed/pixelated image detail and clean aliasing; do not redesign or reinterpret the backdrop. No new objects, no extra words, no new symbols, no border, no watermark. Opaque background, including the existing black areas. Keep the original game's gritty 2000s emergency-services menu aesthetic."
+    },
+    {
+      "file": "hd-ui/202-level_image_01_24b-restored.png",
+      "sha256": "79404b45517cf4a2c5e8030027e88124c949ec9c309b1f1c1d2b4603275849a6",
+      "original_texture_names": [
+        "frontend\\frt_content\\level_image_01%24b%.tga",
+        "frontend\\frt_content\\level_image_01sm.tga",
+        "frontend\\frt_content\\level_image_01smg.tga"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Use case: precise-object-edit. This original square game-menu photograph texture is the edit target, not merely inspiration. Restore this exact image at high resolution (ideally1024x1024) while preserving its composition, camera, object silhouettes/positions, crop, lighting, color palette, fine horizontal scanlines and faded textured border. Keep all existing scene/background content; transparency is only for the original transparent edge/gutter areas, never remove the photographed background. Reconstruct compressed detail conservatively, with the same gritty2000s game appearance. Do not add objects, lettering, badges, new figures, a new frame, logos, bloom or cinematic redesign. Flat texture image only. Preserve existing alpha treatment and square canvas. Retain the dark left foreground figure/equipment and the pale industrial walkway/fire scene on the right exactly as framed."
+    },
+    {
+      "file": "hd-ui/203-frt_loading03_32b-restored.png",
+      "sha256": "eb3ae7ab9f82605a1f15cbbce192ae66001320c1d233726af7958c284dd78aca",
+      "original_texture_names": [
+        "frontend\\frt_backdrops\\frt_loading03%32b%.tga"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Use case: precise-object-edit. Edit this exact square original game loading-screen texture into a sharper higher-resolution restoration. Preserve original artwork exactly in composition, crop, subject count, poses, mask designs, palette, horizontal scanlines and gritty 2000s game style. Preserve square canvas and solid black top and bottom bands at EXACT original relative heights, as well as the thin pale horizontal separator lines; do not enlarge the illustrated region or add rounded corners. The artwork is a collage, not a newly staged scene. No new objects, figures, lettering, symbols, logos or cinematic redesign. Entire original background must remain opaque. Flat texture image only. Retain large masked portrait at left, two crouching masked figures lower center and lower right, large orange fireballs at upper right, and faded American flag overlay lower left."
+    },
+    {
+      "file": "hd-ui/204-frt_loading02_32b-restored.png",
+      "sha256": "a93bb07302a9d4dd436719190778861fd3f09079119143071ec63e546bd5e1b5",
+      "original_texture_names": [
+        "frontend\\frt_backdrops\\frt_loading02%32b%.tga"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Use case: precise-object-edit. Edit this exact square original game loading-screen texture into a sharper higher-resolution restoration. Preserve original artwork exactly in composition, crop, subject count, poses, mask designs, palette, horizontal scanlines and gritty 2000s game style. Preserve square canvas and solid black top and bottom bands at EXACT original relative heights, as well as the thin pale horizontal separator lines; do not enlarge the illustrated region or add rounded corners. The artwork is a collage, not a newly staged scene. No new objects, figures, lettering, symbols, logos or cinematic redesign. Entire original background must remain opaque. Flat texture image only. Retain the two large masked men leaning inward, left figure close at far left and right figure centered on right, bright white/red diagonal flag sweep across lower center, cool blue-white background, original dark tactical clothes and red armbands."
+    },
+    {
+      "file": "hd-ui/205-frt_loading01_32b-restored.png",
+      "sha256": "024b5f5957d65c6a1c1d434616bc7c9237b76a1cd7029c047a200b903a2c00bb",
+      "original_texture_names": [
+        "frontend\\frt_backdrops\\frt_loading01%32b%.tga"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Use case: precise-object-edit. Edit this exact square original game loading-screen texture into a sharper higher-resolution restoration. Preserve original artwork exactly in composition, crop, subject count, poses, mask designs, palette, horizontal scanlines and gritty 2000s game style. Preserve square canvas and solid black top and bottom bands at EXACT original relative heights, as well as the thin pale horizontal separator lines; do not enlarge the illustrated region or add rounded corners. The artwork is a collage, not a newly staged scene. No new objects, figures, lettering, symbols, logos or cinematic redesign. Entire original background must remain opaque. Flat texture image only. Keep rear-view police officer large at lower right with EXACT white word \"POLICE\" across back (P O L I C E), masked gunman center holding gun, two faded masked portraits/fire on left, and flag collage. Preserve label typography and position; no other letters or new symbols."
+    },
+    {
+      "file": "hd-ui/206-frt_loading00_32b-restored.png",
+      "sha256": "688e6c46bd4cbfbd41c1c6cf63113f265716d3e5e52bd5e6529e899fec5c74c4",
+      "original_texture_names": [
+        "frontend\\frt_backdrops\\frt_backdrop_rcgeneric.tga",
+        "frontend\\frt_backdrops\\frt_loading00%32b%.tga"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Use case: precise-object-edit. Edit this exact square original game loading-screen texture into a sharper higher-resolution restoration. Preserve original artwork exactly in composition, crop, subject count, poses, mask designs, palette, horizontal scanlines and gritty 2000s game style. Preserve square canvas and solid black top and bottom bands at EXACT original relative heights, as well as the thin pale horizontal separator lines; do not enlarge the illustrated region or add rounded corners. The artwork is a collage, not a newly staged scene. No new objects, figures, lettering, symbols, logos or cinematic redesign. Entire original background must remain opaque. Flat texture image only. Keep the exact flag collage: blue field with white stars upper left, diagonal red-white stripes across left and lower center, faded grey urban gameplay photos as rectangular collage fragments across center/right, teal-blue translucent wash on right. Preserve subtlety of photos; do not invent prominent subjects or add lettering."
+    },
+    {
+      "file": "hd-ui/211-hud_badge_tzero-restored.png",
+      "sha256": "d18488f9ce79487695ddf9466af8ac8fd289364a6c095fb5ef3e2b1b072ede66",
+      "original_texture_names": [
+        "hud\\hud_badge_tzero.tga=nomipmap"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Faithfully restore this tiny POLICE T-ZERO shield badge as crisp high-resolution game HUD artwork. Keep identical metallic silver police shield shape, embossed circular emblem, top eagle and blue lower ribbon, its existing original letters only; do not invent text. Preserve frontal flat icon, colors and placement. Output a square 1024x1024 RGBA sprite on a fully transparent background, centered with the same proportional padding as reference. This is a restoration of existing game artwork, not a redesign. Only the supplied object; no backdrop, checkerboard, new writing, flourishes, or shadow outside its original silhouette."
+    },
+    {
+      "file": "hd-ui/212-hud_badge_burners-restored.png",
+      "sha256": "a083da69a4f77826b6597ac852d5ca2d30c213c03aefbb71be94634ff3c7ac40",
+      "original_texture_names": [
+        "hud\\hud_badge_burners.tga=nomipmap"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Faithfully restore this small gold and brown flame faction badge as crisp high-resolution game HUD artwork. Keep identical stylized curled flame silhouette, gold rim and warm brown center, original highlights, centered icon. Do not add a circular badge or text. Output a square 1024x1024 RGBA sprite on a fully transparent background, centered with the same proportional padding as reference. This is a restoration of existing game artwork, not a redesign. Only the supplied object; no backdrop, checkerboard, new writing, flourishes, or shadow outside its original silhouette."
+    },
+    {
+      "file": "hd-ui/230-hud_weapons_o_molotov-restored.png",
+      "sha256": "89fb43a1fd600f84fe1357902c85c629f44684dd5f557f4ae4c53d369da15c7a",
+      "original_texture_names": [
+        "hud\\hud_weapons_o_molotov.tga=nomipmap"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Use case: precise-object-edit. Restore this exact low-resolution game HUD icon into clean high-resolution raster artwork with a genuine transparent background. Input image is the strict original edit target. A short, fairly stout green glass bottle lying horizontally, neck and small tied rag on LEFT, broad bottle base on RIGHT, pale scuffed paper label with red marking. The whole bottle plus rag must have visible width:height exactly about 2.94:1 (47 by16 original units), not a skinny long bottle. Keep the rag compact: no flame, smoke or debris. Original whole64x32 canvas bounding box x7..54,y9..25. Preserve original palette, orientation, object identity, relative canvas padding and material style. Improve only edge clarity and subtle readable texture; it must still read like the original restrained 2006 illustrated game icon. Canvas must be exactly 2:1 landscape. The visible alpha silhouette aspect ratio specified above is crucial, independent of canvas ratio. Do not add text, labels, logo, watermark, floor, border, drop shadow, other objects or ambient glow. Keep semitransparent edge pixels clean and connected; no faint isolated specks across the empty canvas. Use the full reference composition and match the specified visible bounding-box proportions closely."
+    },
+    {
+      "file": "hd-ui/231-hud_weapons_o_nailbomb-restored.png",
+      "sha256": "1bf14d9aa94d029ccdc02bd093fe46a070a66b3f89cf1f9a4dd11c65b0b31e38",
+      "original_texture_names": [
+        "hud\\hud_weapons_o_nailbomb.tga=nomipmap"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Use case: precise-object-edit. Asset: one restored HUD sprite. Faithfully upscale the attached 64x32 original RGBA icon: a compact blue-gray horizontal improvised canister icon with short silver metallic components on both ends and a dark central band. Reproduce only the visible external appearance; same silhouette, gray-blue palette and exact relative position. Produce a sharp high-resolution 2:1 transparent image preserving the original complete canvas and relative bounding box, position and angle, with the same restrained painted game-HUD style. Clear edge/detail restoration only; no redesign, enlargement within the canvas, added labels, extra objects, glow, drop shadow, background or frame. Genuine transparent background."
+    },
+    {
+      "file": "hd-ui/232-hud_ammo_grenadelauncher-restored.png",
+      "sha256": "55aaecf883349858783ef5944996dc6f55c51ec0dacf8fb81bb89b4021498400",
+      "original_texture_names": [
+        "hud\\hud_ammo_grenadelauncher.tga=nomipmap"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Use case: precise-object-edit. Asset: one restored HD ammo HUD sprite. Edit target is the attached 32x32 original. Restore one upright rounded pale blue-gray-tipped grenade round with a warm brass cylindrical casing and darker lower band, centered with original transparent margins. Produce a square high-resolution RGBA PNG; same proportions, exact object count, original relative bounding box and alignment. Match subdued metallic game-interface illustration style, clean edges and clear small-size highlights; maintain original palette. Do not turn into a product photo or add decoration, writing, labels, background, floor, shadow, rim glow, or additional objects. Genuine transparent background. Restore detail, not a new design."
+    },
+    {
+      "file": "hd-ui/233-hud_weapons_o_grenadelauncher-restored.png",
+      "sha256": "cf5a86588c41d4cb077a157f5fd4d989ee9ea8ba9e6e7345d786736495b46228",
+      "original_texture_names": [
+        "hud\\hud_weapons_o_grenadelauncher.tga=nomipmap"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Use case: precise-object-edit. Restore this exact low-resolution game HUD icon into clean high-resolution raster artwork with a genuine transparent background. Input image is the strict original edit target. A dark-metal single-shot grenade launcher facing LEFT, muzzle at left, broad curved brown wooden stock on right and small wood fore-end. Use the specific reference silhouette rather than inventing a modern weapon. Whole visible object width:height about3.11:1 (56 by18 original units): substantial stock height and compact barrel, NOT a very thin elongated rifle. Whole64x32 canvas original bounding box x6..62,y6..24. Preserve original palette, orientation, object identity, relative canvas padding and material style. Improve only edge clarity and subtle readable texture; it must still read like the original restrained 2006 illustrated game icon. Canvas must be exactly 2:1 landscape. The visible alpha silhouette aspect ratio specified above is crucial, independent of canvas ratio. Do not add text, labels, logo, watermark, floor, border, drop shadow, other objects or ambient glow. Keep semitransparent edge pixels clean and connected; no faint isolated specks across the empty canvas. Use the full reference composition and match the specified visible bounding-box proportions closely."
+    },
+    {
+      "file": "hd-ui/234-hud_weapons_o_cleaver-restored.png",
+      "sha256": "1c877ec896140d405164aa6f882b8fa3291d2017a202159b35fdca87fab854e1",
+      "original_texture_names": [
+        "hud\\hud_weapons_o_cleaver.tga=nomipmap"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Use case: precise-object-edit. Asset: HD replacement for one original 64x32 RGBA HUD icon. Restore the short wide rectangular worn gray meat cleaver with brown handle pointing upper right, blade at left and restrained reddish staining at lower blade. Keep exact slight tilt, size and padding. Use the attached image as the strict edit target. Same 2:1 whole canvas, original object bounding box, relative composition, viewing angle and muted color palette. Resolve pixelated metal/wood edges into crisp restrained game-icon detail that reads small. This is an upscale restoration, not a new design. No labels, added objects, extra highlights, new background, shadow, border, glow, or cropping. Genuine transparent background and original clear margins."
+    },
+    {
+      "file": "hd-ui/235-hud_weapons_o_chainsaw-restored.png",
+      "sha256": "f963f7de11cc5df7e082f9e187e8dc3a091987d18c421572d1db7a2775612212",
+      "original_texture_names": [
+        "hud\\hud_weapons_o_chainsaw.tga=nomipmap"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Use case: precise-object-edit. Asset: HD replacement for one original 64x32 RGBA HUD icon. Restore the worn portable circular cut-off rescue saw, with large round silver-and-dark disc on the left and yellow/orange motor housing and black handle on right. This is a circular saw, not a long-chain chainsaw. Keep original exact left-facing silhouette. Use the attached image as the strict edit target. Same 2:1 whole canvas, original object bounding box, relative composition, viewing angle and muted color palette. Resolve pixelated metal/wood edges into crisp restrained game-icon detail that reads small. This is an upscale restoration, not a new design. No labels, added objects, extra highlights, new background, shadow, border, glow, or cropping. Genuine transparent background and original clear margins."
+    },
+    {
+      "file": "hd-ui/236-hud_ammo_magnum-restored.png",
+      "sha256": "21e5513599ee5ec623b61b71a03518470356a7ecb5a92a8df820db8c481f1679",
+      "original_texture_names": [
+        "hud\\hud_ammo_magnum.tga=nomipmap"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Use case: precise-object-edit. Asset: one restored HD ammo HUD sprite. Edit target is the attached 32x32 original. Restore one upright magnum cartridge with gold casing, metallic bullet tip with tiny pale copper highlight, dark circumferential detail, centered with original transparent margins. Produce a square high-resolution RGBA PNG; same proportions, exact object count, original relative bounding box and alignment. Match subdued metallic game-interface illustration style, clean edges and clear small-size highlights; maintain original palette. Do not turn into a product photo or add decoration, writing, labels, background, floor, shadow, rim glow, or additional objects. Genuine transparent background. Restore detail, not a new design."
+    },
+    {
+      "file": "hd-ui/237-hud_weapons_o_magnum-restored.png",
+      "sha256": "6c1f7d62b570ac2f8ae245758cad2237e0b4380ba3ab60f10c81f03d8da4299a",
+      "original_texture_names": [
+        "hud\\hud_weapons_o_magnum.tga=nomipmap"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Restore original 64x32 transparent revolver HUD icon to crisp high resolution, preserve silver barrel/dark curved grip, same composition/padding/palette, no added content. Exact original tool request retained in conversation."
+    },
+    {
+      "file": "hd-ui/239-hud_ammo_machinepistol-restored.png",
+      "sha256": "4ce882e3ab8b628e4a4aa4c6e14c2d4635138838b81095b8957e782b161d0636",
+      "original_texture_names": [
+        "hud\\hud_ammo_machinepistol.tga=nomipmap"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Use case: precise-object-edit. Restore this exact low-resolution game HUD icon into clean high-resolution raster artwork with a genuine transparent background. Input image is the strict original edit target. One upright broad stubby pistol cartridge with rounded blunt gold/brass bullet nose, dark brass/olive case, rim at bottom. It is a short wide pistol round, NOT a narrow long pointed rifle bullet. Visible object width:height about0.517:1 (15 by29 original units): width roughly half total height. Square32x32 original canvas, original bounding box x9..24,y3..32. Preserve metal highlight placement and subdued vintage game shading. Preserve original palette, orientation, object identity, relative canvas padding and material style. Improve only edge clarity and subtle readable texture; it must still read like the original restrained 2006 illustrated game icon. Canvas must be square 1:1. The visible alpha silhouette aspect ratio specified above is crucial, independent of canvas ratio. Do not add text, labels, logo, watermark, floor, border, drop shadow, other objects or ambient glow. Keep semitransparent edge pixels clean and connected; no faint isolated specks across the empty canvas. Use the full reference composition and match the specified visible bounding-box proportions closely."
+    },
+    {
+      "file": "hd-ui/240-hud_weapons_o_machinepistol-restored.png",
+      "sha256": "6861711a846eda17ab71de14447c6c7eea91662775ea2c1688d75ec32a3e28f9",
+      "original_texture_names": [
+        "hud\\hud_weapons_o_machinepistol.tga=nomipmap"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Use case: precise-object-edit. Asset: restored HD game HUD sprite. Restore the attached 64x32 RGBA icon as a sharp high-resolution 2:1 transparent PNG. Match the entire reference canvas, including all transparent padding and the object position/angle. Restore the compact dark olive-gray machine pistol, barrel pointing left, vertical pale olive grip below the right half. Keep its exact original silhouette and sparse metallic accents. Recover clean metal edges, material detail, and readable small-scale shading in the original restrained illustrated game style. Do not enlarge or move the subject within the canvas, add objects, glow, text, outline, background, floor or shadow. Preserve the relative bounding box and orientation exactly; genuine transparent background. This is a higher-detail restoration of this specific icon, not a new weapon design."
+    },
+    {
+      "file": "hd-ui/241-hud_weapons_o_gangshotgun-restored.png",
+      "sha256": "061f5c4b9c0dccb77eb881ac2c3a3b65061a50d5b463e572062e142f2f47ea56",
+      "original_texture_names": [
+        "hud\\hud_weapons_o_gangshotgun.tga=nomipmap"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Use case: precise-object-edit. Restore this exact low-resolution game HUD icon into clean high-resolution raster artwork with a genuine transparent background. Input image is the strict original edit target. The original brown wooden-stock shotgun facing LEFT, long dark barrel along top and substantially curved wooden grip and butt descending on RIGHT. Preserve reference angle and authored distinct shape. Whole visible object width:height about3.12:1 (53 by17 original units), including its descending grip/stock; do not produce a skinny4:1 horizontal generic shotgun. Whole64x32 canvas original bounding box x5..58,y11..28. Preserve original palette, orientation, object identity, relative canvas padding and material style. Improve only edge clarity and subtle readable texture; it must still read like the original restrained 2006 illustrated game icon. Canvas must be exactly 2:1 landscape. The visible alpha silhouette aspect ratio specified above is crucial, independent of canvas ratio. Do not add text, labels, logo, watermark, floor, border, drop shadow, other objects or ambient glow. Keep semitransparent edge pixels clean and connected; no faint isolated specks across the empty canvas. Use the full reference composition and match the specified visible bounding-box proportions closely."
+    },
+    {
+      "file": "hd-ui/242-hud_weapons_o_gangassault-restored.png",
+      "sha256": "e5e69593c54405a95ef689240bb1bc1dcad061a5f13d58a3e35e2e22551f7b2f",
+      "original_texture_names": [
+        "hud\\hud_weapons_o_gangassault.tga=nomipmap"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Use case: precise-object-edit. Asset: restored HD game HUD sprite. Restore the attached 64x32 RGBA icon as a sharp high-resolution 2:1 transparent PNG. Match the entire reference canvas, including all transparent padding and the object position/angle. Restore the dark green/black assault rifle facing left, its short barrel at left, magazine under the middle, carrying handle and stock on right. Keep the exact original silhouette, recognizable components and muted dark palette. Recover clean metal edges, material detail, and readable small-scale shading in the original restrained illustrated game style. Do not enlarge or move the subject within the canvas, add objects, glow, text, outline, background, floor or shadow. Preserve the relative bounding box and orientation exactly; genuine transparent background. This is a higher-detail restoration of this specific icon, not a new weapon design."
+    },
+    {
+      "file": "hd-ui/243-hud_weapons_o_smokegrenade-restored.png",
+      "sha256": "4747a015e6af73058cac5ba42d99261a84bea4490fbc53182146c9dd5aa6d9d6",
+      "original_texture_names": [
+        "hud\\hud_weapons_o_smokegrenade.tga=nomipmap"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Use case: precise-object-edit. Asset: one restored HUD sprite. Faithfully upscale the attached 64x32 original RGBA icon: a small pale blue-gray cylindrical smoke canister lying horizontally, slightly rotated with left end higher, narrow dark bands and tiny blue markings; match the original muted palette and thin silhouette. Do not invent new text. Produce a sharp high-resolution 2:1 transparent image preserving the original complete canvas and relative bounding box, position and angle, with the same restrained painted game-HUD style. Clear edge/detail restoration only; no redesign, enlargement within the canvas, added labels, extra objects, glow, drop shadow, background or frame. Genuine transparent background."
+    },
+    {
+      "file": "hd-ui/244-hud_weapons_o_riotgrenade-restored.png",
+      "sha256": "5a02614628b303d0f66af92f1949cf1bc3e228a12217d334250825a5d7c1ab79",
+      "original_texture_names": [
+        "hud\\hud_weapons_o_riotgrenade.tga=nomipmap"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Use case: precise-object-edit. Asset: one restored HUD sprite. Faithfully upscale the attached 64x32 original RGBA icon: a single small dark teal round-bodied riot grenade upright in the center, little neck and silver pull lever at top; match its exact bulbous silhouette and muted original shading; do not add new writing or marks. Produce a sharp high-resolution 2:1 transparent image preserving the original complete canvas and relative bounding box, position and angle, with the same restrained painted game-HUD style. Clear edge/detail restoration only; no redesign, enlargement within the canvas, added labels, extra objects, glow, drop shadow, background or frame. Genuine transparent background."
+    },
+    {
+      "file": "hd-ui/245-hud_ammo_assaultrifle-restored.png",
+      "sha256": "e941714084923abdd7da5449d764e78be0ab59acce87d2bf8dac9ee559b760b7",
+      "original_texture_names": [
+        "hud\\hud_ammo_assaultrifle.tga=nomipmap"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Use case: precise-object-edit. Asset: one restored HD ammo HUD sprite. Edit target is the attached 32x32 original. Restore exactly three upright brass rifle cartridges next to one another, pointed tips at top, tall slender golden casings. Preserve original positions: group near center, tall cartridges with minimal top/bottom margin. Produce a square high-resolution RGBA PNG; same proportions, exact object count, original relative bounding box and alignment. Match subdued metallic game-interface illustration style, clean edges and clear small-size highlights; maintain original palette. Do not turn into a product photo or add decoration, writing, labels, background, floor, shadow, rim glow, or additional objects. Genuine transparent background. Restore detail, not a new design."
+    },
+    {
+      "file": "hd-ui/246-hud_ammo_shotgun-restored.png",
+      "sha256": "a9eda5ce6fc0e0904e4049be15bf6f4405d282dde1122c383502fb860f38281f",
+      "original_texture_names": [
+        "hud\\hud_ammo_shotgun.tga=nomipmap"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Use case: precise-object-edit. Asset: one restored HD ammo HUD sprite. Edit target is the attached 32x32 original. Restore one upright red shotgun shell with warm brass base and rim. Same narrow center silhouette as original, rounded rectangular top and original gold/red bands. Produce a square high-resolution RGBA PNG; same proportions, exact object count, original relative bounding box and alignment. Match subdued metallic game-interface illustration style, clean edges and clear small-size highlights; maintain original palette. Do not turn into a product photo or add decoration, writing, labels, background, floor, shadow, rim glow, or additional objects. Genuine transparent background. Restore detail, not a new design."
+    },
+    {
+      "file": "hd-ui/247-hud_ammo_pistol-restored.png",
+      "sha256": "dd7df6a96b3bb766b8913dac53962e5a6188b14e33f8bcbc19d2115f7a91f609",
+      "original_texture_names": [
+        "hud\\hud_ammo_pistol.tga=nomipmap"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Use case: precise-object-edit. Asset: one restored HD ammo HUD sprite. Edit target is the attached 32x32 original. Restore one upright brass handgun cartridge, rounded pale gold bullet, short gold case, at center, with substantial transparent margins. Original tip is near y4/32 and bottom near y29/32; keep that placement and scale. Produce a square high-resolution RGBA PNG; same proportions, exact object count, original relative bounding box and alignment. Match subdued metallic game-interface illustration style, clean edges and clear small-size highlights; maintain original palette. Do not turn into a product photo or add decoration, writing, labels, background, floor, shadow, rim glow, or additional objects. Genuine transparent background. Restore detail, not a new design."
+    },
+    {
+      "file": "hd-ui/254-hud_ammo_assaultgrenade-restored.png",
+      "sha256": "dd4ceb4928ec0c4f4fde665d3f4a72dec754c18255902c117653a14f1b047530",
+      "original_texture_names": [
+        "hud\\hud_ammo_assaultgrenade.tga=nomipmap"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Use case: precise-object-edit. Restore the attached 16x16 original game HUD sprite into a crisp high-resolution square RGBA PNG. Subject: one tiny narrow upright blue-gray round/canister indicator in the lower-right area of the canvas, small pale outline, reddish upper highlight. Keep the exact small off-center position and empty margins; no added features. Use original muted gray/blue metallic game-interface style and exact framing. Higher-detail restoration only, no redesigned silhouette, labels, extra objects, background, frame, shadow, enlarged object or new symbols. Genuine transparent background."
+    },
+    {
+      "file": "hd-ui/255-hud_weapons_altflashon-restored.png",
+      "sha256": "0b41b1e5d5915cf568aaae636cd67dc7b52291329e246207dcc74c0fbe9ff529",
+      "original_texture_names": [
+        "hud\\hud_weapons_altflashon.tga=nomipmap"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Use case: precise-object-edit. Restore a compact game HUD flashlight-on icon. Reference image1 is the original low-resolution ON icon; reference image2 is the newly restored OFF body and should supply its exact silver head, black ribbed handle, clean shading and SHORT STOUT proportions. Use the same compact body as reference2, add a short smooth white translucent triangular light cone pointing LEFT from the silver head. The beam should add only about25% of body width, and the total combined occupied silhouette must be about2.8 to3.0 times as wide as tall. This is crucial: previous output was3.56:1 and rejected as too long. Shorten handle/beam and retain the tall large head so the full illuminated icon is compact and thick. The original combined silhouette is32x12 (2.67:1); aim near that, never above3.2:1. Keep whole canvas exactly2:1 landscape, lower-left placement as original with transparent empty upper/right margins. Light cone is smooth continuous soft transparency with straight clean tapering top/bottom edges, no ragged pieces, debris, cloth, fog, sparks or isolated alpha specks. No text, shadow, background, borders, or additional objects. High-resolution faithful 2006 game-icon restoration with genuine transparent background."
+    },
+    {
+      "file": "hd-ui/256-hud_weapons_altflashoff-restored.png",
+      "sha256": "bbcceb269ec511453e56c0835e6d5f09dc0b05b5cb8a53a9f36ba4264ba7c096",
+      "original_texture_names": [
+        "hud\\hud_weapons_altflashoff.tga=nomipmap"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Use case: precise-object-edit. Restore this exact low-resolution game HUD icon into clean high-resolution raster artwork with a genuine transparent background. Input image is the strict original edit target. The original compact silver/black flashlight pointing LEFT, no light beam. Large broad silver conical head at LEFT and short dark ribbed handle extending RIGHT. Visible width:height about2.09:1 (23 by11 original units): a short stout body with a prominent tall head, not a thin long penlight. Whole64x32 canvas original object x9..32,y20..31: lower-left placement and much empty space above/right. No light/glow outside the object. Preserve original palette, orientation, object identity, relative canvas padding and material style. Improve only edge clarity and subtle readable texture; it must still read like the original restrained 2006 illustrated game icon. Canvas must be exactly 2:1 landscape. The visible alpha silhouette aspect ratio specified above is crucial, independent of canvas ratio. Do not add text, labels, logo, watermark, floor, border, drop shadow, other objects or ambient glow. Keep semitransparent edge pixels clean and connected; no faint isolated specks across the empty canvas. Use the full reference composition and match the specified visible bounding-box proportions closely."
+    },
+    {
+      "file": "hd-ui/289-hud_weapons_o_minigun-restored.png",
+      "sha256": "9f401daa76446ff319b08ba4e27dc394fe5dfe93257913887d7fdc3027b3bc40",
+      "original_texture_names": [
+        "hud\\hud_weapons_o_minigun.tga=nomipmap"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Faithfully restore this tiny original video game HUD weapon icon into crisp high-resolution replacement artwork. It depicts a compact horizontally elongated black metallic rotary minigun, barrel pointing LEFT, six short parallel silver/grey barrels on the left, dark drum housing at right, narrow belt of brass cartridges curving down from its middle. The reference is the sole authority for shape, orientation, proportions, dark materials and details. Preserve the entire outer silhouette and exact aspect ratio of the visible object, including the width and length of each part; do not redesign or add pieces. Flat readable game inventory icon with restrained metallic shading and fine antialiased edges, no photographic background, no scenery, no pedestal, no ground shadow, no glow, no text, no border, no labels. Preserve the original left-facing orientation. Center the complete isolated object with a modest clear margin in a wide landscape canvas, transparent background. Improve detail carefully while retaining the distinctive original 2006 game aesthetic. This is one icon, not a sprite sheet."
+    },
+    {
+      "file": "hd-ui/290-hud_weapons_o_pistol-restored.png",
+      "sha256": "4e8c191c9619cc2a32741852654af5426017c199ffe587c0f5e42cf375a93152",
+      "original_texture_names": [
+        "hud\\hud_weapons_o_pistol.tga=nomipmap"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Faithfully restore this tiny original video game HUD weapon icon into crisp high-resolution replacement artwork. It depicts a compact matte-black police semiautomatic pistol in left-facing side profile, short squared slide and barrel pointing LEFT, trigger and grip on RIGHT descending diagonally down-right. No attachments or scope. The reference is the sole authority for shape, orientation, proportions, dark materials and details. Preserve the entire outer silhouette and exact aspect ratio of the visible object, including the width and length of each part; do not redesign or add pieces. Flat readable game inventory icon with restrained metallic shading and fine antialiased edges, no photographic background, no scenery, no pedestal, no ground shadow, no glow, no text, no border, no labels. Preserve the original left-facing orientation. Center the complete isolated object with a modest clear margin in a wide landscape canvas, transparent background. Improve detail carefully while retaining the distinctive original 2006 game aesthetic. This is one icon, not a sprite sheet."
+    },
+    {
+      "file": "hd-ui/291-hud_weapons_o_pistol2-restored.png",
+      "sha256": "a8fbee1b72cdd1db402b2403e996df3a8d601f03ff767dceb4609b0b6c10dacb",
+      "original_texture_names": [
+        "hud\\hud_weapons_o_pistol2.tga=nomipmap"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Restore this exact tiny police pistol HUD icon, not a generic modern handgun. KEEP ITS UNUSUAL TALL, COMPACT SILHOUETTE. The visible object's overall width-to-height is 1.17:1 (almost square), including the tall rear sight/attachment and long downward grip. Do not stretch the barrel horizontally. Side view, muzzle pointing LEFT, rear sight and grip RIGHT. This original upgrade has a raised compact optical sight above the rear of a short black squared slide, and a long grip dropping down-right. Match all pixel-reference placement and proportions. Crisp high-resolution game inventory artwork, restrained dark black metal finish, clean antialiasing, no invented branding, no new attachments, no glow, no ground shadow. One isolated complete object centered on a wide landscape transparent canvas, with ample transparent room left and right. The visible gun must remain almost square rather than long and flat. Faithful reference restoration rather than redesign."
+    },
+    {
+      "file": "hd-ui/292-hud_weapons_o_pistol3-restored.png",
+      "sha256": "a4d341075be8879dd7ed8c62a07ed0615e5d03192dc592297665e7dc3488c0f9",
+      "original_texture_names": [
+        "hud\\hud_weapons_o_pistol3.tga=nomipmap"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Restore this exact tiny police pistol HUD icon, not a generic modern handgun. KEEP ITS UNUSUAL TALL, COMPACT SILHOUETTE. The visible object's overall width-to-height is 1:1 (square), including the tall rear sight/attachment and long downward grip. Do not stretch the barrel horizontally. Side view, muzzle pointing LEFT, rear sight and grip RIGHT. This original upgrade has a particularly tall raised compact optical sight above the rear of a short black squared slide, a silver-grey underbarrel attachment, and a long grip dropping down-right. Match all pixel-reference placement and proportions. Crisp high-resolution game inventory artwork, restrained dark black metal finish, clean antialiasing, no invented branding, no new attachments, no glow, no ground shadow. One isolated complete object centered on a wide landscape transparent canvas, with ample transparent room left and right. The visible gun must remain almost square rather than long and flat. Faithful reference restoration rather than redesign."
+    },
+    {
+      "file": "hd-ui/293-hud_weapons_o_policeassault-restored.png",
+      "sha256": "9d7536cc36bcc834982855d77b69e6d64a08f69efda4a43774199d78862a7c12",
+      "original_texture_names": [
+        "hud\\hud_weapons_o_policeassault.tga=nomipmap"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Use case: precise-object-edit. Restore this exact low-resolution Urban Chaos equipment HUD icon as a clean high-resolution game UI cutout. The attached image is the edit target and sole design reference: base police assault-rifle icon; subdued charcoal-black and muted steel with the original small bright muzzle and upper-edge highlights. Keep the same left-facing side view: muzzle on the LEFT and stock on the RIGHT. Preserve all major silhouette angles, relative component lengths, magazine/grip position and object proportions; do not redesign or substitute a different gun. The nontransparent object bounding box must have width-to-height ratio approximately 3.0000. Use a transparent 2:1 landscape canvas, with the complete object centered and occupying about 86% of the canvas width. Sharpen the existing modeled edge/detail information into restrained original-game-icon materials, enough lighting to read against a dark HUD; keep the original dark palette, do not make an excessively glossy photographic prop. No new scope, laser, accessory, decal, writing or invented ornament. No text, watermark, border, shadow backdrop, bloom or checkerboard. Actual transparent alpha background, anti-aliased object edge only. Do not crop the barrel, stock, sights or grip. Output exactly one icon."
+    },
+    {
+      "file": "hd-ui/294-hud_weapons_o_policeassault2-restored.png",
+      "sha256": "0e618caba20db2c537b8122552c6253ceeb535def49a4d81dd1c78c9e35fc724",
+      "original_texture_names": [
+        "hud\\hud_weapons_o_policeassault2.tga=nomipmap"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Use case: precise-object-edit. Restore this exact low-resolution Urban Chaos equipment HUD icon as a clean high-resolution game UI cutout. The attached image is the edit target and sole design reference: second police assault-rifle icon; subdued charcoal-black/steel, preserving exactly the original upper receiver/attachment silhouette. Keep the same left-facing side view: muzzle on the LEFT and stock on the RIGHT. Preserve all major silhouette angles, relative component lengths, magazine/grip position and object proportions; do not redesign or substitute a different gun. The nontransparent object bounding box must have width-to-height ratio approximately 2.8421. Use a transparent 2:1 landscape canvas, with the complete object centered and occupying about 86% of the canvas width. Sharpen the existing modeled edge/detail information into restrained original-game-icon materials, enough lighting to read against a dark HUD; keep the original dark palette, do not make an excessively glossy photographic prop. No new scope, laser, accessory, decal, writing or invented ornament. No text, watermark, border, shadow backdrop, bloom or checkerboard. Actual transparent alpha background, anti-aliased object edge only. Do not crop the barrel, stock, sights or grip. Output exactly one icon."
+    },
+    {
+      "file": "hd-ui/295-hud_weapons_o_policeassault3-restored.png",
+      "sha256": "4c37d8acf17f3e6396cbc461623ee988244b999febd51124dab11485e62353f7",
+      "original_texture_names": [
+        "hud\\hud_weapons_o_policeassault3.tga=nomipmap"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Use case: precise-object-edit. Restore this exact low-resolution Urban Chaos equipment HUD icon as a clean high-resolution game UI cutout. The attached image is the edit target and sole design reference: third police assault-rifle icon; subdued charcoal-black/steel, preserving exactly the original upper receiver/attachment silhouette. Keep the same left-facing side view: muzzle on the LEFT and stock on the RIGHT. Preserve all major silhouette angles, relative component lengths, magazine/grip position and object proportions; do not redesign or substitute a different gun. The nontransparent object bounding box must have width-to-height ratio approximately 2.8421. Use a transparent 2:1 landscape canvas, with the complete object centered and occupying about 86% of the canvas width. Sharpen the existing modeled edge/detail information into restrained original-game-icon materials, enough lighting to read against a dark HUD; keep the original dark palette, do not make an excessively glossy photographic prop. No new scope, laser, accessory, decal, writing or invented ornament. No text, watermark, border, shadow backdrop, bloom or checkerboard. Actual transparent alpha background, anti-aliased object edge only. Do not crop the barrel, stock, sights or grip. Output exactly one icon."
+    },
+    {
+      "file": "hd-ui/296-hud_weapons_o_policeshotgun-restored.png",
+      "sha256": "f4aa25b09dc4ed32f47d944f41d2ae3cd393fa1f92b764f5b9ca4ab5cdc926ea",
+      "original_texture_names": [
+        "hud\\hud_weapons_o_policeshotgun.tga=nomipmap"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Use case: precise-object-edit. Restore this exact low-resolution Urban Chaos equipment HUD icon as a clean high-resolution game UI cutout. The attached image is the edit target and sole design reference: base police shotgun icon; preserve its original dull olive-gold/bronze rim and charcoal surfaces, long narrow top silhouette and downward magazine/grip. Keep the same left-facing side view: muzzle on the LEFT and stock on the RIGHT. Preserve all major silhouette angles, relative component lengths, magazine/grip position and object proportions; do not redesign or substitute a different gun. The nontransparent object bounding box must have width-to-height ratio approximately 2.9474. Use a transparent 2:1 landscape canvas, with the complete object centered and occupying about 86% of the canvas width. Sharpen the existing modeled edge/detail information into restrained original-game-icon materials, enough lighting to read against a dark HUD; keep the original dark palette, do not make an excessively glossy photographic prop. No new scope, laser, accessory, decal, writing or invented ornament. No text, watermark, border, shadow backdrop, bloom or checkerboard. Actual transparent alpha background, anti-aliased object edge only. Do not crop the barrel, stock, sights or grip. Output exactly one icon. CRITICAL PROPORTION CORRECTION: the original is a compact TALL silhouette, not a thin long gun. Make the complete nontransparent weapon silhouette 2.947 units wide for every 1 unit tall, including sights and the full downward magazine and pistol grip. Keep the barrel/receiver/stock length to original proportions and extend the downward parts only as shown by the reference. The upper receiver occupies about the upper third of the silhouette height; the original long downward magazine/grip accounts for the lower two thirds. The silhouette should fit an illustrative box about 1400 pixels wide by 475 pixels tall on the 2:1 canvas, with generous transparent side margins. Avoid the previous common error of a 4.3:1 flat wide silhouette. Treat the reference outline as authoritative; preserve the original compact overall shape."
+    },
+    {
+      "file": "hd-ui/297-hud_weapons_o_policeshotgun2-restored.png",
+      "sha256": "e1a349c1b0d2c51bd47c2b41e8e9815bdecbc40f5b1d4c3e6aa0d1974c8ac364",
+      "original_texture_names": [
+        "hud\\hud_weapons_o_policeshotgun2.tga=nomipmap",
+        "hud\\hud_weapons_o_policeshotgun3.tga=nomipmap"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Use case: precise-object-edit. Restore this exact low-resolution Urban Chaos equipment HUD icon as a clean high-resolution game UI cutout. The attached image is the edit target and sole design reference: upgraded police shotgun icon; preserve its original cool gray/charcoal material, taller upper sight/attachment silhouette and downward magazine/grip. Keep the same left-facing side view: muzzle on the LEFT and stock on the RIGHT. Preserve all major silhouette angles, relative component lengths, magazine/grip position and object proportions; do not redesign or substitute a different gun. The nontransparent object bounding box must have width-to-height ratio approximately 2.5455. Use a transparent 2:1 landscape canvas, with the complete object centered and occupying about 86% of the canvas width. Sharpen the existing modeled edge/detail information into restrained original-game-icon materials, enough lighting to read against a dark HUD; keep the original dark palette, do not make an excessively glossy photographic prop. No new scope, laser, accessory, decal, writing or invented ornament. No text, watermark, border, shadow backdrop, bloom or checkerboard. Actual transparent alpha background, anti-aliased object edge only. Do not crop the barrel, stock, sights or grip. Output exactly one icon. CRITICAL PROPORTION CORRECTION: the original is a compact TALL silhouette, not a thin long gun. Make the complete nontransparent weapon silhouette 2.545 units wide for every 1 unit tall, including sights and the full downward magazine and pistol grip. Keep the barrel/receiver/stock length to original proportions and extend the downward parts only as shown by the reference. The upper receiver occupies about the upper third of the silhouette height; the original long downward magazine/grip accounts for the lower two thirds. The silhouette should fit an illustrative box about 1400 pixels wide by 550 pixels tall on the 2:1 canvas, with generous transparent side margins. Avoid the previous common error of a 4.3:1 flat wide silhouette. Treat the reference outline as authoritative; preserve the original compact overall shape."
+    },
+    {
+      "file": "hd-ui/298-hud_weapons_o_taser-restored.png",
+      "sha256": "613bedf20a05f277eb746aab30f82b689d73527b2aadc6d2eafb06d171472cb8",
+      "original_texture_names": [
+        "hud\\hud_weapons_o_taser.tga=nomipmap",
+        "hud\\hud_weapons_o_taser2.tga=nomipmap"
+      ],
+      "tool": "builtin image_gen",
+      "prompt": "Faithfully restore this tiny original video game HUD weapon icon into crisp high-resolution replacement artwork. It depicts a compact futuristic black and dark teal police taser, horizontal left-facing side view, bulbous rounded short orange/brass electrodes on LEFT, slender black rectangular body to right, pale metallic ribbed battery/grip band at RIGHT, small restrained red and blue accents. No pistol grip. The reference is the sole authority for shape, orientation, proportions, dark materials and details. Preserve the entire outer silhouette and exact aspect ratio of the visible object, including the width and length of each part; do not redesign or add pieces. Flat readable game inventory icon with restrained metallic shading and fine antialiased edges, no photographic background, no scenery, no pedestal, no ground shadow, no glow, no text, no border, no labels. Preserve the original left-facing orientation. Center the complete isolated object with a modest clear margin in a wide landscape canvas, transparent background. Improve detail carefully while retaining the distinctive original 2006 game aesthetic. This is one icon, not a sprite sheet."
+    }
+  ]
+}

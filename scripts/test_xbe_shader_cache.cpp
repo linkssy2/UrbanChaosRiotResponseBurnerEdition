@@ -86,7 +86,26 @@ static void Pipeline(ID3DBlob* vs,ID3DBlob* ps){
     pso.PrimitiveTopologyType=D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
     pso.NumRenderTargets=1;pso.RTVFormats[0]=DXGI_FORMAT_R8G8B8A8_UNORM;pso.SampleDesc.Count=1;
     ComPtr<ID3D12PipelineState> pipeline;
-    CHECK(SUCCEEDED(device->CreateGraphicsPipelineState(&pso,IID_PPV_ARGS(&pipeline))));
+    CHECK(SUCCEEDED(uc_xbe_shader_cache::CreatePipeline(device.Get(),pso,pipeline.GetAddressOf())));
+    uc_xbe_shader_cache::FlushWrites();
+    const auto key=uc_xbe_shader_cache::PipelineKey(pso);
+    auto changed=pso;changed.RasterizerState.CullMode=D3D12_CULL_MODE_BACK;
+    CHECK(!key.empty()&&uc_xbe_shader_cache::PipelineKey(changed)!=key);
+    ComPtr<ID3D12PipelineState> reused;
+    CHECK(SUCCEEDED(uc_xbe_shader_cache::CreatePipeline(device.Get(),pso,reused.GetAddressOf())));
+    uc_xbe_shader_cache::FlushWrites();
+    // Driver-rejected but checksummed payloads must still create the normal PSO.
+    auto& store=uc_xbe_shader_cache::Pipelines();std::string disk_key;std::array<uint32_t,6> contract{};
+    CHECK(store.Key(key,"pipeline","driver",0,0,disk_key,contract));
+    ComPtr<ID3DBlob> driver_blob;
+    if(SUCCEEDED(pipeline->GetCachedBlob(&driver_blob))&&driver_blob->GetBufferSize()){
+        size_t saved_size=0;std::unique_ptr<void,decltype(&std::free)> saved(
+            nv_shader_disk_load(store.directory.c_str(),disk_key.c_str(),contract.data(),&saved_size),&std::free);
+        CHECK(saved&&saved_size==driver_blob->GetBufferSize());
+    }
+    CHECK(nv_shader_disk_save(store.directory.c_str(),disk_key.c_str(),contract.data(),"bad driver blob",15));
+    reused.Reset();CHECK(SUCCEEDED(uc_xbe_shader_cache::CreatePipeline(device.Get(),pso,reused.GetAddressOf())));
+    uc_xbe_shader_cache::FlushWrites();
 }
 
 int main(){
@@ -100,6 +119,7 @@ int main(){
     CHECK(compile_calls==1&&g_perf.shaders==1&&g_perf.shader_disk_hits==0&&errors.empty());
     CHECK(last_flags==D3DCOMPILE_OPTIMIZATION_LEVEL1&&last_effect_flags==0);
     CHECK(cold.Compile(source,"first","vs_5_0",hash)==first&&compile_calls==1);
+    cache::FlushWrites();
     D3D12Backend warm;
     CHECK(Bytes(warm.Compile(source,"first","vs_5_0",hash))==bytes);
     CHECK(compile_calls==1&&g_perf.shaders==1&&g_perf.shader_disk_hits==1);
@@ -107,6 +127,7 @@ int main(){
     CHECK(warm.Compile(source,"first","vs_4_0",hash)&&compile_calls==3);
     CHECK(warm.Compile(source+"\n// exact source key","first","vs_5_0",hash)&&compile_calls==4);
     CHECK(warm.Compile(source,"pixel","ps_5_0",hash)&&compile_calls==5);
+    cache::FlushWrites();
     D3D12Backend cached_pipeline;
     auto* vs=cached_pipeline.Compile(source,"first","vs_5_0",hash);
     auto* ps=cached_pipeline.Compile(source,"pixel","ps_5_0",hash);
@@ -119,6 +140,15 @@ int main(){
         CHECK(store.Load(src,entry.c_str(),profile.c_str(),D3DCOMPILE_OPTIMIZATION_LEVEL1,0,&expected));
         CHECK(Bytes(expected.Get())==Bytes(code));
     });
+    CHECK(warmed==5&&compile_calls==5);
+    // Bogus large records must not prevent valid shaders from warming.
+    for(unsigned i=0;i<8;++i){
+        NvShaderDiskHeader h{};h.magic=0x5343564E;h.version=1;
+        h.source_bytes=1;h.code_bytes=16*1024*1024;h.contract[1]=D3DCOMPILE_OPTIMIZATION_LEVEL1;
+        std::ofstream file(std::filesystem::path(store.directory)/("000-truncated-"+std::to_string(i)+".bin"),std::ios::binary);
+        file.write(reinterpret_cast<const char*>(&h),sizeof(h));file.put('x');
+    }
+    warmed=0;store.Warm([&](const auto&,const auto&,const auto&,ID3DBlob*){++warmed;});
     CHECK(warmed==5&&compile_calls==5);
     CHECK(!store.Load(source,"first","vs_5_0",D3DCOMPILE_OPTIMIZATION_LEVEL3,0,&missed));
     CHECK(!store.Load(source,"first","vs_5_0",D3DCOMPILE_OPTIMIZATION_LEVEL1,1,&missed));
@@ -136,6 +166,7 @@ int main(){
     auto fallback=[&]{
         const unsigned before=compile_calls;D3D12Backend fresh;
         CHECK(Bytes(fresh.Compile(source,"first","vs_5_0",hash))==bytes&&compile_calls==before+1);
+        cache::FlushWrites();
         D3D12Backend repaired;
         CHECK(Bytes(repaired.Compile(source,"first","vs_5_0",hash))==bytes&&compile_calls==before+1);
     };
@@ -183,6 +214,7 @@ int main(){
     CHECK(errors.size()==2&&errors[0].find("compile failed")!=std::string::npos&&errors[1]==invalid);
     CHECK(!bad.Compile(invalid,"first","vs_5_0",hash)&&compile_calls==before+1);
     CHECK(!store.Load(invalid,"first","vs_5_0",D3DCOMPILE_OPTIMIZATION_LEVEL1,0,&missed));
+    cache::FlushWrites();
     std::error_code error;std::filesystem::remove_all(app::fixture_directory,error);CHECK(!error);
     std::puts("PASS actual Compile: disk reuse and byte equality, WARP PSO, exact source/entry/profile/flags/compiler identity, corrupt/unavailable fallback and original compile error behavior");
 }

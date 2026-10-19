@@ -89,11 +89,11 @@ int main() {
     W32(kDevice + 0x7d4 + 4, page);
     backend.query_counts_ = {30, 20, 0, 0};
 
-    // Complete during this poll, without Present. Walk must queue the report
-    // before Flush submits it; original readback then agrees byte for byte.
+    // A pending report completes without Present and agrees with the XBE reader.
     W32(report + 12, 0xffffffff); queued_report = report;
+    W32(pixels, 0xabcddcba);
     assert(invoke(false, index, pixels, timestamp) == 0);
-    assert(walks == 1 && submissions == 1 && backend.reports_.empty());
+    assert(submissions == 1 && backend.reports_.empty());
     assert(R32(pixels) == 20 && R32(timestamp) == 91 && R32(timestamp + 4) == 0);
     assert(R32(report + 12) == 0);
     W32(pixels, 0); W32(timestamp, 0); W32(timestamp + 4, 0);

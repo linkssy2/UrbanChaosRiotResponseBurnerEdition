@@ -31,7 +31,8 @@ std::recursive_mutex g_lock;
 std::map<uint32_t,Voice> g_voices;
 float g_listener[3]{};
 uint32_t completed=0;
-uint32_t FramesOf(const Voice& v,uint32_t bytes){return bytes/v.align;}
+unsigned frame_conversions=0;
+uint32_t FramesOf(const Voice& v,uint32_t bytes){++frame_conversions;return bytes/v.align;}
 double RoutedPlaybackStep(const Voice&){return 1;}
 void Levels(Voice& v,float g[2][2]){g[0][0]=g[1][1]=v.volume;g[0][1]=g[1][0]=0;}
 float Sample(Voice&,uint32_t,uint32_t f,uint32_t c){return (f&1)?.25f*(c?1:-1):.5f;}
@@ -106,5 +107,12 @@ int main(){
     Wait();auto cap=Read(capped);assert(cap.find("records=2 dropped=18 truncated=1")!=std::string::npos);
     assert(!uc_audio_trace::Active()&&!uc_audio_trace::SnapshotDue());
     std::filesystem::remove(file);std::filesystem::remove(capped);std::filesystem::remove(dir);
+    // Nonzero loop starts retain exact samples/position without per-sample divisions.
+    loop.loop_start=4;loop.loop_len=12;
+    std::vector<float> long_before(4096),long_after(4096);
+    g_voices={{1,loop}};frame_conversions=0;RenderOriginal(long_before.data(),2048);
+    const auto reference_pos=g_voices.at(1).pos;assert(frame_conversions==4096);
+    g_voices={{1,loop}};frame_conversions=0;RenderTracked<false>(long_after.data(),2048);
+    assert(long_before==long_after&&g_voices.at(1).pos==reference_pos&&frame_conversions==2);
     std::puts("audio trace: original/traced mixer parity, voice/source/mixed evidence, inactive path, hotkey, overlap, copied filename and truncation passed");
 }

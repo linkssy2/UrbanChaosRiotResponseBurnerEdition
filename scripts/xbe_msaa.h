@@ -3,7 +3,8 @@
 
 namespace uc_msaa {
 inline uint32_t Samples(const gpu::Target* t) {
-    return t && t->res ? t->res->GetDesc().SampleDesc.Count : 1;
+    if (!t || !t->res) return 1;
+    return t->samples ? t->samples : t->res->GetDesc().SampleDesc.Count;
 }
 inline bool Primary(const gpu::Target& t,uint32_t width,uint32_t height) {
     return t.gw==width && t.gh==height && width && height && t.range==1 &&

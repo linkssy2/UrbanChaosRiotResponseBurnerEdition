@@ -94,6 +94,13 @@ static void SnapshotChecks(){
     bindings[0][1]='F';
     conversation_prompt=false;CHECK(TrialPromptSnapshot(1,out)&&out.bindings[0]=='R');
     CHECK(TrialPromptSnapshot(2,out)&&!out.held&&out.bindings[12]==VK_MBUTTON);
+    CHECK(TrialPromptSnapshot(1,out,2)&&out.bindings[12]==VK_MBUTTON&&!out.held);
+    CHECK(TrialPromptSnapshot(1,out)&&!out.bindings[12]&&!out.labels[12][0]);
+    bindings[24][0]=0;bindings[24][1]='O';std::strcpy(labels[24],"O");
+    CHECK(TrialPromptSnapshot(1,out,2)&&out.bindings[12]=='O'&&!std::strcmp(out.labels[12],"O"));
+    bindings[24][1]=0;std::strcpy(labels[24],"Unbound");
+    CHECK(TrialPromptSnapshot(1,out,2)&&!out.bindings[12]&&!std::strcmp(out.labels[12],"Unbound"));
+    bindings[24][0]=VK_MBUTTON;bindings[24][1]=0;std::strcpy(labels[24],"Middle mouse");
     order_held=true;order_x=-61;order_y=3;
     for(unsigned i=0;i<100;++i){CHECK(TrialPromptSnapshot(2,out)&&out.held&&out.x==-60&&out.y==2&&out.direction==4);}
     CHECK(order_phase==3&&order_buttons==0&&order_selection==0&&order_x==-61&&order_y==3);
@@ -129,6 +136,7 @@ static void ControllerSnapshotChecks(){
     controller_bindings[0][1]=4;CHECK(!TrialPromptSnapshot(1,out));
     controller_bindings[0][0]=4;CHECK(TrialPromptSnapshot(1,out)&&out.controller&&out.bindings[0]==4&&!std::strcmp(out.labels[0],"Y"));
     auto original=out;CHECK(TrialPromptSnapshot(1,out,1)&&uc_pc_prompts::Equal(original,out));
+    CHECK(TrialPromptSnapshot(1,out,2)&&uc_pc_prompts::Equal(original,out));
     controller_bindings[0][0]=0;CHECK(TrialPromptSnapshot(1,out)&&out.bindings[0]==4&&!std::strcmp(out.labels[0],"Y"));
     for(unsigned source=0;source<=24;++source){
         controller_bindings[0][1]=source;
@@ -199,6 +207,14 @@ static void ArtworkChecks(){
     CHECK(TrialPromptArtwork(1,source.data(),input,pixels,w,h));
     CHECK(std::memcmp(&old[128*128*4],&pixels[128*128*4],128*128*4));
     CHECK(!std::memcmp(&old[2*128*128*4],&pixels[2*128*128*4],30*128*128*4));
+    CHECK(TrialPromptSnapshot(1,input,2));
+    CHECK(TrialPromptArtwork(1,source.data(),input,pixels,w,h));
+    CHECK(std::memcmp(&old[20*128*128*4],&pixels[20*128*128*4],128*128*4));
+    // An Orders glyph uses the same bound keycap as the other buttons.
+    input.bindings[0]=input.bindings[12];std::strcpy(input.labels[0],input.labels[12]);
+    CHECK(TrialPromptArtwork(1,source.data(),input,pixels,w,h));
+    CHECK(!std::memcmp(&pixels[128*128*4],&pixels[20*128*128*4],128*128*4));
+    CHECK(TrialPromptSnapshot(1,input));CHECK(TrialPromptArtwork(1,source.data(),input,pixels,w,h)&&pixels==old);
     CHECK(TrialPromptSnapshot(2,input));input.bindings[12]=VK_MBUTTON;std::strcpy(input.labels[12],"Middle mouse");
     CHECK(TrialPromptArtwork(2,nullptr,input,pixels,w,h)&&w==256&&h==256);auto idle=pixels;
     for(auto direction:{1u,2u,4u,8u}){

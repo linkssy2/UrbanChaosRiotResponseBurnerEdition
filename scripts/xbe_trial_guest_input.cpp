@@ -31,14 +31,22 @@ extern int TrialMouseActive();
 extern void TrialGameplay();
 extern void TrialMouseTake(long*,long*,unsigned*);
 extern void TrialInputPublish();
+extern void TrialMenuKeysBegin();
+extern void TrialMenuKeysEnd();
+extern void TrialMenuKeysReset();
 #include "xbe_graphics_menu_context.h"
 #include "xbe_frontend_guest.inc"
 static bool MouseObject(uint32_t object){return menu_pointer_readable(object,0x694)&&MEM32(object+0x368)==0;}
 int TrialGuestHook(X86Context& ctx,uint8_t* base,unsigned op){
     regs=&ctx;ram=base;unsigned csr=_mm_getcsr();int result=0;
     switch(op){
-    case 0:menu_pointer_begin(g_ecx);GraphicsMenuBegin();break;
-    case 1:menu_pointer_end();GraphicsMenuEnd();break;
+    case 0:
+        if(menu_pointer_readable(g_ecx,0x15)&&MEM32(g_ecx+4)!=menu_screen)TrialMenuKeysReset();
+        menu_pointer_begin(g_ecx);GraphicsMenuBegin();break;
+    case 1:{const uint32_t previous=menu_screen;menu_pointer_end();GraphicsMenuEnd();
+        if(previous!=menu_screen)TrialMenuKeysReset();break;}
+    case 34:TrialMenuKeysBegin();break;
+    case 35:TrialMenuKeysEnd();break;
     case 2:ucrr_menu_list_enter();FrontendListEnter();break;case 3:GraphicsMenuCapture();ucrr_menu_list_leave();break;
     case 4:ucrr_menu_adjust_enter();break;case 5:ucrr_menu_adjust_leave();break;
     case 6:ucrr_menu_arrow_bounds();break;case 7:ucrr_menu_list_hover();break;

@@ -21,4 +21,6 @@ void uc_feature_particles_3(void);
 void uc_feature_particles_4(void);
 void uc_feature_particles_5(void);
 void uc_feature_blob_shadow(void);
+int uc_scene_fog_visible(void);
+void uc_scene_fog_show(int visible);
 #endif

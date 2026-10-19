@@ -14,6 +14,7 @@
 #include "xbe_conversation_skip.h"
 #include "xbe_controls.h"
 #include "xbe_controls_capture.h"
+#include "xbe_menu_key_taps.h"
 
 namespace {
 std::recursive_mutex input_lock;
@@ -28,11 +29,13 @@ bool escape_pause_held=false;
 bool menu_right_down=false,menu_right_pending=false,menu_right_consumed=false;
 bool graphics_release_pending[4]={};
 trial_intro::Gate intro_gate;
+trial_input::MenuKeyTaps menu_key_taps;
+thread_local bool menu_key_update=false;
 constexpr UINT kCapture=WM_APP+71;
 struct XBOX_GAMEPAD { WORD wButtons=0; BYTE bAnalogButtons[8]={}; SHORT sThumbLX=0,sThumbLY=0,sThumbRX=0,sThumbRY=0; };
 const WORD controller_digital[]={16,32,64,128,1,2,4,8};
 bool focused(){return game_window&&GetForegroundWindow()==game_window;}
-BOOL keyboard_key_down(int key){return focused()&&!(key==VK_RBUTTON&&menu_right_consumed)&&(GetAsyncKeyState(key)&0x8000);}
+BOOL keyboard_key_down(int key){return focused()&&!(key==VK_RBUTTON&&menu_right_consumed)&&((GetAsyncKeyState(key)&0x8000)||(menu_key_update&&menu_key_taps.Retained(key)));}
 int controller_path(wchar_t* path){auto p=app::ExeDir()/L"xboxrecomp.ini";if(p.native().size()>=MAX_PATH)return 0;wcscpy_s(path,MAX_PATH,p.c_str());return 1;}
 }
 #include "third_party/xboxrecomp/src/input/host_keyboard_config.h"
@@ -86,6 +89,7 @@ bool TrialMenuRightBack(){
 }
 void TrialIntroMovie(uint32_t owner,uint32_t kind,bool opening,bool ready){
     std::lock_guard guard(input_lock);
+    if(owner)menu_key_taps.Clear();
     intro_gate.Context(owner,kind,opening,ready);
     if(owner)click_pending=false;
 }
@@ -106,6 +110,7 @@ static void ReconcileCapture(){
 }
 void TrialGraphicsInputChanged(){
     std::lock_guard guard(input_lock);
+    menu_key_taps.Clear();
     for(auto& pending:graphics_release_pending)pending=true;
     click_pending=false;dx=dy=0;
     order_phase=order_buttons=0;order_held=false;keyboard_wheel_clear();
@@ -120,14 +125,28 @@ void TrialInputWindow(void* window){
     if(!RegisterRawInputDevices(&device,1,sizeof(device)))throw std::runtime_error("Raw mouse registration failed");
 }
 int TrialMouseActive(){std::lock_guard guard(input_lock);return captured&&focused()&&xbox_KeyboardMode();}
-void TrialGameplay(){std::lock_guard guard(input_lock);if(!gameplay){gameplay=true;menu_mode=false;PostMessage(game_window,kCapture,0,0);}}
+void TrialGameplay(){
+    std::lock_guard guard(input_lock);
+    if(!gameplay){menu_key_taps.Clear();gameplay=true;menu_mode=false;PostMessage(game_window,kCapture,0,0);}
+}
 void TrialMouseTake(long* x,long* y,unsigned* sensitivity){
     std::lock_guard guard(input_lock);*x=dx;*y=dy;dx=dy=0;
     *sensitivity=mouse_sensitivity;
 }
 void ucrr_host_menu_mode(int enabled){
     std::lock_guard guard(input_lock);
-    if(menu_mode!=!!enabled){menu_mode=!!enabled;click_pending=false;dx=dy=0;PostMessage(game_window,kCapture,0,0);}
+    if(menu_mode!=!!enabled){menu_key_taps.Clear();menu_mode=!!enabled;click_pending=false;dx=dy=0;PostMessage(game_window,kCapture,0,0);}
+}
+void TrialMenuKeysReset(){std::lock_guard guard(input_lock);menu_key_taps.Clear();}
+void TrialMenuKeysBegin(){
+    std::lock_guard guard(input_lock);
+    menu_key_update=true;
+    if(!focused()||TrialGraphicsOpen()||intro_gate.owner||graphics_release_pending[0])menu_key_taps.Clear();
+    menu_key_taps.Begin();
+}
+void TrialMenuKeysEnd(){
+    std::lock_guard guard(input_lock);
+    menu_key_taps.End();menu_key_update=false;
 }
 uint64_t ucrr_host_menu_milliseconds(){return GetTickCount64();}
 int ucrr_host_menu_pointer(float* x,float* y,int* click){
@@ -168,6 +187,7 @@ bool TrialInputMessage(void*,uint32_t msg,uintptr_t wp,intptr_t lp,intptr_t* res
     if(msg==WM_RBUTTONDOWN||msg==WM_RBUTTONUP)TrialMenuRightButton(msg==WM_RBUTTONDOWN);
     if(TrialGraphicsMessage(msg,wp,lp)){click_pending=false;dx=dy=0;*result=0;return true;}
     if(msg==WM_KILLFOCUS||(msg==WM_ACTIVATEAPP&&!wp)){
+        menu_key_taps.Clear();
         intro_gate.FocusLost();
         menu_right_pending=menu_right_down=false;menu_right_consumed=(GetAsyncKeyState(VK_RBUTTON)&0x8000)!=0;
         captured=false;dx=dy=0;order_phase=order_buttons=0;order_held=false;click_pending=false;keyboard_wheel_clear();ClipCursor(nullptr);
@@ -188,6 +208,8 @@ bool TrialInputMessage(void*,uint32_t msg,uintptr_t wp,intptr_t lp,intptr_t* res
         if(key==VK_CONTROL)key=(lp&(1LL<<24))?VK_RCONTROL:VK_LCONTROL;
         if(key==VK_SHIFT)key=MapVirtualKey(unsigned(lp>>16)&255,MAPVK_VSC_TO_VK_EX);
         xbox_KeyboardSourceEvent(key,msg==WM_KEYDOWN);
+        menu_key_taps.Event(key,msg==WM_KEYDOWN,(uint64_t(lp)&(1ull<<30))!=0,
+            focused()&&!intro_gate.owner&&!TrialGraphicsOpen()&&!graphics_release_pending[0]);
     }
     if(msg==WM_LBUTTONDOWN&&menu_mode){
         float x,y;int ignored;
@@ -229,7 +251,8 @@ void TrialInputPad(int port,input::Pad& pad){
         // Preserve the configured A/Start keys as well as the PC skip inputs.
         for(unsigned action:{0u,8u})for(unsigned slot=0;slot<2;++slot){
             unsigned key=xbox_KeyboardBinding(action,slot);
-            if(key&&key<256&&keyboard_key_down(key))intro_keys|=4;
+            // Intro release guards must not feed retained menu taps back into themselves.
+            if(key&&key<256&&(GetAsyncKeyState(key)&0x8000))intro_keys|=4;
         }
         intro_gate.Keyboard(intro_keys,focused());
     }
@@ -248,6 +271,7 @@ void TrialInputPad(int port,input::Pad& pad){
     if(gameplay&&!menu_mode)trial_controls::Remap(pad);
     if(port!=0||!focused())return;
     if(pad.buttons||std::abs(int(pad.rx))>8689||std::abs(int(pad.ry))>8689)InterlockedExchange(&keyboard_mode,0);
+    if(menu_key_update)menu_key_taps.GuestPortPolled(port);
     XBOX_GAMEPAD keys;keyboard_apply_bindings(&keys,captured);keys.wButtons|=order_buttons;
     // CONTROL capped the title-facing stick magnitude in ucrr_host_stick_axis.
     // Keep keyboard movement within that circle before merging physical input;

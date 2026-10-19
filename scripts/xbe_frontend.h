@@ -8,6 +8,7 @@ struct TrialLevelRect { float x=0,y=0,w=0,h=0; };
 struct TrialFrontendFrame {
     UcHybridFrontendSnapshot source{};
     char labels[55][128]{};
+    char values[20][128]{};
     float row_top=390;
     uint32_t list_kind=0;
     TrialLevelRect profile_bounds[4]{};
@@ -16,6 +17,8 @@ struct TrialFrontendFrame {
     uint32_t profile_delete_mask=0;
     bool delete_dialog=false;
     char delete_name[20]{};
+    bool pause_dialog=false;
+    char dialog_message[128]{};
 };
 struct TrialFrontendNameActionData {
     UcHybridFrontendAction identity{};
@@ -53,10 +56,12 @@ inline bool TrialFrontendSupported(const TrialFrontendFrame& f) {
         for(const auto& r:f.profile_bounds)if(!(r.w>0&&r.h>0))return false;
         return true;
     }
-    if(s.kind==UC_HF_DIALOG)return f.delete_dialog&&f.delete_name[0]&&s.count==2&&
-        s.rows[0].callback==0x284580&&s.rows[1].callback==0x284310;
+    if(s.kind==UC_HF_DIALOG)return s.count==2&&s.rows[1].callback==0x284310&&
+        ((f.delete_dialog&&f.delete_name[0]&&s.rows[0].callback==0x284580)||
+         (f.pause_dialog&&f.dialog_message[0]&&(s.source_kind&0x80000000u)&&
+          s.rows[0].callback==0x267400));
     return (s.kind==TRIAL_HF_NAME&&s.count==1&&f.name_capacity==15)||
-           (s.kind==UC_HF_LIST&&f.list_kind>=1&&f.list_kind<=3&&s.count<=20)||
+           (s.kind==UC_HF_LIST&&f.list_kind>=1&&f.list_kind<=5&&s.count<=20)||
            (s.kind==UC_HF_LEVELS&&s.count<=17)||
            (s.kind==UC_HF_REWARD_BROWSER&&s.count<=55);
 }

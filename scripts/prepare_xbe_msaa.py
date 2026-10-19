@@ -47,6 +47,14 @@ def patch(s):
     Begin();''')
     part=function(s,'bool D3D12Backend::CreateTargetResource(')
     s=once(s,part,once(part,'    D3D12_CLEAR_VALUE cv{};','    td.SampleDesc.Count=DesiredSamples(t);\n    D3D12_CLEAR_VALUE cv{};'))
+    # Immutable metadata avoids repeated driver queries. Extensions retain the
+    # fallback because their callbacks may replace Target::res directly.
+    s=once(s,'''    return SUCCEEDED(dev_->CreateCommittedResource(&hp, D3D12_HEAP_FLAG_NONE, &td, t.state, &cv,
+                                                   IID_PPV_ARGS(&t.res)));''',
+           '''    const bool made = SUCCEEDED(dev_->CreateCommittedResource(&hp, D3D12_HEAP_FLAG_NONE, &td, t.state, &cv,
+                                                   IID_PPV_ARGS(&t.res)));
+    if (made) t.samples = ext_ ? 0 : td.SampleDesc.Count;
+    return made;''')
     s=once(s,'        dv.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;',
            '        dv.ViewDimension = uc_msaa::Samples(&t)>1?D3D12_DSV_DIMENSION_TEXTURE2DMS:D3D12_DSV_DIMENSION_TEXTURE2D;')
     # A missing attachment inherits the retained companion, including during an
@@ -157,6 +165,8 @@ def patch(s):
            'EnsurePassPipeline(copy_shader,"psmain",t.fmt,-1,samples)')
     s=once(s,'auto td=Texture2DDesc(kSmoothFogFormat,t.w,t.h); td.Flags=D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;',
            'auto td=Texture2DDesc(kSmoothFogFormat,t.w,t.h); td.Flags=D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET; td.SampleDesc.Count=samples;')
+    s=once(s,'        f.other.view=free_rtv_.back(); free_rtv_.pop_back();',
+           '        f.other.samples=ext_ ? 0 : samples;\n        f.other.view=free_rtv_.back(); free_rtv_.pop_back();')
     # Color copies cannot CopyTextureRegion to multisampled destinations or
     # directly from a multisampled source. The draw path preserves rect/alpha.
     part=function(s,'void D3D12Backend::Copy(const Surface&')
@@ -199,12 +209,25 @@ def patch(s):
     s=once(s,'        ReleaseSmoothFog(*old[i]);','')
     s=once(s,'        auto& t=*old[i];\n        CurrentFrame().garbage.push_back(t.res);',
            '        auto& t=*old[i];\n        ReleaseSmoothFog(t);\n        ReleaseMsaa(t.res.Get());\n        CurrentFrame().garbage.push_back(t.res);')
+    s=once(s,'return area * float(t->res->GetDesc().SampleDesc.Count);',
+           'return area * float(uc_msaa::Samples(t));')
     return s
 
 
-def prepare(source,area):
+def prepare(source,area,sdk):
     area=Path(area);local=Path(__file__).parent
     source=patch(source)
+    header=(Path(sdk)/'runtime/gpu/ext.h').read_text()
+    header=once(header,'    Microsoft::WRL::ComPtr<ID3D12Resource> res;',
+                '    Microsoft::WRL::ComPtr<ID3D12Resource> res;\n'
+                '    uint32_t samples = 0; // Immutable image metadata; zero keeps external targets on GetDesc.')
+    (area/'src/gpu').mkdir(parents=True,exist_ok=True)
+    (area/'src/gpu/ext.h').write_text(header)
+    # Transfer metadata with the image, including ownership rollback on failure.
+    fog=area/'src/compat/xbe_smooth_fog.h'
+    fog.write_text(once(fog.read_text(),
+        '    swap(a.res,b.res); swap(a.view,b.view); swap(a.state,b.state);',
+        '    swap(a.res,b.res); swap(a.samples,b.samples); swap(a.view,b.view); swap(a.state,b.state);'))
     (area/'src/compat/xbe_msaa.h').write_text((local/'xbe_msaa.h').read_text())
     fixture=(local/'test_xbe_msaa.cpp').read_text()
     start=source.index('    struct MsaaRead {')
@@ -212,7 +235,7 @@ def prepare(source,area):
     fixture=once(fixture,'    // PRODUCTION_MSAA_FIELDS',fields)
     methods=(local/'xbe_msaa_methods.inc').read_text()
     methods=once(methods,'bool D3D12Backend::CreateMatchedColor(', 'bool D3D12Backend::CreateMatchedColorReal(')
-    fixture=once(fixture,'// PRODUCTION_MSAA_METHODS',methods)
+    fixture=once(fixture,'// PRODUCTION_MSAA_METHODS',methods.replace('uc_msaa::Samples(', 'CheckedSamples('))
     names=('D3D12_RESOURCE_DESC BufferDesc(', 'D3D12_RESOURCE_DESC Texture2DDesc(')
     fixture=once(fixture,'// PRODUCTION_RESOURCE_HELPERS','\n'.join(function(source,n) for n in names))
     names=('void D3D12Backend::Transition(', 'void D3D12Backend::SetFullViewport(',
@@ -227,12 +250,12 @@ def prepare(source,area):
            'float D3D12Backend::SamplesPerPixel(')
     methods='\n'.join(function(source,n) for n in names)
     methods=once(methods,'bool D3D12Backend::CreateTargetResource(', 'bool D3D12Backend::CreateTargetResourceReal(')
-    fixture=once(fixture,'// PRODUCTION_BACKEND_METHODS',methods)
+    fixture=once(fixture,'// PRODUCTION_BACKEND_METHODS',methods.replace('uc_msaa::Samples(', 'CheckedSamples('))
     # Negative witness: the exact current body with the previous unconditional
     # precision-close seam restored, rather than a second hand-written binder.
     before=function(source,'bool D3D12Backend::BindTargets(')
     before=once(before,'bool D3D12Backend::BindTargets(', 'bool D3D12Backend::BindTargetsBefore(')
     before=once(before,'    if(rt&&ds&&(', '    if(rt&&ds&&!EndSmoothFog(*rt))return false;\n    if(rt&&ds&&(')
-    fixture=once(fixture,'// PRODUCTION_BEFORE_BIND',before)
+    fixture=once(fixture,'// PRODUCTION_BEFORE_BIND',before.replace('uc_msaa::Samples(', 'CheckedSamples('))
     (area/'src/compat/test_msaa.cpp').write_text(fixture)
     return source

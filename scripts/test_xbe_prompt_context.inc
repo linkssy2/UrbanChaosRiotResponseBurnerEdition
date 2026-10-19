@@ -99,7 +99,7 @@ static void PromptContextChecks(){
     X86_MEM32(kPromptOwner+0x10)=kPromptBuffer;
     X86_MEM32(kPromptOwner)=0;CHECK(!PromptRecordVariant(base,kPromptOwner));
     X86_MEM32(kPromptOwner)=0x456bb8;
-    for(const char* key:{"HUD-Help-50","HUD-Operate-","HUD-Operate-7","HUD-Operate-9","HUD-Operate-10",
+    for(const char* key:{"HUD-Help-50","HUD-Help-400","HUD-Help-40-extra","HUD-Operate-","HUD-Operate-7","HUD-Operate-9","HUD-Operate-10",
                          "HUD-Operate-11","HUD-Operate-1-extra","newfrontend-friends-111"}){
         std::strcpy(reinterpret_cast<char*>(base+0x64000),key);
         TrialPromptTextScope scope(base,0x64000,0);CHECK(!prompt_text_variant);
@@ -111,25 +111,35 @@ static void PromptContextChecks(){
      {TrialPromptTextScope invalid(base,kPromptRam-2,0);CHECK(!prompt_text_variant);}
      CHECK(prompt_text_variant==1);}
     CHECK(!prompt_text_variant);TrialPromptQueueReset(kPromptOwner);
+    X86_MEM32(kPromptOwner+0x1c)=0;text("HUD-Help-40");text("HUD-Help-50");
+    draw(6);draw(7);CHECK(prompt_submissions[prompt_submissions.size()-2]==0&&prompt_submissions.back()==2);
+    TrialPromptQueueReset(kPromptOwner);
     // Negative witness for the former conversation-only qualification: the
     // same original Fade text draw is used by a cinematic without that flag.
     // It must keep F through the delayed queue, while a subsequent Reload is R.
-    conversation_prompt=false;X86_MEM32(kPromptOwner+0x1c)=0;
-    std::strcpy(reinterpret_cast<char*>(base+0x64000),"HUD-Help-120");
-    X86Context ctor{};ctor.ecx=0x69000;ctor.esp=0x50000;
-    const uint32_t args[]={0x66000,0x3e4ccccd,3,0x64000,1,0xffffffff,1,0,0x64100};
-    X86_MEM8(0x64100)=0;
-    for(unsigned i=0;i<9;++i)X86_MEM32(ctor.esp+4+i*4)=args[i];
-    sub_00273590(ctor,base);CHECK(ctor.esp==0x50028&&ctor.eax==0x69000);
-    CHECK(!std::strcmp(reinterpret_cast<char*>(base+0x6903c),"HUD-Help-120"));
-    auto object=std::array<uint8_t,0xb4>{};std::memcpy(object.data(),base+0x69000,object.size());
-    X86Context render{};render.ecx=0x69000;render.esp=0x50000;
-    X86_MEM32(render.esp+4)=0;sub_00273860(render,base);
-    CHECK(render.esp==0x50008&&!prompt_text_variant);
-    CHECK(!std::memcmp(object.data(),base+0x69000,object.size()));
-    text("HUD-Help-50");draw(6);draw(7);
-    CHECK(prompt_submissions[prompt_submissions.size()-2]==0&&prompt_submissions.back()==1);
-    TrialPromptQueueReset(kPromptOwner);
+    // PlayerHelpPrompt140680 uses this same constructor with font2/flags0x11;
+    // its Orders key must also survive the later draw and ordinary Reload.
+    for(bool orders:{false,true}){
+        conversation_prompt=false;X86_MEM32(kPromptOwner+0x1c)=0;
+        const char* key=orders?"HUD-Help-40":"HUD-Help-120";
+        std::strcpy(reinterpret_cast<char*>(base+0x64000),key);
+        X86Context ctor{};ctor.ecx=0x69000;ctor.esp=0x50000;
+        const uint32_t args[]={0x66000,orders?0x3ecccccdu:0x3e4ccccdu,3,0x64000,
+                               orders?2u:1u,0xffffffff,orders?0x11u:1u,0,0x64100};
+        X86_MEM8(0x64100)=0;
+        for(unsigned i=0;i<9;++i)X86_MEM32(ctor.esp+4+i*4)=args[i];
+        sub_00273590(ctor,base);CHECK(ctor.esp==0x50028&&ctor.eax==0x69000);
+        CHECK(!std::strcmp(reinterpret_cast<char*>(base+0x6903c),key));
+        CHECK(X86_MEM32(0x6905c)==args[4]&&X86_MEM32(0x69064)==args[6]);
+        auto object=std::array<uint8_t,0xb4>{};std::memcpy(object.data(),base+0x69000,object.size());
+        X86Context render{};render.ecx=0x69000;render.esp=0x50000;
+        X86_MEM32(render.esp+4)=0;sub_00273860(render,base);
+        CHECK(render.esp==0x50008&&!prompt_text_variant);
+        CHECK(!std::memcmp(object.data(),base+0x69000,object.size()));
+        text("HUD-Help-50");draw(6);draw(7);
+        CHECK(prompt_submissions[prompt_submissions.size()-2]==0&&prompt_submissions.back()==(orders?2u:1u));
+        TrialPromptQueueReset(kPromptOwner);
+    }
     // Both non-conversation Skip producers poll the original A action. This
     // result is deliberately untouched; physical bindings are checked below.
     X86_MEM32(0x51c4dc)=0x6a000;X86_MEM32(0x6a000)=0x6a100;X86_MEM32(0x6a108)=0xf0001;

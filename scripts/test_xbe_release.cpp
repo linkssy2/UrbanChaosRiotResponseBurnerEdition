@@ -3,6 +3,7 @@
 #include "core/log.h"
 #include "core/diag.h"
 #include "xbe_audio_loop.h"
+#include "test_release_environment.h"
 #include <cassert>
 #include <cstdlib>
 #include <filesystem>
@@ -11,6 +12,10 @@
 int main() {
     _putenv_s("XBE_PERF", "1");
     _putenv_s("XBE_CAPTURE_DIR", "must-not-create");
+    _putenv_s("UCRR_COROUTINE_TRACE", "1");
+    _putenv_s("XBE_D3D12_DEBUG", "1");
+    TestReleaseCoroutineTrace();
+    TestReleaseDeviceDebugLayer();
     unsigned evaluated=0;
     LOGD("%u",++evaluated); LOGI("%u",++evaluated);
     LOGW("%u",++evaluated); LOGR("%u",++evaluated);
@@ -21,5 +26,5 @@ int main() {
     assert(!TrialAudioTraceStart("must-not-create/audio.csv"));
     assert(!TrialAudioTraceHotkey(0x100,0x73,0,true,true));
     assert(!uc_audio_trace::Active()&&!uc_audio_trace::SnapshotDue());
-    std::puts("release: logs have no argument/atomic work; capture/perf/audio diagnostics cannot activate");
+    std::puts("release: logs have no argument/atomic work; capture/perf/audio/coroutine/device diagnostics cannot activate");
 }

@@ -1,4 +1,5 @@
 #include "xbe_frontend_text.h"
+extern int xbox_KeyboardMode();
 // Native presentation submits identities to the original handlers. Profile
 // activation and name validation retain their original callbacks/save policy.
 extern "C" uint32_t TrialFrontendWarningText(uint8_t* base,uint32_t key,uint32_t text,
@@ -95,6 +96,31 @@ static bool FrontendDeleteParent(){
         hf_view.kind==UC_HF_DIALOG&&hf_view.owner==frontend_delete.dialog&&
         FrontendDeleteDialog(frontend_delete.dialog);
 }
+static bool FrontendPauseDialog(uint32_t owner){
+    // 2677C2 -> 263520 -> 265D9E/258DF0: only the pause Quit warning.
+    // Its No and Back both return through the original 284310 callback.
+    return menu_manager&&hf_pause_manager==menu_manager&&
+        menu_pointer_readable(menu_manager,0x15)&&MEM32(menu_manager+4)==menu_screen&&
+        menu_dialog_valid(owner)&&MEM32(owner+4)==0x473368&&MEM32(owner+0xC)==2&&
+        MEM32(owner+0x10)==0x48573C&&MEM32(owner+0x14)==0x485750&&
+        MEM32(owner+0x30)==0x267400&&MEM32(owner+0x34)==0x284310&&
+        MEM32(owner+0x50)==0x284310;
+}
+static void FrontendPauseDialogEnter(){
+    // Reuse the original modal capture before its first glyph submission, so
+    // presentation must accept the replacement before any source text hides.
+    if(!xbox_KeyboardMode()||!hf_settled()||!FrontendPauseDialog(dialog_owner)||
+       (hf_view.kind==UC_HF_DIALOG&&hf_view.owner==dialog_owner&&
+        hf_view.screen==menu_screen&&TrialFrontendPresents(dialog_owner,UC_HF_DIALOG)))return;
+    menu_dialog_capture();
+    if(hf_pending.kind==UC_HF_DIALOG&&hf_pending.owner==dialog_owner)hf_publish();
+}
+bool TrialFrontendHidePauseDialogText(uint32_t owner){
+    // Suppress at the three original text calls, before glyphs are queued.
+    // The shade/backdrop and original layout, sounds and callbacks still run.
+    return xbox_KeyboardMode()&&dialog_running&&dialog_owner==owner&&
+        FrontendPauseDialog(owner)&&TrialFrontendPresents(owner,UC_HF_DIALOG);
+}
 static bool FrontendNameValid(uint32_t owner){
     return menu_pointer_readable(owner,0x58)&&MEM32(owner)==0x48CD08&&!MEM8(owner+4)&&
         MEM32(owner+8)==0x51D71C&&MEM32(owner+0xC)==15&&MEM32(owner+0x10)==0x283250&&
@@ -140,6 +166,10 @@ extern "C" void ucrr_native_frontend_publish(const UcHybridFrontendSnapshot* sou
             std::memcpy(frame.delete_name,frontend_delete.name,sizeof(frame.delete_name));
             if(!FrontendProfileDeleteValid())frame.source.rows[0].enabled=0;
         }
+        if(source->kind==UC_HF_DIALOG&&FrontendPauseDialog(source->owner)){
+            frame.pause_dialog=true;
+            FrontendText(source->title,frame.dialog_message);
+        }
         if(source->kind==TRIAL_HF_NAME&&FrontendNameValid(source->owner)){
             frame.name_capacity=15;
             hf_inline(0x51D71C,frame.name,sizeof(frame.name));
@@ -150,7 +180,7 @@ extern "C" void ucrr_native_frontend_publish(const UcHybridFrontendSnapshot* sou
             static TrialFrontendFrame cached{};
             if(source->kind!=UC_HF_PROFILES&&source->kind!=TRIAL_HF_NAME&&source->kind!=UC_HF_DIALOG&&
                cached.source.epoch==source->epoch&&cached.source.owner==source->owner){
-                frame=cached;frame.source.selected=source->selected;
+                frame=cached;frame.source=*source;
             }else{
                 for(unsigned i=0;i<source->count;++i)FrontendText(source->rows[i].label,frame.labels[i]);
                 frame.row_top=480;
@@ -159,13 +189,16 @@ extern "C" void ucrr_native_frontend_publish(const UcHybridFrontendSnapshot* sou
                 frame.row_top=std::clamp(frame.row_top-4.f,72.f,390.f);
                 cached=frame;
             }
+            if(frame.list_kind==4||frame.list_kind==5)
+                for(unsigned i=0;i<source->count;++i)FrontendText(source->rows[i].value,frame.values[i]);
         }
     }
     TrialFrontendPublish(frame);
 }
 static bool FrontendGuestOwns(uint32_t owner,uint32_t kind){
     return (kind==UC_HF_LEVELS||kind==UC_HF_REWARD_BROWSER||kind==UC_HF_PROFILES||kind==TRIAL_HF_NAME||
-        (kind==UC_HF_DIALOG&&FrontendDeleteDialog(owner))||GraphicsMenuKind(owner))&&TrialFrontendOwns(owner,kind);
+        (kind==UC_HF_DIALOG&&(FrontendDeleteDialog(owner)||FrontendPauseDialog(owner)))||
+        GraphicsMenuKind(owner))&&TrialFrontendOwns(owner,kind);
 }
 
 static void FrontendNameEnter(){
@@ -215,7 +248,11 @@ static bool FrontendNameQuery(){
 static void FrontendListEnter(){
     if(!GraphicsMenuKind(menu_owner))TrialFrontendPublish({});
 }
-extern int xbox_KeyboardMode();
+bool TrialFrontendHideListSprites(){
+    // Only the current list's rows; its parent still draws the animated backdrop.
+    return menu_owner&&xbox_KeyboardMode()&&GraphicsMenuKind(menu_owner)&&
+        TrialFrontendPresents(menu_owner,UC_HF_LIST);
+}
 static void FrontendRewardSidebar(){
     const uint32_t owner=g_esi;
     if(!xbox_KeyboardMode()||!hf_settled()||!menu_pointer_readable(owner,0x34)||

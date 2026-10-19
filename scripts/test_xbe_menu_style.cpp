@@ -51,6 +51,7 @@ bool Apply(const Draft& next,std::string& status){
     live=next;++applied;status="Changes applied and saved.";return true;
 }
 bool ScalePending(){return false;}
+bool HdUi(){return live.hd_ui;}
 bool MsaaSupported(uint32_t samples){return samples<32&&(sample_support&(1u<<samples));}
 }
 namespace trial_language {
@@ -134,8 +135,14 @@ static void ClickPoint(float x,float y,bool settle=true){
 static void Click(unsigned index,bool settle=true){
     CHECK(index<hits.size());auto r=hits[index];ClickPoint((r.a.x+r.b.x)*.5f,(r.a.y+r.b.y)*.5f,settle);
 }
+static bool KeyEvent(ImGuiKey key,bool down,bool repeat=false){
+    // Match WndProc: ImGui receives the event before the native ownership hook.
+    ImGui::GetIO().AddKeyEvent(key,down);
+    const unsigned vk=key==ImGuiKey_Enter?VK_RETURN:key==ImGuiKey_Space?VK_SPACE:0;
+    return vk&&TrialGraphicsMessage(down?WM_KEYDOWN:WM_KEYUP,vk,repeat?intptr_t(1ull<<30):0);
+}
 static void Key(ImGuiKey key){
-    ImGui::GetIO().AddKeyEvent(key,true);DrawFrame();ImGui::GetIO().AddKeyEvent(key,false);DrawFrame();
+    KeyEvent(key,true);DrawFrame();KeyEvent(key,false);DrawFrame();
 }
 static void RightClick(){
     ImGui::GetIO().AddMouseButtonEvent(1,true);DrawFrame();
@@ -159,17 +166,72 @@ static TrialFrontendFrame MakeList(unsigned kind){
 static void Publish(const TrialFrontendFrame& f){
     TrialGraphicsMenuContext(0x800,f.source.screen,f.source.owner,f.list_kind);TrialFrontendPublish(f);Settle();Drain();
 }
+static void CheckNativeConfirmTransitions(){
+    auto main=MakeList(1),levels=MakeList(1);
+    levels.list_kind=0;levels.source.kind=UC_HF_LEVELS;
+    levels.source.owner+=0x1000;levels.source.screen+=0x1000;
+    auto transition=main;transition.source.source_kind|=UC_HF_TRANSITION;
+    auto no_action=[](){for(unsigned i=0;i<8;++i){DrawFrame();EmptyAction();}};
+
+    Publish(main);Move(0,0);Drain();
+    // Both taps arrive before the first render. ImGui intentionally retains
+    // their down/up/down/up sequence, but native confirm coalesces this page.
+    CHECK(KeyEvent(ImGuiKey_Enter,true));CHECK(KeyEvent(ImGuiKey_Enter,false));
+    CHECK(KeyEvent(ImGuiKey_Enter,true));CHECK(KeyEvent(ImGuiKey_Enter,false));
+    DrawFrame();auto action=Take();
+    CHECK(action.kind==UC_HF_ACTIVATE&&action.owner==main.source.owner);
+    TrialFrontendPublish(transition);
+    TrialGraphicsMenuContext(0x800,levels.source.screen,levels.source.owner,0);
+    TrialFrontendPublish(levels);no_action();
+    Key(ImGuiKey_Enter);action=Take();
+    CHECK(action.kind==UC_HF_ACTIVATE&&action.owner==levels.source.owner);no_action();
+
+    // A native transition must consume confirms before the original keyboard
+    // adapter can retain them, even though no interactive overlay is open.
+    TrialFrontendPublish(transition);CHECK(!TrialGraphicsOpen());
+    CHECK(KeyEvent(ImGuiKey_Enter,true));CHECK(KeyEvent(ImGuiKey_Enter,false));
+    CHECK(KeyEvent(ImGuiKey_Space,true));CHECK(KeyEvent(ImGuiKey_Space,false));
+    TrialFrontendPublish(levels);no_action();
+    Key(ImGuiKey_Space);action=Take();CHECK(action.kind==UC_HF_ACTIVATE);no_action();
+
+    // A queued edge is invalid after replacement, and repeats/focus loss do
+    // not create a fresh activation. No global ImGui key queue is cleared.
+    Publish(main);CHECK(KeyEvent(ImGuiKey_Enter,true));CHECK(KeyEvent(ImGuiKey_Enter,false));
+    TrialFrontendPublish(levels);no_action();
+    KeyEvent(ImGuiKey_Enter,true,true);DrawFrame();EmptyAction();
+    KeyEvent(ImGuiKey_Enter,false);no_action();
+    KeyEvent(ImGuiKey_Enter,true);TrialGraphicsMessage(WM_KILLFOCUS,0,0);
+    DrawFrame();EmptyAction();KeyEvent(ImGuiKey_Enter,false);no_action();
+
+    // Rebinding still receives Enter as a binding candidate, not a menu
+    // activation. Original/title screens remain available to the guest path.
+    trial_controls::BeginCapture(0);CHECK(KeyEvent(ImGuiKey_Enter,true));
+    CHECK(native_confirm_generation.load()==0);
+    trial_controls::capture.Sample(0,0,true);
+    trial_controls::capture.Sample(VK_RETURN,0,true);
+    CHECK(trial_controls::TakeCapture()==VK_RETURN);
+    KeyEvent(ImGuiKey_Enter,false);trial_controls::CancelCapture();no_action();
+    TrialFrontendPublish({});
+    CHECK(!KeyEvent(ImGuiKey_Enter,true));CHECK(!KeyEvent(ImGuiKey_Enter,false));
+    Publish(levels);no_action();
+}
 static void OpenGraphics(const TrialFrontendFrame& f){
     CHECK(f.list_kind==3);
-    Publish(f);CHECK(hits.size()==f.source.count+2);Click(f.source.count);CHECK(PanelOpen());CHECK(hits.size()==17);
-    for(unsigned i=0;i<14;++i){
+    Publish(f);CHECK(hits.size()==f.source.count+2);
+    if(keyboard_mode)for(unsigned i=0;i<hits.size();++i){
+        CHECK(hits[i].a.x==48.f*output.width/640.f);
+        CHECK(hits[i].b.x==432.f*output.width/640.f);
+        if(i)CHECK(hits[i].a.y>=hits[i-1].b.y-.1f);
+    }
+    Click(f.source.count);CHECK(PanelOpen());CHECK(hits.size()==21);
+    for(unsigned i=0;i<18;++i){
         CHECK(hits[i].name=="setting");
-        CHECK(hits[i].b.y<=360*output.height/480.f+.1f);
+        CHECK(hits[i].b.y<=364*output.height/480.f+.1f);
         if(i)CHECK(hits[i-1].b.y<=hits[i].a.y+.1f);
     }
 }
 static void ChangeSetting(unsigned index){
-    CHECK(index<14&&hits.size()==17);auto r=hits[index];
+    CHECK(index<18&&hits.size()==21);auto r=hits[index];
     // Click the actual row's right-arrow side, using recorded production bounds.
     ClickPoint(r.b.x-15*float(output.width)/640,(r.a.y+r.b.y)*.5f);
 }
@@ -178,7 +240,10 @@ static void CheckStrip(unsigned count){
     for(unsigned i=0;i<count;++i){
         CHECK(hits[i].name=="row");
         CHECK(hits[i].b.y-hits[i].a.y>=26*output.height/480.f);
-        if(i){CHECK(std::abs(hits[i].a.y-hits[0].a.y)<.01f);CHECK(hits[i-1].b.x<=hits[i].a.x+.1f);}
+        if(i){
+            if(hits[i].a.y==hits[0].a.y)CHECK(hits[i-1].b.x<=hits[i].a.x+.1f);
+            else {CHECK(hits[i].a.x==hits[0].a.x);CHECK(hits[i-1].b.y<=hits[i].a.y+.1f);}
+        }
     }
     CHECK(hits.front().a.x>=17*output.width/640.f);
     CHECK(hits.back().b.x<=623*output.width/640.f);
@@ -214,7 +279,7 @@ static void CheckVisualHandoff(const TrialFrontendFrame& f){
     // reveal its own pixels rather than retain an unrelated native footer.
     for(unsigned kind:{unsigned(UC_HF_NONE),unsigned(UC_HF_DIALOG),unsigned(UC_HF_LIST)}){
         TrialFrontendPublish(f);TrialFrontendPublish(transition);
-        auto original=f;original.source.kind=kind;original.list_kind=0;original.delete_dialog=false;
+        auto original=f;original.source.kind=kind;original.list_kind=0;original.delete_dialog=false;original.pause_dialog=false;
         TrialFrontendPublish(original);DrawFrame();
         CHECK(hits.empty()&&ImGui::GetDrawData()->TotalVtxCount==0&&!frontend_presentation.visible);
         EmptyAction();EmptyName();
@@ -259,8 +324,8 @@ static void CheckProfilesAndName(){
     deletion.source.owner=0x7400;deletion.source.screen=profiles.source.screen;
     deletion.source.rows[0].callback=0x284580;deletion.source.rows[1].callback=0x284310;
     std::strcpy(deletion.delete_name,"Alice");
-    ImGui::GetIO().AddKeyEvent(ImGuiKey_Enter,true);Publish(deletion);CHECK(hits.size()==2);EmptyAction();
-    DrawFrame();EmptyAction();ImGui::GetIO().AddKeyEvent(ImGuiKey_Enter,false);Settle();
+    KeyEvent(ImGuiKey_Enter,true);Publish(deletion);CHECK(hits.size()==2);EmptyAction();
+    DrawFrame();EmptyAction();KeyEvent(ImGuiKey_Enter,false);Settle();
     Key(ImGuiKey_Enter);ordinary=Take();CHECK(ordinary.kind==UC_HF_ACTIVATE&&ordinary.index==1); // default No
     for(auto key:{ImGuiKey_Escape,ImGuiKey_Q}){Key(key);ordinary=Take();CHECK(ordinary.kind==UC_HF_BACK);}
     RightClick();ordinary=Take();CHECK(ordinary.kind==UC_HF_BACK);
@@ -284,7 +349,19 @@ static void CheckProfilesAndName(){
     auto name=MakeList(1);name.list_kind=0;name.source.kind=TRIAL_HF_NAME;
     name.source.count=1;name.source.owner=0x7100;name.source.screen=0x7200;
     name.source.rows[0].row=0x51d71c;name.name_capacity=15;
-    std::strcpy(name.name,"Unit");Publish(name);CHECK(hits.size()==2);
+    std::strcpy(name.name,"Unit");
+    // ImGui may still contain a second old-page Enter when the first one opens
+    // the text editor. It must neither submit the name nor steal text focus.
+    profiles.source.selected=3;++profiles.source.epoch;Publish(profiles);Move(0,0);Drain();
+    CHECK(KeyEvent(ImGuiKey_Enter,true));CHECK(KeyEvent(ImGuiKey_Enter,false));
+    CHECK(KeyEvent(ImGuiKey_Enter,true));CHECK(KeyEvent(ImGuiKey_Enter,false));
+    DrawFrame();ordinary=Take();CHECK(ordinary.kind==UC_HF_ACTIVATE&&ordinary.index==3);
+    TrialGraphicsMenuContext(0x800,name.source.screen,name.source.owner,0);TrialFrontendPublish(name);
+    for(unsigned i=0;i<8;++i){DrawFrame();EmptyName();EmptyAction();}
+    CHECK(native_confirm_generation.load()==0);
+    CHECK(KeyEvent(ImGuiKey_Space,true));CHECK(native_confirm_generation.load()==0);
+    KeyEvent(ImGuiKey_Space,false);Settle();EmptyName();
+    CHECK(hits.size()==2);
     CHECK(TrialFrontendOwns(name.source.owner,TRIAL_HF_NAME));
     // InputText uses real ImGui character/filter events, including Q as text.
     Key(ImGuiKey_End);Type(" Q7!_");auto edit=TakeName();
@@ -293,6 +370,7 @@ static void CheckProfilesAndName(){
     EmptyAction();Key(ImGuiKey_Backspace);edit=TakeName();CHECK(!std::strcmp(edit.text,"Unit Q"));
     Type("123456789012345");edit=TakeName();CHECK(std::strlen(edit.text)==15);
     Key(ImGuiKey_Enter);auto accept=TakeName();CHECK(accept.identity.kind==UC_HF_ACTIVATE&&std::strlen(accept.text)==15);
+    CHECK(native_confirm_generation.load()==0); // InputText owns name submission.
     // An original validation error preserves the edited draft and can be
     // corrected without losing focus or interpreting Q as the Back command.
     std::strcpy(name.name_error,"This profile name already exists.");
@@ -427,9 +505,9 @@ static void CheckLanguage(const TrialFrontendFrame& options){
     // A held opening Enter must not cycle the language or save it.
     Publish(options);auto row=hits[options.source.count+1];Move((row.a.x+row.b.x)/2,(row.a.y+row.b.y)/2);
     const auto saves=trial_language::saves;
-    ImGui::GetIO().AddKeyEvent(ImGuiKey_Enter,true);DrawFrame();Settle();
+    KeyEvent(ImGuiKey_Enter,true);DrawFrame();Settle();
     CHECK(PanelOpen()&&language_draft==1&&trial_language::saves==saves&&!LanguageDirty());
-    ImGui::GetIO().AddKeyEvent(ImGuiKey_Enter,false);Settle();
+    KeyEvent(ImGuiKey_Enter,false);Settle();
     // Actual controller producer: separate directions/confirm navigate the
     // language choice and Apply; the saved language is still next-boot only.
     auto pad=[&](uint32_t buttons,uint8_t a=0,uint8_t b=0){
@@ -462,9 +540,9 @@ static void CheckQuit(const TrialFrontendFrame& main){
     // Keyboard activation reaches the extra row; its opening Enter is held
     // through multiple modal frames without accepting the default No or Yes.
     Publish(main);auto quit=hits.back();Move((quit.a.x+quit.b.x)/2,(quit.a.y+quit.b.y)/2);
-    ImGui::GetIO().AddKeyEvent(ImGuiKey_Enter,true);DrawFrame();CHECK(quit_open);Settle();
+    KeyEvent(ImGuiKey_Enter,true);DrawFrame();CHECK(quit_open);Settle();
     CHECK(quit_open&&quit_selection==1&&quit_posts==before);EmptyAction();
-    ImGui::GetIO().AddKeyEvent(ImGuiKey_Enter,false);Settle();Key(ImGuiKey_Enter);cancelled();
+    KeyEvent(ImGuiKey_Enter,false);Settle();Key(ImGuiKey_Enter);cancelled();
 
     // Production posts the app's clean WM_CLOSE request once, only after Yes.
     open();fail_quit_post=true;Click(0);fail_quit_post=false;CHECK(quit_open&&!quit_submitted&&quit_posts==before);
@@ -472,7 +550,9 @@ static void CheckQuit(const TrialFrontendFrame& main){
     CloseQuit();Settle();
     Publish(main);Click(main.source.count);Key(ImGuiKey_LeftArrow);CHECK(quit_selection==0);
     Key(ImGuiKey_Space);CHECK(quit_submitted&&quit_posts==before+2);CloseQuit();Settle();
-    keyboard_mode=0;Publish(main);Click(main.source.count);TrialFrontendPad(0,0,0,0,0);
+    keyboard_mode=0;Publish(main);CHECK(hits.empty()&&!TrialFrontendOwns(main.source.owner,UC_HF_LIST));
+    TrialFrontendPad(0,0,0,0,0);TrialFrontendPad(0x200,0,0,0,0);DrawFrame();Settle();
+    CHECK(quit_open);TrialFrontendPad(0,0,0,0,0);
     TrialFrontendPad(4,0,0,0,0);DrawFrame();CHECK(quit_selection==0);TrialFrontendPad(0,0,0,0,0);
     TrialFrontendPad(0,255,0,0,0);DrawFrame();CHECK(quit_submitted&&quit_posts==before+3);
     TrialFrontendPad(0,255,0,0,0);Settle();CHECK(quit_posts==before+3);
@@ -484,6 +564,47 @@ static void CheckQuit(const TrialFrontendFrame& main){
     Publish(replacement);CHECK(!quit_open&&quit_posts==before+3);EmptyAction();
     auto pause=MakeList(2);Publish(pause);CheckStrip(pause.source.count);Click(pause.source.count-1);
     auto action=Take();CHECK(action.kind==UC_HF_ACTIVATE&&action.index==pause.source.count-1&&!quit_open);
+}
+static void CheckPauseConfirmation(){
+    const auto before=quit_posts;
+    auto f=MakeList(2);f.list_kind=0;f.source.kind=UC_HF_DIALOG;f.source.count=2;
+    f.source.owner=0x7800;f.source.selected=1;f.source.back_action=0x17;f.pause_dialog=true;
+    f.source.rows[0].callback=0x267400;f.source.rows[1].callback=0x284310;
+    std::strcpy(f.labels[0],"Yes");std::strcpy(f.labels[1],"No");
+    std::strcpy(f.dialog_message,"You will lose your progress, are you sure?");
+    CHECK(TrialFrontendSupported(f));
+    KeyEvent(ImGuiKey_Enter,true);Publish(f);CheckStrip(2);EmptyAction();
+    CHECK(hits[0].a.x==48.f*output.width/640.f&&hits[0].b.x==432.f*output.width/640.f);
+    CHECK(hits[1].a.y>hits[0].a.y);
+    for(unsigned i=0;i<4;++i){TrialFrontendPublish(f);DrawFrame();EmptyAction();}
+    KeyEvent(ImGuiKey_Enter,false);Settle();Move(0,0);
+    Key(ImGuiKey_Enter);auto a=Take();CHECK(a.kind==UC_HF_ACTIVATE&&a.index==1);
+    Click(0);a=Take();CHECK(a.kind==UC_HF_ACTIVATE&&a.index==0&&a.owner==f.source.owner);
+    Click(1);a=Take();CHECK(a.kind==UC_HF_ACTIVATE&&a.index==1);
+    for(auto key:{ImGuiKey_Escape,ImGuiKey_Q}){Key(key);a=Take();CHECK(a.kind==UC_HF_BACK);}
+    RightClick();a=Take();CHECK(a.kind==UC_HF_BACK);
+    ++f.source.epoch;Publish(f);Move(0,0);Key(ImGuiKey_UpArrow);Key(ImGuiKey_Space);
+    a=Take();CHECK(a.kind==UC_HF_ACTIVATE&&a.index==0);
+    // Retain the paused scene: no opaque cover is allowed over its content.
+    const float sx=output.width/640.f,sy=output.height/480.f;
+    bool shade=false;
+    for(const auto* list:ImGui::GetDrawData()->CmdLists)for(int i=0;i+3<list->VtxBuffer.Size;++i){
+        const auto* v=&list->VtxBuffer[i];
+        if(std::abs(v[0].pos.x-3*sx)<.01f&&std::abs(v[0].pos.y-73*sy)<.01f&&
+           std::abs(v[2].pos.x-637*sx)<.01f&&std::abs(v[2].pos.y-379*sy)<.01f){
+            CHECK((v[0].col>>IM_COL32_A_SHIFT)==112);shade=true;
+        }
+    }
+    CHECK(shade&&quit_posts==before);
+    // Switching devices relinquishes the native modal, including queued Yes.
+    FrontendAction(f,UC_HF_ACTIVATE,0);keyboard_mode=0;Publish(f);
+    CHECK(hits.empty()&&!frontend_presentation.visible&&!TrialFrontendOwns(f.source.owner,UC_HF_DIALOG));EmptyAction();
+    keyboard_mode=1;++f.source.epoch;Publish(f);CheckStrip(2);
+    auto invalid=f;invalid.source.rows[0].callback=0x267330;
+    CHECK(!TrialFrontendSupported(invalid));
+    invalid=f;invalid.source.source_kind=0;CHECK(!TrialFrontendSupported(invalid));
+    invalid=f;invalid.dialog_message[0]=0;CHECK(!TrialFrontendSupported(invalid));
+    CheckVisualHandoff(f);CHECK(quit_posts==before);
 }
 static void CheckSize(unsigned width,unsigned height){
     output={width,height};live={};Close();TrialFrontendPublish({});TrialGraphicsMenuContext(0,0,0,0);Settle();
@@ -503,30 +624,78 @@ static void CheckSize(unsigned width,unsigned height){
     auto options=MakeList(3);OpenGraphics(options);unsigned before=applied;ChangeSetting(3);CHECK(Dirty());CHECK(live.settings.render_percent==100);
     sample_support=2|(1u<<4);ChangeSetting(9);CHECK(draft.msaa==4&&live.msaa==1);
     sample_support=2|(1u<<2)|(1u<<4);
-    Click(14);CHECK(applied==before+1&&live.settings.render_percent==125&&live.msaa==4&&!Dirty());
+    Click(18);CHECK(applied==before+1&&live.settings.render_percent==125&&live.msaa==4&&!Dirty());
     ChangeSetting(10);ChangeSetting(11);ChangeSetting(12);ChangeSetting(13);ChangeSetting(13);
     CHECK(!draft.scenery&&!draft.characters&&draft.character_quality==1&&draft.ragdolls==2&&Dirty());
     CHECK(live.scenery&&live.characters&&live.character_quality==0&&live.ragdolls==0);
-    CHECK(hits.size()==17&&draft.ragdolls==2);Click(14);
+    CHECK(hits.size()==21&&draft.ragdolls==2);Click(18);
     CHECK(applied==before+2&&!live.scenery&&!live.characters&&live.character_quality==1&&live.ragdolls==2&&!Dirty());
-    ChangeSetting(13);CHECK(Dirty());Click(15);CHECK(!Dirty()&&draft.ragdolls==2);
+    ChangeSetting(13);CHECK(Dirty());Click(19);CHECK(!Dirty()&&draft.ragdolls==2);
+    ChangeSetting(14);CHECK(draft.fov!=53&&live.fov==53&&Dirty());
+    // Both real tracks drag/clamp without touching committed settings before Apply.
+    auto drag=[&](unsigned row,float start,float end){
+        const auto hit=hits[row];const float y=(hit.a.y+hit.b.y)*.5f;
+        Move(start*width/640.f,y);ImGui::GetIO().AddMouseButtonEvent(0,true);DrawFrame();
+        Move(end*width/640.f,y);DrawFrame();
+        ImGui::GetIO().AddMouseButtonEvent(0,false);Settle();
+    };
+    drag(14,470,600);CHECK(draft.fov==90&&live.fov==53);
+    drag(14,470,300);CHECK(draft.fov==40&&live.fov==53);
+    drag(14,470,492.4f);CHECK(draft.fov==70&&live.fov==53);
+    CHECK(draft.reticle_scale==100&&live.reticle_scale==100);
+    drag(16,470,600);CHECK(draft.reticle_scale==200&&live.reticle_scale==100);
+    drag(16,470,300);CHECK(draft.reticle_scale==50&&live.reticle_scale==100);
+    drag(16,470,500.67f);CHECK(draft.reticle_scale==150&&live.reticle_scale==100);
+    Key(ImGuiKey_LeftArrow);CHECK(draft.reticle_scale==145&&live.reticle_scale==100);
+    Key(ImGuiKey_RightArrow);CHECK(draft.reticle_scale==150);
+    // A key pressed while releasing a drag still applies exactly one step.
+    const auto reticle_hit=hits[16];const float reticle_y=(reticle_hit.a.y+reticle_hit.b.y)*.5f;
+    Move(500.67f*width/640.f,reticle_y);ImGui::GetIO().AddMouseButtonEvent(0,true);DrawFrame();
+    CHECK(draft.reticle_scale==150);
+    ImGui::GetIO().AddMouseButtonEvent(0,false);KeyEvent(ImGuiKey_LeftArrow,true);DrawFrame();
+    KeyEvent(ImGuiKey_LeftArrow,false);Settle();CHECK(draft.reticle_scale==145);
+    Key(ImGuiKey_RightArrow);CHECK(draft.reticle_scale==150);
+    Click(18);CHECK(live.fov==70&&live.reticle_scale==150&&!Dirty());
+    ChangeSetting(16);CHECK(draft.reticle_scale==155&&live.reticle_scale==150&&Dirty());
+    Click(20);CHECK(confirm_back);Click(2);CHECK(PanelOpen()&&Dirty());
+    Click(19);CHECK(draft.reticle_scale==150&&live.reticle_scale==150&&!Dirty());
+    // Weapon FOV is independent of the world camera, with the same Apply policy.
+    CHECK(draft.weapon_fov==100&&live.weapon_fov==100);
+    drag(17,470,600);CHECK(draft.weapon_fov==150&&live.weapon_fov==100&&draft.fov==70);
+    drag(17,470,300);CHECK(draft.weapon_fov==50&&live.weapon_fov==100&&draft.fov==70);
+    drag(17,470,511);CHECK(draft.weapon_fov==125&&live.weapon_fov==100);
+    fail_apply=true;Click(18);fail_apply=false;CHECK(Dirty()&&live.weapon_fov==100);
+    Click(19);CHECK(!Dirty()&&draft.weapon_fov==100);
+    ChangeSetting(17);CHECK(draft.weapon_fov==105&&Dirty());Click(20);CHECK(confirm_back);
+    Click(2);CHECK(PanelOpen()&&Dirty());Click(18);
+    CHECK(live.weapon_fov==105&&live.fov==70&&!Dirty());
+    // HD changes use the same staged save/discard/back policy, including failures.
+    CHECK(!live.hd_ui);ChangeSetting(15);CHECK(draft.hd_ui&&Dirty()&&!live.hd_ui);
+    fail_apply=true;Click(18);fail_apply=false;CHECK(draft.hd_ui&&Dirty()&&!live.hd_ui);
+    Click(19);CHECK(!draft.hd_ui&&!Dirty());
+    ChangeSetting(15);Click(20);CHECK(confirm_back&&hits.size()==3);
+    Click(2);CHECK(PanelOpen()&&draft.hd_ui&&Dirty());
+    Click(20);Click(1);CHECK(!PanelOpen()&&!live.hd_ui);
+    OpenGraphics(options);CHECK(!draft.hd_ui&&!Dirty());
+    ChangeSetting(15);Click(18);CHECK(live.hd_ui&&!Dirty());
+    ChangeSetting(15);Click(19);CHECK(live.hd_ui&&draft.hd_ui&&!Dirty());
     // One Fog control covers all four effective modes. Mouse edits stay in the
     // draft, and failed Apply rolls back the three compatible config keys.
     CHECK(TrialDistanceFog&&!TrialSmoothFog&&TrialFogDistanceMode==0);
     ChangeSetting(8);CHECK(draft_fog_mode==2&&!TrialSmoothFog&&Dirty());
-    Click(15);CHECK(draft_fog_mode==1&&TrialDistanceFog&&!Dirty());
-    ChangeSetting(8);Click(14);CHECK(TrialDistanceFog&&TrialFogDistanceMode==0&&TrialSmoothFog&&!Dirty());
-    ChangeSetting(8);Click(14);CHECK(TrialDistanceFog&&TrialFogDistanceMode==1&&!TrialSmoothFog&&!Dirty());
-    ChangeSetting(8);fail_apply=true;Click(14);fail_apply=false;
+    Click(19);CHECK(draft_fog_mode==1&&TrialDistanceFog&&!Dirty());
+    ChangeSetting(8);Click(18);CHECK(TrialDistanceFog&&TrialFogDistanceMode==0&&TrialSmoothFog&&!Dirty());
+    ChangeSetting(8);Click(18);CHECK(TrialDistanceFog&&TrialFogDistanceMode==1&&!TrialSmoothFog&&!Dirty());
+    ChangeSetting(8);fail_apply=true;Click(18);fail_apply=false;
     CHECK(TrialDistanceFog&&TrialFogDistanceMode==1&&!TrialSmoothFog&&draft_fog_mode==0&&Dirty());
-    Click(14);CHECK(!TrialDistanceFog&&TrialFogDistanceMode==0&&!TrialSmoothFog&&!Dirty());
-    ChangeSetting(8);Click(14);CHECK(TrialDistanceFog&&TrialFogDistanceMode==0&&!TrialSmoothFog&&!Dirty());
-    ChangeSetting(8);Click(16);CHECK(confirm_back&&hits.size()==3);
-    Key(ImGuiKey_Escape);Settle();CHECK(!confirm_back&&PanelOpen()&&Dirty()&&hits.size()==17);
-    CHECK(draft_fog_mode==2&&!TrialSmoothFog);Click(15);CHECK(!Dirty());
-    ChangeSetting(6);CHECK(Dirty()&&message.empty());Click(16);CHECK(confirm_back&&hits.size()==3);
-    Key(ImGuiKey_Escape);Settle();CHECK(!confirm_back&&PanelOpen()&&Dirty()&&hits.size()==17);
-    Click(16);CHECK(confirm_back&&hits.size()==3);Click(1);CHECK(!PanelOpen());
+    Click(18);CHECK(!TrialDistanceFog&&TrialFogDistanceMode==0&&!TrialSmoothFog&&!Dirty());
+    ChangeSetting(8);Click(18);CHECK(TrialDistanceFog&&TrialFogDistanceMode==0&&!TrialSmoothFog&&!Dirty());
+    ChangeSetting(8);Click(20);CHECK(confirm_back&&hits.size()==3);
+    Key(ImGuiKey_Escape);Settle();CHECK(!confirm_back&&PanelOpen()&&Dirty()&&hits.size()==21);
+    CHECK(draft_fog_mode==2&&!TrialSmoothFog);Click(19);CHECK(!Dirty());
+    ChangeSetting(6);CHECK(Dirty()&&message.empty());Click(20);CHECK(confirm_back&&hits.size()==3);
+    Key(ImGuiKey_Escape);Settle();CHECK(!confirm_back&&PanelOpen()&&Dirty()&&hits.size()==21);
+    Click(20);CHECK(confirm_back&&hits.size()==3);Click(1);CHECK(!PanelOpen());
     CHECK(live.settings.render_percent==125&&live.settings.fps_cap==60);CheckStrip(5);
 
     // A fresh controller Back reaches the open page; its held repeat cannot
@@ -541,7 +710,7 @@ static void CheckSize(unsigned width,unsigned height){
     // RMB has the same Back policy as Q/Escape, including dirty confirmation.
     OpenGraphics(options);ChangeSetting(3);RightClick();CHECK(confirm_back&&PanelOpen()&&Dirty());
     RightClick();CHECK(!confirm_back&&PanelOpen()&&Dirty());
-    Click(15);CHECK(!Dirty());
+    Click(18);CHECK(!Dirty());
     ImGui::GetIO().AddMouseButtonEvent(1,true);DrawFrame();CHECK(!PanelOpen());
     Settle();EmptyAction(); // held closing click cannot back out of Options too
     ImGui::GetIO().AddMouseButtonEvent(1,false);Settle();EmptyAction();
@@ -570,8 +739,8 @@ static void CheckSize(unsigned width,unsigned height){
     Click(0);auto sliding=levels;sliding.source.source_kind|=UC_HF_TRANSITION;
     TrialFrontendPublish(sliding);DrawFrame();CHECK(hits.size()==21&&ImGui::GetDrawData()->TotalVtxCount>100);
     CHECK(!TrialFrontendOwns(levels.source.owner,UC_HF_LEVELS));EmptyAction();
-    ImGui::GetIO().AddKeyEvent(ImGuiKey_Enter,true);Publish(levels);EmptyAction();
-    ImGui::GetIO().AddKeyEvent(ImGuiKey_Enter,false);Settle();EmptyAction();
+    KeyEvent(ImGuiKey_Enter,true);Publish(levels);EmptyAction();
+    KeyEvent(ImGuiKey_Enter,false);Settle();EmptyAction();
     Key(ImGuiKey_Enter);action=Take();CHECK(action.kind==UC_HF_ACTIVATE);
 
     // The actual Graphics UI must consume controller navigation and Apply.
@@ -582,8 +751,17 @@ static void CheckSize(unsigned width,unsigned height){
     // Select a known row with mouse once, then operate entirely by controller.
     Move(0,0);ClickPoint(hits[7].a.x+2,hits[7].a.y+2);const bool old_fps=draft_fps;
     pad(8);CHECK(draft_fps!=old_fps);pad(4);CHECK(draft_fps==old_fps);
-    for(unsigned i=0;i<7;++i)pad(2); // FPS row 7 -> Apply row 14.
-    const auto saved=applied;pad(0,255);CHECK(applied==saved+1);
+    for(unsigned i=0;i<8;++i)pad(2); // FPS row 7 -> HD UI row 15.
+    const bool old_hd=live.hd_ui;pad(8);CHECK(draft.hd_ui!=old_hd&&live.hd_ui==old_hd&&Dirty());
+    pad(2); // Reticle row 16, then Weapon FOV row 17.
+    const auto old_reticle=live.reticle_scale;pad(8);
+    CHECK(draft.reticle_scale==old_reticle+5&&live.reticle_scale==old_reticle&&Dirty());
+    pad(4);CHECK(draft.reticle_scale==old_reticle);
+    pad(2);
+    const auto old_weapon=live.weapon_fov;pad(8);
+    CHECK(draft.weapon_fov==old_weapon+5&&live.weapon_fov==old_weapon&&Dirty());
+    pad(2); // Apply
+    const auto saved=applied;pad(0,255);CHECK(applied==saved+1&&live.hd_ui!=old_hd&&!Dirty());
     pad(0,0,255);CHECK(!PanelOpen());EmptyAction();keyboard_mode=1;
     Publish(levels);pad(0x200);action=Take();CHECK(action.kind==UC_HF_DIFFICULTY);
     pad(0x100);action=Take();CHECK(action.kind==UC_HF_REWARDS);
@@ -603,7 +781,7 @@ static void CheckSize(unsigned width,unsigned height){
     RightClick();action=Take();CHECK(action.kind==UC_HF_BACK);
     keyboard_mode=0;Publish(rewards);CHECK(hits.empty()&&!frontend_presentation.visible);
     keyboard_mode=1;
-    CheckControls(options);CheckLanguage(options);CheckProfilesAndName();CheckQuit(main);
+    CheckControls(options);CheckLanguage(options);CheckProfilesAndName();CheckQuit(main);CheckPauseConfirmation();
     CheckVisualHandoff(main);CheckVisualHandoff(pause);CheckVisualHandoff(options);CheckVisualHandoff(levels);
 
     // A queued Graphics request must never attach to a newly switched screen.
@@ -614,6 +792,8 @@ static void CheckSize(unsigned width,unsigned height){
     OpenGraphics(options);auto moving_options=options;moving_options.source.source_kind|=UC_HF_TRANSITION;
     TrialFrontendPublish(moving_options);DrawFrame();CHECK(!PanelOpen()&&hits.size()==options.source.count+2);
     TrialFrontendPublish({});DrawFrame();CHECK(hits.empty()&&!TrialGraphicsOpen());
+    // Render, effects, world/weapon FOV, HD, four fog modes, RMB flow, controller Apply.
+    CHECK(applied==before+11);
     std::printf("PASS %ux%u: menu strips, profile targets, typed names, 17 level hits, draft/apply/discard, release gates and stale screen revocation\n",width,height);
 }
 int main(){
@@ -625,6 +805,22 @@ int main(){
     CheckLegacyFogSettings();CHECK(applied==8);
     const unsigned before_ui=applied;
     CheckSize(640,480);CheckSize(1920,1080);CheckSize(2560,1440);
-    CHECK(input_changes>10&&applied==before_ui+21&&frames>100);
+    CheckNativeConfirmTransitions();
+    for(unsigned kind:{4u,5u}){
+        auto page=MakeList(kind);
+        for(unsigned i=0;i<page.source.count;++i){page.source.rows[i].actions=UC_HF_ROW_LEFT|UC_HF_ROW_RIGHT;std::strcpy(page.values[i],"16");}
+        keyboard_mode=1;Publish(page);CHECK(hits.size()==page.source.count+1);
+        auto r=hits[0];ClickPoint(r.a.x+345*output.width/640.f,(r.a.y+r.b.y)/2);
+        auto action=Take();CHECK(action.kind==UC_HF_LEFT&&action.index==0);
+        Key(ImGuiKey_RightArrow);action=Take();CHECK(action.kind==UC_HF_RIGHT&&action.index==0);
+        RightClick();action=Take();CHECK(action.kind==UC_HF_BACK);
+        auto transition=page;transition.source.source_kind|=UC_HF_TRANSITION;
+        TrialFrontendPublish(transition);DrawFrame();CHECK(!TrialFrontendOwns(page.source.owner,UC_HF_LIST));
+        Key(ImGuiKey_RightArrow);EmptyAction();
+        keyboard_mode=0;Publish(page);CHECK(hits.empty()&&!TrialGraphicsOpen());
+        keyboard_mode=1;
+    }
+    std::printf("UI totals: input changes=%u, applies=%u, frames=%u\n",input_changes,applied-before_ui,frames);
+    CHECK(input_changes>10&&applied==before_ui+33&&frames>100);
     ImGui::DestroyContext();std::puts("PASS actual menu UI + original fonts offline; no live scene or visual parity claim");
 }

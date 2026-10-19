@@ -1,14 +1,16 @@
-"""Assemble the tested D3D12 release from an explicit asset-free allowlist."""
+"""Assemble a tested release from an explicit runtime/restored-art allowlist."""
 from pathlib import Path
 import argparse
 import hashlib
 import json
+import re
 import shutil
+import struct
 import sys
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
-VERSION = '0.04'
+VERSION = '0.05'
 SDK = REPO / 'build/upstream-review-xboxxbe-20261014'
 RUNTIME_NAME = 'UrbanChaosXbeTrial.exe'
 RUNTIME_FILES = (RUNTIME_NAME, 'zlib1.dll', 'libusb-1.0.dll', 'msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll')
@@ -17,6 +19,94 @@ CRT = VS / 'VC/Redist/MSVC/14.44.35112/x64/Microsoft.VC143.CRT'
 PYTHON_FILES = ('python.exe', 'python312.dll', 'python3.dll', 'python312.zip',
                 'vcruntime140.dll', 'vcruntime140_1.dll', '_hashlib.pyd', 'libcrypto-3.dll', 'LICENSE.txt')
 LAUNCHERS = {'Burner Edition Setup.exe', 'Play Burner Edition.exe'}
+ARTWORK = REPO / 'artwork/hd-ui'
+ARTWORK_LIMIT = 32 * 1024 * 1024
+
+
+def valid_hash(value):
+    return isinstance(value, str) and re.fullmatch(r'[0-9a-f]{64}', value)
+
+
+def artwork_name(value):
+    if (not isinstance(value, str) or not 0 < len(value) < 128 or '..' in value or
+            not re.fullmatch(r'[A-Za-z0-9_.-]+\.png', value)):
+        raise ValueError('Invalid approved artwork filename')
+    if value.split('.')[0].upper() in {'CON', 'PRN', 'AUX', 'NUL',
+                                     *[f'COM{i}' for i in range(10)], *[f'LPT{i}' for i in range(10)]}:
+        raise ValueError('Reserved approved artwork filename')
+    return value
+
+
+def artwork_sources(directory):
+    """Only the canonical approved manifest can add art to the release allowlist."""
+    if directory.is_symlink() or directory.is_junction():
+        raise ValueError('Artwork source directory cannot be a link')
+    manifest = directory / 'manifest.json'
+    if manifest.is_symlink() or manifest.stat().st_size > 1024 * 1024:
+        raise ValueError('Invalid approved artwork manifest')
+    data = json.loads(manifest.read_text())
+    if (not isinstance(data, dict) or set(data) != {'version', 'assets'} or type(data['version']) is not int or
+            data['version'] != 1 or not isinstance(data['assets'], list) or len(data['assets']) > 512):
+        raise ValueError('Invalid approved artwork schema')
+    fields = {'name', 'width', 'height', 'format', 'source_bytes', 'source_sha256',
+              'png', 'png_sha256', 'crop', 'alpha'}
+    plan, identities, seen = {}, {}, {}
+    for row in data['assets']:
+        if not isinstance(row, dict) or not fields <= set(row) or set(row) - fields - {'placement', 'color'}:
+            raise ValueError('Invalid approved artwork record')
+        name = row['name']
+        if (not isinstance(name, str) or not name or len(name) > 512 or name != name.lower() or
+                not name.startswith(('hud\\', 'frontend\\', 'font\\', 'fonts\\')) or
+                any(ord(c) < 32 or ord(c) > 126 or c == '/' for c in name) or
+                any(part in ('', '.', '..') for part in name.split('\\'))):
+            raise ValueError('Invalid original UI identity name')
+        if (any(type(row[k]) is not int for k in ('width', 'height', 'format', 'source_bytes')) or
+                not 0 < row['width'] <= 1024 or not 0 < row['height'] <= 1024 or row['format'] not in (12, 15) or
+                not 0 < row['source_bytes'] <= 2 * 1024 * 1024 or not valid_hash(row['source_sha256']) or
+                not valid_hash(row['png_sha256']) or row['alpha'] not in ('png', 'source')):
+            raise ValueError('Invalid original UI identity or artwork hash')
+        png = artwork_name(row['png'])
+        placement = row.get('placement', 'canvas')
+        bound_sprite = name.startswith('hud\\') or name in {
+            'frontend\\frt_content\\' + leaf for leaf in ('lc_medal01.tga', 'lc_medal02.tga',
+                'lc_medal03.tga', 'lc_medal04.tga', 'lc_medal01smg.tga', 'reward_star.tga')}
+        if (placement not in ('canvas', 'source_bounds') or
+                (placement == 'source_bounds' and (row['alpha'] != 'png' or not bound_sprite))):
+            raise ValueError('Invalid approved artwork placement')
+        color = row.get('color', 'png')
+        if color not in ('png', 'source_chroma') or (color == 'source_chroma' and not (
+                row['alpha'] == 'source' and row['width'] == row['height'] == 32 and
+                name.startswith(('frontend\\frt_content\\level_image_', 'frontend\\frt_content\\reward_image_')) and
+                name.endswith('smg.tga'))):
+            raise ValueError('Invalid approved artwork color policy')
+        if png.lower() in seen and seen[png.lower()] != (png, row['png_sha256']):
+            raise ValueError('Conflicting approved artwork filename')
+        crop = row['crop']
+        if not isinstance(crop, list) or len(crop) != 4 or any(type(v) is not int or v < 0 for v in crop):
+            raise ValueError('Invalid approved artwork crop')
+        identity = tuple(row[k] for k in ('width', 'height', 'format', 'source_bytes', 'source_sha256'))
+        replacement = (png, row['png_sha256'], tuple(crop), row['alpha'], placement, color)
+        if identity in identities and identities[identity] != replacement:
+            raise ValueError('Conflicting artwork for an identical original texture')
+        path = directory / png
+        if path.is_symlink() or not path.is_file() or not 0 < path.stat().st_size <= ARTWORK_LIMIT or sha(path) != row['png_sha256']:
+            raise ValueError('Missing or modified approved artwork: ' + png)
+        with path.open('rb') as file:
+            header = file.read(24)
+        if len(header) != 24 or header[:16] != b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR':
+            raise ValueError('Approved artwork is not a PNG: ' + png)
+        width, height = struct.unpack('>II', header[16:24])
+        if not 0 < width <= 8192 or not 0 < height <= 8192 or width * height * 4 > 64 * 1024 * 1024:
+            raise ValueError('Approved artwork dimensions exceed the loader bounds')
+        x, y, w, h = (0, 0, width, height) if crop == [0, 0, 0, 0] else crop
+        if (not w or not h or x + w > width or y + h > height or
+                w < row['width'] * 2 or h < row['height'] * 2 or
+                (placement != 'source_bounds' and w * row['height'] != h * row['width'])):
+            raise ValueError('Approved artwork crop does not preserve the source aspect')
+        seen[png.lower()] = (png, row['png_sha256'])
+        identities[identity] = replacement
+        plan['runtime/hd-ui/' + png] = path
+    return plan, {'hd-ui/' + png: digest for png, digest in seen.values()}
 
 
 def sha(path):
@@ -60,7 +150,10 @@ def audit(package, allowlist, require_launchers=True):
     expected = set(allowlist)
     if require_launchers:
         expected |= LAUNCHERS
-    actual = {p.relative_to(package).as_posix() for p in package.rglob('*') if p.is_file()}
+    paths = list(package.rglob('*'))
+    if any(path.is_symlink() or path.is_junction() for path in paths):
+        raise ValueError('Package contains a linked file or directory')
+    actual = {p.relative_to(package).as_posix() for p in paths if p.is_file()}
     if actual != expected:
         raise ValueError('Unexpected/missing package files: ' + repr(sorted(actual ^ expected)))
     manifest = json.loads((package / 'tools/disc-manifest.json').read_text())
@@ -78,13 +171,30 @@ def audit(package, allowlist, require_launchers=True):
             raise ValueError('Original disc file in release: ' + name)
         files[name] = digest
     info = json.loads((package / 'tools/runtime-manifest.json').read_text())
+    if not isinstance(info, dict) or not isinstance(info.get('files'), dict) or set(info['files']) != set(RUNTIME_FILES):
+        raise ValueError('Runtime package file list changed')
     for name, digest in info['files'].items():
         if files['runtime/' + name] != digest:
             raise ValueError('Runtime package identity changed')
+    art = info.get('artwork', {})
+    if not isinstance(art, dict) or len(art) > 512:
+        raise ValueError('Invalid runtime artwork map')
+    seen = set()
+    for name, digest in art.items():
+        if not isinstance(name, str) or not name.startswith('hd-ui/'):
+            raise ValueError('Invalid runtime artwork path')
+        artwork_name(name[6:])
+        if (name.lower() in seen or not valid_hash(digest) or files.get('runtime/' + name) != digest or
+                not 0 < (package / 'runtime' / name).stat().st_size <= ARTWORK_LIMIT):
+            raise ValueError('Runtime artwork identity changed')
+        seen.add(name.lower())
+    if {name for name in actual if name.startswith('runtime/hd-ui/')} != {'runtime/' + name for name in art}:
+        raise ValueError('Unlisted restored artwork in package')
     return {'version': VERSION, 'strict_allowlist': True, 'files': files,
             'disc_payload_hashes_checked': len(forbidden_hashes),
             'original_payload_files_in_package': 0,
-            'note': 'Runtime generated code and custom edition artwork are permitted. No imported assets, saves, settings, caches, logs or diagnostic executables are packaged. Live startup and audible/visual acceptance are separate checks.'}
+            'restored_artwork_files': len(art),
+            'note': 'Generated runtime code, custom edition artwork and approved restored PNGs are permitted. No original disc payloads, imported assets, saves, settings, caches, logs or diagnostic executables are packaged. Live appearance is a separate check.'}
 
 
 def assemble(runtime, expected_sha256, output):
@@ -93,6 +203,8 @@ def assemble(runtime, expected_sha256, output):
     if output.exists():
         raise ValueError('Choose a fresh package directory; existing packages are never overwritten.')
     plan = sources(runtime)
+    restored, artwork = artwork_sources(ARTWORK)
+    plan.update(restored)
     for name, source in plan.items():
         if not source.is_file():
             raise ValueError('Missing package dependency: ' + str(source))
@@ -103,7 +215,7 @@ def assemble(runtime, expected_sha256, output):
         shutil.copy2(source, dest)
     (output / 'tools/python/python312._pth').write_text('python312.zip\n.\n..\n')
     info = {'version': VERSION, 'files': {
-        name: sha(plan['runtime/' + name]) for name in RUNTIME_FILES}}
+        name: sha(plan['runtime/' + name]) for name in RUNTIME_FILES}, 'artwork': artwork}
     (output / 'tools/runtime-manifest.json').write_text(json.dumps(info, indent=2) + '\n')
     (output / 'licenses/DEPENDENCIES.txt').write_text(
         'XboxXBERecomp by TGP482: https://github.com/TGP482/XboxXBERecomp (MIT).\n'
@@ -113,7 +225,7 @@ def assemble(runtime, expected_sha256, output):
         'Python3.12 and included OpenSSL: tools/python/LICENSE.txt. zlib: zlib.txt.\n'
         'Microsoft Visual C++2015-2022 runtime: app-local DLLs from the official VS2022 Redist folder; Microsoft-Visual-Cpp-Redistribution.txt and accompanying Microsoft notices.\n'
         'Direct3D12, XAudio2 and other Windows components are supplied by Windows.\n'
-        'The launcher cover/icon is the existing custom Burner Edition artwork, not an extracted disc file.\n')
+        'The launcher cover/icon is custom Burner Edition artwork. Approved restored HD UI PNGs are included under runtime/hd-ui; original disc files are still supplied by the user.\n')
     allowlist = set(plan) | {'tools/python/python312._pth', 'tools/runtime-manifest.json',
                             'licenses/DEPENDENCIES.txt'}
     result = audit(output, allowlist, require_launchers=False)

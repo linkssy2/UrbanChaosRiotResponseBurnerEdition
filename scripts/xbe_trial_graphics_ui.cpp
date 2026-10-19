@@ -2,6 +2,7 @@
 #include <windows.h>
 #include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <mutex>
@@ -28,7 +29,8 @@ std::mutex context_lock;
 Menu context, opened;
 Menu quit_origin;
 uint64_t quit_epoch=0;
-bool quit_open=false,quit_submitted=false;
+std::atomic<bool> quit_open=false;
+bool quit_submitted=false;
 unsigned quit_selection=1;
 TrialFrontendFrame frontend;
 TrialFrontendPresentation frontend_presentation;
@@ -37,6 +39,14 @@ TrialFrontendNameActionData frontend_name_action{};
 std::atomic<bool> frontend_active=false;
 std::atomic<unsigned> frontend_events=0;
 std::atomic<uint64_t> navigation_generation=1;
+// ImGui may spread rapid taps over several frames. Confirm belongs to the
+// native page that received its window event, never a later page's key queue.
+std::atomic<uint64_t> native_confirm_generation=0;
+std::atomic<bool> frontend_text_entry=false,frontend_transition=false;
+bool TakeNativeConfirm(bool ready){
+    const auto received=native_confirm_generation.exchange(0);
+    return ready&&received&&received==navigation_generation.load();
+}
 std::atomic<bool> panel_open=false, open_requested=false;
 std::atomic<unsigned> settings_page=0; // 0 Graphics, 1 Controls, 2 Language, all under Options.
 void ControlsReadDraft();
@@ -65,9 +75,9 @@ bool Dirty() {
     auto live=trial_graphics::Snapshot();const auto&a=draft.settings;const auto&b=live.settings;
     return a.width!=b.width||a.height!=b.height||a.display_mode!=b.display_mode||
         a.render_percent!=b.render_percent||a.vsync!=b.vsync||a.fps_cap!=b.fps_cap||a.aniso!=b.aniso||
-        draft.aspect!=live.aspect||draft.msaa!=live.msaa||draft.scenery!=live.scenery||
+        draft.fov!=live.fov||draft.weapon_fov!=live.weapon_fov||draft.aspect!=live.aspect||draft.msaa!=live.msaa||draft.scenery!=live.scenery||
         draft.characters!=live.characters||draft.character_quality!=live.character_quality||
-        draft.ragdolls!=live.ragdolls||draft_fps!=TrialShowFps||draft_fog_mode!=FogMode();
+        draft.ragdolls!=live.ragdolls||draft.hd_ui!=live.hd_ui||draft.reticle_scale!=live.reticle_scale||draft_fps!=TrialShowFps||draft_fog_mode!=FogMode();
 }
 void Close() {
     ControlsCancelCapture();
@@ -119,7 +129,7 @@ struct MenuCanvas {
     float sx,sy;
     explicit MenuCanvas(const ImGuiViewport* v):view(v),draw(ImGui::GetWindowDrawList()),sx(v->Size.x/640.f),sy(v->Size.y/480.f){}
     ImVec2 Point(float x,float y)const{return {view->Pos.x+x*sx,view->Pos.y+y*sy};}
-    ImFont* Font(bool title=false)const{return title&&title_font?title_font:body_font?body_font:ImGui::GetFont();}
+    ImFont* Font(bool title=false)const{return TrialFrontendFontForUi(title&&title_font?title_font:body_font?body_font:ImGui::GetFont());}
     float Width(const char* text,float height,bool title=false)const{
         return Font(title)->CalcTextSizeA(height*sy,100000,0,text).x/sx;
     }
@@ -211,9 +221,10 @@ void RowStrip(MenuCanvas& c,const char*const* labels,const bool* enabled,unsigne
 void FrontendAction(const TrialFrontendFrame& f,unsigned action,unsigned index=0){
     std::lock_guard lock(context_lock);
     const auto& s=f.source;
-    if(!frontend_active||frontend.source.epoch!=s.epoch||frontend.source.owner!=s.owner)return;
+    if((!frontend_active&&!PanelOpen())||frontend.source.epoch!=s.epoch||frontend.source.owner!=s.owner)return;
     if(frontend_action.kind&&frontend_action.kind!=UC_HF_SELECT)return;
     frontend_action={s.epoch,s.screen,s.owner,index<s.count?s.rows[index].row:0,index,action};
+    if(action!=UC_HF_SELECT)native_confirm_generation=0;
 }
 bool IsMainMenu(const TrialFrontendFrame& f){
     return f.source.kind==UC_HF_LIST&&f.list_kind==1;
@@ -224,7 +235,7 @@ bool QuitMatches(const TrialFrontendFrame& f){
 }
 void OpenQuit(const TrialFrontendFrame& f){
     std::lock_guard lock(context_lock);
-    if(!frontend_active||!IsMainMenu(f)||frontend.source.epoch!=f.source.epoch||
+    if(!TrialFrontendSupported(frontend)||!IsMainMenu(f)||frontend.source.epoch!=f.source.epoch||
        frontend.source.owner!=f.source.owner||context.kind!=1||
        context.owner!=f.source.owner||context.screen!=f.source.screen)return;
     quit_origin=context;quit_epoch=f.source.epoch;quit_open=true;quit_submitted=false;quit_selection=1;
@@ -238,6 +249,7 @@ void QuitUi(const ImGuiViewport* view){
     static TrialFrontendReleaseGate gate;
     const bool ready=!quit_submitted&&gate.Accept(navigation_generation.load(),UiHeld());
     const unsigned events=frontend_events.exchange(0);
+    const bool confirm=TakeNativeConfirm(ready);
     BeginMenu("Quit to desktop",view);MenuCanvas canvas(view);canvas.SettingsFrame(false,"QUIT TO DESKTOP");
     canvas.Center("Are you sure you want to quit?",40,165,560,24,white,true);
     ImGui::BeginDisabled(!ready);
@@ -247,7 +259,7 @@ void QuitUi(const ImGuiViewport* view){
         // Use the same window-thread shutdown as closing the game window:
         // WM_CLOSE -> WM_DESTROY -> the app loop's kernel::Shutdown.
         {std::lock_guard lock(context_lock);
-            if(!frontend_active||!QuitMatches(frontend)||!SameMenu(context,quit_origin))return;}
+            if(!TrialFrontendSupported(frontend)||!QuitMatches(frontend)||!SameMenu(context,quit_origin))return;}
         if(PostMessageW(static_cast<HWND>(app::Window()),WM_CLOSE,0,0))quit_submitted=true;
     };
     if(ready){
@@ -256,7 +268,7 @@ void QuitUi(const ImGuiViewport* view){
             quit_selection=1-quit_selection;
         const bool back=(events&8)||ImGui::IsMouseClicked(1,false)||ImGui::IsKeyPressed(ImGuiKey_Q,false)||ImGui::IsKeyPressed(ImGuiKey_Escape,false);
         if(back)CloseQuit();
-        else if((events&4)||ImGui::IsKeyPressed(ImGuiKey_Enter,false)||ImGui::IsKeyPressed(ImGuiKey_Space,false))activate(quit_selection);
+        else if((events&4)||confirm)activate(quit_selection);
     }
     const char* labels[]={"Yes","No"};
     RowStrip(canvas,labels,nullptr,2,257,quit_selection,[&](unsigned i){quit_selection=i;},
@@ -265,16 +277,21 @@ void QuitUi(const ImGuiViewport* view){
     else FooterPrompts(canvas,{{0x103,"Navigate"},{0x101,"Select"},{0x102,"Back"}});
     ImGui::EndDisabled();EndMenu();
 }
-void DeleteProfileUi(const TrialFrontendFrame& f,const ImGuiViewport* view,bool interactive=true){
+void ConfirmationUi(const TrialFrontendFrame& f,const ImGuiViewport* view,bool interactive=true){
     static uint64_t epoch=0;static unsigned selection=1;static TrialFrontendReleaseGate gate;
     if(epoch!=f.source.epoch){epoch=f.source.epoch;selection=1;}
     const bool ready=interactive&&gate.Accept(navigation_generation.load(),UiHeld());
     const unsigned events=interactive?frontend_events.exchange(0):0;
-    BeginMenu("Delete profile",view);MenuCanvas c(view);c.SettingsFrame(false,"DELETE PROFILE");
-    c.Rect(3,73,634,306,IM_COL32(0,0,0,255));
-    c.Center("Delete this saved profile?",40,139,560,24,white,true);
-    c.Center(f.delete_name,40,190,560,22,IM_COL32(237,212,166,255));
-    c.Center("This cannot be undone.",40,224,560,13,muted);
+    const bool confirm=TakeNativeConfirm(ready);
+    BeginMenu("Original confirmation",view);MenuCanvas c(view);
+    c.SettingsFrame(f.pause_dialog,f.pause_dialog?"QUIT MISSION":"DELETE PROFILE");
+    if(f.pause_dialog)c.Text(f.dialog_message,56,115,16,white,528);
+    else{
+        c.Rect(3,73,634,306,IM_COL32(0,0,0,255));
+        c.Center("Delete this saved profile?",40,139,560,24,white,true);
+        c.Center(f.delete_name,40,190,560,22,IM_COL32(237,212,166,255));
+        c.Center("This cannot be undone.",40,224,560,13,muted);
+    }
     ImGui::BeginDisabled(!ready);
     auto activate=[&](unsigned i){if(ready&&f.source.rows[i].enabled)FrontendAction(f,UC_HF_ACTIVATE,i);};
     if(ready){
@@ -282,10 +299,23 @@ void DeleteProfileUi(const TrialFrontendFrame& f,const ImGuiViewport* view,bool 
            ImGui::IsKeyPressed(ImGuiKey_UpArrow)||ImGui::IsKeyPressed(ImGuiKey_DownArrow)||ImGui::IsKeyPressed(ImGuiKey_Tab))selection=1-selection;
         const bool back=(events&8)||ImGui::IsMouseClicked(1,false)||ImGui::IsKeyPressed(ImGuiKey_Q,false)||ImGui::IsKeyPressed(ImGuiKey_Escape,false);
         if(back)FrontendAction(f,UC_HF_BACK);
-        else if((events&4)||ImGui::IsKeyPressed(ImGuiKey_Enter,false)||ImGui::IsKeyPressed(ImGuiKey_Space,false))activate(selection);
+        else if((events&4)||confirm)activate(selection);
     }
-    const char* labels[]={"Yes","No"};const bool enabled[]={f.source.rows[0].enabled!=0,true};
-    RowStrip(c,labels,enabled,2,275,selection,[&](unsigned i){selection=i;},activate);
+    const char* labels[]={f.labels[0][0]?f.labels[0]:"Yes",f.labels[1][0]?f.labels[1]:"No"};
+    const bool enabled[]={f.source.rows[0].enabled!=0,f.source.rows[1].enabled!=0};
+    if(f.pause_dialog){
+        // Match the pause list's full-width mouse targets; the guest still owns both choices.
+        for(unsigned i=0;i<2;++i){
+            const float y=190.f+30.f*i;
+            ImGui::PushID(int(i));ImGui::BeginDisabled(!enabled[i]);
+            if(c.Hit("row",48,y-2,384,30))activate(i);
+            const bool hot=ImGui::IsItemHovered();
+            if(hot&&PointerMoved())selection=i;
+            if(enabled[i]&&(selection==i||hot))c.Selection(48,y,384,11);
+            c.Text(labels[i],56,y+2,14,!enabled[i]?disabled:selection==i||hot?white:muted,360);
+            ImGui::EndDisabled();ImGui::PopID();
+        }
+    }else RowStrip(c,labels,enabled,2,275,selection,[&](unsigned i){selection=i;},activate);
     if(xbox_KeyboardMode())FooterPrompts(c,{{13,"Select"},{VK_RBUTTON,"Cancel"}});
     else FooterPrompts(c,{{0x103,"Navigate"},{0x101,"Select"},{0x102,"Back"}});
     ImGui::EndDisabled();EndMenu();
@@ -327,10 +357,11 @@ void FrontendUi(const TrialFrontendFrame& f,const ImGuiViewport* view,bool inter
         }else FrontendAction(f,UC_HF_ACTIVATE,i);
     };
     const unsigned events=interactive?frontend_events.exchange(0):0;
+    const bool confirm=TakeNativeConfirm(ready);
     if(ready){
         if((events&1)||ImGui::IsKeyPressed(ImGuiKey_LeftArrow)||ImGui::IsKeyPressed(ImGuiKey_UpArrow))choose((focus+count-1)%count);
         if((events&2)||ImGui::IsKeyPressed(ImGuiKey_RightArrow)||ImGui::IsKeyPressed(ImGuiKey_DownArrow)||ImGui::IsKeyPressed(ImGuiKey_Tab))choose((focus+1)%count);
-        if((events&4)||ImGui::IsKeyPressed(ImGuiKey_Enter,false)||ImGui::IsKeyPressed(ImGuiKey_Space,false))activate(focus);
+        if((events&4)||confirm)activate(focus);
         if(!quit_open&&((events&8)||ImGui::IsMouseClicked(1,false)||ImGui::IsKeyPressed(ImGuiKey_Q,false)||ImGui::IsKeyPressed(ImGuiKey_Escape,false)))FrontendAction(f,UC_HF_BACK);
         if(levels&&((events&128)||ImGui::IsKeyPressed(ImGuiKey_D,false)))FrontendAction(f,UC_HF_DIFFICULTY);
         if(levels&&((events&64)||ImGui::IsKeyPressed(ImGuiKey_R,false)))FrontendAction(f,UC_HF_REWARDS);
@@ -392,7 +423,22 @@ void FrontendUi(const TrialFrontendFrame& f,const ImGuiViewport* view,bool inter
                 graphics&&!std::strcmp(src.rows[i].label,"NewFrontEnd-ControllerOptions-1")?"Controls":f.labels[i];
             enabled[i]=i>=src.count||src.rows[i].enabled;
         }
-        RowStrip(canvas,labels,enabled,count,top+9,focus,choose,activate);
+        if(xbox_KeyboardMode()){
+            const char* title=main?"MAIN MENU":f.list_kind==2?"PAUSED":"OPTIONS";
+            canvas.SettingsFrame((src.source_kind&0x80000000u)!=0,title);
+            // Match the old mouse frontend's roomy vertical rows and fading highlight.
+            const float step=std::min(26.f,264.f/std::max(1u,count));
+            for(unsigned i=0;i<count;++i){
+                const float y=103.f+step*i;
+                ImGui::PushID(int(i));ImGui::BeginDisabled(!enabled[i]);
+                if(canvas.Hit("row",48,y-2,384,step))activate(i);
+                const bool hot=ImGui::IsItemHovered();
+                if(hot&&PointerMoved())choose(i);
+                if(enabled[i]&&(focus==i||hot))canvas.Selection(48,y,384,11);
+                canvas.Text(labels[i],56,y+2,14,!enabled[i]?disabled:focus==i||hot?white:muted,360);
+                ImGui::EndDisabled();ImGui::PopID();
+            }
+        }else RowStrip(canvas,labels,enabled,count,top+9,focus,choose,activate);
     }
     if(xbox_KeyboardMode()){
         if(levels)FooterPrompts(canvas,{{1,"Deploy"},{'D',"Difficulty"},{'R',"Rewards"},{VK_RBUTTON,"Back"}});
@@ -416,6 +462,7 @@ void NameUi(const TrialFrontendFrame& f,const ImGuiViewport* view,bool interacti
     // Release the key/click that opened this page before accepting characters;
     // once acquired, Q and Space are ordinary name text, never Back shortcuts.
     const bool ready=interactive&&gate.Accept(navigation_generation.load(),UiHeld());
+    if(!ready)TakeNativeConfirm(false);
     BeginMenu("Create profile",view);MenuCanvas c(view);c.SettingsFrame(false,"CREATE PROFILE");
     // The original on-screen keyboard remains authoritative for controllers.
     // On PC cover its keys; only the submitted text reaches its validator.
@@ -436,7 +483,12 @@ void NameUi(const TrialFrontendFrame& f,const ImGuiViewport* view,bool interacti
     const bool entered=ImGui::InputText("##profile name",text,sizeof(text),
         ImGuiInputTextFlags_EnterReturnsTrue|ImGuiInputTextFlags_CallbackCharFilter,NameCharacter);
     ImGui::PopStyleColor(2);ImGui::PopStyleVar(3);ImGui::SetWindowFontScale(1);ImGui::PopFont();
-    if(entered)submit(UC_HF_ACTIVATE);
+    // Old-page Enter events can still reach ImGui after its queued key-up;
+    // only an Enter received by this name page may commit the text.
+    if(entered){
+        if(TakeNativeConfirm(ready))submit(UC_HF_ACTIVATE);
+        else focus_text=true;
+    }
     else if(std::memcmp(previous,text,sizeof(text)))submit(UC_HF_SELECT);
     const char* labels[]={"Create profile","Cancel"};
     RowStrip(c,labels,nullptr,2,395,2,[](unsigned){},[&](unsigned i){submit(i?UC_HF_BACK:UC_HF_ACTIVATE);});
@@ -451,10 +503,11 @@ void RequestBack(){
     else Close();
 }
 
-int SettingRow(MenuCanvas& c,const char* label,const char* value,unsigned index,unsigned& focus,int key_delta){
-    const float y=90+index*18.f;
+int SettingRow(MenuCanvas& c,const char* label,const char* value,unsigned index,unsigned& focus,int key_delta,
+               float step=18,float top=90){
+    const float y=top+index*step;
     ImGui::PushID(int(index));
-    const bool clicked=c.Hit("setting",50,y,540,18);
+    const bool clicked=c.Hit("setting",50,y,540,std::min(18.f,step));
     const bool hot=ImGui::IsItemHovered();
     if(hot&&PointerMoved())focus=index;
     int delta=focus==index?key_delta:0;
@@ -465,7 +518,7 @@ int SettingRow(MenuCanvas& c,const char* label,const char* value,unsigned index,
         if(x>=376)delta=x<408?-1:1;
     }
     const bool selected=focus==index;
-    if(selected)c.Selection(50,y,540,18);
+    if(selected)c.Selection(50,y,540,std::min(18.f,step));
     c.Text(label,61,y+2,13,selected?white:muted,304);
     c.Arrow(391,y+9,false,selected||hot?white:muted);
     c.Text(value,418,y+2,13,selected?white:muted,124);
@@ -474,12 +527,69 @@ int SettingRow(MenuCanvas& c,const char* label,const char* value,unsigned index,
     ImGui::PopID();return delta;
 }
 
+void OriginalSettingsUi(const TrialFrontendFrame& f,const ImGuiViewport* view,bool interactive=true){
+    const auto& src=f.source;
+    static uint32_t owner=0;static unsigned focus=0;static TrialFrontendReleaseGate gate;
+    if(owner!=src.owner){owner=src.owner;focus=src.selected;}
+    focus=std::min(focus,src.count);
+    const bool ready=interactive&&gate.Accept(navigation_generation.load(),UiHeld());
+    const unsigned events=interactive?frontend_events.exchange(0):0;
+    const bool confirm=TakeNativeConfirm(ready);
+    if(ready){
+        if(ImGui::IsKeyPressed(ImGuiKey_UpArrow))focus=(focus+src.count)%(src.count+1);
+        if(ImGui::IsKeyPressed(ImGuiKey_DownArrow)||ImGui::IsKeyPressed(ImGuiKey_Tab))focus=(focus+1)%(src.count+1);
+        if((events&8)||ImGui::IsMouseClicked(1,false)||ImGui::IsKeyPressed(ImGuiKey_Q,false)||ImGui::IsKeyPressed(ImGuiKey_Escape,false))FrontendAction(f,UC_HF_BACK);
+        if(focus==src.count&&confirm)FrontendAction(f,UC_HF_BACK);
+    }
+    const int direction=ready?(ImGui::IsKeyPressed(ImGuiKey_LeftArrow)?-1:
+        ImGui::IsKeyPressed(ImGuiKey_RightArrow)?1:0):0;
+    BeginMenu("Original settings",view);MenuCanvas canvas(view);
+    canvas.SettingsFrame((src.source_kind&0x80000000u)!=0,f.list_kind==4?"AUDIO":"GENERAL");
+    ImGui::BeginDisabled(!ready);
+    const float step=std::min(26.f,260.f/std::max(1u,src.count));
+    for(unsigned i=0;i<src.count;++i){
+        ImGui::BeginDisabled(!src.rows[i].enabled);
+        const int delta=SettingRow(canvas,f.labels[i],f.values[i],i,focus,direction,step,103);
+        const unsigned action=delta<0?UC_HF_LEFT:UC_HF_RIGHT;
+        const unsigned mask=delta<0?UC_HF_ROW_LEFT:UC_HF_ROW_RIGHT;
+        if(ready&&delta&&src.rows[i].enabled&&(src.rows[i].actions&mask))FrontendAction(f,action,i);
+        ImGui::EndDisabled();
+    }
+    const char* labels[]={"Back"};const bool enabled[]={true};
+    RowStrip(canvas,labels,enabled,1,398,focus==src.count?0:1,
+        [&](unsigned){focus=src.count;},[&](unsigned){if(ready)FrontendAction(f,UC_HF_BACK);});
+    FooterPrompts(canvas,{{VK_LEFT,"Change"},{VK_RIGHT,"Change"},{VK_RBUTTON,"Back"}});
+    ImGui::EndDisabled();EndMenu();
+}
+
 template<class T,size_t N>
 void SettingChoice(MenuCanvas& c,const char* label,T& value,const T(&values)[N],const char*const(&names)[N],
-                   unsigned index,unsigned& focus,int key_delta){
+                   unsigned index,unsigned& focus,int key_delta,float top=90,float step=17){
     size_t current=N;for(size_t i=0;i<N;++i)if(value==values[i])current=i;
-    const int delta=SettingRow(c,label,current<N?names[current]:"Custom",index,focus,key_delta);
+    const int delta=SettingRow(c,label,current<N?names[current]:"Custom",index,focus,key_delta,step,top);
     if(delta)value=values[current<N?(current+N+(delta>0?1:-1))%N:delta>0?0:N-1];
+}
+
+// Sliders share the menu's row hit target and controller/key navigation.
+void SettingSlider(MenuCanvas& c,const char* label,uint32_t& value,int low,int high,int increment,
+                   const char* suffix,unsigned index,unsigned& focus,int key_delta,float top){
+    char text[32];std::snprintf(text,sizeof(text),"%u%s",value,suffix);
+    const int delta=SettingRow(c,label,text,index,focus,key_delta,16,top);
+    const float grab_x=(ImGui::GetIO().MouseClickedPos[0].x-c.view->Pos.x)/c.sx;
+    const bool track_grab=grab_x>=410&&grab_x<=548;
+    // Releasing a track drag must not also count as the row's value click.
+    const int change=track_grab&&ImGui::IsMouseReleased(0)?(focus==index?key_delta:0):delta;
+    if(change)value=uint32_t(std::clamp(int(value)+(change>0?increment:-increment),low,high));
+    if(ImGui::IsItemActive()&&ImGui::IsMouseDown(0)&&track_grab){
+        const float x=(ImGui::GetIO().MousePos.x-c.view->Pos.x)/c.sx;
+        const float raw=low+(x-418)*(high-low)/124;
+        value=uint32_t(std::clamp(low+int(std::round((raw-low)/increment))*increment,low,high));
+        focus=index;message.clear();
+    }
+    const float y=top+index*16+15;
+    c.Line(418,y,124,IM_COL32(118,126,121,180));
+    const float knob=418+124*(float(value)-low)/(high-low);
+    c.Line(knob-2,y-1,4,white);
 }
 
 void SettingsUi(const ImGuiViewport* view,bool paused){
@@ -492,7 +602,7 @@ void SettingsUi(const ImGuiViewport* view,bool paused){
     const bool ready=gate.Accept(generation,UiHeld());
     const unsigned events=frontend_events.exchange(0);
     const bool back=ready&&((events&8)||ImGui::IsMouseClicked(1,false)||ImGui::IsKeyPressed(ImGuiKey_Escape,false)||ImGui::IsKeyPressed(ImGuiKey_Q,false));
-    const bool enter=ready&&((events&4)||ImGui::IsKeyPressed(ImGuiKey_Enter,false)||ImGui::IsKeyPressed(ImGuiKey_Space,false));
+    const bool enter=TakeNativeConfirm(ready)||(ready&&(events&4));
     ImGui::BeginDisabled(!ready);
     if(confirm_back){
         canvas.Center("Apply your changes?",40,163,560,24,white,true);
@@ -510,7 +620,8 @@ void SettingsUi(const ImGuiViewport* view,bool paused){
         }
         RowStrip(canvas,labels,nullptr,3,257,confirmation,[&](unsigned i){confirmation=i;},activate);
     }else{
-        constexpr unsigned rows=14,total=rows+3;
+        constexpr unsigned rows=18,total=rows+3;
+        constexpr float top=73; // Eighteen rows fit above the existing help divider.
         focus=std::min(focus,total-1);
         int delta=0;
         if(ready){
@@ -529,7 +640,7 @@ void SettingsUi(const ImGuiViewport* view,bool paused){
         char resolution[48];
         if(!draft.settings.width)std::snprintf(resolution,sizeof(resolution),"Desktop");
         else std::snprintf(resolution,sizeof(resolution),"%u x %u",draft.settings.width,draft.settings.height);
-        int resolution_delta=SettingRow(canvas,"Resolution",resolution,0,focus,keyboard_row==0?delta:0);
+        int resolution_delta=SettingRow(canvas,"Resolution",resolution,0,focus,keyboard_row==0?delta:0,16,top);
         if(resolution_delta&&!modes.empty()){
             size_t current=modes.size();
             for(size_t i=0;i<modes.size();++i)if(draft.settings.width==modes[i].width&&draft.settings.height==modes[i].height)current=i;
@@ -538,36 +649,44 @@ void SettingsUi(const ImGuiViewport* view,bool paused){
         }
         const app::DisplayMode display[]={app::DisplayMode::Fullscreen,app::DisplayMode::Borderless,app::DisplayMode::Windowed};
         const char* display_names[]={"Fullscreen","Borderless","Windowed"};
-        SettingChoice(canvas,"Display mode",draft.settings.display_mode,display,display_names,1,focus,keyboard_row==1?delta:0);
+        SettingChoice(canvas,"Display mode",draft.settings.display_mode,display,display_names,1,focus,keyboard_row==1?delta:0,top,16);
         const uint32_t aspects[]={0,1,2};const char* aspect_names[]={"Automatic","4:3","16:9"};
-        SettingChoice(canvas,"Aspect ratio",draft.aspect,aspects,aspect_names,2,focus,keyboard_row==2?delta:0);
+        SettingChoice(canvas,"Aspect ratio",draft.aspect,aspects,aspect_names,2,focus,keyboard_row==2?delta:0,top,16);
         const uint32_t scales[]={25,50,67,75,100,125,150,200};const char* scale_names[]={"25%","50%","67%","75%","100%","125%","150%","200%"};
-        SettingChoice(canvas,"Internal render scale",draft.settings.render_percent,scales,scale_names,3,focus,keyboard_row==3?delta:0);
+        SettingChoice(canvas,"Internal render scale",draft.settings.render_percent,scales,scale_names,3,focus,keyboard_row==3?delta:0,top,16);
         const uint32_t filters[]={0,1,2,4,8,16};const char* filter_names[]={"Game default","Off","2x","4x","8x","16x"};
-        SettingChoice(canvas,"Anisotropic filtering",draft.settings.aniso,filters,filter_names,4,focus,keyboard_row==4?delta:0);
-        SettingChoice(canvas,"VSync",draft.settings.vsync,flags,flag_names,5,focus,keyboard_row==5?delta:0);
+        SettingChoice(canvas,"Anisotropic filtering",draft.settings.aniso,filters,filter_names,4,focus,keyboard_row==4?delta:0,top,16);
+        SettingChoice(canvas,"VSync",draft.settings.vsync,flags,flag_names,5,focus,keyboard_row==5?delta:0,top,16);
         const uint32_t caps[]={30,60,90,120,144,165,240,0};const char* cap_names[]={"30","60","90","120","144","165","240","Unlimited"};
-        SettingChoice(canvas,"FPS limit",draft.settings.fps_cap,caps,cap_names,6,focus,keyboard_row==6?delta:0);
-        SettingChoice(canvas,"FPS counter",draft_fps,flags,flag_names,7,focus,keyboard_row==7?delta:0);
+        SettingChoice(canvas,"FPS limit",draft.settings.fps_cap,caps,cap_names,6,focus,keyboard_row==6?delta:0,top,16);
+        SettingChoice(canvas,"FPS counter",draft_fps,flags,flag_names,7,focus,keyboard_row==7?delta:0,top,16);
         const uint32_t fog_modes[]={0,1,2,3};const char* fog_names[]={"Off","Original","Smooth original","Distant only"};
-        SettingChoice(canvas,"Fog",draft_fog_mode,fog_modes,fog_names,8,focus,keyboard_row==8?delta:0);
+        SettingChoice(canvas,"Fog",draft_fog_mode,fog_modes,fog_names,8,focus,keyboard_row==8?delta:0,top,16);
         const uint32_t samples[]={1,2,4};const char* sample_names[]={"Off","2x","4x"};
         unsigned sample_index=draft.msaa==4?2:draft.msaa==2?1:0;
-        const int sample_delta=SettingRow(canvas,"MSAA",sample_names[sample_index],9,focus,keyboard_row==9?delta:0);
+        const int sample_delta=SettingRow(canvas,"MSAA",sample_names[sample_index],9,focus,keyboard_row==9?delta:0,16,top);
         if(sample_delta){
             for(unsigned i=0;i<3;++i){
                 sample_index=(sample_index+(sample_delta>0?1:2))%3;
                 if(trial_graphics::MsaaSupported(samples[sample_index])){draft.msaa=samples[sample_index];break;}
             }
         }
-        SettingChoice(canvas,"Dynamic scenery lighting",draft.scenery,flags,flag_names,10,focus,keyboard_row==10?delta:0);
-        SettingChoice(canvas,"World character lighting",draft.characters,flags,flag_names,11,focus,keyboard_row==11?delta:0);
+        SettingChoice(canvas,"Dynamic scenery lighting",draft.scenery,flags,flag_names,10,focus,keyboard_row==10?delta:0,top,16);
+        SettingChoice(canvas,"World character lighting",draft.characters,flags,flag_names,11,focus,keyboard_row==11?delta:0,top,16);
         const uint32_t qualities[]={0,1};const char* quality_names[]={"Full","Simple"};
-        SettingChoice(canvas,"Character lighting quality",draft.character_quality,qualities,quality_names,12,focus,keyboard_row==12?delta:0);
+        SettingChoice(canvas,"Character lighting quality",draft.character_quality,qualities,quality_names,12,focus,keyboard_row==12?delta:0,top,16);
         const uint32_t amounts[]={0,1,2};const char* amount_names[]={"Default","More","Forever"};
-        SettingChoice(canvas,"Ragdoll amount",draft.ragdolls,amounts,amount_names,13,focus,keyboard_row==13?delta:0);
+        SettingChoice(canvas,"Ragdoll amount",draft.ragdolls,amounts,amount_names,13,focus,keyboard_row==13?delta:0,top,16);
+        SettingSlider(canvas,"Field of view (vertical)",draft.fov,40,90,1," degrees",14,focus,keyboard_row==14?delta:0,top);
+        SettingChoice(canvas,"HD HUD and menus",draft.hd_ui,flags,flag_names,15,focus,keyboard_row==15?delta:0,top,16);
+        SettingSlider(canvas,"Reticle size",draft.reticle_scale,50,200,5,"%",16,focus,keyboard_row==16?delta:0,top);
+        SettingSlider(canvas,"Weapon FOV",draft.weapon_fov,50,150,5,"%",17,focus,keyboard_row==17?delta:0,top);
         canvas.Line(60,364,520,IM_COL32(118,126,121,100));
-        canvas.Text(focus==2?"Aspect ratio changes take effect after restarting the game.":
+        canvas.Text(focus==17?"Weapon FOV: 100% is original. Changes the gun and hands; keeps the world view.":
+                    focus==16?"Reticle size: 100% is original. Applies to the crosshair, not the rest of the HUD.":
+                    focus==15?"Sharper original HUD, menus, text and prompts. Keeps the original layout.":
+                    focus==14?"Vertical FOV: 53 is original. Applies to gameplay; weapon zoom is preserved.":
+                    focus==2?"Aspect ratio changes take effect after restarting the game.":
                     focus==3?"Render scale changes the resolution of the 3D scene.":
                     focus==8?(draft_fog_mode==0?"Removes distance fog.":
                               draft_fog_mode==1?"Uses the original game's distance fog.":
@@ -605,26 +724,29 @@ void SettingsUi(const ImGuiViewport* view,bool paused){
 void TrialFrontendPublish(const TrialFrontendFrame& frame){
     // Original profile/name/level screens suit a pad. Keep added settings and
     // desktop actions reachable in the shared main, pause and options lists.
-    const bool native=xbox_KeyboardMode()||frame.source.kind==UC_HF_LIST||frame.delete_dialog;
+    const bool native=xbox_KeyboardMode()||frame.delete_dialog;
     const bool active=TrialFrontendSupported(frame)&&native;bool changed;
     {std::lock_guard lock(context_lock);
         changed=frontend_active.load()!=active;
         if(changed||frontend.source.epoch!=frame.source.epoch||frontend.source.owner!=frame.source.owner||
            frontend.source.screen!=frame.source.screen||frontend.source.kind!=frame.source.kind){
             frontend_action={};frontend_name_action={};frontend_events=0;++navigation_generation;
+            native_confirm_generation=0;
         }
         frontend=frame;frontend_active=active;
+        frontend_text_entry=active&&frame.source.kind==TRIAL_HF_NAME;
+        frontend_transition=native&&(frame.source.source_kind&UC_HF_TRANSITION);
         if(!native)frontend_presentation={};
         else frontend_presentation.Publish(frame,active);
     }
     if(changed)TrialGraphicsInputChanged();
 }
 bool TrialFrontendTakeAction(UcHybridFrontendAction& action){
-    std::lock_guard lock(context_lock);if(!frontend_active||!frontend_action.kind)return false;
+    std::lock_guard lock(context_lock);if(!frontend_action.kind||!TrialFrontendSupported(frontend))return false;
     action=frontend_action;frontend_action={};return true;
 }
 bool TrialFrontendOwns(uint32_t owner,uint32_t kind){
-    std::lock_guard lock(context_lock);return frontend_active&&frontend.source.owner==owner&&frontend.source.kind==kind;
+    std::lock_guard lock(context_lock);return (frontend_active||frontend_action.kind)&&frontend.source.owner==owner&&frontend.source.kind==kind;
 }
 bool TrialFrontendPresents(uint32_t owner,uint32_t kind){
     std::lock_guard lock(context_lock);return frontend_presentation.Presents(owner,kind);
@@ -646,6 +768,11 @@ bool TrialFrontendTakeName(TrialFrontendNameActionData& action){
     if(!frontend_active||frontend.source.kind!=TRIAL_HF_NAME||!frontend_name_action.identity.kind)return false;
     action=frontend_name_action;frontend_name_action={};return true;
 }
+static bool ControllerSupplement(){
+    return !xbox_KeyboardMode()&&TrialFrontendSupported(frontend)&&
+        frontend.source.kind==UC_HF_LIST&&context.owner==frontend.source.owner&&
+        context.screen==frontend.source.screen&&(context.kind==1||context.kind==3);
+}
 void TrialFrontendPad(uint32_t buttons,uint8_t confirm,uint8_t back,int16_t x,int16_t y){
     const bool controls=PanelOpen();
     const unsigned mask=(controls?((buttons&1)||y>16000?1:0)|((buttons&2)||y<-16000?2:0)|
@@ -654,7 +781,8 @@ void TrialFrontendPad(uint32_t buttons,uint8_t confirm,uint8_t back,int16_t x,in
         (confirm>30?4:0)|(back>30?8:0)|((buttons&0x100)?64:0)|((buttons&0x200)?128:0);
     static uint64_t epoch=0;static unsigned previous=0;static bool released=false,panel_mode=false;
     std::lock_guard lock(context_lock);
-    if(!frontend_active){epoch=0;released=false;previous=mask;frontend_events=0;return;}
+    const bool supplement=ControllerSupplement();
+    if(!frontend_active&&!supplement&&!PanelOpen()){epoch=0;released=false;previous=mask;frontend_events=0;return;}
     const bool panel=PanelOpen();
     if(epoch!=navigation_generation||panel_mode!=panel){
         epoch=navigation_generation;panel_mode=panel;released=false;previous=mask;frontend_events=0;
@@ -667,10 +795,18 @@ void TrialFrontendPad(uint32_t buttons,uint8_t confirm,uint8_t back,int16_t x,in
 void TrialGraphicsMenuContext(uint32_t manager,uint32_t screen,uint32_t owner,uint32_t kind) {
     std::lock_guard lock(context_lock);context={manager,screen,owner,kind};
 }
-bool TrialGraphicsOpen() { return PanelOpen()||frontend_active.load(); }
+bool TrialGraphicsOpen() { return PanelOpen()||quit_open.load()||frontend_active.load(); }
 bool TrialGraphicsMessage(uint32_t msg,uintptr_t key,intptr_t position) {
-    (void)key;(void)position;
-    return TrialGraphicsOpen()&&((msg>=WM_KEYFIRST&&msg<=WM_KEYLAST)||(msg>=WM_MOUSEFIRST&&msg<=WM_MOUSELAST)||msg==WM_INPUT);
+    if(msg==WM_KILLFOCUS||(msg==WM_ACTIVATEAPP&&!key))native_confirm_generation=0;
+    const bool owned=TrialGraphicsOpen();
+    const bool confirm=key==VK_RETURN||key==VK_SPACE;
+    if(owned&&confirm&&msg==WM_KEYDOWN&&!(uint64_t(position)&(1ull<<30))&&
+       (key==VK_RETURN||!frontend_text_entry||PanelOpen()||quit_open)&&!trial_controls::CaptureWaiting())
+        native_confirm_generation=navigation_generation.load();
+    // Transition pixels are deliberately non-interactive. Do not retain their
+    // confirm taps for the original screen which will appear underneath next.
+    if(frontend_transition&&confirm&&(msg==WM_KEYDOWN||msg==WM_KEYUP))return true;
+    return owned&&((msg>=WM_KEYFIRST&&msg<=WM_KEYLAST)||(msg>=WM_MOUSEFIRST&&msg<=WM_MOUSELAST)||msg==WM_INPUT);
 }
 void TrialGraphicsFonts(const std::filesystem::path& game) {
     auto& io=ImGui::GetIO();
@@ -685,9 +821,22 @@ void TrialGraphicsFonts(const std::filesystem::path& game) {
 void TrialGraphicsUi() {
     Menu menu;TrialFrontendFrame frame;TrialFrontendPresentation presentation;bool active;
     {std::lock_guard lock(context_lock);menu=context;frame=frontend;presentation=frontend_presentation;active=frontend_active.load();}
-    const bool current=active&&TrialFrontendSupported(frame)&&(frame.source.kind!=UC_HF_LIST||
+    const bool eligible=TrialFrontendSupported(frame)&&(frame.source.kind!=UC_HF_LIST||
         (menu.owner==frame.source.owner&&menu.screen==frame.source.screen&&menu.kind==frame.list_kind));
-    const bool graphics=current&&frame.source.kind==UC_HF_LIST&&frame.list_kind==3;
+    const bool current=active&&eligible;
+    const bool graphics=eligible&&frame.source.kind==UC_HF_LIST&&frame.list_kind==3;
+    if(!xbox_KeyboardMode()&&eligible&&!PanelOpen()&&!quit_open){
+        const unsigned events=frontend_events.exchange(0);
+        if(menu.kind==1&&(events&128))OpenQuit(frame);
+        if(graphics&&(events&(64|128))){
+            std::lock_guard lock(context_lock);
+            opened=menu;settings_page=(events&128)?1:0;open_requested=true;
+            if(settings_page==1){controls_origin=frame;controls_origin_row=0;
+                for(unsigned i=0;i<frame.source.count;++i)
+                    if(!std::strcmp(frame.source.rows[i].label,"NewFrontEnd-ControllerOptions-1"))controls_origin_row=i;
+            }
+        }
+    }
     if(open_requested.load()) {
         if(graphics&&SameMenu(menu,opened)){
             panel_open=true;open_requested=false;frontend_events=0;++navigation_generation;
@@ -697,7 +846,7 @@ void TrialGraphicsUi() {
         }else open_requested=false;
     }
     if(panel_open&&(!graphics||!SameMenu(menu,opened)))Close();
-    if(quit_open&&(!current||!QuitMatches(frame)||!SameMenu(menu,quit_origin)))CloseQuit();
+    if(quit_open&&(!eligible||!QuitMatches(frame)||!SameMenu(menu,quit_origin)))CloseQuit();
     const bool transition=!current&&presentation.visible&&presentation.transition;
     if(!menu.kind&&!current&&!transition)return;
     const auto* view=ImGui::GetMainViewport();
@@ -708,13 +857,22 @@ void TrialGraphicsUi() {
         if(settings_page==1)ControlsUi(view,paused);else if(settings_page==2)LanguageUi(view,paused);else SettingsUi(view,paused);
     }
     else if(current){
-        if(frame.delete_dialog)DeleteProfileUi(frame,view);
+        if(frame.delete_dialog||frame.pause_dialog)ConfirmationUi(frame,view);
+        else if(frame.source.kind==UC_HF_LIST&&(frame.list_kind==4||frame.list_kind==5))OriginalSettingsUi(frame,view);
         else if(frame.source.kind==TRIAL_HF_NAME)NameUi(frame,view);else FrontendUi(frame,view);
+    }
+    else if(!xbox_KeyboardMode()&&eligible&&(menu.kind==1||menu.kind==3)){
+        BeginMenu("PC controller shortcuts",view);MenuCanvas canvas(view);
+        canvas.Rect(0,440,640,40,IM_COL32(0,0,0,255));
+        if(menu.kind==3)FooterPrompts(canvas,{{0x104,"Graphics"},{0x105,"Controls"}});
+        else FooterPrompts(canvas,{{0x105,"Quit to desktop"}});
+        ImGui::End();ImGui::PopStyleVar();
     }
     else if(transition){
         // Keep only the last copied presentation while the original manager
         // fades its rows. Active identities/actions were already revoked.
-        if(presentation.frame.delete_dialog)DeleteProfileUi(presentation.frame,view,false);
+        if(presentation.frame.delete_dialog||presentation.frame.pause_dialog)ConfirmationUi(presentation.frame,view,false);
+        else if(presentation.frame.source.kind==UC_HF_LIST&&(presentation.frame.list_kind==4||presentation.frame.list_kind==5))OriginalSettingsUi(presentation.frame,view,false);
         else if(presentation.frame.source.kind==TRIAL_HF_NAME)NameUi(presentation.frame,view,false);
         else FrontendUi(presentation.frame,view,false);
     }

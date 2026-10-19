@@ -28,7 +28,12 @@ def prepare(source, output, area):
                   '            continue;\n        }')
     traced = once(traced, '        double step = RoutedPlaybackStep(v);',
                   '        double step = RoutedPlaybackStep(v);\n'
+                  '        // The mixer lock keeps buffer loop bounds fixed for this output block.\n'
+                  '        const uint32_t start = !v.stream && v.looping ? FramesOf(v,v.loop_start) : 0;\n'
+                  '        const uint32_t end = !v.stream ? FramesOf(v,v.looping ? v.loop_start+v.loop_len : v.play_len) : 0;\n'
                   '        double trace_source=0, trace_mixed=0; uint32_t trace_frames=0;')
+    traced = once(traced, '                uint32_t start = v.looping ? FramesOf(v, v.loop_start) : 0;\n'
+                         '                uint32_t end = FramesOf(v, v.looping ? v.loop_start + v.loop_len : v.play_len);\n', '')
     traced = once(traced, '            out[i * 2] += a * g[0][0] + b * g[1][0];',
                   '            if constexpr(Track) {\n'
                   '                trace_source += double(a)*a + double(b)*b;\n'

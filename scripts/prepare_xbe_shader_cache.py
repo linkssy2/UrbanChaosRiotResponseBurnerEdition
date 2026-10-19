@@ -1,5 +1,6 @@
 """Reuse validated DXBC across launches, without changing shader options or draws."""
 from pathlib import Path
+import hashlib
 from prepare_xbe_perf import function, once
 
 
@@ -65,6 +66,9 @@ def prepare(source, area):
     (area/'src/compat/nv2a_shader_compiler_identity.h').write_text((prior/'nv2a_shader_compiler_identity.h').read_text())
     for name in ('xbe_shader_cache.h', 'xbe_shader_cache.cpp'):
         (area/'src/compat'/name).write_text((local/name).read_text())
+    # Root signature/state construction changes invalidate driver blobs automatically.
+    contract=hashlib.sha256(source.encode()).hexdigest()
+    (area/'src/compat/xbe_pipeline_contract.h').write_text('#define UC_PIPELINE_CONTRACT "'+contract+'"\n')
     result = transform(source)
     assert transform(result) == result
     fixture = (local/'test_xbe_shader_cache.cpp').read_text()
@@ -72,4 +76,8 @@ def prepare(source, area):
     assert fixture.count(marker) == 1
     fixture = fixture.replace(marker, function(result, 'ID3DBlob* D3D12Backend::Compile('))
     (area/'src/compat/test_shader_cache.cpp').write_text(fixture)
+    for desc in ('p','d'):
+        result=result.replace('dev_->CreateGraphicsPipelineState(&'+desc+', IID_PPV_ARGS(&pso))',
+            'uc_xbe_shader_cache::CreatePipeline(dev_.Get(),'+desc+',pso.GetAddressOf())')
+    assert 'dev_->CreateGraphicsPipelineState(' not in result
     return result

@@ -26,6 +26,8 @@ unsigned PromptTextVariant(uint8_t* base,uint32_t text,uint32_t flags,uint32_t c
         if(!TrialGuestReadable(text,1))return 0;
         unsigned c=base[text++];if(c>='A'&&c<='Z')c+='a'-'A';key[i]=char(c);
         if(!c){
+            // This authored D-pad hint means Orders, not menu navigation.
+            if(!std::strcmp(key,"hud-help-40"))return 2;
             // Exact authored interaction IDs: Open/Close Door, Use Ladder,
             // Operate, Rescue, Recapture, Open. Reload is HUD-Help-50.
             if(i==13&&!std::memcmp(key,"hud-operate-",12)&&

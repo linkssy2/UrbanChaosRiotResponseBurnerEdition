@@ -29,6 +29,18 @@ using gpu::kRsZEnable;
 using gpu::kRsStencilEnable;
 uint32_t TrialFogDistanceMode=1;
 
+// Compare each candidate query with immutable driver metadata. Assertions stay
+// enabled in this windowless fixture even for Release builds.
+static unsigned metadata_queries=0;
+static uint32_t CheckedSamples(const Target* t) {
+    const auto actual=t&&t->res?t->res->GetDesc().SampleDesc.Count:1;
+    const auto candidate=uc_msaa::Samples(t);
+    assert(candidate==actual);
+    if(t&&t->res&&t->samples)assert(t->samples==actual);
+    ++metadata_queries;
+    return candidate;
+}
+
 namespace trial_graphics {
 uint32_t requested=1;
 uint32_t MsaaSamples(){return requested;}
@@ -209,7 +221,7 @@ O psmain(float4 p:SV_Position,uint sample:SV_SampleIndex){O o;
     if(triangle){auto at=text.find("uv*float2(2,-2)+float2(-1,1)");assert(at!=std::string::npos);
         text.replace(at,std::strlen("uv*float2(2,-2)+float2(-1,1)"),"uv*float2(1,-1)+float2(-1,1)");}
     auto vs=Compile(text.c_str(),"vs","vs_5_0"),ps=Compile(text.c_str(),"psmain","ps_5_0");
-    auto pd=FullScreenPipelineDesc(vs.Get(),ps.Get(),color.fmt,uc_msaa::Samples(&color));
+    auto pd=FullScreenPipelineDesc(vs.Get(),ps.Get(),color.fmt,CheckedSamples(&color));
     pd.DSVFormat=DXGI_FORMAT_D24_UNORM_S8_UINT;pd.DepthStencilState.DepthEnable=TRUE;
     pd.DepthStencilState.DepthWriteMask=D3D12_DEPTH_WRITE_MASK_ALL;pd.DepthStencilState.DepthFunc=D3D12_COMPARISON_FUNC_ALWAYS;
     pd.DepthStencilState.StencilEnable=TRUE;pd.DepthStencilState.StencilReadMask=pd.DepthStencilState.StencilWriteMask=255;
@@ -252,13 +264,13 @@ float4 vs(uint id:SV_VertexID):SV_Position {
 
 void D3D12Backend::DrawShader(Target& out,const std::string& pixel,const std::vector<Target*>& inputs) {
     const std::string shader=std::string(kFixtureVertex)+pixel;
-    auto* pso=EnsurePassPipeline(shader.c_str(),"psmain",out.fmt,-1,uc_msaa::Samples(&out));assert(pso);
+    auto* pso=EnsurePassPipeline(shader.c_str(),"psmain",out.fmt,-1,CheckedSamples(&out));assert(pso);
     const auto slot=AllocSrvSlots(4);
     for(unsigned i=0;i<4;++i) {
         auto* input=i<inputs.size()?inputs[i]:nullptr;
         D3D12_SHADER_RESOURCE_VIEW_DESC sv{};sv.Format=input?input->fmt:DXGI_FORMAT_B8G8R8A8_UNORM;
         sv.Shader4ComponentMapping=D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-        sv.ViewDimension=input&&uc_msaa::Samples(input)>1?D3D12_SRV_DIMENSION_TEXTURE2DMS:D3D12_SRV_DIMENSION_TEXTURE2D;
+        sv.ViewDimension=input&&CheckedSamples(input)>1?D3D12_SRV_DIMENSION_TEXTURE2DMS:D3D12_SRV_DIMENSION_TEXTURE2D;
         if(sv.ViewDimension==D3D12_SRV_DIMENSION_TEXTURE2D)sv.Texture2D.MipLevels=1;
         if(input)Transition(input->res.Get(),input->state,D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
         dev_->CreateShaderResourceView(input?input->res.Get():nullptr,&sv,Cpu(srv_heap_.Get(),slot+i,srv_inc_));
@@ -270,7 +282,7 @@ void D3D12Backend::DrawShader(Target& out,const std::string& pixel,const std::ve
 }
 
 std::vector<uint8_t> D3D12Backend::ReadSamples(Target& source) {
-    const unsigned n=uc_msaa::Samples(&source);
+    const unsigned n=CheckedSamples(&source);
     if(n==1)return Read(source.res.Get(),source.state);
     auto all=Make(false,source.w*n,source.h);
     const std::string shader="Texture2DMS<float4> image:register(t0);float4 psmain(float4 p:SV_Position):SV_Target {"
@@ -283,7 +295,7 @@ void D3D12Backend::RetainedFogDepth(Target& color,Target& depth) {
     // Actual observed scene order: fog0953 -> feedback0954 -> depth-enabled
     // draws0955..1412 -> feedback/bloom -> tone1445. The old BindTargets body
     // demoted at0955 and disabled tone interpolation, even with MSAA Off.
-    const unsigned samples=uc_msaa::Samples(&color);
+    const unsigned samples=CheckedSamples(&color);
     const auto original_color=color.res,original_depth=depth.res;
     const auto original_samples=ReadSamples(color);
     auto state=std::make_unique<State>();state->rt.header=1;state->viewport.w=color.gw;state->viewport.h=color.gh;
@@ -294,7 +306,7 @@ void D3D12Backend::RetainedFogDepth(Target& color,Target& depth) {
     assert(color.res.Get()==original_color.Get()&&!smooth_fog_[&color].active);
     assert(BeginSmoothFog(*state));
     auto& fog=smooth_fog_.at(&color);
-    assert(fog.active&&color.fmt==kSmoothFogFormat&&uc_msaa::Samples(&color)==samples);
+    assert(fog.active&&color.fmt==kSmoothFogFormat&&CheckedSamples(&color)==samples);
     if(samples>1)assert(ReadSamples(color)==original_samples); // coverage is not resolved and broadcast on promotion
 
     // Write a fine gradient that a premature RGB8 conversion cannot retain.
@@ -320,7 +332,7 @@ void D3D12Backend::RetainedFogDepth(Target& color,Target& depth) {
     assert(BindTargets(*state)&&BeginSmoothFog(*state));DrawShader(color,gradient);
     assert(BindTargets(*state));
     assert(fog.active&&color.fmt==kSmoothFogFormat&&color.res.Get()!=original_color.Get());
-    assert(uc_msaa::Samples(&color)==samples&&depth.res.Get()==original_depth.Get());
+    assert(CheckedSamples(&color)==samples&&depth.res.Get()==original_depth.Get());
     assert(bound_rt_==&color&&bound_ds_==&depth);
     assert(SmoothToneDraw(*tone_state));
     fine=ReadTarget(color);assert(Read(fine.res,*fine.state)==before);
@@ -384,12 +396,79 @@ return float4(saturate(t1.rgb+t2.rgb+t3.rgb),t0.a);})";
     ReleaseSmoothFog(color);fixture_color_=fixture_depth_=nullptr;bound_rt_=bound_ds_=nullptr;
 }
 
+static void MetadataLifecycle(bool hardware) {
+    D3D12Backend b(hardware);
+    trial_graphics::requested=1;
+    auto one=b.Make(false);
+    trial_graphics::requested=2;
+    auto two=b.Make(false);
+    assert(one.samples==1&&two.samples==2);
+    assert(CheckedSamples(&one)==1&&CheckedSamples(&two)==2);
+    const auto original_one=one.res,original_two=two.res;
+    Target copied=two;
+    Target moved=std::move(copied);
+    assert(moved.res.Get()==original_two.Get()&&moved.samples==2);
+    assert(CheckedSamples(&moved)==2&&CheckedSamples(&copied)==1);
+    // Use deliberately different sample counts: a missing metadata swap cannot
+    // hide behind the usual equal-count fog pair.
+    SwapSmoothFogImage(one,two);
+    assert(one.res.Get()==original_two.Get()&&two.res.Get()==original_one.Get());
+    assert(one.samples==2&&two.samples==1);
+    assert(CheckedSamples(&one)==2&&CheckedSamples(&two)==1);
+    SwapSmoothFogImage(one,two);
+    assert(one.samples==1&&two.samples==2);
+    moved.res.Reset();assert(moved.samples==2&&CheckedSamples(&moved)==1);
+    assert(CheckedSamples(nullptr)==1);
+    Target empty;assert(!empty.samples&&CheckedSamples(&empty)==1);
+
+    // Failure before creation leaves the original pair intact. Production
+    // matching allocates into a local ComPtr, so actual device failure also
+    // preserves its previous image/count.
+    Target failed=two;
+    b.fail_allocation_=b.allocation_calls_+1;
+    assert(!b.CreateTargetResource(failed,{})&&failed.res.Get()==original_two.Get()&&failed.samples==2);
+    b.fail_allocation_=0;
+    assert(CheckedSamples(&failed)==2);
+    assert(!b.CreateMatchedColorReal(failed,3));
+    assert(failed.res.Get()==original_two.Get()&&failed.samples==2&&CheckedSamples(&failed)==2);
+    if(b.errors_)b.errors_->ClearStoredMessages(); // expected invalid-sample device rejection
+    // General creation writes through ComPtr's output parameter. On failure
+    // the resource is null; its stale metadata must never override null->1.
+    b.msaa_override_=3;
+    assert(!b.CreateTargetResourceReal(failed,{}));
+    b.msaa_override_=0;
+    assert(!failed.res&&CheckedSamples(&failed)==1);
+    if(b.errors_)b.errors_->ClearStoredMessages();
+
+    // Extension-owned targets remain uncached because an extension may replace
+    // res directly. Exercise both factory paths then mutate the image identity.
+    gpu::Extension extension;b.ext_=&extension;
+    Target external;external.gw=external.gh=8;
+    assert(b.CreateTargetResourceReal(external,{})&&!external.samples&&CheckedSamples(&external)==1);
+    assert(b.CreateMatchedColorReal(external,2)&&!external.samples&&CheckedSamples(&external)==2);
+    external.res=original_one;assert(CheckedSamples(&external)==1);
+    external.res=original_two;assert(CheckedSamples(&external)==2);
+    external.res.Reset();assert(CheckedSamples(&external)==1);
+    // Fog alternate creation obeys the same external-ownership guard.
+    b.fixture_color_=&one;b.bound_rt_=&one;b.smooth_fog_.try_emplace(&one);
+    one.samples=0;
+    auto fog=std::make_unique<State>();fog->uc_fog_pass=1;fog->uc_fog_params_valid=1;
+    assert(b.BeginSmoothFog(*fog));
+    assert(!one.samples&&!b.smooth_fog_.at(&one).other.samples);
+    assert(CheckedSamples(&one)==1);
+    assert(b.EndSmoothFog(one));b.ReleaseSmoothFog(one);
+    b.fixture_color_=nullptr;b.ext_=nullptr;b.bound_rt_=nullptr;
+    b.Finish();
+    std::puts("PASS metadata creation/failure/copy/move/release/fog-swap/external-replacement lifecycle");
+}
+
 static void Run(bool hardware){
+    MetadataLifecycle(hardware);
     D3D12Backend b(hardware);unsigned tested=0;
     for(unsigned n:{1u,2u,4u}){
         if(!(b.msaa_support_&(1u<<n)))continue;++tested;trial_graphics::requested=n;
         auto color=b.Make(false),depth=b.Make(true),shadow=b.Make(false,4,4);
-        assert(uc_msaa::Samples(&color)==n&&uc_msaa::Samples(&depth)==n&&uc_msaa::Samples(&shadow)==1);
+        assert(CheckedSamples(&color)==n&&CheckedSamples(&depth)==n&&CheckedSamples(&shadow)==1);
         b.bound_rt_=&color;assert(b.SamplesPerPixel()==float(n));b.bound_rt_=nullptr;
         b.Scene(color,depth,false);
         auto c=b.ReadTarget(color),z=b.ReadTarget(depth);assert(c.res&&z.res);
@@ -425,7 +504,7 @@ static void Run(bool hardware){
         fog.other.res=b.Resource(td,D3D12_HEAP_TYPE_DEFAULT,D3D12_RESOURCE_STATE_RENDER_TARGET);fog.other.state=D3D12_RESOURCE_STATE_RENDER_TARGET;
         assert(b.CreateTargetView(fog.other));assert(b.CopySmoothFogImage(color,fog.other));SwapSmoothFogImage(color,fog.other);fog.active=true;
         b.fail_pipeline_=true;assert(!b.EndSmoothFog(color)&&fog.active);b.fail_pipeline_=false;
-        assert(b.EndSmoothFog(color)&&!fog.active&&uc_msaa::Samples(&color)==n);
+        assert(b.EndSmoothFog(color)&&!fog.active&&CheckedSamples(&color)==n);
         auto after=b.ReadTarget(color);assert(b.Read(after.res,*after.state)==edges);
         b.ReleaseSmoothFog(color); // retire this intentionally single-sample conversion witness
         if(n>1){
@@ -444,7 +523,7 @@ static void Run(bool hardware){
             b.fixture_depth_=&companion;b.fail_pipeline_=true;
             assert(!b.BindTargets(*pair)&&b.smooth_fog_.at(&color).active&&color.res.Get()==promoted.Get());
             b.fail_pipeline_=false;assert(b.BindTargets(*pair));
-            assert(color.fmt==DXGI_FORMAT_B8G8R8A8_UNORM&&uc_msaa::Samples(&color)==1);
+            assert(color.fmt==DXGI_FORMAT_B8G8R8A8_UNORM&&CheckedSamples(&color)==1);
             assert(b.bound_ds_==&companion&&companion.res.Get()==peer.Get());
             assert(!b.msaa_reads_.count(promoted.Get()));
             auto retained_pair=b.ReadTarget(color);assert(b.Read(retained_pair.res,*retained_pair.state)==edges);
@@ -454,10 +533,10 @@ static void Run(bool hardware){
             b.fail_allocation_=0;b.fail_pipeline_=true;
             assert(!b.MatchTargetSamples(color,companion)&&color.res.Get()==old.Get());
             b.fail_pipeline_=false;assert(b.MatchTargetSamples(color,companion));
-            assert(uc_msaa::Samples(&color)==1&&color.w==8&&color.h==8&&companion.res.Get()==peer.Get());
+            assert(CheckedSamples(&color)==1&&color.w==8&&color.h==8&&companion.res.Get()==peer.Get());
             auto read=b.ReadTarget(color);assert(b.Read(read.res,*read.state)==edges);
             assert(!b.msaa_reads_.count(old.Get()));
-            assert(b.MatchTargetSamples(color,depth)&&uc_msaa::Samples(&color)==n&&depth.res.Get()==old_depth.Get());
+            assert(b.MatchTargetSamples(color,depth)&&CheckedSamples(&color)==n&&depth.res.Get()==old_depth.Get());
             read=b.ReadTarget(color);assert(b.Read(read.res,*read.state)==edges);
             b.CurrentFrame().garbage.push_back(companion.res);b.free_dsv_.push_back(companion.view);
             // A differently sized attachment follows the existing no-depth
@@ -483,7 +562,7 @@ static void Run(bool hardware){
             clear.flags=0xf3;b.fail_allocation_=b.allocation_calls_+2;
             b.ResizeClearedTargets(*state,clear,&color,&depth);assert(color.res.Get()==old_color.Get()&&depth.res.Get()==old_depth.Get());
             b.fail_allocation_=0;b.ResizeClearedTargets(*state,clear,&color,&depth);
-            assert(color.res.Get()!=old_color.Get()&&depth.res.Get()!=old_depth.Get()&&uc_msaa::Samples(&color)==1&&uc_msaa::Samples(&depth)==1);
+            assert(color.res.Get()!=old_color.Get()&&depth.res.Get()!=old_depth.Get()&&CheckedSamples(&color)==1&&CheckedSamples(&depth)==1);
             assert(color.w==12&&color.h==12&&depth.w==12&&depth.h==12);
             assert(!b.msaa_reads_.count(old_color.Get())&&!b.msaa_reads_.count(old_depth.Get()));
             b.Scene(color,depth,false);auto resized=b.ReadTarget(color);auto changed=b.Read(resized.res,*resized.state);
@@ -495,5 +574,6 @@ static void Run(bool hardware){
         b.scale_=1;
     }
     assert(tested>=2);assert(b.msaa_reads_.empty());
+    std::printf("Checked %u real-resource sample queries through production MSAA/fog/resize paths\n",metadata_queries);
 }
 int main(int argc,char**argv){Run(argc>1&&std::strcmp(argv[1],"hardware")==0);std::puts("MSAA production paths: capabilities, 1x/2x/4x raster samples, color/depth reads, alias, actual fog/depth BindTargets, retained precision through tone, per-sample copies and transactional Apply passed");}

@@ -36,7 +36,7 @@ bool TrialPromptSnapshot(unsigned id,TrialPromptInput& out,unsigned variant){
         }
         return changed;
     }
-    unsigned first=id==1?0:12,last=id==1?12:13;
+    unsigned first=id==1?0:12,last=id==1&&variant!=2?12:13;
     for(unsigned i=first;i<last;++i){unsigned action=i==12?24:i;
         out.bindings[i]=xbox_KeyboardBinding(action,0);
         if(!out.bindings[i])out.bindings[i]=xbox_KeyboardBinding(action,1);
@@ -63,9 +63,9 @@ bool TrialPromptSnapshot(unsigned id,TrialPromptInput& out,unsigned variant){
 METHOD=r'''
 ID3D12Resource* D3D12Backend::BindPcPrompt(unsigned id,unsigned variant,const TextureDesc& original,DrawTextures& stages,int stage) {
     TrialPromptInput input;
-    if(id!=1||variant>1)variant=0;
+    if(id!=1||variant>2)variant=0;
     if(!TrialPromptSnapshot(id,input,variant))return nullptr;
-    auto& slot=pc_prompts_[input.controller?3:variant?variant+1:id-1];
+    auto& slot=pc_prompts_[input.controller?3:variant==2?4:variant?variant+1:id-1];
     const ULONGLONG now=GetTickCount64();
     bool changed=!slot.texture.res||!uc_pc_prompts::Equal(slot.input,input);
     // Same bounded refresh as CONTROL; release/press transitions are immediate.
@@ -102,6 +102,7 @@ bool TrialPromptArtwork(unsigned id,const uint8_t* source,const TrialPromptInput
         uc_pc_prompts::DecodeButtons(source,pc_hud_buttons_pixels);pc_hud_supplied=true;
     }
     char labels[13][64];std::memcpy(labels,input.labels,sizeof(labels));
+    if(input.controller)labels[12][0]=0;
     // A physical controller source number is not a keyboard virtual-key code.
     // Unknown button artwork (directions/unbound) gets its actual source name
     // inside the existing graphical badge, never an unrelated mouse picture.
@@ -151,6 +152,9 @@ static uint32_t pc_hud_buttons_pixels[32*1024];
 static bool pc_hud_supplied=false;
 static int pc_hud_load_pixels(){return pc_hud_supplied;}''')
     art=once(art,'uint32_t*copy=malloc((size_t)*w**h*4);','uint32_t*copy=static_cast<uint32_t*>(malloc((size_t)*w**h*4));')
+    # Glyph0x15 is also used for menu navigation; replace it only in the Orders hint.
+    art=once(art,'int a=pc_hud_actions[row];if(a<0)continue;',
+             'int a=row==20&&labels[12][0]?12:pc_hud_actions[row];if(a<0)continue;')
     # Reuse the accepted standalone keycap rasterizer for native menu hints.
     keycap=(ROOT/'native/runtime/hud_keys.c').read_text()
     keycap=keycap[keycap.index('int native_hud_keycap('):]
@@ -182,7 +186,7 @@ static int pc_hud_load_pixels(){return pc_hud_supplied;}''')
         '    ID3D12Resource* BindPcPrompt(unsigned,unsigned,const TextureDesc&,DrawTextures&,int);')
     field='''    struct PcPromptSlot { Tex texture;TrialPromptInput input;ULONGLONG updated=0;
         D3D12_RESOURCE_STATES state=D3D12_RESOURCE_STATE_COPY_DEST; };
-    PcPromptSlot pc_prompts_[4];
+    PcPromptSlot pc_prompts_[5];
 '''
     graphics_source=once(graphics_source,'    std::unordered_map<uc_xbe_signed::TextureKey, Tex, uc_xbe_signed::TextureKeyHash> textures_;',
         field+'    std::unordered_map<uc_xbe_signed::TextureKey, Tex, uc_xbe_signed::TextureKeyHash> textures_;')
@@ -358,6 +362,9 @@ def stage_tests(area,art):
         if chunk in CONTEXT_HOOKS:text=transform_prompt_context(text,chunk)
         begin=text.index('X86_FUNC(__imp__sub_'+address+') {')
         body=text[begin:text.index('\nX86_WEAK_FUNC(sub_'+address,begin)]
+        # This oracle exercises retail prompt batching; HUD coordinates have their own fixture.
+        body=body.replace('\tTrialHudQuadScope trial_hud_quad(ctx,base);\n','')
+        body=body.replace('\tif (TrialFrontendHideListSprites()) { ctx.esp += 36; return; }\n','')
         bodies.append(body.replace('__imp__sub_'+address,'sub_'+address))
     selector=(area/'generated/game/x86_recomp.16.cpp').read_text()
     selector=selector[selector.index('\t// 0009E257 '):selector.index('\t// 0009E280 ')]

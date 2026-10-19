@@ -47,6 +47,42 @@ def prepare(area):
     assert set(struct.unpack('<4I',read(0x26f688,16)))=={0x26f621,0x26f653,0x26f5ee}
     for name in ('xbe_frontend.h','xbe_frontend_guest.inc','xbe_frontend_text.h'):
         (out/name).write_text((local/name).read_text())
+    # Drop only list-owned sprite submissions, retaining original row updates,
+    # hit bounds and callbacks. The parent background is outside this scope.
+    assert hashlib.sha256(read(0x9d9b0,242)).hexdigest()=='26966356054def9572634c6237ec90e69eaac615c3ec40db4f7a8cfe4801d4c7'
+    queue=area/'generated/game/x86_recomp.16.cpp'
+    text=queue.read_text()
+    declaration='extern bool TrialFrontendHideListSprites();\n'
+    hook='\tif (TrialFrontendHideListSprites()) { ctx.esp += 36; return; }\n'
+    text=text.replace(declaration,'').replace(hook,'')
+    text=text.replace('#include "x86_recomp_shared.h"\n','#include "x86_recomp_shared.h"\n'+declaration,1)
+    marker='X86_FUNC(__imp__sub_0009D9B0) {\n'
+    assert text.count(marker)==1
+    queue.write_text(text.replace(marker,marker+hook,1))
+    # Qualify the actual pause Quit row, its shared yes/no factory and the
+    # message/choice/separator calls. Do not cover or skip its scene backdrop.
+    for va,n,digest in [
+        (0x263520,0x4C,'8350b50059a6b20f4e2dbcee568b2c7f902e239644e78f70dc9dc95927cb1a45'),
+        (0x265D9E,0x5B,'5e3b6ed5258a3e5104dc322a4c8cd48f611abcf05eec5be5d57ee5533a25e6ff'),
+        (0x2677C2,0x18,'c84abe247a4b78bea601fb0a11715f861ea5e0b2b2f006618cfb6351c5e9766d')]:
+        assert hashlib.sha256(read(va,n)).hexdigest()==digest,hex(va)
+    for va,label in [(0x473368,b'NewFrontEnd-LooseProgress-1\0'),
+                     (0x48573C,b'NewFrontEnd-Yes-1\0'),(0x485750,b'NewFrontEnd-No-1\0')]:
+        assert read(va,len(label))==label,hex(va)
+    modal=area/'generated/game/x86_recomp.62.cpp';text=modal.read_text()
+    declaration='extern bool TrialFrontendHidePauseDialogText(uint32_t);\n'
+    if declaration not in text:
+        marker='#include "x86_recomp_shared.h"\n'
+        assert text.count(marker)==1;text=text.replace(marker,marker+declaration,1)
+    match=re.search(r'X86_FUNC\(__imp__sub_0025A310\) \{.*?^\}',text,re.S|re.M)
+    assert match;original=body=match[0]
+    for caller,function,pop in [('25A5D5','00018CE0',32),('25A754','00018CE0',32),('25A7CE','00018DE0',24)]:
+        marker=f'X86_PUSH32(0x{caller}u); sub_{function}(ctx, base);'
+        replacement=(f'X86_PUSH32(0x{caller}u); if (TrialFrontendHidePauseDialogText(ctx.ebx)) '
+                     f'ctx.esp += {pop}; else sub_{function}(ctx, base);')
+        if replacement not in body:
+            assert body.count(marker)==1;body=body.replace(marker,replacement,1)
+    modal.write_text(text.replace(original,body,1))
     guest=out/'hybrid_frontend_guest.inc';text=guest.read_text()
     marker='if(!ucrr_native_frontend_enabled()||!hf_settled()||hf_view.kind!=kind'
     replacement='if(!FrontendGuestOwns(owner,kind)||!ucrr_native_frontend_enabled()||!hf_settled()||hf_view.kind!=kind'
@@ -59,6 +95,20 @@ def prepare(area):
                   'static bool FrontendDeleteChoice(uint32_t,unsigned);\n'
                   'static bool FrontendDeleteParent();\n')
     if declarations not in text:text=declarations+text
+    declarations='static void menu_dialog_capture();\nstatic void FrontendPauseDialogEnter();\n'
+    if declarations not in text:text=declarations+text
+    marker='    dialog_running=1;menu_special_reveal();\n'
+    replacement=marker+'    FrontendPauseDialogEnter();\n'
+    if replacement not in text:
+        assert text.count(marker)==1;text=text.replace(marker,replacement,1)
+    # Share the exact existing capture with early native-presentation handoff.
+    # The original leave still owns all running/click/rectangle cleanup.
+    if 'static void menu_dialog_capture(){' not in text:
+        marker='void ucrr_menu_dialog_leave(void){\n'
+        assert text.count(marker)==1
+        start=text.index(marker);cleanup=text.index('    dialog_running=0;dialog_click=0;if(!dialog_drawn)dialog_count=0;',start)
+        capture=text[start+len(marker):cleanup]
+        text=text[:start]+'static void menu_dialog_capture(){\n'+capture+'}\n'+marker+'    menu_dialog_capture();\n'+text[cleanup:]
     marker='if(hf_view.kind&&!(dialog_running'
     replacement='if(hf_view.kind&&!FrontendDeleteParent()&&!(dialog_running'
     if replacement not in text:

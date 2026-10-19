@@ -14,6 +14,7 @@ def prepare(area):
         body('D3D12_TEXTURE_ADDRESS_MODE Address(', 'DXGI_FORMAT HostFormat('),
         body('struct DrawTextures {', '\n};')+'\n};',
         body('// D3DTEXF: 1 point, 2 linear, 3 anisotropic', 'uint32_t D3D12Backend::EnsureStageSamplers('),
+        body('bool UnitTexcoords(', '// a stage without a texture gets a null view'),
     ])
     shaders=(area/'src/compat/shaders.cpp').read_text()
     at=shaders.index('uint64_t Hash(')

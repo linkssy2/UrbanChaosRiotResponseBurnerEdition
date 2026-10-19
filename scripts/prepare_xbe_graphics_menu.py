@@ -24,6 +24,8 @@ def prepare(area):
         0x2677F4: '68a4cf5100',
         0x267F9B: '68a4cf5100',
         0x276DFC: '6810d35100',
+        0x276A1C: '6804d35100',
+        0x276D18: '680cd35100',
         0x266A3D: 'c706b4774800',
         0x272928: 'c6461401',  # manager transition byte +14
     }
@@ -36,8 +38,8 @@ def prepare(area):
 
     guest = (ROOT / 'scripts/xbe_trial_guest_input.cpp').read_text()
     for seam in (
-        'case 0:menu_pointer_begin(g_ecx);GraphicsMenuBegin();break;',
-        'case 1:menu_pointer_end();GraphicsMenuEnd();break;',
+        'menu_pointer_begin(g_ecx);GraphicsMenuBegin();break;',
+        'menu_pointer_end();GraphicsMenuEnd();',
         'case 3:GraphicsMenuCapture();ucrr_menu_list_leave();break;',
         'case 15:GraphicsMenuDestroy(g_ecx);ucrr_menu_manager_destroy();break;',
         'case 16:ucrr_menu_dialog_enter();GraphicsMenuSpecial();break;',

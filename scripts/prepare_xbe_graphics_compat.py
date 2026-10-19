@@ -75,8 +75,17 @@ HLE_STDCALL(D3DDevice_SetBackBufferScale, 2) {
  (AREA/'src/compat/d3d8.cpp').write_text(d)
  vertex=(SDK/'runtime/gpu/vertex.cpp').read_text()
  vertex=once(vertex,'return !(s.vs_handle & 1) && (s.vs_handle & 0xE) == 0x4;','return (s.vs && s.vs->immediate_pretransformed) || (!(s.vs_handle & 1) && (s.vs_handle & 0xE) == 0x4);')
+ from prepare_xbe_vertex_costs import prepare as prepare_vertex_costs, packed_renderer
+ vertex=prepare_vertex_costs(vertex,AREA,(SDK/'runtime/gpu/vertex.h').read_text())
  (AREA/'src/compat/vertex.cpp').write_text(vertex)
  d=(SDK/'runtime/gpu/d3d12.cpp').read_text()
+ d=once(d,'bool UnitTexcoords(const Assembled& a) {','''bool UnitTexcoords(const State& s, const Assembled& a) {
+    // Only wrapped U/V samplers use this vertex-dependent clamp decision.
+    bool wrapped = false;
+    for (const auto& t : s.tss)
+        wrapped |= t[kTssAddressU] == kTaddressWrap || t[kTssAddressV] == kTaddressWrap;
+    if (!wrapped) return false;''')
+ d=once(d,'EnsureStageSamplers(s, stages, UnitTexcoords(a))','EnsureStageSamplers(s, stages, UnitTexcoords(s, a))')
  # F3-only state evidence; no per-frame logging in normal play.
  d=once(d,'    CaptureTextures(s, stages);','''    fprintf(cap_, " fog %u/%u rgba %08X params %.6g %.6g %.6g %.6g stencil %u func %X ref %X mask %X write %X ops %X/%X/%X",
         s.rs[kRsFogEnable], s.rs[kRsFogTableMode], s.rs[kRsFogColor],
@@ -101,5 +110,5 @@ HLE_STDCALL(D3DDevice_SetBackBufferScale, 2) {
  prepare_shaders(SDK/'runtime/gpu/shaders.cpp', AREA/'src/compat/shaders.cpp')
  (AREA/'src/compat/xbe_native_lighting.h').write_text((ROOT/'scripts/xbe_native_lighting.h').read_text())
  (AREA/'src/compat/native_lighting_pixel_source.h').write_text((ROOT/'src/native_lighting_pixel_source.h').read_text())
- (AREA/'src/compat/d3d12.cpp').write_text(d)
+ (AREA/'src/compat/d3d12.cpp').write_text(packed_renderer(d))
 if __name__=='__main__':prepare()

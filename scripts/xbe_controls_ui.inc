@@ -109,7 +109,7 @@ void ControlsUi(const ImGuiViewport* view,bool paused){
     static unsigned focus=0,confirmation=0;static TrialFrontendReleaseGate gate;
     const bool ready=gate.Accept(navigation_generation.load(),UiHeld());
     const unsigned events=frontend_events.exchange(0);
-    const bool accept=ready&&((events&4)||ImGui::IsKeyPressed(ImGuiKey_Enter,false)||ImGui::IsKeyPressed(ImGuiKey_Space,false));
+    const bool accept=TakeNativeConfirm(ready)||(ready&&(events&4));
     const bool back=ready&&((events&8)||ImGui::IsKeyPressed(ImGuiKey_Escape,false)||ImGui::IsKeyPressed(ImGuiKey_Q,false)||ImGui::IsMouseClicked(1,false));
     ImGui::BeginDisabled(!ready);
     if(confirm_back||controls_conflict_action>=0){

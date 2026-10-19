@@ -12,10 +12,22 @@
 
 uint32_t TrialAspectRatio = 0;
 uint32_t TrialMsaaSamples = 1;
+uint32_t TrialFieldOfView = 53;
 bool TrialSceneryLighting = true, TrialCharacterLighting = true;
+bool TrialHdUi = false;
+uint32_t TrialReticleScale = 100;
+uint32_t TrialWeaponFovScale = 100;
 uint32_t TrialCharacterQuality = 0, TrialRagdollMode = 0;
 namespace trial_graphics {
 static std::atomic<bool> boot_wide{true};
+static std::atomic<uint32_t> field_of_view{53};
+static std::atomic<bool> hd_ui{false};
+static std::atomic<uint32_t> reticle_scale{100};
+static std::atomic<uint32_t> weapon_fov_scale{100};
+uint32_t FieldOfView(){return field_of_view.load();}
+bool HdUi(){return hd_ui.load();}
+uint32_t ReticleScale(){return reticle_scale.load();}
+uint32_t WeaponFovScale(){return weapon_fov_scale.load();}
 static std::atomic<bool> scale_pending{false};
 static std::atomic<uint32_t> msaa_samples{1},msaa_supported{2};
 static std::atomic<uint32_t> effects{3};
@@ -24,14 +36,21 @@ bool CharacterLighting(){return effects.load()&2;}
 uint32_t CharacterQuality(){return (effects.load()>>2)&1;}
 uint32_t RagdollMode(){return effects.load()>>3;}
 static void PublishEffects(const Draft& d){
+    field_of_view=d.fov;
+    hd_ui=d.hd_ui;
+    reticle_scale=d.reticle_scale;
+    weapon_fov_scale=d.weapon_fov;
     effects=uint32_t(d.scenery)|(uint32_t(d.characters)<<1)|(d.character_quality<<2)|(d.ragdolls<<3);
 }
 static Draft Current(){return {app::Get(),TrialAspectRatio,TrialMsaaSamples,
-    TrialSceneryLighting,TrialCharacterLighting,TrialCharacterQuality,TrialRagdollMode};}
+    TrialSceneryLighting,TrialCharacterLighting,TrialCharacterQuality,TrialRagdollMode,TrialFieldOfView,TrialHdUi,TrialReticleScale,TrialWeaponFovScale};}
 static void Store(const Draft& d){
     app::Get()=d.settings;TrialAspectRatio=d.aspect;TrialMsaaSamples=d.msaa;
     TrialSceneryLighting=d.scenery;TrialCharacterLighting=d.characters;
-    TrialCharacterQuality=d.character_quality;TrialRagdollMode=d.ragdolls;
+    TrialCharacterQuality=d.character_quality;TrialRagdollMode=d.ragdolls;TrialFieldOfView=d.fov;
+    TrialHdUi=d.hd_ui;
+    TrialReticleScale=d.reticle_scale;
+    TrialWeaponFovScale=d.weapon_fov;
 }
 uint32_t MsaaSamples(){return msaa_samples.load();}
 bool MsaaSupported(uint32_t samples){return samples<32&&(msaa_supported.load()&(1u<<samples));}
@@ -57,6 +76,12 @@ bool Validate(const Draft& d, app::Mode desktop, std::string& message) {
         message="Choose Desktop or a resolution between 320 x 240 and 7680 x 4320.";
     else if(s.render_percent<25 || s.render_percent>200)
         message="Internal resolution must be between 25% and 200%.";
+    else if(d.fov<40||d.fov>90)
+        message="Field of view must be between 40 and 90 vertical degrees.";
+    else if(d.reticle_scale<50||d.reticle_scale>200)
+        message="Reticle size must be between 50% and 200%.";
+    else if(d.weapon_fov<50||d.weapon_fov>150)
+        message="Weapon field of view must be between 50% and 150%.";
     else if(d.msaa!=1&&d.msaa!=2&&d.msaa!=4)
         message="Choose Off, 2x or 4x MSAA.";
     else if(d.character_quality>1||d.ragdolls>2)

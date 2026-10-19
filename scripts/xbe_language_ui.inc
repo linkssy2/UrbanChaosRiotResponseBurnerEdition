@@ -23,7 +23,7 @@ void LanguageUi(const ImGuiViewport* view,bool paused){
     if(epoch!=generation){epoch=generation;focus=0;confirmation=2;}
     const bool ready=gate.Accept(generation,UiHeld());
     const unsigned events=frontend_events.exchange(0);
-    const bool accept=ready&&((events&4)||ImGui::IsKeyPressed(ImGuiKey_Enter,false)||ImGui::IsKeyPressed(ImGuiKey_Space,false));
+    const bool accept=TakeNativeConfirm(ready)||(ready&&(events&4));
     const bool back=ready&&((events&8)||ImGui::IsKeyPressed(ImGuiKey_Escape,false)||ImGui::IsKeyPressed(ImGuiKey_Q,false)||ImGui::IsMouseClicked(1,false));
     ImGui::BeginDisabled(!ready);
     if(confirm_back){

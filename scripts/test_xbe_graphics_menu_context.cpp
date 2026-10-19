@@ -28,12 +28,13 @@ extern "C" void ucrr_native_frontend_publish(const UcHybridFrontendSnapshot*){++
 extern "C" int ucrr_native_frontend_take_action(UcHybridFrontendAction*){++frontend_actions;return 0;}
 static bool FrontendGuestOwns(uint32_t,uint32_t){return false;}
 // This fixture exercises graphics-context discovery with the native frontend
-// disabled. Profile deletion is tested through its real guest adapter in
-// test_frontend; keep that unrelated action unavailable here.
+// disabled. Profile deletion and pause confirmation use their real guest
+// adapters in test_frontend; keep those unrelated actions unavailable here.
 static bool FrontendProfileDelete(uint32_t,unsigned){return false;}
 static bool FrontendProfileDeleteQuery(){return false;}
 static bool FrontendDeleteChoice(uint32_t,unsigned){return false;}
 static bool FrontendDeleteParent(){return false;}
+static void FrontendPauseDialogEnter(){}
 #include "menu_pointer_guest.h"
 #include "xbe_graphics_menu_context.h"
 static TrialMenuContext observed;
@@ -68,15 +69,15 @@ int main(){
         const uint32_t row=Row+i*0x40;MEM32(Owner+8+i*4)=row;
         MEM32(row)=0x487608;MEM8(row+4)=1;MEM32(row+0xc)=0x272010;
     }
-    const uint32_t selectors[]={0x51D29C,0x51CFA4,0x51D310};
-    for(unsigned i=0;i<3;++i){
+    const uint32_t selectors[]={0x51D29C,0x51CFA4,0x51D310,0x51D304,0x51D30C};
+    for(unsigned i=0;i<5;++i){
         MEM32(Owner+4)=selectors[i];Frame();
         CHECK(observed.kind==i+1&&observed.manager==Manager&&observed.screen==Screen&&observed.owner==Owner);
         CHECK(menu_mode&&menu_target_count==2);
     }
     // Controller/audio/general submenus, arbitrary lists, bad counts/selections
     // and unsupported base classes must not expose the host graphics page.
-    for(uint32_t selector:{0x51D300u,0x51D304u,0x51D30Cu,0x600100u}){
+    for(uint32_t selector:{0x51D300u,0x51D308u,0x600100u}){
         MEM32(Owner+4)=selector;Frame();CHECK(!observed.kind);
     }
     MEM32(Owner+4)=0x51D310;

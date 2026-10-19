@@ -10,7 +10,8 @@ static uint32_t GraphicsMenuKind(uint32_t owner){
     if(!count||count>20||!menu_pointer_readable(selection,4)||MEM32(selection)>=count)return 0;
     // Original factories: Main 2722A5, Pause 2677F4/267F9B, Options 276DFC.
     // 51D300 is Controller Options, not the Options hub (51D310).
-    return selection==0x51D29C?1:selection==0x51CFA4?2:selection==0x51D310?3:0;
+    return selection==0x51D29C?1:selection==0x51CFA4?2:selection==0x51D310?3:
+        selection==0x51D304?4:selection==0x51D30C?5:0;
 }
 static void GraphicsMenuPublish(TrialMenuContext context={}){
     graphics_published=context;

@@ -39,10 +39,10 @@ uint64_t ucrr_host_menu_milliseconds(){return 1000;}
 void TrialFrontendPublish(const TrialFrontendFrame& f){
     published=f;
     presentation.Publish(f,TrialFrontendSupported(f)&&
-        (f.source.kind!=TRIAL_HF_NAME||name_keyboard_mode));
+        (f.delete_dialog||name_keyboard_mode));
 }
 bool TrialFrontendTakeAction(UcHybridFrontendAction& a){if(!queued.kind)return false;a=queued;queued={};return true;}
-bool TrialFrontendOwns(uint32_t p,uint32_t k){return (k!=TRIAL_HF_NAME||name_keyboard_mode)&&TrialFrontendSupported(published)&&published.source.owner==p&&published.source.kind==k;}
+bool TrialFrontendOwns(uint32_t p,uint32_t k){return (published.delete_dialog||name_keyboard_mode)&&TrialFrontendSupported(published)&&published.source.owner==p&&published.source.kind==k;}
 void TrialGraphicsMenuContext(uint32_t,uint32_t,uint32_t,uint32_t){}
 struct Draw {uint32_t function,texture,color;float x,y,right,bottom;};
 static std::vector<Draw> draws;
@@ -57,6 +57,8 @@ static unsigned name_validations,name_sounds,name_frees;
 static unsigned profile_hover_sounds,profile_back_sounds;
 static bool profile_child_active;
 static bool delete_fixture;
+static bool pause_fixture;
+static unsigned pause_texts,pause_separators,pause_backdrops;
 static unsigned deleted_profiles,deleted_index,profile_rebuilds;
 X86_EXTERN_FUNC(__imp__sub_0025A310);
 X86_EXTERN_FUNC(__imp__sub_00258BC0);
@@ -220,8 +222,8 @@ int TrialGuestHook(X86Context& ctx,uint8_t* base,unsigned op){
 }
 X86_FUNC(sub_00017060){ctx.esp+=8;}
 X86_FUNC(sub_00017160){ctx.esp+=12;}
-X86_FUNC(sub_00018CE0){ctx.esp+=32;}
-X86_FUNC(sub_00018DE0){ctx.esp+=24;}
+X86_FUNC(sub_00018CE0){if(pause_fixture)++pause_texts;ctx.esp+=32;}
+X86_FUNC(sub_00018DE0){if(pause_fixture)++pause_separators;ctx.esp+=24;}
 static void ProfileQuad(X86Context& ctx,uint8_t* base,uint32_t fn){
     const uint32_t p=X86_MEM32(ctx.esp+8),q=X86_MEM32(ctx.esp+12);
     profile_quads.push_back({fn,X86_MEM32(ctx.esp+4),0,X86_MEMF32(p),X86_MEMF32(p+4),X86_MEMF32(q),X86_MEMF32(q+4)});
@@ -249,7 +251,7 @@ X86_FUNC(sub_002835E0){
 }
 // Only allocation, visual sinks and the final save service are intercepted.
 // Profile update, original modal factories/constructor and Yes/No consumer run.
-X86_FUNC(sub_000656D0){assert(delete_fixture);ctx.esp+=4;}
+X86_FUNC(sub_000656D0){assert(delete_fixture||pause_fixture);if(pause_fixture)++pause_backdrops;ctx.esp+=4;}
 X86_FUNC(sub_00017180){ctx.esp+=12;}
 X86_FUNC(sub_00017EE0){ctx.eax=1;ctx.esp+=16;}
 X86_FUNC(sub_000176D0){x87_push(ctx,20.);ctx.esp+=8;}
@@ -259,9 +261,9 @@ X86_FUNC(sub_00086FD0){
     const uint32_t p=X86_MEM32(ctx.esp+4);for(unsigned i=0;i<4;++i)X86_MEMF32(p+4*i)=1;
     ctx.eax=p;ctx.esp+=8;
 }
-X86_FUNC(sub_002D57FB){assert(delete_fixture&&X86_MEM32(ctx.esp+4)==0x8C);ctx.eax=0x646000;ctx.esp+=4;}
+X86_FUNC(sub_002D57FB){assert((delete_fixture||pause_fixture)&&X86_MEM32(ctx.esp+4)==0x8C);ctx.eax=0x646000;ctx.esp+=4;}
 X86_FUNC(sub_00253FF0){
-    assert(delete_fixture&&X86_MEM32(ctx.esp+8)==0x646000&&X86_MEM32(ctx.esp+12)==1);
+    assert((delete_fixture||pause_fixture)&&X86_MEM32(ctx.esp+8)==0x646000&&X86_MEM32(ctx.esp+12)==1);
     const uint32_t p=X86_MEM32(ctx.esp+4);X86_MEM32(p)=0x646000;X86_MEM32(p+4)=1;
     ctx.eax=p;ctx.esp+=4;
 }
@@ -272,7 +274,7 @@ X86_FUNC(sub_0027EA20){
 }
 X86_FUNC(sub_00258BC0){__imp__sub_00258BC0(ctx,base);}
 X86_FUNC(sub_00258D40){__imp__sub_00258D40(ctx,base);}
-X86_FUNC(sub_00258DF0){assert(delete_fixture);__imp__sub_00258DF0(ctx,base);}
+X86_FUNC(sub_00258DF0){assert(delete_fixture||pause_fixture);__imp__sub_00258DF0(ctx,base);}
 // ORIGINAL_PROFILE_PATH
 // ORIGINAL_PROFILE_DELETE_PATH
 
@@ -286,6 +288,7 @@ static std::atomic<unsigned> settings_page=0;
 static std::atomic<uint64_t> navigation_generation=1;
 static bool panel_open=false;
 static bool PanelOpen(){return panel_open;}
+static bool ControllerSupplement(){return false;} // Supplemental screens are exercised by test_menu_style.
 // PRODUCTION_FRONTEND_PAD
 
 static void Sample(unsigned expected,uint32_t buttons=0,uint8_t confirm=0,uint8_t back=0,int16_t x=0,int16_t y=0){
@@ -354,7 +357,7 @@ static void CheckManagerHandoff(){
     // Exercise the real shared guest manager/reset/publication sequence, not
     // merely a synthetic host transition bit. The outgoing native frame is
     // still visible, but its callbacks stop owning input at the first reset.
-    for(uint32_t selector:{0x51D29Cu,0x51CFA4u,0x51D310u}){
+    for(uint32_t selector:{0x51D29Cu,0x51CFA4u,0x51D310u,0x51D304u,0x51D30Cu}){
         MEM8(0x600014)=0;Frame(selector);const auto stable=published;
         assert(presentation.visible&&!presentation.transition);
         MEM8(0x600014)=1;menu_pointer_begin(0x600000);GraphicsMenuBegin();
@@ -362,12 +365,16 @@ static void CheckManagerHandoff(){
         assert(!TrialFrontendSupported(published)&&presentation.visible&&presentation.transition);
         assert(!std::memcmp(&presentation.frame,&stable,sizeof(stable)));
         assert(!TrialFrontendOwns(stable.source.owner,stable.source.kind));
+        g_ecx=stable.source.owner;ucrr_menu_list_enter();
+        assert(TrialFrontendHideListSprites());
+        name_keyboard_mode=false;assert(!TrialFrontendHideListSprites());name_keyboard_mode=true;
+        menu_owner=0;assert(!TrialFrontendHideListSprites());
         // Repeated fade frames may have new epochs, but never resurrect a
         // callback identity or discard the copied presentation prematurely.
         for(unsigned i=0;i<3;++i){hf_publish();assert(presentation.transition&&presentation.visible);}
         MEM8(0x600014)=0;Frame(selector);
         assert(TrialFrontendSupported(published)&&presentation.visible&&!presentation.transition);
-        // View Controls/General/Audio and the original child/modal screens
+        // View Controls and the original child/modal screens
         // remain source-owned. A settled unsupported child clears the cover.
         Frame(0x51D300);assert(!TrialFrontendSupported(published)&&!presentation.visible);
         MEM8(0x600014)=1;hf_reset();assert(!presentation.visible);MEM8(0x600014)=0;
@@ -489,6 +496,87 @@ static void CheckDeleteProfile(){
     context.esp=0x700000;profile_child_active=false;ProfileFrame();
     assert(!frontend_delete.owner&&!published.delete_dialog&&published.source.kind==UC_HF_PROFILES);
     delete_fixture=false;queued={};name_sounds=0;
+}
+static uint32_t PauseDialogFrame(){
+    menu_pointer_begin(0x600000);GraphicsMenuBegin();
+    g_ecx=0x602000;ucrr_menu_list_enter();FrontendListEnter();
+    g_ecx=0x646000;g_esp=0x700000;
+    g_esp-=4;MEM32(g_esp)=0x652000;
+    g_esp-=4;MEMF(g_esp)=1.f/60;
+    g_esp-=4;MEM32(g_esp)=0xFEEDFACE;
+    __imp__sub_0025A310(context,ram);assert(g_esp==0x700000);
+    const uint32_t callback=context.eax;
+    // The list parent completes after its modal child, as in2659C0.
+    GraphicsMenuCapture();ucrr_menu_list_leave();menu_pointer_end();GraphicsMenuEnd();
+    return callback;
+}
+static void CheckPauseQuit(){
+    pause_fixture=true;queued={};name_keyboard_mode=true;
+    MEM32(0x600004)=0x601000;MEM32(0x600008)=0x10;MEM8(0x600014)=0;
+    std::strcpy((char*)ram+0x473368,"NewFrontEnd-LooseProgress-1");
+    std::strcpy((char*)ram+0x48573C,"NewFrontEnd-Yes-1");
+    std::strcpy((char*)ram+0x485750,"NewFrontEnd-No-1");
+    std::strcpy((char*)ram+0x605200,"You will lose your progress, are you sure?");
+    auto open=[&]{
+        hf_quit_handoff=0;queued={};Frame(0x51CFA4);
+        assert(hf_pause_manager==menu_manager);
+        // Execute the original shared factory with the exact265D9E arguments.
+        context.esp=0x700000;
+        const uint32_t args[]={0x647000,0x473368,0,0x267400,0x284310,3};
+        for(unsigned i=6;i;--i){context.esp-=4;MEM32(context.esp)=args[i-1];}
+        context.esp-=4;MEM32(context.esp)=0xFEEDFACE;
+        __imp__sub_00258DF0(context,ram);assert(context.esp==0x700000-24);context.esp+=24;
+        assert(MEM32(0x647000)==0x646000&&MEM32(0x646008)==1&&FrontendPauseDialog(0x646000));
+        pause_texts=pause_separators=pause_backdrops=0;
+    };
+    auto action=[&](unsigned kind,unsigned index=0){
+        const auto& s=published.source;
+        queued={s.epoch,s.screen,s.owner,index<s.count?s.rows[index].row:0,index,kind};
+    };
+    open();assert(PauseDialogFrame()==0);
+    assert(published.pause_dialog&&TrialFrontendSupported(published));
+    assert(!std::strcmp(published.dialog_message,"You will lose your progress, are you sure?"));
+    assert(pause_texts==0&&pause_separators==0&&pause_backdrops==1); // first frame
+    const auto epoch=published.source.epoch;
+    assert(PauseDialogFrame()==0&&published.source.epoch==epoch&&pause_backdrops==2);
+    auto s=published.source;
+    for(unsigned invalid=0;invalid<4;++invalid){
+        action(UC_HF_ACTIVATE,0);
+        if(invalid==0)--queued.epoch;
+        if(invalid==1)++queued.screen;
+        if(invalid==2)++queued.owner;
+        if(invalid==3)++queued.row;
+        assert(PauseDialogFrame()==0&&MEM32(0x646008)==1&&!hf_quit_handoff);
+    }
+    const unsigned confirm_sounds=name_sounds,back_sounds=profile_back_sounds;
+    action(UC_HF_ACTIVATE,1);assert(PauseDialogFrame()==0x284310&&name_sounds==confirm_sounds+1);
+    action(UC_HF_BACK);assert(PauseDialogFrame()==0x284310&&profile_back_sounds==back_sounds+1);
+    action(UC_HF_ACTIVATE,0);assert(PauseDialogFrame()==0x267400&&hf_quit_handoff);
+    assert(name_sounds==confirm_sounds+2); // original confirmation sound still runs
+
+    // Every exact factory field is required; another warning/callback keeps
+    // its own rendering and cannot consume a queued native Quit action.
+    for(uint32_t offset:{0u,4u,0xCu,0x10u,0x14u,0x30u,0x34u,0x50u}){
+        open();const uint32_t original=MEM32(0x646000+offset);
+        MEM32(0x646000+offset)=original^1u;
+        assert(!FrontendPauseDialog(0x646000));
+        MEM32(0x646000+offset)=original;
+    }
+    open();PauseDialogFrame();action(UC_HF_ACTIVATE,0);MEM32(0x646030)=0x284580;
+    assert(PauseDialogFrame()==0&&pause_texts==3&&pause_separators==1&&!published.pause_dialog);
+    queued={};
+    open();name_keyboard_mode=false;
+    assert(PauseDialogFrame()==0&&pause_texts==3&&pause_separators==1&&pause_backdrops==1);
+    assert(!TrialFrontendOwns(0x646000,UC_HF_DIALOG)&&!presentation.visible);
+    name_keyboard_mode=true;open();PauseDialogFrame();
+    MEM8(0x600014)=1;pause_texts=pause_separators=0;
+    assert(PauseDialogFrame()==0&&pause_texts==0&&pause_separators==0);
+    assert(presentation.visible&&presentation.transition&&!TrialFrontendSupported(published));
+    // An unmatched transition and another manager never suppress original UI.
+    presentation={};g_ecx=0x646000;ucrr_menu_dialog_enter();
+    assert(!TrialFrontendHidePauseDialogText(0x646000));dialog_running=0;
+    MEM8(0x600014)=0;hf_pause_manager=0;assert(!FrontendPauseDialog(0x646000));
+    pause_fixture=false;queued={};name_sounds=0;MEM32(0x600008)=0;Frame(0x51D29C);
 }
 static void NameFrame(){
     menu_pointer_begin(0x600000);g_ecx=g_esi=0x644000;
@@ -677,6 +765,6 @@ int main(){
     assert(!gate.Accept(1,false));assert(gate.Accept(1,true));
     assert(!gate.Accept(2,true));assert(!gate.Accept(2,false));assert(gate.Accept(2,false));
     controller_fixture::Check();
-    CheckProfiles();CheckDeleteProfile();CheckName();CheckProfileWarnings();
+    CheckProfiles();CheckDeleteProfile();CheckPauseQuit();CheckName();CheckProfileWarnings();
     std::puts("frontend: original profile bounds/actions, typed-name source validation/cancel, source-owned actions, badge/completion, manager visual handoff, controller gates and localized PC profile warnings passed");
 }

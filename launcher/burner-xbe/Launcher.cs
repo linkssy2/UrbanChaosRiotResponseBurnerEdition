@@ -9,12 +9,12 @@ using System.Collections.Generic;
 
 class BurnerLauncher : Form {
     static readonly string Root=AppDomain.CurrentDomain.BaseDirectory;
-    static readonly string Data=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"UrbanChaosBurnerEdition");
+    static readonly string Data=Path.Combine(Root,"GameData");
     readonly Label status=new Label(); readonly ProgressBar progress=new ProgressBar();
     readonly Button play=new Button(), import=new Button(), cancel=new Button();
     bool busy, running; string cancelPath; Image cover;
     static string Quote(string s){return "\""+s.Replace("\"","\\\"")+"\"";}
-    // Both entry points use the same local importer; the D3D12 runtime keeps its own settings and saves.
+    // Resolve beside the EXE so shortcuts and moving the folder keep the same portable data.
     static ProcessStartInfo Worker(string action,string extra="") {
         var p=new ProcessStartInfo(Path.Combine(Root,"tools","python","python.exe"),"-B "+Quote(Path.Combine(Root,"tools","import_game.py"))+" "+action+" --data "+Quote(Data)+extra);
         p.UseShellExecute=false;p.CreateNoWindow=true;p.RedirectStandardOutput=true;p.RedirectStandardError=true;p.WorkingDirectory=Root;return p;
@@ -38,14 +38,14 @@ class BurnerLauncher : Form {
         int[] heights={40,66,68,70,30,66,66,58,54};foreach(int h in heights)panel.RowStyles.Add(new RowStyle(SizeType.Absolute,h));panel.RowStyles.Add(new RowStyle(SizeType.Percent,100));layout.Controls.Add(panel,1,0);
         panel.Controls.Add(new Label{Text="URBAN CHAOS  /  RIOT RESPONSE",Dock=DockStyle.Fill,ForeColor=Color.FromArgb(190,190,169),Font=new Font("Segoe UI",11,FontStyle.Bold)});
         panel.Controls.Add(new Label{Text="BURNER EDITION",Dock=DockStyle.Fill,ForeColor=Color.FromArgb(245,175,49),Font=new Font("Segoe UI",29,FontStyle.Bold)});
-        panel.Controls.Add(new Label{Text="Your Xbox disc. Ready for PC.\nImport your ISO once, then launch and play.",Dock=DockStyle.Fill,Font=new Font("Segoe UI",12),ForeColor=Color.FromArgb(206,207,199)});
+        panel.Controls.Add(new Label{Text="Your Xbox disc. Ready for PC.\nPortable game data and saves stay in GameData.",Dock=DockStyle.Fill,Font=new Font("Segoe UI",12),ForeColor=Color.FromArgb(206,207,199)});
         status.Text="Checking game data...";status.Dock=DockStyle.Fill;status.Font=new Font("Segoe UI",11);panel.Controls.Add(status);
         progress.Dock=DockStyle.Fill;progress.Margin=new Padding(0,0,0,10);panel.Controls.Add(progress);
         play=MakeButton("PLAY",async(s,e)=>await Play());play.Enabled=false;play.BackColor=Color.FromArgb(138,56,19);panel.Controls.Add(play);
         import=MakeButton("SELECT XBOX ISO",async(s,e)=>await Import());panel.Controls.Add(import);
-        panel.Controls.Add(MakeButton("OPEN SAVES",(s,e)=>{Directory.CreateDirectory(Path.Combine(Data,"xbe-runtime","hdd"));Process.Start("explorer.exe",Quote(Path.Combine(Data,"xbe-runtime","hdd")));}));
+        panel.Controls.Add(MakeButton("OPEN SAVES",(s,e)=>{string saves=Path.Combine(Data,"xbe-runtime","hdd");if(Directory.Exists(saves))Process.Start("explorer.exe",Quote(saves));else status.Text="No portable saves yet. Import your ISO and create a profile first.";}));
         cancel=MakeButton("QUIT",(s,e)=>{if(busy&&!running){File.WriteAllText(cancelPath,"");status.Text="Cancelling import...";cancel.Enabled=false;}else Close();});panel.Controls.Add(cancel);
-        panel.Controls.Add(new Label{Text="v0.04  |  Windows x64 / Direct3D 12\nGame data is imported locally. No disc files are included.",Dock=DockStyle.Fill,Font=new Font("Segoe UI",9),ForeColor=Color.FromArgb(138,143,138),TextAlign=ContentAlignment.BottomLeft});
+        panel.Controls.Add(new Label{Text="v0.05  |  Windows x64 / Direct3D 12\nPortable edition. No disc files are included.",Dock=DockStyle.Fill,Font=new Font("Segoe UI",9),ForeColor=Color.FromArgb(138,143,138),TextAlign=ContentAlignment.BottomLeft});
         Shown+=async(s,e)=>await RefreshReady();FormClosing+=(s,e)=>{if(busy){e.Cancel=true;status.Text=running?"Close the game before exiting the launcher.":"Use Cancel Import to stop safely.";}};
     }
     async Task RefreshReady(){bool ready=await Ready();play.Enabled=ready;status.Text=ready?"READY TO PLAY\nYour imported game data is available.":"SELECT YOUR XBOX ISO\nChoose the supported Urban Chaos: Riot Response disc image.";}
@@ -59,11 +59,11 @@ class BurnerLauncher : Form {
     }
     void Busy(bool value,bool game=false){busy=value;running=value&&game;import.Enabled=!value;play.Enabled=!value;cancel.Text=value&&!game?"CANCEL IMPORT":"QUIT";cancel.Enabled=true;}
     async Task Import(){using(var d=new OpenFileDialog{Title="Select your Urban Chaos Xbox ISO",Filter="Xbox disc image (*.iso)|*.iso",CheckFileExists=true}){
-        if(d.ShowDialog(this)!=DialogResult.OK)return;Directory.CreateDirectory(Data);cancelPath=Path.Combine(Data,"cancel-"+Guid.NewGuid().ToString("N"));Busy(true);progress.Value=0;
-        try{int code=await RunWorker("import"," --iso "+Quote(d.FileName)+" --cancel "+Quote(cancelPath));Busy(false);if(code==0)await RefreshReady();else play.Enabled=await Ready();}
+        if(d.ShowDialog(this)!=DialogResult.OK)return;cancelPath=Path.Combine(Data,"cancel-"+Guid.NewGuid().ToString("N"));Busy(true);progress.Value=0;
+        try{Directory.CreateDirectory(Data);int code=await RunWorker("import"," --iso "+Quote(d.FileName)+" --cancel "+Quote(cancelPath));Busy(false);if(code==0)await RefreshReady();else play.Enabled=await Ready();}
         catch(Exception ex){Busy(false);status.Text=ex.Message;}finally{if(File.Exists(cancelPath))File.Delete(cancelPath);}
     }}
-    async Task Play(){Busy(true,true);status.Text="Game running. Your settings and saves stay in your user folder.";
+    async Task Play(){Busy(true,true);status.Text="Game running. Your settings and saves stay in this folder's GameData.";
         try{int code=await RunWorker("launch","");Busy(false);if(code==0)await RefreshReady();else play.Enabled=await Ready();}catch(Exception ex){Busy(false);status.Text=ex.Message;}}
     protected override void Dispose(bool disposing){if(disposing&&cover!=null)cover.Dispose();base.Dispose(disposing);}
     [STAThread] static int Main(string[] args) {

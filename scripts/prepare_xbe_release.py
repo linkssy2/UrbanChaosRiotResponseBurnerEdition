@@ -7,6 +7,39 @@ def once(source, old, new):
     return source.replace(old, new, 1)
 
 
+def quiet_environment_probes(area):
+    """Exclude optional diagnostic work, including its environment lookups."""
+    area = Path(area)
+    begin = '#ifndef UC_BURNER_RELEASE // UC_RELEASE_ENVIRONMENT\n'
+    end = '#endif // UC_RELEASE_ENVIRONMENT\n'
+    probes = (
+        ('src/common/xbe_trial_coroutines.cpp', 'CoroutineTrace',
+         '    if(getenv("UCRR_COROUTINE_TRACE"))fprintf(stderr,\n'
+         '            "[UCRR-COROUTINE] Created context=%08X guest_stack=%08X\\n",\n'
+         '            context_va, coroutine->guest_stack_base);\n'),
+        ('src/compat/d3d12.cpp', 'DeviceDebugLayer',
+         '    if (GetEnvironmentVariableW(L"XBE_D3D12_DEBUG", nullptr, 0)) {\n'
+         '        ComPtr<ID3D12Debug> dbg;\n'
+         '        if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&dbg)))) dbg->EnableDebugLayer();\n'
+         '    }\n'),
+    )
+    fixture = ['// Actual guarded production blocks; diagnostic dependencies are intentionally undeclared.\n'
+               '// A missing release guard must fail compilation, not silently stub the work.\n'
+               '#pragma once\n#ifndef UC_BURNER_RELEASE\n#error Release policy is required\n#endif\n']
+    for relative, name, block in probes:
+        path = area / relative
+        source = path.read_text()
+        original = source.replace(begin, '').replace(end, '')
+        guarded = begin + block + end
+        updated = once(original, block, guarded)
+        assert updated.replace(begin, '').replace(end, '') == original
+        # Removing the diagnostic block cannot change any functional statement.
+        assert updated.replace(guarded, '') == original.replace(block, '')
+        path.write_text(updated)
+        fixture.append('inline void TestRelease' + name + '() {\n' + guarded + '}\n')
+    (area / 'src/compat/test_release_environment.h').write_text(''.join(fixture))
+
+
 def prepare(sdk, area):
     sdk, area = Path(sdk), Path(area)
     core = area / 'src/core'
@@ -112,3 +145,4 @@ void Write(Level level, const char* format, ...) {
     (area / 'src/compat/test_release.cpp').write_text(fixture)
     from prepare_xbe_release_gpu import prepare as prepare_gpu
     prepare_gpu(area)
+    quiet_environment_probes(area)

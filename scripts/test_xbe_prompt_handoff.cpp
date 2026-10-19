@@ -84,7 +84,7 @@ template<class State> static void Unrelated(const State& s,const State& expected
 template<class Pipeline,class State> static void Sequence(bool retained) {
     Pipeline pipeline;assert(pipeline.CopiesPrompt()==retained);
     State source=Scene<State>(),expected=source;
-    const unsigned variants[]={1,0,1,1,0,0,1};
+    const unsigned variants[]={1,0,2,2,0,0,1};
     for(unsigned variant:variants){source.uc_prompt_variant=variant;pipeline.Queue(source);}
     // Repeated variant with identical state creates no redundant state packet.
     assert(pipeline.States()==(retained?5u:1u));

@@ -6,11 +6,13 @@
 #include <cassert>
 #include <cstring>
 #include <cstdio>
+#include <limits>
 #include <unordered_map>
 #include <vector>
 #include "app/app.h"
 #include "gpu/shaders.h"
 #include "gpu/state.h"
+#include "gpu/vertex.h"
 namespace app {static Settings settings;Settings& Get(){return settings;}}
 namespace gpu {
 // PRODUCTION_SAMPLER
@@ -37,6 +39,40 @@ struct D3D12Backend {
 int main(){
     using namespace gpu;
     State s{};DrawTextures stages{};
+    // Non-wrapping descriptors cannot use the UV scan, even with unreadable vertices.
+    Assembled vertices{};
+    vertices.regs=1u<<9;vertices.vertex_count=4096;
+    vertices.elements[9]={DXGI_FORMAT_R32G32_FLOAT,0,0};
+    void* unreadable=VirtualAlloc(nullptr,4096,MEM_RESERVE|MEM_COMMIT,PAGE_NOACCESS);
+    assert(unreadable);
+    vertices.buffers[0]={static_cast<const uint8_t*>(unreadable),4096u*8u,8};
+    for(auto& sampler:s.tss)sampler[kTssAddressU]=sampler[kTssAddressV]=3;
+    unsigned bypasses=0;
+    for(unsigned stage=0;stage<4;++stage)for(auto axis:{kTssAddressU,kTssAddressV}){
+        for(unsigned mode:{0u,2u,3u,4u,5u}){
+            s.tss[stage][axis]=mode;
+            assert(!UnitTexcoords(s,vertices));++bypasses;
+            for(int i=0;i<4;++i){
+                auto before=StageSampler(s,i,stages,true,0);
+                auto after=StageSampler(s,i,stages,false,0);
+                assert(!std::memcmp(&before,&after,sizeof(before)));
+            }
+        }
+        s.tss[stage][axis]=3;
+    }
+    assert(VirtualFree(unreadable,0,MEM_RELEASE));
+    float uv[]={0,0,1,1};
+    vertices.vertex_count=2;
+    vertices.buffers[0]={reinterpret_cast<const uint8_t*>(uv),sizeof(uv),8};
+    for(unsigned stage=0;stage<4;++stage)for(auto axis:{kTssAddressU,kTssAddressV}){
+        s.tss[stage][axis]=1;
+        assert(UnitTexcoords(s,vertices));
+        uv[2]=1.1f;assert(!UnitTexcoords(s,vertices));
+        uv[2]=std::numeric_limits<float>::quiet_NaN();assert(!UnitTexcoords(s,vertices));
+        uv[2]=1;s.tss[stage][axis]=3;
+    }
+    assert(bypasses==40);
+    s=State{};
     auto& t=s.tss[0];
     t[kTssMinFilter]=t[kTssMagFilter]=t[kTssMipFilter]=2;
     t[kTssAddressU]=t[kTssAddressV]=1;
@@ -74,5 +110,5 @@ int main(){
     assert(device.descriptors[second].Filter==D3D12_FILTER_MIN_MAG_MIP_LINEAR);
     app::Get().aniso=16;assert(cache.EnsureStageSamplers(s,stages,false)==first);
     assert(cache.smp_used_==8&&cache.samplers_.size()==2);
-    std::puts("anisotropic filtering: production sampler levels/default/off, runtime changes, point/mip/shadow exclusions passed");
+    std::puts("anisotropic filtering: sampler settings passed; 40 non-wrap scans bypassed unreadable vertices with identical descriptors; every wrapped U/V stage retains UV and NaN checks");
 }
