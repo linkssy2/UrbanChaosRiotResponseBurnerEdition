@@ -75,6 +75,7 @@ static void hf_capture_list(uint32_t owner){
     if(s.selected>=count)return;
     if(selection==0x51D29C){strcpy(s.title,"NewFrontEnd-MainMenu-1");hf_pause_manager=0;hf_quit_handoff=0;}
     if(selection==0x51CFA4){strcpy(s.title,"NewFrontEnd-Paused-1");hf_pause_manager=menu_manager;}
+    if(selection==0x51CFB8){strcpy(s.title,"NewFrontEnd-MissionFailed-1");hf_pause_manager=menu_manager;}
     if(selection==0x51D300)hf_text(0x4855A8,s.title);
     if(selection==0x51D304)hf_text(0x489AAC,s.title);
     if(selection==0x51D308)hf_text(0x489B38,s.title);

@@ -1,4 +1,4 @@
-Urban Chaos: Riot Response - Burner Edition 0.05
+Urban Chaos: Riot Response - Burner Edition 0.06
 
 HD HUD is still a work in progress and has known prompt/display issues.
 Turn HD UI Off to use the original HUD, which works normally.
@@ -8,27 +8,18 @@ Windows x64 PC port using XboxXBERecomp by TGP482, with native Direct3D12 render
 PC controls and menus. Original gameplay is statically recompiled from Xbox code.
 XboxXBERecomp: https://github.com/TGP482/XboxXBERecomp
 
-NEW IN 0.05
-- Corrected widescreen positioning for markers around interactive objects.
-- Display Orders shows the configured mouse/key control in keyboard mode.
-- Portable: imported game files, profiles, settings and shader cache stay in
-  GameData beside the launchers. Move the entire folder to take them with you.
-- Pause Quit now uses matching mouse-friendly Yes/No rows. Controllers keep
-  the original confirmation. The paused scene remains visible.
-- Separate Weapon FOV control (50-150%; 100% preserves each weapon's original
-  view) adjusts the gun and hands without changing the world camera.
-- Optional HD UI combines bundled restored artwork with sharper menu fonts,
-  HUD details and original button symbols derived from your imported game.
-  Enable it in Options > Graphics; it defaults to Off.
-- Mouse-friendly main, pause and settings menus follow the game's visual style.
-  Controllers retain the original game menus; added Graphics and Controls pages
-  remain available. Keyboard, PlayStation and Nintendo prompts are preserved.
-- Graphics includes vertical FOV (40-90 degrees, default 53), widescreen HUD
-  positioning and crosshair size (50-200%; 100% is the original size).
-- Shared renderer improvements reduce repeated vertex, texture and visibility
-  query work across levels. Gains vary by scene and hardware; they do not
-  guarantee a steady 60 FPS.
-
+NEW IN 0.06
+- Mouse-friendly Profile Select, Difficulty, Mission Failed, Objectives and quit menus; original controller layouts retained.
+- Removed underlying controller-menu rows from mouse menus and their transitions.
+- Organized, scrollable Controls with separate Reload/Interact bindings and merged game/controller options.
+- Mouse sensitivity slider supports settings down to 1%.
+- Hold Enter or left-click to skip FMVs, with a bottom-right progress bar; release between videos.
+- Improved FMV pacing, menu input transitions and title-screen any-key/click support.
+- Fixed widescreen rifle scope masking and the gameplay cap above 60 FPS.
+- Pistol spin supports the original gesture or an assignable button.
+- Fixed missing blue pipe flames when HD HUD is enabled.
+- Optional HD game textures: separate ZIP, installed through Setup. Option stays unavailable until installed.
+- Optional Spanish beta support by ZARF (English voices; translation files separate).
 INSTALL
 1. Extract the entire ZIP to a writable folder (not Program Files or inside ZIP).
 2. Run Burner Edition Setup.exe and choose your supported original Xbox ISO.
@@ -78,8 +69,24 @@ resolution and ragdoll retention.
 Normal gameplay writes no diagnostic logs or captures. A failed run can leave a
 bounded last-error.txt beside the imported data to explain the failure.
 
+OPTIONAL HD GAME TEXTURES
+Download the separate Burner Edition HD texture pack ZIP. In Burner Edition
+Setup, choose Install HD Texture Pack and select that ZIP (do not extract it).
+Then start the game and enable Graphics > HD game textures > Apply.
+The option is grayed out when the pack is not installed or is incomplete.
+The pack stays in portable GameData and is separate from HD HUD and menus.
+HD textures use more video memory. Original textures remain available with Off.
+HD game texture artwork: xXthe.RockoXx; converted from the PS2 HD texture pack.
+
 CREDITS
 XboxXBERecomp: TGP482. Earlier xboxrecomp work and retained helpers: sp00nz.
 Additional dependency notices are in licenses/. This is an unofficial fan port.
 Original game content belongs to its respective owners and must be supplied
 locally by the user.
+
+Optional community Spanish text
+The ZARF beta translation is supported as a separately converted local pack in
+GameData/xbe-runtime/translations/es-zarf. Choose Espanol (ZARF beta) in
+Options > Language, Apply, then restart. English voices and untranslated text
+are retained. PC-specific menus remain English. No translated game archives
+are included in the base package.

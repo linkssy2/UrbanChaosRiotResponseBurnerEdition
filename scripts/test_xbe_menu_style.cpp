@@ -37,6 +37,8 @@ static void RecordMenuHit(const char* name,ImVec2 p,ImVec2 size){
     hits.push_back({name,ImGui::GetID(name),p,{p.x+size.x,p.y+size.y}});
 }
 bool TrialShowFps=true;
+static float movie_progress=0;
+float TrialIntroProgress(){return movie_progress;}
 static int keyboard_mode=1;
 int xbox_KeyboardMode(){return keyboard_mode;}
 void TrialGraphicsInputChanged(){++input_changes;}
@@ -51,10 +53,13 @@ bool Apply(const Draft& next,std::string& status){
     live=next;++applied;status="Changes applied and saved.";return true;
 }
 bool ScalePending(){return false;}
+bool textures_available=true;
+bool WorldTexturesAvailable(){return textures_available;}
 bool HdUi(){return live.hd_ui;}
 bool MsaaSupported(uint32_t samples){return samples<32&&(sample_support&(1u<<samples));}
 }
 namespace trial_language {
+bool SpanishAvailable(){return false;}
 static uint32_t selected=0,active=0;static unsigned saves=0;
 uint32_t Snapshot(){return selected;}
 bool PendingRestart(){return selected!=active;}
@@ -102,6 +107,8 @@ bool Disc::Load(std::string_view,std::vector<uint8_t>&)const{return false;}
 #undef PostMessageW
 
 static void DrawFrame(){
+    unsigned profile_values[7];std::memcpy(profile_values,profile_live,sizeof(profile_values));
+    TrialControlsProfile(profile_values,context.kind==3);
     hits.clear();auto& io=ImGui::GetIO();io.DisplaySize={float(output.width),float(output.height)};io.DeltaTime=1.f/60;
     ImGui::NewFrame();TrialGraphicsUi();ImGui::Render();++frames;
     for(size_t i=0;i<hits.size();++i){
@@ -151,14 +158,15 @@ static void RightClick(){
 static TrialFrontendFrame MakeList(unsigned kind){
     static uint64_t next=0;TrialFrontendFrame f{};f.list_kind=kind;f.row_top=390;
     auto& s=f.source;s.epoch=++next;s.owner=0x2000+kind*0x100;s.screen=0x1000+kind*0x100;
-    s.kind=UC_HF_LIST;s.count=kind==2?5:kind==3?3:4;s.selected=0;
+    s.kind=UC_HF_LIST;s.count=kind==2?5:kind==3||kind==7?3:4;s.selected=0;
     if(kind==2)s.source_kind=0x80000010u;
     const char* main[] ={"Single player","Multiplayer","Options","Credits"};
     const char* pause[]={"Return to game","Restart mission","Options","Objectives","Quit"};
     const char* options[]={"Controls","Audio","Back"};
+    const char* failed[]={"Continue from last checkpoint","Restart mission","Quit"};
     for(unsigned i=0;i<s.count;++i){
         s.rows[i].enabled=1;s.rows[i].row=0x3000+i*0x100;s.rows[i].actions=UC_HF_ROW_ACTIVATE;
-        std::snprintf(f.labels[i],sizeof(f.labels[i]),"%s",kind==2?pause[i]:kind==3?options[i]:main[i]);
+        std::snprintf(f.labels[i],sizeof(f.labels[i]),"%s",kind==2?pause[i]:kind==3?options[i]:kind==7?failed[i]:main[i]);
     }
     if(kind==3)std::strcpy(s.rows[0].label,"NewFrontEnd-ControllerOptions-1");
     return f;
@@ -223,7 +231,7 @@ static void OpenGraphics(const TrialFrontendFrame& f){
         CHECK(hits[i].b.x==432.f*output.width/640.f);
         if(i)CHECK(hits[i].a.y>=hits[i-1].b.y-.1f);
     }
-    Click(f.source.count);CHECK(PanelOpen());CHECK(hits.size()==21);
+    Click(f.source.count);CHECK(PanelOpen());CHECK(hits.size()==22);
     for(unsigned i=0;i<18;++i){
         CHECK(hits[i].name=="setting");
         CHECK(hits[i].b.y<=364*output.height/480.f+.1f);
@@ -231,7 +239,7 @@ static void OpenGraphics(const TrialFrontendFrame& f){
     }
 }
 static void ChangeSetting(unsigned index){
-    CHECK(index<18&&hits.size()==21);auto r=hits[index];
+    CHECK(index<19&&hits.size()==22);auto r=hits[index];
     // Click the actual row's right-arrow side, using recorded production bounds.
     ClickPoint(r.b.x-15*float(output.width)/640,(r.a.y+r.b.y)*.5f);
 }
@@ -279,7 +287,7 @@ static void CheckVisualHandoff(const TrialFrontendFrame& f){
     // reveal its own pixels rather than retain an unrelated native footer.
     for(unsigned kind:{unsigned(UC_HF_NONE),unsigned(UC_HF_DIALOG),unsigned(UC_HF_LIST)}){
         TrialFrontendPublish(f);TrialFrontendPublish(transition);
-        auto original=f;original.source.kind=kind;original.list_kind=0;original.delete_dialog=false;original.pause_dialog=false;
+        auto original=f;original.source.kind=kind;original.list_kind=0;original.delete_dialog=false;original.pause_dialog=false;original.source.title[0]=0;
         TrialFrontendPublish(original);DrawFrame();
         CHECK(hits.empty()&&ImGui::GetDrawData()->TotalVtxCount==0&&!frontend_presentation.visible);
         EmptyAction();EmptyName();
@@ -287,15 +295,14 @@ static void CheckVisualHandoff(const TrialFrontendFrame& f){
     TrialFrontendPublish({});DrawFrame();CHECK(hits.empty());
 }
 static void CheckProfilesAndName(){
-    // Original profile rectangles stay authoritative; the host overlays only
-    // matching mouse targets and a footer, never a replacement save callback.
+    // Native rows retain the original profile identities and save callbacks.
     auto profiles=MakeList(1);profiles.list_kind=0;profiles.source.kind=UC_HF_PROFILES;
     for(unsigned i=0;i<4;++i)profiles.profile_bounds[i]={100,100+55.f*i,440,42};
     profiles.profile_delete_mask=3;
     Publish(profiles);CHECK(hits.size()==7);
     for(unsigned i=0;i<4;++i){
         CHECK(hits[i].name=="profile");
-        CHECK(std::abs(hits[i].a.x-profiles.profile_bounds[i].x*output.width/640.f)<.1f);
+        CHECK(std::abs(hits[i].a.x-50.f*output.width/640.f)<.1f);
     }
     Click(2);auto ordinary=Take();CHECK(ordinary.kind==UC_HF_ACTIVATE&&ordinary.index==2);
     RightClick();ordinary=Take();CHECK(ordinary.kind==UC_HF_BACK);
@@ -414,6 +421,8 @@ static void CheckLegacyFogSettings(){
     TrialDistanceFog=true;TrialFogDistanceMode=0;TrialSmoothFog=false;ReadDraft();
 }
 static void CheckControls(const TrialFrontendFrame& options){
+    auto footer=[&](unsigned i){Click(unsigned(hits.size())-4+i);};
+    auto scroll=[&](float delta){Move(300*output.width/640.f,200*output.height/480.f);ImGui::GetIO().AddMouseWheelEvent(0,delta);DrawFrame();Settle();};
     auto open=[&](){
         Publish(options);Click(0);CHECK(PanelOpen()&&settings_page==1);
         // Hovering the existing original row legitimately publishes SELECT.
@@ -423,7 +432,16 @@ static void CheckControls(const TrialFrontendFrame& options){
         EmptyAction();
     };
     trial_controls::live_controls=trial_controls::Defaults();controls_device=0;
-    open();CHECK(hits.size()==24);
+    open();CHECK(hits.size()==20);
+    CHECK(std::strcmp(ControlsName(0),"Reload")==0);
+    CHECK(std::strcmp(ControlsName(28),"Interact / dialogue skip")==0);
+    CHECK(&ControlsBinding(0,0)!=&ControlsBinding(28,0));
+    for(unsigned device=0;device<2;++device){
+        controls_device=device;std::vector<bool> seen(ControlsCount());
+        for(unsigned row=0;row<ControlsCount();++row){const auto action=ControlsAction(row);CHECK(action<ControlsCount()&&!seen[action]);seen[action]=true;}
+    }
+    controls_device=0;CHECK(ControlsAction(0)==0&&ControlsAction(1)==28);
+
     CHECK(!ControlsDirty());
     for(const auto* description:control_help)CHECK(std::strlen(description)>20);
     auto source=[](unsigned value){
@@ -439,15 +457,15 @@ static void CheckControls(const TrialFrontendFrame& options){
     Click(2);CHECK(controls_capture_action<0&&!ControlsDirty());
     Click(1);source('Z');CHECK(controls_draft.keyboard[0][0]=='Z'&&ControlsDirty());
     CHECK(trial_controls::live_controls.keyboard[0][0]=='R');
-    Click(2);source(VK_MBUTTON);CHECK(controls_conflict_action==24);Click(1);
+    ControlsBegin(28,0);DrawFrame();Settle();source(VK_MBUTTON);CHECK(controls_conflict_action==24);Click(1);
     CHECK(controls_draft.keyboard[0][1]==VK_MBUTTON&&controls_draft.keyboard[24][0]==VK_MBUTTON);
-    const unsigned before=controls_applied;Click(19);CHECK(controls_applied==before+1&&!ControlsDirty());
+    const unsigned before=controls_applied;footer(0);CHECK(controls_applied==before+1&&!ControlsDirty());
     // Wheel capture is an event, not a held virtual key; it can bind normal
     // actions but not the hold-and-drag orders action.
     Click(1);trial_controls::capture.Sample(0,0,true);trial_controls::capture.Wheel(256);DrawFrame();Settle();
-    CHECK(controls_draft.keyboard[0][0]==256&&ControlsDirty());Click(20);CHECK(!ControlsDirty());
-    for(unsigned page=0;page<3;++page)Click(18);
-    CHECK(controls_page==3&&hits.size()==10);Click(1);CHECK(controls_capture_action==24);
+    CHECK(controls_draft.keyboard[0][0]==256&&ControlsDirty());footer(1);CHECK(!ControlsDirty());
+    controls_scroll=22;Settle();
+    CHECK(ControlsAction(controls_scroll)==24);Click(1);CHECK(controls_capture_action==24);
     trial_controls::capture.Sample(0,0,true);trial_controls::capture.Wheel(257);DrawFrame();Settle();
     CHECK(controls_capture_action==24&&trial_controls::CaptureWaiting()&&!ControlsDirty());
     Key(ImGuiKey_Escape);Settle();CHECK(controls_capture_action<0&&PanelOpen());
@@ -457,34 +475,61 @@ static void CheckControls(const TrialFrontendFrame& options){
     ImGui::GetIO().AddMouseButtonEvent(0,true);DrawFrame();
     CHECK(controls_capture_action<0&&!ControlsDirty());
     ImGui::GetIO().AddMouseButtonEvent(0,false);Settle();
-    // Device selection returns to page one. Controller sources are raw, and
+    controls_scroll=10;Settle();Click(1);CHECK(controls_draft.spin_mode==1&&ControlsDirty());
+    Click(3);CHECK(controls_capture_action==26);source('P');
+    CHECK(controls_draft.spin_binding[0][0]=='P');
+    footer(1);CHECK(!ControlsDirty()); // Discard restores mode and button together.
+    controls_scroll=17;Settle();
+    CHECK(controls_draft.sensitivity==400);
+    const auto slider=hits[1];const float slider_y=(slider.a.y+slider.b.y)*.5f;
+    Move(418*output.width/640.f,slider_y);ImGui::GetIO().AddMouseButtonEvent(0,true);DrawFrame();
+    CHECK(controls_draft.sensitivity==1&&ControlsDirty());
+    Move(542*output.width/640.f,slider_y);DrawFrame();CHECK(controls_draft.sensitivity==1600);
+    Move(418*output.width/640.f,slider_y);DrawFrame();ImGui::GetIO().AddMouseButtonEvent(0,false);Settle();
+    CHECK(controls_draft.sensitivity==1);Key(ImGuiKey_LeftArrow);CHECK(controls_draft.sensitivity==1);
+    Key(ImGuiKey_RightArrow);CHECK(controls_draft.sensitivity==2);
+    Key(ImGuiKey_Tab);Key(ImGuiKey_Enter);CHECK(trial_controls::live_controls.sensitivity==2&&!ControlsDirty());
+    // Device selection returns to the top. Controller sources are raw, and
     // Replace clears an overlapping source instead of silently invoking both.
     auto device=hits[0];ClickPoint(device.b.x-15*float(output.width)/640,(device.a.y+device.b.y)/2);
-    CHECK(controls_device==1&&controls_page==0&&hits.size()==24);
+    CHECK(controls_device==1&&controls_scroll==0&&hits.size()==22);
     Click(1);source(8);CHECK(controls_conflict_action==7);Click(0);
     CHECK(controls_draft.controller[0][0]==8&&!controls_draft.controller[7][0]);
-    fail_apply=true;Click(19);fail_apply=false;CHECK(ControlsDirty()&&trial_controls::live_controls.controller[0][0]==1);
-    Click(19);CHECK(!ControlsDirty()&&trial_controls::live_controls.controller[0][0]==8);
-    Click(21);CHECK(ControlsDirty()&&controls_draft.controller[0][0]==1);
-    Click(20);CHECK(!ControlsDirty()&&controls_draft.controller[0][0]==8);
-    Click(21);RightClick();CHECK(confirm_back&&PanelOpen());
+    fail_apply=true;footer(0);fail_apply=false;CHECK(ControlsDirty()&&trial_controls::live_controls.controller[0][0]==1);
+    footer(0);CHECK(!ControlsDirty()&&trial_controls::live_controls.controller[0][0]==8);
+    footer(2);CHECK(ControlsDirty()&&controls_draft.controller[0][0]==1);
+    footer(1);CHECK(!ControlsDirty()&&controls_draft.controller[0][0]==8);
+    footer(2);RightClick();CHECK(confirm_back&&PanelOpen());
     RightClick();CHECK(!confirm_back&&ControlsDirty());
-    Click(22);CHECK(confirm_back);Click(1);CHECK(!PanelOpen());EmptyAction();
-    // The original controller options (inversion, crouch, vibration and
-    // sensitivity) remain reachable by their original callback. Dirty drafts
-    // receive the same save prompt before that transition.
-    open();Click(21);CHECK(ControlsDirty());
-    Click(23);CHECK(confirm_back&&controls_original_requested);Click(2);
-    CHECK(PanelOpen()&&!confirm_back&&!controls_original_requested);EmptyAction();
-    Click(23);CHECK(confirm_back);Click(1);CHECK(!PanelOpen());
-    auto original_options=Take();CHECK(original_options.kind==UC_HF_ACTIVATE&&original_options.index==0&&original_options.row==options.source.rows[0].row);
-    // Controller left/right reaches the pager and every footer action. It
+    footer(3);CHECK(confirm_back);Click(1);CHECK(!PanelOpen());EmptyAction();
+    // The redundant Game Options entry is gone; profile values live in Controls.
+    Publish(options);CHECK(hits.size()==options.source.count+2);
+    // Controller left/right reaches every footer action. It
     // never silently reuses a queued Confirm from the capture dialog.
-    open();auto apply=hits[19];Move((apply.a.x+apply.b.x)/2,(apply.a.y+apply.b.y)/2);
+    open();auto apply=hits[hits.size()-4];Move((apply.a.x+apply.b.x)/2,(apply.a.y+apply.b.y)/2);
     frontend_events=32;DrawFrame();frontend_events=4;DrawFrame();Settle();CHECK(message=="Changes discarded.");
-    auto previous=hits[17];Move((previous.a.x+previous.b.x)/2,(previous.a.y+previous.b.y)/2);
-    frontend_events=32;DrawFrame();frontend_events=4;DrawFrame();Settle();CHECK(controls_page==1);
-    Click(22);CHECK(!PanelOpen());EmptyAction();
+    // Wheel and keyboard scroll one list; all rows remain reachable without page actions.
+    scroll(-1);CHECK(controls_scroll==3);scroll(1);CHECK(controls_scroll==0);
+    const auto bar=hits[hits.size()-5];
+    Move((bar.a.x+bar.b.x)*.5f,bar.b.y-1);ImGui::GetIO().AddMouseButtonEvent(0,true);DrawFrame();
+    CHECK(controls_scroll==ControlsCount()-8);
+    Move((bar.a.x+bar.b.x)*.5f,bar.a.y+1);DrawFrame();CHECK(controls_scroll==0);
+    ImGui::GetIO().AddMouseButtonEvent(0,false);Settle();
+    Move(0,0);ClickPoint(hits[1].a.x+2,hits[1].a.y+2);
+    Key(ImGuiKey_Escape);Settle(); // Cancel capture, retaining row focus.
+    for(unsigned i=0;i<ControlsCount()+8;++i)Key(ImGuiKey_DownArrow);
+    CHECK(controls_scroll==ControlsCount()-8);
+    footer(3);CHECK(!PanelOpen());EmptyAction();
+    // Native edits commit only to the matching original Options profile snapshot.
+    open();const unsigned settings[]={1,1,1,0,1,75,35};
+    std::memcpy(profile_draft,settings,sizeof(settings));CHECK(ControlsDirty());
+    footer(0);CHECK(!ControlsDirty()&&!std::memcmp(profile_live,settings,sizeof(settings)));
+    profile_draft[0]=0;footer(1);CHECK(profile_draft[0]==1&&!ControlsDirty());
+    unsigned snapshot[7];std::memcpy(snapshot,profile_live,sizeof(snapshot));
+    profile_draft[5]=80;CHECK(ControlsApply());
+    unsigned stale[7];std::memcpy(stale,snapshot,sizeof(stale));stale[6]=40;
+    CHECK(!TrialControlsProfile(stale,true)&&stale[5]==75); // A changed profile rejects a queued write.
+    TrialControlsProfile(snapshot,true);ControlsReadDraft();Close();Settle();
     // Original Options Controls is intercepted only within the qualified hub.
     auto unrelated=options;unrelated.list_kind=1;++unrelated.source.epoch;
     Publish(unrelated);Click(0);auto action=Take();CHECK(action.kind==UC_HF_ACTIVATE&&!PanelOpen());
@@ -520,7 +565,7 @@ static void CheckLanguage(const TrialFrontendFrame& options){
     // clears it after Apply. Paused Options uses this same ownership path.
     auto paused=options;paused.source.source_kind|=0x80000000u;++paused.source.epoch;
     Publish(paused);Click(paused.source.count+1);CHECK(PanelOpen()&&settings_page==2&&trial_language::PendingRestart());
-    change();change();CHECK(language_draft==0);Click(1);CHECK(!trial_language::PendingRestart());
+    change();change();change();CHECK(language_draft==0);Click(1);CHECK(!trial_language::PendingRestart());
     change();RightClick();CHECK(confirm_back);Click(0);CHECK(!PanelOpen()&&trial_language::Snapshot()==1);
     EmptyAction();
 }
@@ -607,7 +652,11 @@ static void CheckPauseConfirmation(){
     CheckVisualHandoff(f);CHECK(quit_posts==before);
 }
 static void CheckSize(unsigned width,unsigned height){
+    std::memset(profile_live,0,sizeof(profile_live));profile_apply=false;
     output={width,height};live={};Close();TrialFrontendPublish({});TrialGraphicsMenuContext(0,0,0,0);Settle();
+    auto failed=MakeList(7);Publish(failed);CheckStrip(3);
+    for(unsigned i=0;i<3;++i){Click(i);auto selected=Take();CHECK(selected.kind==UC_HF_ACTIVATE&&selected.index==i&&selected.row==failed.source.rows[i].row);}
+    keyboard_mode=0;Publish(failed);CHECK(hits.empty());keyboard_mode=1;
     auto main=MakeList(1);Publish(main);CheckStrip(5);CHECK(ImGui::GetDrawData()->TotalVtxCount>100);
     Click(2);auto action=Take();CHECK(action.kind==UC_HF_ACTIVATE&&action.index==2&&action.row==main.source.rows[2].row);
     main.source.rows[1].enabled=0;++main.source.epoch;Publish(main);Click(1);EmptyAction();
@@ -624,13 +673,13 @@ static void CheckSize(unsigned width,unsigned height){
     auto options=MakeList(3);OpenGraphics(options);unsigned before=applied;ChangeSetting(3);CHECK(Dirty());CHECK(live.settings.render_percent==100);
     sample_support=2|(1u<<4);ChangeSetting(9);CHECK(draft.msaa==4&&live.msaa==1);
     sample_support=2|(1u<<2)|(1u<<4);
-    Click(18);CHECK(applied==before+1&&live.settings.render_percent==125&&live.msaa==4&&!Dirty());
+    Click(19);CHECK(applied==before+1&&live.settings.render_percent==125&&live.msaa==4&&!Dirty());
     ChangeSetting(10);ChangeSetting(11);ChangeSetting(12);ChangeSetting(13);ChangeSetting(13);
     CHECK(!draft.scenery&&!draft.characters&&draft.character_quality==1&&draft.ragdolls==2&&Dirty());
     CHECK(live.scenery&&live.characters&&live.character_quality==0&&live.ragdolls==0);
-    CHECK(hits.size()==21&&draft.ragdolls==2);Click(18);
+    CHECK(hits.size()==22&&draft.ragdolls==2);Click(19);
     CHECK(applied==before+2&&!live.scenery&&!live.characters&&live.character_quality==1&&live.ragdolls==2&&!Dirty());
-    ChangeSetting(13);CHECK(Dirty());Click(19);CHECK(!Dirty()&&draft.ragdolls==2);
+    ChangeSetting(13);CHECK(Dirty());Click(20);CHECK(!Dirty()&&draft.ragdolls==2);
     ChangeSetting(14);CHECK(draft.fov!=53&&live.fov==53&&Dirty());
     // Both real tracks drag/clamp without touching committed settings before Apply.
     auto drag=[&](unsigned row,float start,float end){
@@ -655,48 +704,48 @@ static void CheckSize(unsigned width,unsigned height){
     ImGui::GetIO().AddMouseButtonEvent(0,false);KeyEvent(ImGuiKey_LeftArrow,true);DrawFrame();
     KeyEvent(ImGuiKey_LeftArrow,false);Settle();CHECK(draft.reticle_scale==145);
     Key(ImGuiKey_RightArrow);CHECK(draft.reticle_scale==150);
-    Click(18);CHECK(live.fov==70&&live.reticle_scale==150&&!Dirty());
+    Click(19);CHECK(live.fov==70&&live.reticle_scale==150&&!Dirty());
     ChangeSetting(16);CHECK(draft.reticle_scale==155&&live.reticle_scale==150&&Dirty());
-    Click(20);CHECK(confirm_back);Click(2);CHECK(PanelOpen()&&Dirty());
-    Click(19);CHECK(draft.reticle_scale==150&&live.reticle_scale==150&&!Dirty());
+    Click(21);CHECK(confirm_back);Click(2);CHECK(PanelOpen()&&Dirty());
+    Click(20);CHECK(draft.reticle_scale==150&&live.reticle_scale==150&&!Dirty());
     // Weapon FOV is independent of the world camera, with the same Apply policy.
     CHECK(draft.weapon_fov==100&&live.weapon_fov==100);
     drag(17,470,600);CHECK(draft.weapon_fov==150&&live.weapon_fov==100&&draft.fov==70);
     drag(17,470,300);CHECK(draft.weapon_fov==50&&live.weapon_fov==100&&draft.fov==70);
     drag(17,470,511);CHECK(draft.weapon_fov==125&&live.weapon_fov==100);
-    fail_apply=true;Click(18);fail_apply=false;CHECK(Dirty()&&live.weapon_fov==100);
-    Click(19);CHECK(!Dirty()&&draft.weapon_fov==100);
-    ChangeSetting(17);CHECK(draft.weapon_fov==105&&Dirty());Click(20);CHECK(confirm_back);
-    Click(2);CHECK(PanelOpen()&&Dirty());Click(18);
+    fail_apply=true;Click(19);fail_apply=false;CHECK(Dirty()&&live.weapon_fov==100);
+    Click(20);CHECK(!Dirty()&&draft.weapon_fov==100);
+    ChangeSetting(17);CHECK(draft.weapon_fov==105&&Dirty());Click(21);CHECK(confirm_back);
+    Click(2);CHECK(PanelOpen()&&Dirty());Click(19);
     CHECK(live.weapon_fov==105&&live.fov==70&&!Dirty());
     // HD changes use the same staged save/discard/back policy, including failures.
     CHECK(!live.hd_ui);ChangeSetting(15);CHECK(draft.hd_ui&&Dirty()&&!live.hd_ui);
-    fail_apply=true;Click(18);fail_apply=false;CHECK(draft.hd_ui&&Dirty()&&!live.hd_ui);
-    Click(19);CHECK(!draft.hd_ui&&!Dirty());
-    ChangeSetting(15);Click(20);CHECK(confirm_back&&hits.size()==3);
+    fail_apply=true;Click(19);fail_apply=false;CHECK(draft.hd_ui&&Dirty()&&!live.hd_ui);
+    Click(20);CHECK(!draft.hd_ui&&!Dirty());
+    ChangeSetting(15);Click(21);CHECK(confirm_back&&hits.size()==3);
     Click(2);CHECK(PanelOpen()&&draft.hd_ui&&Dirty());
-    Click(20);Click(1);CHECK(!PanelOpen()&&!live.hd_ui);
+    Click(21);Click(1);CHECK(!PanelOpen()&&!live.hd_ui);
     OpenGraphics(options);CHECK(!draft.hd_ui&&!Dirty());
-    ChangeSetting(15);Click(18);CHECK(live.hd_ui&&!Dirty());
-    ChangeSetting(15);Click(19);CHECK(live.hd_ui&&draft.hd_ui&&!Dirty());
+    ChangeSetting(15);Click(19);CHECK(live.hd_ui&&!Dirty());
+    ChangeSetting(15);Click(20);CHECK(live.hd_ui&&draft.hd_ui&&!Dirty());
     // One Fog control covers all four effective modes. Mouse edits stay in the
     // draft, and failed Apply rolls back the three compatible config keys.
     CHECK(TrialDistanceFog&&!TrialSmoothFog&&TrialFogDistanceMode==0);
     ChangeSetting(8);CHECK(draft_fog_mode==2&&!TrialSmoothFog&&Dirty());
-    Click(19);CHECK(draft_fog_mode==1&&TrialDistanceFog&&!Dirty());
-    ChangeSetting(8);Click(18);CHECK(TrialDistanceFog&&TrialFogDistanceMode==0&&TrialSmoothFog&&!Dirty());
-    ChangeSetting(8);Click(18);CHECK(TrialDistanceFog&&TrialFogDistanceMode==1&&!TrialSmoothFog&&!Dirty());
-    ChangeSetting(8);fail_apply=true;Click(18);fail_apply=false;
+    Click(20);CHECK(draft_fog_mode==1&&TrialDistanceFog&&!Dirty());
+    ChangeSetting(8);Click(19);CHECK(TrialDistanceFog&&TrialFogDistanceMode==0&&TrialSmoothFog&&!Dirty());
+    ChangeSetting(8);Click(19);CHECK(TrialDistanceFog&&TrialFogDistanceMode==1&&!TrialSmoothFog&&!Dirty());
+    ChangeSetting(8);fail_apply=true;Click(19);fail_apply=false;
     CHECK(TrialDistanceFog&&TrialFogDistanceMode==1&&!TrialSmoothFog&&draft_fog_mode==0&&Dirty());
-    Click(18);CHECK(!TrialDistanceFog&&TrialFogDistanceMode==0&&!TrialSmoothFog&&!Dirty());
-    ChangeSetting(8);Click(18);CHECK(TrialDistanceFog&&TrialFogDistanceMode==0&&!TrialSmoothFog&&!Dirty());
-    ChangeSetting(8);Click(20);CHECK(confirm_back&&hits.size()==3);
-    Key(ImGuiKey_Escape);Settle();CHECK(!confirm_back&&PanelOpen()&&Dirty()&&hits.size()==21);
-    CHECK(draft_fog_mode==2&&!TrialSmoothFog);Click(19);CHECK(!Dirty());
-    ChangeSetting(6);CHECK(Dirty()&&message.empty());Click(20);CHECK(confirm_back&&hits.size()==3);
-    Key(ImGuiKey_Escape);Settle();CHECK(!confirm_back&&PanelOpen()&&Dirty()&&hits.size()==21);
-    Click(20);CHECK(confirm_back&&hits.size()==3);Click(1);CHECK(!PanelOpen());
-    CHECK(live.settings.render_percent==125&&live.settings.fps_cap==60);CheckStrip(5);
+    Click(19);CHECK(!TrialDistanceFog&&TrialFogDistanceMode==0&&!TrialSmoothFog&&!Dirty());
+    ChangeSetting(8);Click(19);CHECK(TrialDistanceFog&&TrialFogDistanceMode==0&&!TrialSmoothFog&&!Dirty());
+    ChangeSetting(8);Click(21);CHECK(confirm_back&&hits.size()==3);
+    Key(ImGuiKey_Escape);Settle();CHECK(!confirm_back&&PanelOpen()&&Dirty()&&hits.size()==22);
+    CHECK(draft_fog_mode==2&&!TrialSmoothFog);Click(20);CHECK(!Dirty());
+    ChangeSetting(6);CHECK(Dirty()&&message.empty());Click(21);CHECK(confirm_back&&hits.size()==3);
+    Key(ImGuiKey_Escape);Settle();CHECK(!confirm_back&&PanelOpen()&&Dirty()&&hits.size()==22);
+    Click(21);CHECK(confirm_back&&hits.size()==3);Click(1);CHECK(!PanelOpen());
+    CHECK(live.settings.render_percent==125&&live.settings.fps_cap==60);CheckStrip(options.source.count+2);
 
     // A fresh controller Back reaches the open page; its held repeat cannot
     // immediately leave the parent menu after the page has closed.
@@ -710,7 +759,7 @@ static void CheckSize(unsigned width,unsigned height){
     // RMB has the same Back policy as Q/Escape, including dirty confirmation.
     OpenGraphics(options);ChangeSetting(3);RightClick();CHECK(confirm_back&&PanelOpen()&&Dirty());
     RightClick();CHECK(!confirm_back&&PanelOpen()&&Dirty());
-    Click(18);CHECK(!Dirty());
+    Click(19);CHECK(!Dirty());
     ImGui::GetIO().AddMouseButtonEvent(1,true);DrawFrame();CHECK(!PanelOpen());
     Settle();EmptyAction(); // held closing click cannot back out of Options too
     ImGui::GetIO().AddMouseButtonEvent(1,false);Settle();EmptyAction();
@@ -719,6 +768,8 @@ static void CheckSize(unsigned width,unsigned height){
         Publish(page);RightClick();action=Take();CHECK(action.kind==UC_HF_BACK);EmptyAction();
     }
 
+    OpenGraphics(options);CHECK(!live.world_textures);trial_graphics::textures_available=false;ChangeSetting(18);CHECK(!draft.world_textures&&!Dirty());trial_graphics::textures_available=true;ChangeSetting(18);CHECK(draft.world_textures&&Dirty()&&!live.world_textures);
+    Click(20);CHECK(!draft.world_textures&&!Dirty());ChangeSetting(18);Click(19);CHECK(live.world_textures&&!Dirty());Close();
     // Show all 17 unlocked slots in the recorded original order. The fixture
     // validates host hit regions/actions; original badge pixels are guest-owned.
     auto levels=MakeList(1);levels.list_kind=0;levels.source.kind=UC_HF_LEVELS;levels.source.count=17;levels.source.level_actions=3;
@@ -760,6 +811,7 @@ static void CheckSize(unsigned width,unsigned height){
     pad(2);
     const auto old_weapon=live.weapon_fov;pad(8);
     CHECK(draft.weapon_fov==old_weapon+5&&live.weapon_fov==old_weapon&&Dirty());
+    pad(2);pad(8);CHECK(draft.world_textures!=live.world_textures);
     pad(2); // Apply
     const auto saved=applied;pad(0,255);CHECK(applied==saved+1&&live.hd_ui!=old_hd&&!Dirty());
     pad(0,0,255);CHECK(!PanelOpen());EmptyAction();keyboard_mode=1;
@@ -793,7 +845,7 @@ static void CheckSize(unsigned width,unsigned height){
     TrialFrontendPublish(moving_options);DrawFrame();CHECK(!PanelOpen()&&hits.size()==options.source.count+2);
     TrialFrontendPublish({});DrawFrame();CHECK(hits.empty()&&!TrialGraphicsOpen());
     // Render, effects, world/weapon FOV, HD, four fog modes, RMB flow, controller Apply.
-    CHECK(applied==before+11);
+    CHECK(applied==before+12);
     std::printf("PASS %ux%u: menu strips, profile targets, typed names, 17 level hits, draft/apply/discard, release gates and stale screen revocation\n",width,height);
 }
 int main(){
@@ -806,7 +858,32 @@ int main(){
     const unsigned before_ui=applied;
     CheckSize(640,480);CheckSize(1920,1080);CheckSize(2560,1440);
     CheckNativeConfirmTransitions();
-    for(unsigned kind:{4u,5u}){
+    for(const auto size:{app::Mode{640,480},app::Mode{1920,1080},app::Mode{2560,1440}}){
+        output=size;auto f=MakeList(2);f.list_kind=0;f.source.kind=UC_HF_OBJECTIVES;f.source.count=1;
+        f.source.back_action=0x17;f.source.rows[0].row=f.source.owner;
+        Publish(f);CheckStrip(3);
+        for(unsigned i=0;i<3;++i){Click(i);const auto a=Take();CHECK(a.kind==(i==0?UC_HF_LEFT:i==1?UC_HF_BACK:UC_HF_RIGHT));}
+        Key(ImGuiKey_UpArrow);CHECK(Take().kind==UC_HF_LEFT);
+        Key(ImGuiKey_DownArrow);CHECK(Take().kind==UC_HF_RIGHT);
+        ImGui::GetIO().AddMouseWheelEvent(0,-1);DrawFrame();CHECK(Take().kind==UC_HF_RIGHT);Settle();
+        RightClick();CHECK(Take().kind==UC_HF_BACK);
+        keyboard_mode=0;Publish(f);CHECK(hits.empty());keyboard_mode=1;
+    }
+    for(unsigned count:{3u,4u}){
+        auto f=MakeList(1);f.list_kind=0;f.source.kind=UC_HF_DIALOG;f.source.count=count;
+        std::strcpy(f.source.title,"NewFrontEnd-EMH-1");
+        const char* keys[]={"NewFrontEnd-EMH-2","NewFrontEnd-EMH-3","NewFrontEnd-EMH-4","NewFrontEnd-EMH-5"};
+        for(unsigned i=0;i<count;++i){std::strcpy(f.source.rows[i].label,keys[i]);f.source.rows[i].callback=0x280000+16*i;}
+        CHECK(TrialFrontendSupported(f));Publish(f);CheckStrip(count);
+        CHECK(hits[1].a.y>hits[0].a.y);
+        for(unsigned i=0;i<count;++i){Click(i);auto a=Take();CHECK(a.kind==UC_HF_ACTIVATE&&a.index==i);}
+        RightClick();auto a=Take();CHECK(a.kind==UC_HF_BACK);
+        CheckVisualHandoff(f);
+        keyboard_mode=0;Publish(f);CHECK(hits.empty()&&!frontend_presentation.visible);
+        keyboard_mode=1;f.source.rows[0].callback=0;CHECK(!TrialFrontendSupported(f));
+    }
+
+    for(unsigned kind:{4u,5u,6u}){
         auto page=MakeList(kind);
         for(unsigned i=0;i<page.source.count;++i){page.source.rows[i].actions=UC_HF_ROW_LEFT|UC_HF_ROW_RIGHT;std::strcpy(page.values[i],"16");}
         keyboard_mode=1;Publish(page);CHECK(hits.size()==page.source.count+1);
@@ -821,6 +898,10 @@ int main(){
         keyboard_mode=1;
     }
     std::printf("UI totals: input changes=%u, applies=%u, frames=%u\n",input_changes,applied-before_ui,frames);
-    CHECK(input_changes>10&&applied==before_ui+33&&frames>100);
+    CHECK(input_changes>10&&applied==before_ui+36&&frames>100);
+    TrialFrontendPublish({});TrialGraphicsMenuContext(0,0,0,0);DrawFrame();
+    movie_progress=.5f;DrawFrame();
+    CHECK(ImGui::FindWindowByName("Hold to skip movie")->Active);
+    movie_progress=0;DrawFrame();CHECK(!ImGui::FindWindowByName("Hold to skip movie")->Active);
     ImGui::DestroyContext();std::puts("PASS actual menu UI + original fonts offline; no live scene or visual parity claim");
 }

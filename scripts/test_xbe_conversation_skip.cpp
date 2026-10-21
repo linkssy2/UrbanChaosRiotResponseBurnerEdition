@@ -97,4 +97,15 @@ static void Prompts(){
     // Controller presentation remains original: the production atlas snapshot
     // returns false in controller mode (covered in the companion prompt fixture).
 }
-int main(){Queries();Prompts();std::puts("PASS retail conversation skip delay/allow flag, F press-edge snapshot, repeated readers, release/repress, blocked holds, controller/original fallback, x87/stdcall stack, exact original HUD publication and teardown; no live claim");}
+static void Reload(){
+    X86Context ctx{};ctx.esi=owner;W32(owner+0x368,0);x87_push(ctx,1.);
+    TrialReloadPublish(false,true);TrialReloadQuery(ctx,g_base);assert(X87_ST(0)==0.);
+    TrialReloadPublish(true,true);TrialReloadQuery(ctx,g_base);assert(X87_ST(0)==1.);
+    TrialReloadPublish(true,true);TrialReloadQuery(ctx,g_base);assert(X87_ST(0)==0.);
+    TrialReloadPublish(false,false);TrialReloadPublish(true,false);TrialReloadPublish(true,true);
+    TrialReloadQuery(ctx,g_base);assert(X87_ST(0)==0.);
+    keyboard_mode=false;X87_ST(0)=.75;TrialReloadQuery(ctx,g_base);assert(X87_ST(0)==.75);
+    keyboard_mode=true;W32(owner+0x368,1);TrialReloadQuery(ctx,g_base);assert(X87_ST(0)==.75);
+    W32(owner+0x368,0);
+}
+int main(){Queries();Prompts();Reload();std::puts("PASS retail conversation skip delay/allow flag, F press-edge snapshot, repeated readers, release/repress, blocked holds, controller/original fallback, x87/stdcall stack, exact original HUD publication and teardown; no live claim");}

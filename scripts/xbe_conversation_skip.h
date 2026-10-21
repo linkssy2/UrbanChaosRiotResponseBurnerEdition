@@ -9,3 +9,6 @@ bool TrialConversationQuery(X86Context&,uint8_t*);
 void TrialConversationPrompt(X86Context&,uint8_t*);
 void TrialConversationClose(uint32_t owner);
 bool TrialConversationPromptActive();
+
+void TrialReloadPublish(bool down,bool enabled);
+void TrialReloadQuery(X86Context&,uint8_t*);

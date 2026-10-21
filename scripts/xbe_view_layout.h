@@ -19,6 +19,7 @@ void TrialPlayerCameraCreated(const X86Context&,const uint8_t*);
 float TrialCameraTarget(const X86Context&,const uint8_t*);
 // BAC10's draw-local first-person projection, before the original publication.
 void TrialWeaponProjection(const X86Context&,uint8_t*);
+void TrialScopeBorders(X86Context&,uint8_t*);
 struct TrialHudLayoutScope {
     TrialHudLayoutScope* previous_;float scale_=1;
     explicit TrialHudLayoutScope(const X86Context&,const uint8_t*);

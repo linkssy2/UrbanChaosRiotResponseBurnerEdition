@@ -10,7 +10,7 @@ import sys
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
-VERSION = '0.05'
+VERSION = '0.06'
 SDK = REPO / 'build/upstream-review-xboxxbe-20261014'
 RUNTIME_NAME = 'UrbanChaosXbeTrial.exe'
 RUNTIME_FILES = (RUNTIME_NAME, 'zlib1.dll', 'libusb-1.0.dll', 'msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll')
@@ -118,6 +118,7 @@ def sources(runtime):
     result = {
         'tools/import_game.py': HERE / 'import_game.py',
         'tools/disc.py': HERE / 'disc.py',
+        'tools/world_textures.py': HERE / 'world_textures.py',
         'tools/disc-manifest.json': HERE.parent / 'burner/disc-manifest.json',
         'tools/xdvdfs.py': REPO / 'third_party/xboxrecomp/tools/xiso/xdvdfs.py',
         'runtime/' + RUNTIME_NAME: runtime,

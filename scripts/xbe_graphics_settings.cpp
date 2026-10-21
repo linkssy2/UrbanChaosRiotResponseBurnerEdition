@@ -9,12 +9,14 @@
 #include <atomic>
 #include <exception>
 #include "xbe_graphics_settings.h"
+#include "xbe_world_textures.h"
 
 uint32_t TrialAspectRatio = 0;
 uint32_t TrialMsaaSamples = 1;
 uint32_t TrialFieldOfView = 53;
 bool TrialSceneryLighting = true, TrialCharacterLighting = true;
 bool TrialHdUi = false;
+bool TrialWorldTextures = false;
 uint32_t TrialReticleScale = 100;
 uint32_t TrialWeaponFovScale = 100;
 uint32_t TrialCharacterQuality = 0, TrialRagdollMode = 0;
@@ -22,9 +24,12 @@ namespace trial_graphics {
 static std::atomic<bool> boot_wide{true};
 static std::atomic<uint32_t> field_of_view{53};
 static std::atomic<bool> hd_ui{false};
+static std::atomic<bool> world_textures{false};
 static std::atomic<uint32_t> reticle_scale{100};
 static std::atomic<uint32_t> weapon_fov_scale{100};
 uint32_t FieldOfView(){return field_of_view.load();}
+bool WorldTexturesAvailable(){return uc_world_textures::Available();}
+bool WorldTextures(){return world_textures.load();}
 bool HdUi(){return hd_ui.load();}
 uint32_t ReticleScale(){return reticle_scale.load();}
 uint32_t WeaponFovScale(){return weapon_fov_scale.load();}
@@ -38,17 +43,19 @@ uint32_t RagdollMode(){return effects.load()>>3;}
 static void PublishEffects(const Draft& d){
     field_of_view=d.fov;
     hd_ui=d.hd_ui;
+    world_textures=d.world_textures;
     reticle_scale=d.reticle_scale;
     weapon_fov_scale=d.weapon_fov;
     effects=uint32_t(d.scenery)|(uint32_t(d.characters)<<1)|(d.character_quality<<2)|(d.ragdolls<<3);
 }
 static Draft Current(){return {app::Get(),TrialAspectRatio,TrialMsaaSamples,
-    TrialSceneryLighting,TrialCharacterLighting,TrialCharacterQuality,TrialRagdollMode,TrialFieldOfView,TrialHdUi,TrialReticleScale,TrialWeaponFovScale};}
+    TrialSceneryLighting,TrialCharacterLighting,TrialCharacterQuality,TrialRagdollMode,TrialFieldOfView,TrialHdUi,TrialReticleScale,TrialWorldTextures,TrialWeaponFovScale};}
 static void Store(const Draft& d){
     app::Get()=d.settings;TrialAspectRatio=d.aspect;TrialMsaaSamples=d.msaa;
     TrialSceneryLighting=d.scenery;TrialCharacterLighting=d.characters;
     TrialCharacterQuality=d.character_quality;TrialRagdollMode=d.ragdolls;TrialFieldOfView=d.fov;
     TrialHdUi=d.hd_ui;
+    TrialWorldTextures=d.world_textures;
     TrialReticleScale=d.reticle_scale;
     TrialWeaponFovScale=d.weapon_fov;
 }

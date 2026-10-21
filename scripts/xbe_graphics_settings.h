@@ -10,6 +10,7 @@ extern uint32_t TrialReticleScale;
 extern uint32_t TrialWeaponFovScale;
 extern bool TrialSceneryLighting, TrialCharacterLighting;
 extern bool TrialHdUi;
+extern bool TrialWorldTextures;
 extern uint32_t TrialCharacterQuality, TrialRagdollMode;
 namespace trial_graphics {
 struct Draft {
@@ -20,6 +21,7 @@ struct Draft {
     uint32_t fov = 53; // vertical degrees; retail player camera default
     bool hd_ui = false;
     uint32_t reticle_scale = 100; // percentage of the authored crosshair size
+    bool world_textures = false;
     uint32_t weapon_fov = 100; // percentage of each weapon's authored view window
 };
 Draft Snapshot();
@@ -28,6 +30,8 @@ bool Widescreen();
 uint32_t FieldOfView();
 uint32_t ReticleScale();
 uint32_t WeaponFovScale();
+bool WorldTextures();
+bool WorldTexturesAvailable();
 bool HdUi(); // committed selection; both font atlases are already resident
 bool FullscreenRequested();
 bool ScalePending();

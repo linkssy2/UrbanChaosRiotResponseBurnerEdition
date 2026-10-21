@@ -1,6 +1,6 @@
 # Code map
 
-The 0.05 PC port uses the XboxXBERecomp Direct3D 12 runtime. Maintained
+The 0.06 PC port uses the XboxXBERecomp Direct3D 12 runtime. Maintained
 integration lives in `scripts/`; generated title/runtime overlays stay private
 under `build/`. Read [build status](BUILDING.md) before attempting a clean build.
 
@@ -30,3 +30,5 @@ The historical `src/`, `native/`, `shaders/`, root CMake project and
 Only selected reviewed helpers are reused by current preparation scripts;
 their presence does not mean every historical experiment is active. This avoids
 moving include paths or introducing runtime changes during source packaging.
+
+See [menu and input maintenance](XBE-MENUS-AND-INPUT.md) for frontend ownership, profile selection, bindings and FMV hold behavior.

@@ -1,6 +1,7 @@
 #pragma once
 #include <algorithm>
 #include <cstdint>
+#include <cstring>
 #include "hybrid_frontend_guest.h"
 
 enum { TRIAL_HF_NAME=6, TRIAL_HF_DELETE=8 };
@@ -47,6 +48,14 @@ inline TrialLevelRect TrialLevelBounds(unsigned index,unsigned count) {
 }
 // Nine rows retain level select's full-size 24px icons and 30px spacing.
 constexpr unsigned TrialRewardsPerPage=9;
+inline bool TrialFrontendDifficulty(const UcHybridFrontendSnapshot& s) {
+    if(s.kind!=UC_HF_DIALOG||(s.count!=3&&s.count!=4)||
+       std::strcmp(s.title,"NewFrontEnd-EMH-1"))return false;
+    const char* keys[]={"NewFrontEnd-EMH-2","NewFrontEnd-EMH-3","NewFrontEnd-EMH-4","NewFrontEnd-EMH-5"};
+    for(unsigned i=0;i<s.count;++i)
+        if(std::strcmp(s.rows[i].label,keys[i])||!s.rows[i].callback||s.rows[i].callback==0xffffffffu)return false;
+    return true;
+}
 inline bool TrialFrontendSupported(const TrialFrontendFrame& f) {
     const auto& s=f.source;
     if(!s.epoch||!s.screen||!s.owner||!s.count||s.selected>=s.count||
@@ -56,12 +65,14 @@ inline bool TrialFrontendSupported(const TrialFrontendFrame& f) {
         for(const auto& r:f.profile_bounds)if(!(r.w>0&&r.h>0))return false;
         return true;
     }
+    if(TrialFrontendDifficulty(s))return true;
+    if(s.kind==UC_HF_OBJECTIVES)return s.count==1&&s.back_action&&s.rows[0].row==s.owner;
     if(s.kind==UC_HF_DIALOG)return s.count==2&&s.rows[1].callback==0x284310&&
         ((f.delete_dialog&&f.delete_name[0]&&s.rows[0].callback==0x284580)||
          (f.pause_dialog&&f.dialog_message[0]&&(s.source_kind&0x80000000u)&&
           s.rows[0].callback==0x267400));
     return (s.kind==TRIAL_HF_NAME&&s.count==1&&f.name_capacity==15)||
-           (s.kind==UC_HF_LIST&&f.list_kind>=1&&f.list_kind<=5&&s.count<=20)||
+           (s.kind==UC_HF_LIST&&f.list_kind>=1&&f.list_kind<=7&&s.count<=20)||
            (s.kind==UC_HF_LEVELS&&s.count<=17)||
            (s.kind==UC_HF_REWARD_BROWSER&&s.count<=55);
 }

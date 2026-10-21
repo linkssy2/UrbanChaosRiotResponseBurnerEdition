@@ -56,3 +56,17 @@ void TrialConversationClose(uint32_t owner){
     }
 }
 bool TrialConversationPromptActive(){return prompt_active.load(std::memory_order_relaxed);}
+
+namespace {
+bool previous_reload=false;
+std::atomic<bool> pressed_reload{false};
+}
+void TrialReloadPublish(bool down,bool enabled){
+    pressed_reload.store(enabled&&down&&!previous_reload,std::memory_order_relaxed);
+    previous_reload=down;
+}
+void TrialReloadQuery(X86Context& ctx,uint8_t* base){
+    // Only the original ManualReload query; automatic empty-magazine reload is unchanged.
+    if(xbox_KeyboardMode()&&TrialGuestReadable(ctx.esi,0x36c)&&ConversationWord(base,ctx.esi+0x368)==0)
+        X87_ST(0)=pressed_reload.load(std::memory_order_relaxed)?1.:0.;
+}

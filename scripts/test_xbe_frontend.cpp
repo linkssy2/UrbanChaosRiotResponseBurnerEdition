@@ -131,6 +131,7 @@ void x86_icall(X86Context& ctx,uint8_t* base,uint32_t target){
 }
 // ORIGINAL_NAME_VALIDATION
 #include "menu_pointer_guest.h"
+bool TrialControlsProfile(uint32_t*,bool){return false;}
 #include "xbe_graphics_menu_context.h"
 #include "xbe_frontend_guest.inc"
 
@@ -181,6 +182,14 @@ static void CheckProfileWarnings(){
         }
     };
     for(const auto& c:warning_cases)present(c.key,c.source,c.expected);
+    for(const char* key:{"newfrontend-pressstart-1","NewFrontEnd-PRESSSTART-2"}){
+        present(key,"PRESS START BUTTON","PRESS ANY KEY");
+        present(key,"APPUYER SUR START","APPUYEZ SUR UNE TOUCHE");
+        present(key,"PREMI START","PREMI UN TASTO");
+        present(key,"START DR\xDC" "CKEN","BELIEBIGE TASTE DR\xDC" "CKEN");
+        name_keyboard_mode=false;present(key,"PRESS START BUTTON","PRESS START BUTTON");
+        name_keyboard_mode=true;
+    }
     present("XBoxTRC-MemCard-1",warning_cases[0].source,warning_cases[0].expected);
     // Unrelated Xbox references, neighboring records and custom wording stay
     // untouched. Missing storage/undersized scratch falls back to the source.
@@ -357,7 +366,7 @@ static void CheckManagerHandoff(){
     // Exercise the real shared guest manager/reset/publication sequence, not
     // merely a synthetic host transition bit. The outgoing native frame is
     // still visible, but its callbacks stop owning input at the first reset.
-    for(uint32_t selector:{0x51D29Cu,0x51CFA4u,0x51D310u,0x51D304u,0x51D30Cu}){
+    for(uint32_t selector:{0x51D29Cu,0x51CFA4u,0x51D310u,0x51D304u,0x51D30Cu,0x51D300u,0x51CFB8u}){
         MEM8(0x600014)=0;Frame(selector);const auto stable=published;
         assert(presentation.visible&&!presentation.transition);
         MEM8(0x600014)=1;menu_pointer_begin(0x600000);GraphicsMenuBegin();
@@ -367,6 +376,19 @@ static void CheckManagerHandoff(){
         assert(!TrialFrontendOwns(stable.source.owner,stable.source.kind));
         g_ecx=stable.source.owner;ucrr_menu_list_enter();
         assert(TrialFrontendHideListSprites());
+        const auto stack=context.esp;const auto quads=sidebar_quads.size();
+        __imp__sub_00065550(context,ram);
+        assert(context.esp==stack+4&&sidebar_quads.size()==quads);context.esp=stack;
+        __imp__sub_00065170(context,ram);
+        assert(context.esp==stack+4&&sidebar_quads.size()==quads);context.esp=stack;
+        // First-frame and incoming-owner draws precede native publication.
+        const auto saved_presentation=presentation;presentation={};
+        assert(TrialFrontendHideListSprites());
+        presentation=saved_presentation;
+        std::memcpy(ram+0x67E000,ram+stable.source.owner,0xE8);
+        menu_owner=0x67E000;assert(TrialFrontendHideListSprites());
+        MEM32(0x67E004)=0x51D308;assert(!TrialFrontendHideListSprites());
+        menu_owner=stable.source.owner;
         name_keyboard_mode=false;assert(!TrialFrontendHideListSprites());name_keyboard_mode=true;
         menu_owner=0;assert(!TrialFrontendHideListSprites());
         // Repeated fade frames may have new epochs, but never resurrect a
@@ -376,7 +398,7 @@ static void CheckManagerHandoff(){
         assert(TrialFrontendSupported(published)&&presentation.visible&&!presentation.transition);
         // View Controls and the original child/modal screens
         // remain source-owned. A settled unsupported child clears the cover.
-        Frame(0x51D300);assert(!TrialFrontendSupported(published)&&!presentation.visible);
+        Frame(0x51D308);assert(!TrialFrontendSupported(published)&&!presentation.visible);
         MEM8(0x600014)=1;hf_reset();assert(!presentation.visible);MEM8(0x600014)=0;
     }
     Frame(0x51D29C);MEM32(0x600004)=0;menu_pointer_end();
@@ -406,6 +428,9 @@ static void CheckProfiles(){
     assert(ProfileFrame()==0);const auto s=published.source;
     assert(TrialFrontendSupported(published)&&s.kind==UC_HF_PROFILES&&s.count==4);
     assert(profile_quads.size()==8&&profile_post_fade==275);
+    TrialFrontendProfileDrawOwner=s.owner;assert(TrialFrontendHideListSprites());
+    name_keyboard_mode=false;assert(!TrialFrontendHideListSprites());name_keyboard_mode=true;
+    TrialFrontendProfileDrawOwner=0;
     for(unsigned i=0;i<4;++i){
         const auto& b=published.profile_bounds[i];const auto& solid=profile_quads[2*i];const auto& fade=profile_quads[2*i+1];
         assert(solid.function==0x65760&&fade.function==0x65550);
@@ -578,6 +603,26 @@ static void CheckPauseQuit(){
     MEM8(0x600014)=0;hf_pause_manager=0;assert(!FrontendPauseDialog(0x646000));
     pause_fixture=false;queued={};name_sounds=0;MEM32(0x600008)=0;Frame(0x51D29C);
 }
+static void CheckDifficultyDialog(){
+    const uint32_t owner=0x646000;
+    const char* keys[]={"NewFrontEnd-EMH-1","NewFrontEnd-EMH-2","NewFrontEnd-EMH-3","NewFrontEnd-EMH-4","NewFrontEnd-EMH-5"};
+    for(unsigned i=0;i<5;++i)std::strcpy(reinterpret_cast<char*>(ram+0x660000+128*i),keys[i]);
+    for(unsigned count:{3u,4u}){
+        std::memset(ram+owner,0,0x8C);MEM32(owner)=0x485B78;MEM32(owner+4)=0x660000;
+        MEM32(owner+0xC)=count;MEM32(owner+8)=1;MEM32(owner+0x50)=0x284310;
+        for(unsigned i=0;i<count;++i){MEM32(owner+0x10+4*i)=0x660080+128*i;MEM32(owner+0x30+4*i)=0x280000+16*i;}
+        assert(FrontendDifficultyDialog(owner));
+        menu_pointer_begin(0x600000);g_ecx=owner;ucrr_menu_dialog_enter();
+        assert(TrialFrontendDifficulty(published.source)&&TrialFrontendOwns(owner,UC_HF_DIALOG));
+        assert(TrialFrontendHidePauseDialogText(owner));
+        ucrr_menu_dialog_leave();menu_pointer_end();
+        name_keyboard_mode=false;menu_pointer_begin(0x600000);g_ecx=owner;ucrr_menu_dialog_enter();
+        assert(!TrialFrontendHidePauseDialogText(owner));
+        ucrr_menu_dialog_leave();menu_pointer_end();name_keyboard_mode=true;
+        MEM32(owner+0x30)=0;assert(!FrontendDifficultyDialog(owner));
+    }
+    Frame(0x51D29C);
+}
 static void NameFrame(){
     menu_pointer_begin(0x600000);g_ecx=g_esi=0x644000;
     FrontendNameEnter();FrontendNameLeave();menu_pointer_end();
@@ -632,6 +677,30 @@ static void CheckName(){
     MEM32(g_esp+4)=0x17;assert(FrontendNameQuery()&&!FrontendNameQuery());
     MEM8(owner+4)=1;NameFrame();assert(!TrialFrontendSupported(published));
 }
+static void CheckObjectives(){
+    constexpr uint32_t manager=0x660000,screen=0x661000,owner=0x662000;
+    MEM32(manager+4)=screen;MEM8(manager+0x14)=0;MEM32(screen)=0x489974;
+    MEM32(owner)=0x487588;MEM32(owner+4)=0x51CF9C;MEM32(owner+0x58)=20;
+    MEM32(owner+0xAC)=0x267400;MEM8(owner+0xB0)=0;MEM32(0x485A18)=0x17;
+    name_keyboard_mode=true;menu_pointer_begin(manager);g_ecx=owner;
+    FrontendObjectivesEnter();FrontendObjectivesLeave();menu_pointer_end();
+    const auto s=published.source;assert(s.kind==UC_HF_OBJECTIVES&&TrialFrontendSupported(published));
+    const auto before=std::vector<uint8_t>(ram+owner,ram+owner+0xFC);
+    for(auto kind:{UC_HF_BACK,UC_HF_LEFT,UC_HF_RIGHT}){
+        menu_pointer_begin(manager);g_ecx=owner;FrontendObjectivesEnter();g_edi=owner;g_esp=0x700000;
+        queued={s.epoch,s.screen,owner,owner,0,uint32_t(kind)};FrontendObjectivesInput();
+        MEM32(g_esp)=kind==UC_HF_BACK?0x26316A:kind==UC_HF_LEFT?0x26319C:0x2631DE;
+        MEM32(g_esp+4)=kind==UC_HF_BACK?0x17:kind==UC_HF_LEFT?0x1E:0x1F;
+        assert(FrontendObjectivesQuery());++MEM32(g_esp);assert(!FrontendObjectivesQuery());
+        --MEM32(g_esp);name_keyboard_mode=false;assert(!FrontendObjectivesQuery());name_keyboard_mode=true;
+        FrontendObjectivesLeave();assert(!FrontendObjectivesQuery());menu_pointer_end();
+    }
+    menu_pointer_begin(manager);g_ecx=owner;FrontendObjectivesEnter();g_edi=owner;
+    queued={s.epoch-1,s.screen,owner,owner,0,UC_HF_BACK};FrontendObjectivesInput();assert(!frontend_objectives_action);
+    FrontendObjectivesLeave();menu_pointer_end();
+    assert(!std::memcmp(before.data(),ram+owner,before.size()));
+    MEM32(owner)=0;g_ecx=owner;FrontendObjectivesEnter();assert(!frontend_objectives_owner);
+}
 int main(){
     g_esp=0x700000;
     MEMF(0x44BF94)=1;MEMF(0x44C1F8)=.5f;
@@ -681,7 +750,7 @@ int main(){
         queued={s.epoch-1,s.screen,s.owner,s.rows[0].row,0,UC_HF_ACTIVATE};ucrr_menu_list_hover();assert(MEM32(selector)==1);
     }
     CheckManagerHandoff();
-    Frame(0x51D300);assert(!TrialFrontendSupported(published));
+    Frame(0x51D308);assert(!TrialFrontendSupported(published));
     unsigned reads=pointer_reads;g_ecx=g_esi=0x602000;ucrr_menu_list_enter();ucrr_menu_list_hover();assert(pointer_reads==reads+1);
     Frame(0x51D29C);MEM8(0x600014)=1;menu_pointer_begin(0x600000);GraphicsMenuBegin();
     assert(!TrialFrontendSupported(published));MEM8(0x600014)=0;
@@ -765,6 +834,6 @@ int main(){
     assert(!gate.Accept(1,false));assert(gate.Accept(1,true));
     assert(!gate.Accept(2,true));assert(!gate.Accept(2,false));assert(gate.Accept(2,false));
     controller_fixture::Check();
-    CheckProfiles();CheckDeleteProfile();CheckPauseQuit();CheckName();CheckProfileWarnings();
+    CheckProfiles();CheckDeleteProfile();CheckPauseQuit();CheckDifficultyDialog();CheckName();CheckProfileWarnings();CheckObjectives();
     std::puts("frontend: original profile bounds/actions, typed-name source validation/cancel, source-owned actions, badge/completion, manager visual handoff, controller gates and localized PC profile warnings passed");
 }

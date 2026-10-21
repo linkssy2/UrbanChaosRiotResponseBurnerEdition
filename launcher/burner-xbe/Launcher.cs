@@ -11,7 +11,7 @@ class BurnerLauncher : Form {
     static readonly string Root=AppDomain.CurrentDomain.BaseDirectory;
     static readonly string Data=Path.Combine(Root,"GameData");
     readonly Label status=new Label(); readonly ProgressBar progress=new ProgressBar();
-    readonly Button play=new Button(), import=new Button(), cancel=new Button();
+    readonly Button play=new Button(), import=new Button(), textures=new Button(), cancel=new Button();
     bool busy, running; string cancelPath; Image cover;
     static string Quote(string s){return "\""+s.Replace("\"","\\\"")+"\"";}
     // Resolve beside the EXE so shortcuts and moving the folder keep the same portable data.
@@ -34,8 +34,8 @@ class BurnerLauncher : Form {
         Icon=Icon.ExtractAssociatedIcon(Application.ExecutablePath);
         var layout=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,Padding=new Padding(20)};layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,45));layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,55));Controls.Add(layout);
         cover=Image.FromFile(Path.Combine(Root,"cover.png"));layout.Controls.Add(new PictureBox{Image=cover,SizeMode=PictureBoxSizeMode.Zoom,Dock=DockStyle.Fill,Margin=new Padding(0,0,24,0)},0,0);
-        var panel=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=1,RowCount=10,Padding=new Padding(12,22,8,16)};
-        int[] heights={40,66,68,70,30,66,66,58,54};foreach(int h in heights)panel.RowStyles.Add(new RowStyle(SizeType.Absolute,h));panel.RowStyles.Add(new RowStyle(SizeType.Percent,100));layout.Controls.Add(panel,1,0);
+        var panel=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=1,RowCount=11,Padding=new Padding(12,22,8,16)};
+        int[] heights={35,60,60,65,25,58,58,58,50,50};foreach(int h in heights)panel.RowStyles.Add(new RowStyle(SizeType.Absolute,h));panel.RowStyles.Add(new RowStyle(SizeType.Percent,100));layout.Controls.Add(panel,1,0);
         panel.Controls.Add(new Label{Text="URBAN CHAOS  /  RIOT RESPONSE",Dock=DockStyle.Fill,ForeColor=Color.FromArgb(190,190,169),Font=new Font("Segoe UI",11,FontStyle.Bold)});
         panel.Controls.Add(new Label{Text="BURNER EDITION",Dock=DockStyle.Fill,ForeColor=Color.FromArgb(245,175,49),Font=new Font("Segoe UI",29,FontStyle.Bold)});
         panel.Controls.Add(new Label{Text="Your Xbox disc. Ready for PC.\nPortable game data and saves stay in GameData.",Dock=DockStyle.Fill,Font=new Font("Segoe UI",12),ForeColor=Color.FromArgb(206,207,199)});
@@ -43,9 +43,10 @@ class BurnerLauncher : Form {
         progress.Dock=DockStyle.Fill;progress.Margin=new Padding(0,0,0,10);panel.Controls.Add(progress);
         play=MakeButton("PLAY",async(s,e)=>await Play());play.Enabled=false;play.BackColor=Color.FromArgb(138,56,19);panel.Controls.Add(play);
         import=MakeButton("SELECT XBOX ISO",async(s,e)=>await Import());panel.Controls.Add(import);
+        textures=MakeButton("INSTALL HD TEXTURE PACK",async(s,e)=>await InstallTextures());panel.Controls.Add(textures);
         panel.Controls.Add(MakeButton("OPEN SAVES",(s,e)=>{string saves=Path.Combine(Data,"xbe-runtime","hdd");if(Directory.Exists(saves))Process.Start("explorer.exe",Quote(saves));else status.Text="No portable saves yet. Import your ISO and create a profile first.";}));
         cancel=MakeButton("QUIT",(s,e)=>{if(busy&&!running){File.WriteAllText(cancelPath,"");status.Text="Cancelling import...";cancel.Enabled=false;}else Close();});panel.Controls.Add(cancel);
-        panel.Controls.Add(new Label{Text="v0.05  |  Windows x64 / Direct3D 12\nPortable edition. No disc files are included.",Dock=DockStyle.Fill,Font=new Font("Segoe UI",9),ForeColor=Color.FromArgb(138,143,138),TextAlign=ContentAlignment.BottomLeft});
+        panel.Controls.Add(new Label{Text="v0.06  |  Windows x64 / Direct3D 12\nPortable edition. No disc files are included.",Dock=DockStyle.Fill,Font=new Font("Segoe UI",9),ForeColor=Color.FromArgb(138,143,138),TextAlign=ContentAlignment.BottomLeft});
         Shown+=async(s,e)=>await RefreshReady();FormClosing+=(s,e)=>{if(busy){e.Cancel=true;status.Text=running?"Close the game before exiting the launcher.":"Use Cancel Import to stop safely.";}};
     }
     async Task RefreshReady(){bool ready=await Ready();play.Enabled=ready;status.Text=ready?"READY TO PLAY\nYour imported game data is available.":"SELECT YOUR XBOX ISO\nChoose the supported Urban Chaos: Riot Response disc image.";}
@@ -57,10 +58,16 @@ class BurnerLauncher : Form {
             if(p.ExitCode!=0&&!String.IsNullOrWhiteSpace(error))status.Text="Setup could not finish. "+error.Trim();return p.ExitCode;
         }
     }
-    void Busy(bool value,bool game=false){busy=value;running=value&&game;import.Enabled=!value;play.Enabled=!value;cancel.Text=value&&!game?"CANCEL IMPORT":"QUIT";cancel.Enabled=true;}
+    void Busy(bool value,bool game=false){busy=value;running=value&&game;import.Enabled=!value;textures.Enabled=!value;play.Enabled=!value;cancel.Text=value&&!game?"CANCEL IMPORT":"QUIT";cancel.Enabled=true;}
     async Task Import(){using(var d=new OpenFileDialog{Title="Select your Urban Chaos Xbox ISO",Filter="Xbox disc image (*.iso)|*.iso",CheckFileExists=true}){
         if(d.ShowDialog(this)!=DialogResult.OK)return;cancelPath=Path.Combine(Data,"cancel-"+Guid.NewGuid().ToString("N"));Busy(true);progress.Value=0;
         try{Directory.CreateDirectory(Data);int code=await RunWorker("import"," --iso "+Quote(d.FileName)+" --cancel "+Quote(cancelPath));Busy(false);if(code==0)await RefreshReady();else play.Enabled=await Ready();}
+        catch(Exception ex){Busy(false);status.Text=ex.Message;}finally{if(File.Exists(cancelPath))File.Delete(cancelPath);}
+    }}
+    async Task InstallTextures(){if(!await Ready()){status.Text="Import your Xbox ISO before installing the optional texture pack.";return;}using(var d=new OpenFileDialog{Title="Select the Burner Edition HD texture ZIP download",Filter="HD texture pack (*.zip)|*.zip",CheckFileExists=true}){
+        if(d.ShowDialog(this)!=DialogResult.OK)return;
+        cancelPath=Path.Combine(Data,"cancel-"+Guid.NewGuid().ToString("N"));Busy(true);progress.Value=0;
+        try{Directory.CreateDirectory(Data);await RunWorker("textures"," --pack "+Quote(d.FileName)+" --cancel "+Quote(cancelPath));Busy(false);play.Enabled=await Ready();}
         catch(Exception ex){Busy(false);status.Text=ex.Message;}finally{if(File.Exists(cancelPath))File.Delete(cancelPath);}
     }}
     async Task Play(){Busy(true,true);status.Text="Game running. Your settings and saves stay in this folder's GameData.";

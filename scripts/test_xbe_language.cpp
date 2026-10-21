@@ -110,6 +110,16 @@ static void CheckBank(unsigned language){
     OriginalMovieMask(ctx,g_base);assert(R32(0x32060)==1u+(1u<<(language+1)));
 }
 int main(){
+    // Optional packs are admitted only when every declared file is present.
+    const auto temporary=std::filesystem::current_path()/"spanish-pack-fixture";
+    assert(!std::filesystem::exists(temporary));std::filesystem::create_directory(temporary);
+    {std::ofstream manifest(temporary/"manifest.txt");
+        for(unsigned i=10;i<37;++i){const auto name=std::to_string(i)+"-01.ent";
+            manifest<<name<<" 200\n";std::ofstream file(temporary/name,std::ios::binary);file<<std::string(200,'x');}}
+    assert(trial_spanish::ReadFiles(temporary).size()==27);
+    {std::ofstream manifest(temporary/"manifest.txt",std::ios::app);manifest<<"truncated";}
+    assert(trial_spanish::ReadFiles(temporary).empty());
+    std::filesystem::remove_all(temporary);
     const uint32_t ids[]={1,4,6,3};
     for(unsigned language=0;language<4;++language){
         Seed();TrialLanguage=language;trial_language::Initialize();

@@ -194,7 +194,7 @@ def import_iso(iso_path, data, cancel):
         check_cancel(cancel)
         (stage / 'installed.json').write_text(json.dumps({
             'version': 1, 'disc_manifest': sha(ROOT / 'tools/disc-manifest.json'),
-            'files': len(required), 'importer': 'burner-xbe-0.05'}))
+            'files': len(required), 'importer': 'burner-xbe-0.06'}))
         staged_runtime = stage_legacy_state(data, stage, cancel)
         publish_import(data, stage, staged_runtime, cancel)
         progress('Ready to play', 100)
@@ -320,9 +320,10 @@ def launch(data):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('action', choices=['import', 'status', 'launch'])
+    parser.add_argument('action', choices=['import', 'status', 'launch', 'textures'])
     parser.add_argument('--data', type=Path, default=ROOT / 'GameData')
     parser.add_argument('--iso', type=Path)
+    parser.add_argument('--pack', type=Path)
     parser.add_argument('--cancel', type=Path)
     args = parser.parse_args()
     try:
@@ -330,6 +331,11 @@ def main():
             if args.iso is None or args.cancel is None:
                 raise ValueError('Import requires an ISO and cancellation path.')
             import_iso(args.iso, args.data, args.cancel)
+        elif args.action == 'textures':
+            if args.pack is None or args.cancel is None:
+                raise ValueError('Select the HD texture ZIP download.')
+            from world_textures import install
+            install(args.pack, args.data, args.cancel)
         elif args.action == 'status':
             return 0 if ready(args.data) else 2
         else:

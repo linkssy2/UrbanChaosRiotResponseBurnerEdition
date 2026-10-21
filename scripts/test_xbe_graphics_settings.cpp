@@ -12,6 +12,7 @@
 #include <sstream>
 #include <system_error>
 #include "xbe_graphics_settings.h"
+#include "xbe_world_textures.h"
 
 static bool platform_supported=true;
 namespace app {
@@ -48,6 +49,7 @@ int main() {
         (L"uc-graphics-fixture-"+std::to_wstring(GetCurrentProcessId())+L".toml");
     app::settings.join_ip="retained";
     trial_graphics::Initialize();assert(trial_graphics::Widescreen());
+    assert(!TrialWorldTextures&&!trial_graphics::WorldTextures());
     assert(!TrialHdUi&&!trial_graphics::HdUi()&&!trial_graphics::Snapshot().hd_ui);
     assert(TrialReticleScale==100&&trial_graphics::ReticleScale()==100);
     assert(TrialWeaponFovScale==100&&trial_graphics::WeaponFovScale()==100);
@@ -60,7 +62,7 @@ int main() {
     draft.settings.render_percent=150;draft.settings.aniso=16;draft.settings.vsync=false;
     draft.settings.fps_cap=120;draft.settings.display_mode=app::DisplayMode::Windowed;
     draft.settings.join_ip="must not overwrite unrelated setting";
-    draft.msaa=4;draft.fov=70;draft.hd_ui=true;draft.reticle_scale=150;draft.weapon_fov=125;
+    draft.world_textures=true;draft.msaa=4;draft.fov=70;draft.hd_ui=true;draft.reticle_scale=150;draft.weapon_fov=125;
     assert(trial_graphics::WeaponFovScale()==100);
     assert(!TrialHdUi&&!trial_graphics::HdUi()); // Draft edits cannot change live rendering.
     draft.scenery=false;draft.characters=false;draft.character_quality=1;draft.ragdolls=2;
@@ -69,6 +71,7 @@ int main() {
     assert(app::settings.fps_cap==120&&!app::settings.vsync&&app::settings.join_ip=="retained");
     assert(trial_graphics::FieldOfView()==70&&trial_graphics::ReticleScale()==150);
     assert(trial_graphics::WeaponFovScale()==125);
+    assert(TrialWorldTextures&&trial_graphics::WorldTextures());
     assert(TrialHdUi&&trial_graphics::HdUi()&&trial_graphics::Snapshot().hd_ui);
     auto invalid_fov=draft;invalid_fov.fov=0;assert(!trial_graphics::Apply(invalid_fov,message));
     invalid_fov.fov=91;assert(!trial_graphics::Apply(invalid_fov,message));
@@ -92,6 +95,7 @@ int main() {
     assert(TrialReticleScale==150&&trial_graphics::ReticleScale()==150);
     assert(TrialWeaponFovScale==125&&trial_graphics::WeaponFovScale()==125);
     assert(TrialMsaaSamples==4&&trial_graphics::MsaaSamples()==4);
+    assert(TrialWorldTextures&&trial_graphics::WorldTextures());
     assert(TrialHdUi&&trial_graphics::HdUi()&&trial_graphics::Snapshot().hd_ui);
     assert(!TrialSceneryLighting&&!TrialCharacterLighting&&TrialCharacterQuality==1&&TrialRagdollMode==2);
     assert(!trial_graphics::SceneryLighting()&&!trial_graphics::CharacterLighting()&&trial_graphics::CharacterQuality()==1&&trial_graphics::RagdollMode()==2);
@@ -157,6 +161,10 @@ int main() {
     TrialWeaponFovScale=120;trial_graphics::Initialize();assert(trial_graphics::WeaponFovScale()==120);
     TrialHdUi=true;trial_graphics::Initialize();assert(trial_graphics::HdUi());
     TrialHdUi=false;trial_graphics::Initialize();assert(!trial_graphics::HdUi());
+    for(unsigned cap:{30u,60u,120u,144u,240u,0u}){
+        draft=trial_graphics::Snapshot();draft.settings.fps_cap=cap;
+        assert(trial_graphics::Apply(draft,message));
+    }
     std::filesystem::remove(app::file);
     std::puts("graphics settings: staged apply, persistence rollback, validation, aspect restart and display routing passed");
 }

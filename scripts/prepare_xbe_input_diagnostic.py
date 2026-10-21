@@ -27,7 +27,7 @@ def prepare(area):
         static input_diagnostic::Rate rate[4];
         if(rate[port].Due()){
             unsigned held=0;for(int k=1;k<256;++k)held+=(GetAsyncKeyState(k)&0x8000)!=0;
-            input_diagnostic::Log("pad port=%d connected=%d buttons=%x analog=%u,%u,%u,%u,%u,%u,%u,%u axes=%d,%d,%d,%d focus=%d keyboard=%d menu=%d gameplay=%d ui=%d release=%d intro=%u capture=%d held_count=%u",port,pad.connected,pad.buttons,pad.analog[0],pad.analog[1],pad.analog[2],pad.analog[3],pad.analog[4],pad.analog[5],pad.analog[6],pad.analog[7],pad.lx,pad.ly,pad.rx,pad.ry,focused(),xbox_KeyboardMode(),menu_mode,gameplay,TrialGraphicsOpen(),graphics_release_pending[port],intro_gate.owner,captured,held);
+            input_diagnostic::Log("pad port=%d connected=%d buttons=%x analog=%u,%u,%u,%u,%u,%u,%u,%u axes=%d,%d,%d,%d focus=%d keyboard=%d menu=%d gameplay=%d ui=%d release_digital=%d intro=%u capture=%d held_count=%u",port,pad.connected,pad.buttons,pad.analog[0],pad.analog[1],pad.analog[2],pad.analog[3],pad.analog[4],pad.analog[5],pad.analog[6],pad.analog[7],pad.lx,pad.ly,pad.rx,pad.ry,focused(),xbox_KeyboardMode(),menu_mode,gameplay,TrialGraphicsOpen(),int(release_pad[port].buttons),intro_gate.owner,captured,held);
         }
     }''')
     s=replace(s, '    pad.buttons|=keys.wButtons;', r'''    if(input_diagnostic::Enabled()){

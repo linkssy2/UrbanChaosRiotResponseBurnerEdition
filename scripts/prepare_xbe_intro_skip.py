@@ -1,4 +1,4 @@
-"""One physical press per qualified startup movie; retain the retail state machine."""
+"""Qualified movie skips with PC hold confirmation; retain the retail state machine."""
 from pathlib import Path
 import hashlib
 import struct
@@ -20,7 +20,7 @@ def prepare(area):
         s=next(s for s in sections if s[1]<=va and va+size<=s[1]+s[4])
         at=s[3]+va-s[1];return xbe[at:at+size]
     # Whole movie constructor/update, held-action query, exact startup chain,
-    # vtable and its literal names. No gameplay cinematic owner is replaced.
+    # vtable and its literal names. Original movie playback and successors remain.
     for va,size,digest in [
         (0x272bb0,1027,'6f33cf9392fdf78e692cafcaa47169817c1d5fcec37b20fa22eb2fc5d738021c'),
         (0x274740,45,'9458b26dc8bfe5d1a47c24c6c97d7fe570dd195718e6ffd09f7e6e819fdded97'),
@@ -32,6 +32,7 @@ def prepare(area):
         (0x489020,12,'e3f6f806a077569b0817d52502e58e1f99ccb2c9de943b76de01cd05c6ac8d6c'),
         (0x488e28,48,'ece5f2da030062fbe9d3b97ad6b042907e0558d406b577ee57236ebe9d216720'),
         (0x45289c,6,'126a3de351335585db57a815ccdb6fa9c37900d7f03d7af3f25a7af4479ec4d3'),
+        (0x276690,0xfa,'64d83be46aee5a8a6af349e264161854c27a3e0898614f7ac885c8fe3d278c2b'),
     ]:
         assert hashlib.sha256(image(va,size)).hexdigest()==digest,hex(va)
     path=area/'generated/game/x86_recomp.65.cpp'
@@ -39,12 +40,15 @@ def prepare(area):
     declarations='''extern void TrialIntroUpdate(X86Context&,uint8_t*);
 extern bool TrialIntroQuery(X86Context&,uint8_t*);
 extern void TrialIntroEnd(X86Context&,uint8_t*);'''
+    declarations+='\nextern void TrialTitleUpdate(X86Context&,uint8_t*);\nextern void TrialTitleAccept(X86Context&,uint8_t*);'
     if declarations not in source:
         source=source.replace('#include "x86_recomp_shared.h"',
                               '#include "x86_recomp_shared.h"\n'+declarations,1)
     for address,hook in [('00272BD6','TrialIntroUpdate(ctx,base);'),
                          ('00274740','if(TrialIntroQuery(ctx,base))return;'),
-                         ('00272F87','TrialIntroEnd(ctx,base);')]:
+                         ('00272F87','TrialIntroEnd(ctx,base);'),
+                         ('00276690','TrialTitleUpdate(ctx,base);'),
+                         ('00276758','TrialTitleAccept(ctx,base);')]:
         marker='\t// '+address+' '
         assert source.count(marker)==1
         insertion='\t'+hook+'\n'
@@ -56,16 +60,17 @@ extern void TrialIntroEnd(X86Context&,uint8_t*);'''
     movie=between(source,'X86_FUNC(__imp__sub_00272BB0) {','\nX86_WEAK_FUNC(sub_00272BB0')
     query=between(source,'X86_FUNC(__imp__sub_00274740) {','\nX86_WEAK_FUNC(sub_00274740')
     query=query.replace('__imp__sub_00274740','sub_00274740',1)
+    title=between(source,'X86_FUNC(__imp__sub_00276690) {','\nX86_WEAK_FUNC(sub_00276690')
     host=(local/'xbe_trial_menu_input.cpp').read_text()
     bodies=[]
-    for name,typ in [('TrialIntroMovie','void'),('TrialIntroTake','bool'),('TrialIntroClose','void')]:
+    for name,typ in [('TrialIntroMovie','void'),('TrialIntroTake','bool'),('TrialIntroClose','void'),('TrialIntroAdvance','void'),('TrialIntroProgress','float')]:
         body=between(host,typ+' '+name+'(','\n}')+'\n}'
         bodies.append(body)
     fixture=(local/'test_xbe_intro_skip.cpp').read_text()
     constants='\n'.join(f'W32(0x{a:x},0x{struct.unpack("<I",image(a,4))[0]:x});'
                         for a in [0x44c174,0x44ff80,0x4523d4,0x4523d0])
     for marker,body in [('// GENERATED_HOST','\n'.join(bodies)),('// GENERATED_QUERY',query),
-                        ('// GENERATED_MOVIE',movie),('// GENERATED_CONSTANTS',constants)]:
+                        ('// GENERATED_MOVIE',movie),('// GENERATED_TITLE',title),('// GENERATED_CONSTANTS',constants)]:
         assert fixture.count(marker)==1,marker
         fixture=fixture.replace(marker,body)
     (area/'src/compat/test_intro_skip.cpp').write_text(fixture)

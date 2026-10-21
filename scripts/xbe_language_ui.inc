@@ -49,7 +49,7 @@ void LanguageUi(const ImGuiViewport* view,bool paused){
         }
         const int change=SettingRow(canvas,"Original game language",trial_language::Names[language_draft],0,focus,delta);
         if(change)language_draft=(language_draft+trial_language::Count+(change>0?1:-1))%trial_language::Count;
-        canvas.Text("Uses the original language files supplied by your game.",61,144,14,white,518);
+        canvas.Text(language_draft==4?(trial_language::SpanishAvailable()?"Community Spanish text by ZARF (beta). English voices.":"Install the optional ZARF Spanish pack, then restart."):"Uses the original language files supplied by your game.",61,144,14,white,518);
         canvas.Text("Restart the game after applying a different language.",61,174,14,white,518);
         canvas.Text("PC-specific settings and controls descriptions remain in English.",61,214,12,muted,518);
         const char* labels[]={"Apply","Discard changes","Back"};

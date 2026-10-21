@@ -12,6 +12,11 @@ int xbox_MouseTakeRelative(long*x,long*y,unsigned*s){*x=pending_x;*y=pending_y;*
 #include "../src/pc_mouse_camera.h"
 #define CHECK(x) do{if(!(x)){printf("FAIL %d: %s\n",__LINE__,#x);return 1;}}while(0)
 int main(void){float p=0,y=0,p2=0,y2=0;
+ float previous=0;
+ for(unsigned sensitivity=1;sensitivity<=1600;++sensitivity){
+  float pitch=0,yaw=0;CHECK(ucrr_pc_rotate(&pitch,&yaw,1.5f,100,50,sensitivity));
+  CHECK(-yaw>previous&&fabsf(yaw+(float)sensitivity*0.00025f)<1e-6f);previous=-yaw;
+ }
  CHECK(ucrr_pc_rotate(&p,&y,1.5f,100,50,400));
  for(int i=0;i<10;++i)CHECK(ucrr_pc_rotate(&p2,&y2,1.5f,10,5,400));
  CHECK(fabsf(p-p2)<1e-6f&&fabsf(y-y2)<1e-6f); /* No delta-time input: partition invariant. */

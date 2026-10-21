@@ -46,6 +46,7 @@ int main(){
     auto changed=defaults;changed.keyboard[4][0]='G';changed.keyboard[24][0]=VK_XBUTTON1;
     changed.keyboard[1][1]=256;changed.controller[0][0]=4;changed.controller[3][0]=1;
     changed.deadzone[0]=12;changed.sensitivity=650;
+    changed.spin_mode=1;changed.spin_binding[0][0]='J';changed.spin_binding[1][0]=10;
     assert(trial_controls::Apply(changed,error));
     assert(Same(changed,trial_controls::Snapshot()));
     assert(GetPrivateProfileIntW(L"KeyboardMouse",L"Binding4_0",0,profile)=='G');
@@ -55,6 +56,7 @@ int main(){
     keyboard_defaults(&keyboard_config);controller_defaults(&controller_config);
     assert(keyboard_load(nullptr,nullptr,nullptr));assert(controller_load(nullptr,nullptr,nullptr));
     mouse_sensitivity=GetPrivateProfileIntW(L"Graphics",L"MouseSensitivity",400,profile);
+    trial_controls::spin_loaded=false;
     assert(Same(changed,trial_controls::Snapshot()));
     wchar_t kept[32];GetPrivateProfileStringW(L"Other",L"Unrelated",L"",kept,32,profile);assert(!wcscmp(kept,L"keep"));
     fail_replace=true;assert(!trial_controls::Apply(defaults,error)&&!error.empty());
@@ -62,15 +64,22 @@ int main(){
     assert(GetPrivateProfileIntW(L"KeyboardMouse",L"Binding4_0",0,profile)=='G');
     assert(GetPrivateProfileIntW(L"Controller",L"Binding0_0",0,profile)==4);
     fail_replace=false;
+    {auto bad=changed;bad.spin_mode=2;assert(!trial_controls::Apply(bad,error));
+     bad=changed;bad.spin_binding[0][0]=VK_ESCAPE;assert(!trial_controls::Apply(bad,error));}
     for(unsigned bad=0;bad<6;++bad){
         auto d=defaults;
         if(bad==0)d.keyboard[0][0]=VK_ESCAPE;
         if(bad==1)d.keyboard[24][0]=256;
         if(bad==2)d.controller[0][0]=25;
         if(bad==3)d.deadzone[1]=31;
-        if(bad==4)d.sensitivity=24;
+        if(bad==4)d.sensitivity=0;
         if(bad==5)d.sensitivity=1601;
         assert(!trial_controls::Apply(d,error)&&Same(changed,trial_controls::Snapshot()));
+    }
+    for(unsigned value:{1u,2u,24u,25u,400u,1600u}){
+        auto low=changed;low.sensitivity=value;assert(trial_controls::Apply(low,error));
+        assert(trial_controls::Snapshot().sensitivity==value);
+        assert(GetPrivateProfileIntW(L"Graphics",L"MouseSensitivity",0,profile)==value);
     }
     assert(trial_controls::Apply(defaults,error));
     // The original identity fast path must preserve even sub-threshold analog input.

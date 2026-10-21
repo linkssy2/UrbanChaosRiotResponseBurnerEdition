@@ -36,6 +36,12 @@ static bool FrontendDeleteChoice(uint32_t,unsigned){return false;}
 static bool FrontendDeleteParent(){return false;}
 static void FrontendPauseDialogEnter(){}
 #include "menu_pointer_guest.h"
+static bool apply_profile=false,profile_seen=false;
+bool TrialControlsProfile(uint32_t* values,bool valid){
+    profile_seen=valid;
+    if(!apply_profile||!valid)return false;
+    const uint32_t next[]={1,1,1,0,1,75,35};std::memcpy(values,next,sizeof(next));return true;
+}
 #include "xbe_graphics_menu_context.h"
 static TrialMenuContext observed;
 void TrialGraphicsMenuContext(uint32_t manager,uint32_t screen,uint32_t owner,uint32_t kind){
@@ -69,15 +75,15 @@ int main(){
         const uint32_t row=Row+i*0x40;MEM32(Owner+8+i*4)=row;
         MEM32(row)=0x487608;MEM8(row+4)=1;MEM32(row+0xc)=0x272010;
     }
-    const uint32_t selectors[]={0x51D29C,0x51CFA4,0x51D310,0x51D304,0x51D30C};
-    for(unsigned i=0;i<5;++i){
+    const uint32_t selectors[]={0x51D29C,0x51CFA4,0x51D310,0x51D304,0x51D30C,0x51D300,0x51CFB8};
+    for(unsigned i=0;i<7;++i){
         MEM32(Owner+4)=selectors[i];Frame();
         CHECK(observed.kind==i+1&&observed.manager==Manager&&observed.screen==Screen&&observed.owner==Owner);
         CHECK(menu_mode&&menu_target_count==2);
     }
-    // Controller/audio/general submenus, arbitrary lists, bad counts/selections
+    // Unrelated submenus, arbitrary lists, bad counts/selections
     // and unsupported base classes must not expose the host graphics page.
-    for(uint32_t selector:{0x51D300u,0x51D308u,0x600100u}){
+    for(uint32_t selector:{0x51D308u,0x600100u}){
         MEM32(Owner+4)=selector;Frame();CHECK(!observed.kind);
     }
     MEM32(Owner+4)=0x51D310;
@@ -115,5 +121,12 @@ int main(){
     g_esi=Row+0x40;MEM32(g_esp)=0x263452;MEM32(g_esp+4)=0x16;
     CHECK(ucrr_menu_click_query()&&ucrr_menu_click_query());Draw();Leave();End();
     CHECK(observed.kind==3&&!frontend_publishes&&!frontend_actions);
+    // Guest writes use the original byte/word fields and leave adjacent profile data intact.
+    std::memset(ram+0x5152d4,0x5a,0x20);apply_profile=true;
+    GraphicsMenuPublish({Manager,menu_screen,menu_owner,3});
+    CHECK(profile_seen&&MEM8(0x5152e0)==1&&MEM8(0x5152d4)==1&&MEM8(0x5152e6)==1);
+    CHECK(MEM8(0x5152e5)==0&&MEM8(0x5152e1)==1&&MEM32(0x5152dc)==75&&MEM32(0x5152d8)==35);
+    CHECK(MEM8(0x5152d5)==0x5a&&MEM8(0x5152e2)==0x5a);
+    GraphicsMenuPublish();CHECK(!profile_seen);
     std::puts("graphics menu context: qualified source menus, transitions, modals, destruction and original clicks passed");
 }

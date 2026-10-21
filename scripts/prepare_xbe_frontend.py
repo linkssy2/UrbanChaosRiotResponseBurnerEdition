@@ -59,6 +59,21 @@ def prepare(area):
     marker='X86_FUNC(__imp__sub_0009D9B0) {\n'
     assert text.count(marker)==1
     queue.write_text(text.replace(marker,marker+hook,1))
+    # Selection bars/arrows use the immediate rectangle path, not the glyph queue.
+    assert hashlib.sha256(read(0x65550,0x89)).hexdigest()=='aab96479d66b4c8839b15e7563beadd6ed280c69ce36ebfd5c59f276fda68c5f'
+    rectangle=area/'generated/game/x86_recomp.9.cpp';text=rectangle.read_text()
+    hook='\tif (TrialFrontendHideListSprites()) { ctx.esp += 4; return; }\n'
+    text=text.replace(declaration,'').replace(hook,'')
+    text=text.replace('#include "x86_recomp_shared.h"\n','#include "x86_recomp_shared.h"\n'+declaration,1)
+    marker='X86_FUNC(__imp__sub_00065550) {\n'
+    assert text.count(marker)==1
+    text=text.replace(marker,marker+hook,1)
+    # Glyph quads at188CA/18A00 use65170 directly, bypassing65550 and9D9B0.
+    assert hashlib.sha256(read(0x65170,0x98)).hexdigest()=='065c75529af885b1496619ccb3d328b405fb562dc7bf321db649260df5a2f553'
+    marker='X86_FUNC(__imp__sub_00065170) {\n'
+    assert text.count(marker)==1
+    rectangle.write_text(text.replace(marker,marker+hook,1))
+    assert hashlib.sha256(read(0x262A00,0x828)).hexdigest()=='fd2e08018be4779761129d8f6b582517d7c0b6ba368312b62ff40e0cea39f05c'
     # Qualify the actual pause Quit row, its shared yes/no factory and the
     # message/choice/separator calls. Do not cover or skip its scene backdrop.
     for va,n,digest in [
@@ -146,6 +161,16 @@ def prepare(area):
             assert text.count(marker)==1;text=text.replace(marker,marker+hook,1)
     path.write_text(text)
     path=area/'generated/game/x86_recomp.67.cpp';text=path.read_text()
+    # Only profile row drawing is scoped out; preview/medals and callbacks remain.
+    assert hashlib.sha256(read(0x284330,0x15e)).hexdigest()=='2313ec48ec27d8e6f118939a70298e27482cd73eeeb999669da3fbdaa21bbbb4'
+    declaration='extern thread_local uint32_t TrialFrontendProfileDrawOwner;\n'
+    text=text.replace(declaration,'')
+    text=text.replace('#include \"x86_recomp_shared.h\"\n','#include \"x86_recomp_shared.h\"\n'+declaration,1)
+    marker='X86_FUNC(__imp__sub_00284330) {\n'
+    hook=('\tstruct ProfileDrawScope { uint32_t previous; ProfileDrawScope(uint32_t owner) : previous(TrialFrontendProfileDrawOwner) { TrialFrontendProfileDrawOwner=owner; } '
+          '~ProfileDrawScope() { TrialFrontendProfileDrawOwner=previous; } } profile_draw_scope(ctx.ecx);\n')
+    if hook not in text:
+        assert text.count(marker)==1;text=text.replace(marker,marker+hook,1)
     # Recompiled interior entry points repeat the tail; patch only the actual
     # keyboard update owner, not every generated copy of its return address.
     match=re.search(r'X86_FUNC\(__imp__sub_00284A50\) \{.*?^\}',text,re.S|re.M)

@@ -18,6 +18,15 @@ static void W(uint8_t*b,unsigned a,unsigned v){std::memcpy(b+a,&v,4);}
 static constexpr unsigned view=0x71000,model=0x72000;
 static std::vector<std::array<float,16>> projections;
 static unsigned model_draws;
+static std::vector<std::array<float,5>> scope_borders;
+namespace kernel {
+uint32_t CallGuest(X86Context& c,uint32_t target,const uint32_t* p,size_t count){
+    assert(target==0x656d0&&count==3);
+    scope_borders.push_back({Real(memory.data(),p[0]),Real(memory.data(),p[0]+4),
+        Real(memory.data(),p[1]),Real(memory.data(),p[1]+4),float(Word(memory.data(),p[2])>>24)});
+    c.eax=0xbad;c.esp-=40;return 0;
+}
+}
 void x86_icall(X86Context& c,uint8_t* b,uint32_t target){
     if(target==0x701001||target==0x701002){
         assert(c.ecx==0x76000);x87_push(c,target==0x701001?640.0:480.0);c.esp+=4;return;
@@ -273,5 +282,15 @@ int main(){
     assert(!hud&&!reticle);
     CheckWeaponProjection(b);
     CheckProjectedHud(b);
+    {
+        TrialHudLayoutScope h(c,b);h.scale_=.75f;c.esi=0x68000;c.edi=0x68100;c.esp=0x70000;
+        W(b,c.esi,0x4530bc);Put(b,c.edi,0);Put(b,c.edi+4,0);Put(b,c.edi+8,640/.75f);Put(b,c.edi+12,480);
+        Put(b,c.esp+28,.5f);const X86Context saved=c;TrialScopeBorders(c,b);
+        assert(!std::memcmp(&saved,&c,sizeof(c))&&scope_borders.size()==2);
+        assert(scope_borders[0][0]==0&&std::abs(scope_borders[0][2]-106.6667f)<.01f&&scope_borders[0][4]==128);
+        assert(std::abs(scope_borders[1][0]-746.6667f)<.01f&&scope_borders[1][2]==640/.75f);
+        h.scale_=1;TrialScopeBorders(c,b);assert(scope_borders.size()==2);
+        h.scale_=.75f;Put(b,c.esp+28,0);TrialScopeBorders(c,b);assert(scope_borders.size()==2);
+    }
     std::printf("PASS player FOV/zoom, HUD aspect/anchors; %u reticle size/center/restoration cases, scope/menu/invalid exclusions\n",reticle_checks);
 }

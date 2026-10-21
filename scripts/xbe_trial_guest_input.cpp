@@ -30,6 +30,8 @@ static bool FrontendGuestOwns(uint32_t owner,uint32_t kind);
 extern int TrialMouseActive();
 extern void TrialGameplay();
 extern void TrialMouseTake(long*,long*,unsigned*);
+extern int TrialSpinSample(float*,float*);
+static thread_local bool spin_button=false;
 extern void TrialInputPublish();
 extern void TrialMenuKeysBegin();
 extern void TrialMenuKeysEnd();
@@ -40,6 +42,16 @@ static bool MouseObject(uint32_t object){return menu_pointer_readable(object,0x6
 int TrialGuestHook(X86Context& ctx,uint8_t* base,unsigned op){
     regs=&ctx;ram=base;unsigned csr=_mm_getcsr();int result=0;
     switch(op){
+    case 38:FrontendObjectivesEnter();break;
+    case 39:FrontendObjectivesLeave();break;
+    case 40:FrontendObjectivesInput();break;
+    case 36:{
+        spin_button=false;
+        if(MouseObject(g_esi)&&menu_pointer_readable(g_esi,0x80c)&&menu_pointer_readable(g_esp+8,8)){
+            float x=0,y=0;const int sample=TrialSpinSample(&x,&y);
+            if(sample){MEMF(g_esp+8)=x;MEMF(g_esp+12)=y;spin_button=sample==2;}
+        }break;}
+    case 37:result=spin_button;spin_button=false;break;
     case 0:
         if(menu_pointer_readable(g_ecx,0x15)&&MEM32(g_ecx+4)!=menu_screen)TrialMenuKeysReset();
         menu_pointer_begin(g_ecx);GraphicsMenuBegin();break;
@@ -50,7 +62,7 @@ int TrialGuestHook(X86Context& ctx,uint8_t* base,unsigned op){
     case 2:ucrr_menu_list_enter();FrontendListEnter();break;case 3:GraphicsMenuCapture();ucrr_menu_list_leave();break;
     case 4:ucrr_menu_adjust_enter();break;case 5:ucrr_menu_adjust_leave();break;
     case 6:ucrr_menu_arrow_bounds();break;case 7:ucrr_menu_list_hover();break;
-    case 8:ucrr_menu_row_bounds();break;case 9:result=FrontendNameQuery()||ucrr_menu_click_query();break;
+    case 8:ucrr_menu_row_bounds();break;case 9:result=FrontendObjectivesQuery()||FrontendNameQuery()||ucrr_menu_click_query();break;
     case 10:ucrr_level_enter();break;case 11:ucrr_level_leave();break;
     case 12:result=ucrr_level_hover();break;case 13:ucrr_level_thumb_begin();break;
     case 14:ucrr_level_thumb_bounds();break;

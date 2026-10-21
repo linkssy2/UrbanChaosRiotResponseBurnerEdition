@@ -1,6 +1,6 @@
 # Source and build status
 
-The 0.05 release uses XboxXBERecomp by TGP482 for static recompilation and
+The 0.06 release uses XboxXBERecomp by TGP482 for static recompilation and
 the Direct3D 12 host runtime. Exact dependency versions are in
 `dependencies.lock.json`. The current entry point is
 `scripts/build_xbe_game_trial.py`; the root CMake project and `src/`, `native/`

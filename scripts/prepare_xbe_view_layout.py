@@ -12,6 +12,7 @@ def prepare(area):
     count,table=struct.unpack_from('<II',xbe,0x11c)
     sections=[struct.unpack_from('<6I',xbe,table-base+i*56) for i in range(count)]
     for va,size,digest in [
+        (0x731e0,136,'0fc7ea519e666a17aa7391c9729b7b3d848d5e239c9615ff80a73398f008f26c'),
         (0x1cdee0, 2188, '3e663bffac54a5898cdd612b5ed257a2ad66f0d6616ff052a1e1abcf9de9da5e'),
         (0x73d80, 395, '2580ad629ab2db40193f06f710a4f7bbeebc1b4920efa86c20a8c88f4fdc02c3'),
         (0x9d9b0, 242, '26966356054def9572634c6237ec90e69eaac615c3ec40db4f7a8cfe4801d4c7'),
@@ -38,6 +39,7 @@ def prepare(area):
         37:[('\t// 0017283A cmp eax, 0xFFFFFFFF','\tTrialPlayerCameraCreated(ctx,base);\n')],
         46:[('X86_FUNC(__imp__sub_001CDEE0) {\n','\tconst float trial_camera_target=TrialCameraTarget(ctx,base);\n')],
         11:[('X86_FUNC(__imp__sub_00073D80) {\n','\tTrialHudLayoutScope trial_hud_layout(ctx,base);\n'),
+            ('\t// 0007325E push edi','\tTrialScopeBorders(ctx,base);\n'),
             ('X86_FUNC(__imp__sub_00073AA0) {\n','\tTrialReticleScope trial_reticle(ctx,base);\n'),
             ('X86_FUNC(__imp__sub_00075B90) {\n','\tTrialProjectedHudScope trial_projected_hud(ctx,base);\n'),
             ('\t// 00073E32 call 0x0022D360','\tTrialHudLayout(ctx,base);\n')],

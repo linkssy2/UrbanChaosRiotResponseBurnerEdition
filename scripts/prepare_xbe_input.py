@@ -24,8 +24,11 @@ def prepare():
     seams={'00259860':(6,''),'00265C48':(7,''),'0027071F':(12,'002703C3'),'00270906':(13,''),'00272A00':(15,''),'0025A49D':(17,''),'0025A754':(18,''),'002840F4':(21,'0028415D'),'002843CE':(22,''),'00208880':(24,''),'000BF9A1':(25,'000BFA40'),'000D30C3':(26,'')}
     found=set()
     # Bracket the original device pass; background connection polls cannot consume taps.
+    wrappers['00262A00']=(38,39)
     seams['0022E5E2']=(34,'')
     seams['0022E602']=(35,'')
+    seams['000C6501']=(36,'')
+    seams['000C6554']=(37,'000C6617')
     seams['0025C721']=(32,'')
     seams['0025C8A3']=(33,'')
     for p in (AREA/'generated/game').glob('x86_recomp.*.cpp'):
@@ -38,6 +41,10 @@ def prepare():
             m=re.search(pat,text,re.S|re.M)
             if not m:continue
             body=m[0];body=body.replace('{','{\n\t'+call(entry)+';',1)
+            if name=='00262A00':
+                marker='\t// 00263102 mov eax, [edi+0xAC]'
+                assert body.count(marker)==1
+                body=body.replace(marker,'\t'+call(40)+';\n'+marker,1)
             assert 'ctx.esp +=' in body,name
             body=re.sub(r'(\tctx\.esp \+= \d+; return;)',r'\t'+call(leave)+r';\n\1',body)
             text=text[:m.start()]+body+text[m.end():];found.add(name)
@@ -67,4 +74,25 @@ def prepare():
             if p.read_text()!=text:p.write_text(text)
     required=set(wrappers)|set(seams)|{'00264422','0026F44D','002745F0'}
     assert found==required,required-found
+    import hashlib,struct
+    image=(AREA/'assets/Default.xbe').read_bytes()
+    base=struct.unpack_from('<I',image,0x104)[0];count,table=struct.unpack_from('<II',image,0x11c)
+    sections=[struct.unpack_from('<6I',image,table-base+i*56) for i in range(count)]
+    section=next(s for s in sections if s[1]<=0xc64d0< s[1]+s[4]);offset=section[3]+0xc64d0-section[1]
+    assert hashlib.sha256(image[offset:offset+405]).hexdigest()=='a7acb040a35630faaa8e5d7e78fe09de97747ef21bbff4f8439fa498ad256093'
+    for address,size,digest in [(0x643e0,6,'2f50be2683201136880faa73c01094369ebb3428808d2188c528381e7a624d6a'),
+                                (0x276810,319,'96004b7edf645697396aff39a35a7a3e585a32e68108da5c704572bb031cb246')]:
+        section=next(s for s in sections if s[1]<=address and address+size<=s[1]+s[4])
+        offset=section[3]+address-section[1]
+        assert hashlib.sha256(image[offset:offset+size]).hexdigest()==digest,hex(address)
+    source=(AREA/'generated/game/x86_recomp.20.cpp').read_text()
+    body=re.search(r'X86_FUNC\(__imp__sub_000C64D0\) \{.*?^\}',source,re.S|re.M)[0]
+    host=(ROOT/'scripts/xbe_trial_menu_input.cpp').read_text();start=host.index('int TrialSpinSample(')
+    host=host[start:host.index('\n}',start)+2]
+    guest=(ROOT/'scripts/xbe_trial_guest_input.cpp').read_text();start=guest.index('    case 36:')
+    guest=guest[start:guest.index('    case 0:',start)]
+    test=(ROOT/'scripts/test_xbe_pistol_spin.cpp').read_text()
+    for marker,value in [('// PRODUCTION_HOST_SAMPLE',host),('// PRODUCTION_GUEST_SAMPLE',guest),('// ORIGINAL_SPIN_DETECTOR',body)]:
+        assert test.count(marker)==1;test=test.replace(marker,value)
+    (AREA/'src/compat/test_pistol_spin.cpp').write_text(test)
 if __name__=='__main__':prepare()

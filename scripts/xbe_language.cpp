@@ -4,14 +4,16 @@
 #include "kernel/kernel.h"
 #include "scripts/xbe_input_memory.h"
 #include "xbe_language.h"
+#include "xbe_spanish.h"
 
 uint32_t TrialLanguage=0;
 namespace trial_language {
 static std::atomic<uint32_t> active{0};
+bool SpanishAvailable(){return trial_spanish::Available();}
 uint32_t Active(){return active.load();}
 uint32_t XboxLanguage(){
     // Original16C50 maps Xbox1/4/6/3 to title0/1/2/3 respectively.
-    static constexpr uint32_t ids[Count]={1,4,6,3};
+    static constexpr uint32_t ids[Count]={1,4,6,3,1};
     return ids[Active()];
 }
 uint32_t Snapshot(){
@@ -20,13 +22,13 @@ uint32_t Snapshot(){
 }
 void Initialize(){
     std::lock_guard lock(app::UiLock());
-    if(TrialLanguage>=Count)TrialLanguage=0;
+    if(TrialLanguage>=Count||(TrialLanguage==4&&!SpanishAvailable()))TrialLanguage=0;
     active=TrialLanguage;
 }
 bool PendingRestart(){return Snapshot()!=Active();}
 bool Apply(uint32_t language,std::string& message){
     std::lock_guard lock(app::UiLock());
-    if(language>=Count){message="That language is not available on this game disc.";return false;}
+    if(language>=Count||(language==4&&!SpanishAvailable())){message=language==4?"Install the ZARF Spanish pack, then restart the game.":"That language is not available.";return false;}
     const uint32_t previous=TrialLanguage;
     if(language!=previous){
         TrialLanguage=language;
@@ -50,6 +52,6 @@ void TrialLanguageStartup(const X86Context& ctx,uint8_t* base){
     // Retail16C00 admits non-English only on PAL. This PC setting supplies the
     // same cached title index at its one constructor boundary, leaving video
     // standard, authored bank/voice selection and the original cached path intact.
-    const uint32_t value=trial_language::Active();
+    const uint32_t value=trial_language::Active()==4?0:trial_language::Active();
     std::memcpy(base+ctx.ecx+0x28,&value,4);
 }

@@ -72,19 +72,21 @@ static void SnapshotChecks(){
     bindings[24][0]=VK_MBUTTON;std::strcpy(labels[24],"Middle mouse");
     bindings[0][0]=0;bindings[0][1]='R';std::strcpy(labels[0],"R");
     TrialPromptInput out{};CHECK(TrialPromptSnapshot(1,out));
-    CHECK(out.bindings[0]=='R'&&out.bindings[8]==VK_ESCAPE&&!std::strcmp(out.labels[8],"Esc"));
+    CHECK(out.bindings[0]==0&&out.bindings[8]==VK_ESCAPE&&!std::strcmp(out.labels[8],"Esc"));
     menu_mode=true;CHECK(TrialPromptSnapshot(1,out)&&out.bindings[8]==VK_RETURN&&!std::strcmp(out.labels[8],"Enter"));
     CHECK(out.bindings[1]==VK_RBUTTON&&!std::strcmp(out.labels[1],"Mouse Right"));
     menu_mode=false;CHECK(TrialPromptSnapshot(1,out)&&out.bindings[1]==bindings[1][0]&&!std::strcmp(out.labels[1],labels[1]));
-    conversation_prompt=true;CHECK(TrialPromptSnapshot(1,out)&&out.bindings[0]=='R');
+    conversation_prompt=true;CHECK(TrialPromptSnapshot(1,out)&&out.bindings[0]==0);
     bindings[0][0]='R';bindings[0][1]='F';
     CHECK(TrialPromptSnapshot(1,out,1)&&out.bindings[0]=='F'&&!std::strcmp(out.labels[0],"F"));
     bindings[0][1]='G';CHECK(TrialPromptSnapshot(1,out,1)&&out.bindings[0]=='G'&&!std::strcmp(out.labels[0],"G"));
-    bindings[0][1]=0;CHECK(TrialPromptSnapshot(1,out,1)&&out.bindings[0]=='R');
+    bindings[0][1]=0;CHECK(TrialPromptSnapshot(1,out,1)&&out.bindings[0]==0);
+    bindings[0][0]=0;bindings[0][1]='F';CHECK(TrialPromptSnapshot(1,out)&&out.bindings[0]==0);
+    bindings[0][0]='R';
     bindings[0][1]='F';
     menu_mode=true;CHECK(TrialPromptSnapshot(1,out)&&out.bindings[0]=='R');menu_mode=false;
-    // Actual regular A-input assembly accepts exactly the displayed binding,
-    // including rebound keys. Keep R as the ordinary Reload label/binding.
+    // Legacy binding storage accepts both slots. Production gameplay separates
+    // their consumers in the graphics-input and conversation/reload fixtures.
     for(unsigned key:{unsigned('F'),unsigned('G'),unsigned(VK_MBUTTON),256u}){
         bindings[0][1]=key;CHECK(TrialPromptSnapshot(1,out,1)&&out.bindings[0]==key);
         CHECK(PromptKeyboard::ActionA(out.bindings[0],true));

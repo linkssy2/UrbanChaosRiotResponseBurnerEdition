@@ -111,6 +111,8 @@ int FontIndex(const std::string& name) {
     return -1;
 }
 bool UiName(const std::string& name,bool hud_only) {
+    // Shared with world materials: a font-folder alias is not UI-only artwork.
+    if(name=="font\\font_untextured.tga")return false;
     if(!(name.ends_with(".tga")||name.ends_with(".tga=nomipmap")))return false;
     if(hud_only)return name.starts_with("hud\\");
     return name.starts_with("frontend\\")||name.starts_with("font\\")||name.starts_with("fonts\\");

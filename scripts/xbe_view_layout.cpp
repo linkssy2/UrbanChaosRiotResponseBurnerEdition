@@ -2,6 +2,7 @@
 #include "xbe_graphics_settings.h"
 #include "cpu/x86_ops.h"
 #include "kernel/memory.h"
+#include "kernel/kernel.h"
 #include "xbe_input_memory.h"
 #include <cstring>
 #include <atomic>
@@ -55,6 +56,26 @@ void TrialWeaponProjection(const X86Context& c,uint8_t* b){
 }
 TrialHudLayoutScope::TrialHudLayoutScope(const X86Context&,const uint8_t*):previous_(hud){hud=this;}
 TrialHudLayoutScope::~TrialHudLayoutScope(){hud=previous_;}
+void TrialScopeBorders(X86Context& c,uint8_t* b){
+    if(!hud||hud->scale_==1||!TrialGuestReadable(c.esi,12)||Word(b,c.esi)!=0x4530bcu||
+       !TrialGuestReadable(c.edi,16)||!TrialGuestReadable(c.esp,32)||c.esp<0x10200)return;
+    Arithmetic arithmetic;
+    const float width=Real(b,c.edi+8),height=Real(b,c.edi+12),alpha=Real(b,c.esp+28);
+    if(Real(b,c.edi)!=0||Real(b,c.edi+4)!=0||std::abs(width-640/hud->scale_)>.01f||height!=480||
+       !std::isfinite(alpha)||alpha<=0||alpha>1)return;
+    const uint32_t scratch=(c.esp-128)&~15u;
+    if(!TrialGuestReadable(scratch-32,160))return;
+    const X86Context saved=c;const float edge=(width-640)*.5f;
+    // Extend only the opaque outside of the circular retail mask, with its fade.
+    for(unsigned side=0;side<2;++side){
+        Put(b,scratch,side?width-edge:0);Put(b,scratch+4,0);
+        Put(b,scratch+8,side?width:edge);Put(b,scratch+12,height);
+        const uint32_t color=uint32_t(alpha*255.f+.5f)<<24;
+        std::memcpy(b+scratch+16,&color,4);c.esp=scratch;
+        kernel::CallGuest(c,0x656d0,{scratch,scratch+8,scratch+16});
+    }
+    c=saved;
+}
 void TrialHudLayout(const X86Context& c,uint8_t* b){
     if(!hud||!trial_graphics::Widescreen()||c.esp>0xffffffabu||!TrialGuestReadable(c.esp+0x10,0x44))return;
     const uint32_t d=c.esp+0x10;

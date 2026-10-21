@@ -130,6 +130,7 @@ int main(int argc,char** argv) {
             const auto* entry=uc_archive_entry(archive,i);std::string name(reinterpret_cast<const char*>(entry->name));
             std::transform(name.begin(),name.end(),name.begin(),[](unsigned char c){return char(c>='A'&&c<='Z'?c+'a'-'A':c);});
             const bool is_hud=name.starts_with("hud\\");
+            if(name=="font\\font_untextured.tga")continue;
             if(!(name.ends_with(".tga")||name.ends_with(".tga=nomipmap"))||
                (source.hud_only?!is_hud:
                 !(name.starts_with("font\\")||name.starts_with("fonts\\")||name.starts_with("frontend\\"))))continue;
@@ -193,7 +194,24 @@ int main(int argc,char** argv) {
         }
         uc_archive_close(archive);
     }
-    CHECK(unique.size()==stats.images&&unique.size()==299);CHECK(total>stats.images&&full_chain>100);
+    CHECK(unique.size()==stats.images&&unique.size()==298);CHECK(total>stats.images&&full_chain>100);
+    // Real mission material payloads must never resolve to HD HUD replacements.
+    {
+        std::ifstream file(game/"1-01.ent",std::ios::binary|std::ios::ate);CHECK(file.good());
+        std::vector<uint8_t> data(size_t(file.tellg()));file.seekg(0);CHECK(file.read(reinterpret_cast<char*>(data.data()),data.size()));
+        UCArchive* archive=nullptr;CHECK(uc_archive_copy(data.data(),data.size(),&archive)==UC_AR_OK);
+        unsigned checked=0;
+        for(size_t i=0;i<uc_archive_count(archive);++i){
+            const auto* entry=uc_archive_entry(archive,i);
+            const std::string name(reinterpret_cast<const char*>(entry->name));
+            if(name!="untextured.tga"&&name!="particles\\fireball.tga")continue;
+            UCTextureAsset t{};CHECK(uc_texture_load(archive,i,UC_AR_LOCAL_PAYLOAD,&t)==UC_TEXTURE_OK);
+            const unsigned format=t.format==UC_TEXTURE_BC1_UNORM?12:15;
+            CHECK(!uc_hd_ui::Match(t.width,t.height,format,t.storage,t.storage_bytes));
+            uc_texture_free(&t);++checked;
+        }
+        uc_archive_close(archive);CHECK(checked==2);
+    }
     CHECK(equipment_entries==13&&equipment_images.size()==10);
     std::printf("PASS equipment HUD: %u entries, %zu distinct images; only named HUD textures loaded\n",
                 equipment_entries,equipment_images.size());

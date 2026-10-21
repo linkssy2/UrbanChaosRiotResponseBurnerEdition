@@ -9,13 +9,29 @@ static uint32_t GraphicsMenuKind(uint32_t owner){
     const uint32_t selection=MEM32(owner+4),count=MEM32(owner+0x58);
     if(!count||count>20||!menu_pointer_readable(selection,4)||MEM32(selection)>=count)return 0;
     // Original factories: Main 2722A5, Pause 2677F4/267F9B, Options 276DFC.
-    // 51D300 is Controller Options, not the Options hub (51D310).
+    // Controller Options is a value list; only the Options hub opens native pages.
     return selection==0x51D29C?1:selection==0x51CFA4?2:selection==0x51D310?3:
-        selection==0x51D304?4:selection==0x51D30C?5:0;
+        selection==0x51D304?4:selection==0x51D30C?5:selection==0x51D300?6:
+        selection==0x51CFB8?7:0;
 }
+extern bool TrialControlsProfile(uint32_t* values,bool valid);
 static void GraphicsMenuPublish(TrialMenuContext context={}){
     graphics_published=context;
     TrialGraphicsMenuContext(context.manager,context.screen,context.owner,context.kind);
+    // Same profile storage and widths as original Controller Options factory 276810.
+    constexpr uint32_t profile=0x5152d4;
+    uint32_t values[7]{};
+    const bool valid=context.kind==3&&menu_pointer_readable(profile,0x13);
+    if(valid){values[0]=MEM8(profile+0xc);values[1]=MEM8(profile);values[2]=MEM8(profile+0x12);
+        values[3]=MEM8(profile+0x11);values[4]=MEM8(profile+0xd);
+        values[5]=MEM32(profile+8);values[6]=MEM32(profile+4);}
+    if(TrialControlsProfile(values,valid)&&valid){
+        bool checked=values[5]<=100&&values[6]<=100;
+        for(unsigned i=0;i<5;++i)checked=checked&&values[i]<=1;
+        if(checked){MEM8(profile+0xc)=uint8_t(values[0]);MEM8(profile)=uint8_t(values[1]);
+            MEM8(profile+0x12)=uint8_t(values[2]);MEM8(profile+0x11)=uint8_t(values[3]);
+            MEM8(profile+0xd)=uint8_t(values[4]);MEM32(profile+8)=values[5];MEM32(profile+4)=values[6];}
+    }
 }
 static void GraphicsMenuBegin(){
     graphics_pending={};

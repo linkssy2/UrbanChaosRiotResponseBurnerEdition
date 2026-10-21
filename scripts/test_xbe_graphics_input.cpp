@@ -24,6 +24,8 @@ bool test_focused=true,test_open=false;
 bool physical_keys[256]={};
 unsigned capture_posts=0;
 bool conversation_down=false,conversation_enabled=false;
+bool reload_down=false,reload_enabled=false;
+void TrialReloadPublish(bool down,bool enabled){reload_down=down;reload_enabled=enabled;}
 void TrialConversationPublish(bool down,bool enabled){conversation_down=down;conversation_enabled=enabled;}
 bool focused(){return test_focused;}
 bool TrialGraphicsOpen(){return test_open;}
@@ -96,16 +98,23 @@ int main(){
     }
     ReleaseAll();
     // Conversation prompts and their exact source-qualified edge query read
-    // the rebound interaction slot, then primary only if secondary is empty.
+    // the rebound interaction slot. Unbound Interact must not fall back to Reload.
     keyboard_config.binding[0][1]='G';physical_keys['F']=true;
     TrialInputPublish();assert(!conversation_down);physical_keys['G']=true;
     TrialInputPublish();assert(conversation_down);ReleaseAll();
     keyboard_config.binding[0][1]=0;physical_keys['R']=true;
-    TrialInputPublish();assert(conversation_down);ReleaseAll();
+    TrialInputPublish();assert(!conversation_down);ReleaseAll();
     keyboard_config.binding[0][1]=256;captured=true;keyboard_wheel_record(WHEEL_DELTA);
     TrialInputPublish();assert(conversation_down);TrialInputPublish();assert(!conversation_down);
     keyboard_defaults(&keyboard_config);
 
+    // Only Interact reaches retail A during gameplay, including rebound keys.
+    gameplay=true;menu_mode=false;captured=true;ReleaseAll();
+    physical_keys['R']=true;TrialInputPublish();assert(reload_down&&reload_enabled&&!conversation_down);assert(Poll(0).analog[0]==0);ReleaseAll();
+    physical_keys['F']=true;TrialInputPublish();assert(!reload_down&&conversation_down);assert(Poll(0).analog[0]==255);ReleaseAll();
+    keyboard_config.binding[0][1]='G';physical_keys['G']=true;assert(Poll(0).analog[0]==255);ReleaseAll();
+    keyboard_config.binding[0][1]=0;physical_keys['R']=true;assert(Poll(0).analog[0]==0);ReleaseAll();
+    keyboard_defaults(&keyboard_config);
     // Capture sees raw input before the menu neutralizes/remaps it. It will
     // not bind the opening click or a held controller confirm, and wheel and
     // focus events use the real production message helper.
@@ -134,7 +143,7 @@ int main(){
 
     // Closing key/click stays consumed until released, then original bindings
     // resume unchanged. This also exercises the real consumed-click latch.
-    const int keys[]={'W','R',VK_ESCAPE,VK_LBUTTON,VK_RBUTTON};
+    const int keys[]={'W','F',VK_ESCAPE,VK_LBUTTON,VK_RBUTTON};
     for(int key:keys){
         Open();physical_keys[key]=true;Close();
         assert(Neutral(Poll(0)));assert(Neutral(Poll(0)));
@@ -142,10 +151,9 @@ int main(){
         physical_keys[key]=true;assert(!Neutral(Poll(0)));
         physical_keys[key]=false;assert(Neutral(Poll(0)));
     }
-    // Q is a UI-only Back key. Its held press must be swallowed even though
-    // the ordinary keyboard profile has no Q binding.
+    // A consumed Back key cannot block a new movement/confirm input.
     Open();physical_keys['Q']=true;Close();physical_keys['W']=true;
-    assert(Neutral(Poll(0)));physical_keys['Q']=physical_keys['W']=false;
+    assert(Poll(0).ly==32767);physical_keys['Q']=physical_keys['W']=false;
     assert(Neutral(Poll(0)));physical_keys['W']=true;assert(Poll(0).ly==32767);
 
     for(int port=0;port<4;++port)for(unsigned control=0;control<12;++control){
@@ -157,7 +165,7 @@ int main(){
         auto resumed=Poll(port,held);assert(!Neutral(resumed)&&resumed.connected);
     }
     // Releasing port 0 cannot unlock a still-held controller on another port.
-    Open();Close();assert(Neutral(Poll(0)));
+    Open();for(int port=1;port<4;++port)Poll(port,Controller(0));Close();assert(Neutral(Poll(0)));
     for(int port=1;port<4;++port)assert(Neutral(Poll(port,Controller(0))));
     physical_keys['W']=true;assert(Poll(0).ly==32767);physical_keys['W']=false;
     for(int port=1;port<4;++port){assert(Neutral(Poll(port)));assert(Poll(port,Controller(0)).buttons==1);}
@@ -165,9 +173,20 @@ int main(){
     // Real stick noise below the runtime deadzone must not strand the page.
     Open();Close();auto drift=Controller(4);drift.lx=500;
     Poll(0,drift);assert(Poll(0,Controller(0)).buttons==1);
-    Open();Close();test_focused=false;assert(Neutral(Poll(0,Controller(0))));
+    Open();Poll(0,Controller(0));Close();test_focused=false;assert(Neutral(Poll(0,Controller(0))));
     test_focused=true;assert(Neutral(Poll(0,Controller(0))));
     assert(Neutral(Poll(0)));assert(Poll(0,Controller(0)).buttons==1);
+
+    // Difficulty handoff: an unrelated stuck key and drifting stick must not
+    // silence Enter, A, or navigation. Only the closing press stays consumed.
+    Open();physical_keys[VK_F12]=true;physical_keys[VK_LBUTTON]=true;
+    auto noisy=Controller(4);noisy.analog[7]=1;Poll(0,noisy);Close();
+    menu_mode=true;physical_keys[VK_RETURN]=true;
+    auto confirm=Poll(0,noisy);assert(confirm.analog[0]==255&&confirm.lx==0);
+    physical_keys[VK_RETURN]=false;
+    noisy.analog[0]=255;assert(Poll(0,noisy).analog[0]==255);
+    noisy.buttons=2;assert(Poll(0,noisy).buttons&2);
+    physical_keys[VK_LBUTTON]=false;ReleaseAll();
 
     // Existing keyboard menu/gameplay Escape mappings and negative axes survive.
     ReleaseAll();menu_mode=true;physical_keys[VK_ESCAPE]=true;
@@ -240,11 +259,11 @@ int main(){
     for(int key:{VK_RETURN,VK_LBUTTON,int('R')}){
         intro_gate={};ReleaseAll();menu_mode=true;
         intro_gate.Context(0x600000,1,true,true);physical_keys[key]=true;
-        assert(Neutral(Poll(0))&&intro_gate.Take(0x600000,0));
+        assert(Neutral(Poll(0)));intro_gate.Advance(.65f);assert(intro_gate.Take(0x600000,0));
         intro_gate.Close(0x600000);assert(Neutral(Poll(0)));
         intro_gate.Context(0x600000,2,true,true);assert(Neutral(Poll(0)));
         assert(!intro_gate.Take(0x600000,0));physical_keys[key]=false;Poll(0);
-        physical_keys[key]=true;assert(Neutral(Poll(0))&&intro_gate.Take(0x600000,0));
+        physical_keys[key]=true;assert(Neutral(Poll(0)));intro_gate.Advance(.65f);assert(intro_gate.Take(0x600000,0));
         intro_gate.Close(0x600000);physical_keys[key]=false;Poll(0);
         physical_keys[key]=true;
         if(key!=VK_LBUTTON)assert(!Neutral(Poll(0))); // menu mouse goes through pointer path

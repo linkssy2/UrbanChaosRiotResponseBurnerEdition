@@ -23,6 +23,7 @@ def prepare(area):
     # close/destroy paths and exact owner identities. This excludes SimpleCutscene,
     # friendly-death cinematics, startup movie skipping and ordinary A/reload.
     pins=[
+        (0xcf7e9,160,'7d5543121d9e24fede796a6736eef3a2dc9a63bd52aa311e0b34f157390234ba'),
         (0x17bb40,73,'b3e16da586c02f4caac367e3a088eca32574a84c08e58f2e9d0e14b13772148c'),
         (0x17bd80,1681,'665016a86df82f93cd599f56be769fd501d0546244f32ae88218821885af5a22'),
         (0x223090,224,'b5029b7f14b74d2ac5825ea8190d40ba8ed474da6208da621c4e433e96f15209'),
@@ -38,15 +39,18 @@ def prepare(area):
         assert hashlib.sha256(raw(va,size)).hexdigest()==digest,hex(va)
     declarations='''extern bool TrialConversationQuery(X86Context&,uint8_t*);
 extern void TrialConversationPrompt(X86Context&,uint8_t*);
-extern void TrialConversationClose(uint32_t);'''
+extern void TrialConversationClose(uint32_t);
+extern void TrialReloadQuery(X86Context&,uint8_t*);'''
     sources={}
-    for chunk in (38,55):
+    for chunk in (21,38,55):
         path=area/f'generated/game/x86_recomp.{chunk}.cpp'
         source=path.read_text()
         if declarations not in source:
             source=source.replace('#include "x86_recomp_shared.h"',
                                   '#include "x86_recomp_shared.h"\n'+declarations,1)
-        if chunk==38:
+        if chunk==21:
+            hooks=[('000CF7FF','TrialReloadQuery(ctx,base);')]
+        elif chunk==38:
             hooks=[('0017BB73','TrialConversationQuery(ctx,base);'),
                    ('0017BAC0','TrialConversationClose(ctx.ecx);'),
                    ('0017BC10','TrialConversationClose(ctx.ecx);'),

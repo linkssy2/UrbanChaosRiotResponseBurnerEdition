@@ -6,6 +6,7 @@ import struct
 
 WRAPPER = '''#include "src/display_interval_policy.h"
 X86_EXTERN_FUNC(__imp__sub_0008BD50);
+X86_EXTERN_FUNC(__imp__sub_0008BFE0);
 X86_EXTERN_FUNC(__imp__sub_0008BD80);
 X86_EXTERN_FUNC(__imp__sub_0008BB90);
 
@@ -36,8 +37,22 @@ static bool TrialCompletedDisplayInterval(const X86Context& ctx) {
     // count and swaps. Use only a completed callback's current count (the HLE
     // caller holds the vertical-blank completion gate while evaluating this).
     return R32(ctx.esp) == 0x0008c02cu && R32(0x519f70) == owner &&
-        R32(owner) == 0x004563e0u && R32(owner + 0x18) == 1 &&
-        static_cast<int32_t>(R32(owner + 0x1c)) >= 1;
+        R32(owner) == 0x004563e0u &&
+        ((R32(owner + 0x18) == 0 && (cap == 0 || cap > 60)) ||
+         (R32(owner + 0x18) == 1 && static_cast<int32_t>(R32(owner + 0x1c)) >= 1));
+}
+
+// Apply host pacing per frame so changing the cap needs no level reload.
+X86_FUNC(sub_0008BFE0) {
+    const uint32_t owner = g_trial_target60_owner.load(std::memory_order_acquire);
+    const uint32_t cap = app::Get().fps_cap;
+    const bool host_paced = (cap == 0 || cap > 60) && owner && ctx.ecx == owner &&
+        TrialGuestReadable(0x519f70, 4) && TrialGuestReadable(owner, 32) &&
+        R32(0x519f70) == owner && R32(owner) == 0x4563e0 && R32(owner + 0x18) == 1;
+    // Borrow only this qualified display's wait; never accelerate shared callbacks.
+    if (host_paced) W32(owner + 0x18, 0);
+    __imp__sub_0008BFE0(ctx, base);
+    if (host_paced) W32(owner + 0x18, 1);
 }
 
 // Explicit PC enhancement: only the game's verified two-blank display request.

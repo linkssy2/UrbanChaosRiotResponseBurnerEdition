@@ -4,6 +4,28 @@ extern int xbox_KeyboardMode();
 // activation and name validation retain their original callbacks/save policy.
 extern "C" uint32_t TrialFrontendWarningText(uint8_t* base,uint32_t key,uint32_t text,
                                            uint32_t scratch,uint32_t capacity){
+    auto key_is=[&](const char* name){
+        const size_t size=std::strlen(name)+1;
+        if(!base||!TrialGuestReadable(key,uint32_t(size)))return false;
+        for(size_t i=0;i<size;++i){
+            unsigned c=base[key+i];if(c>='A'&&c<='Z')c+='a'-'A';
+            if(c!=unsigned(name[i]))return false;
+        }
+        return true;
+    };
+    if(xbox_KeyboardMode()&&(key_is("newfrontend-pressstart-1")||key_is("newfrontend-pressstart-2"))){
+        if(!TrialGuestReadable(text,128)||!std::memchr(base+text,0,128))return text;
+        const char* source=reinterpret_cast<const char*>(base+text);
+        const char* label=nullptr;
+        if(!std::strcmp(source,"PRESS START BUTTON"))label="PRESS ANY KEY";
+        else if(!std::strncmp(source,"APPUYER SUR",11))label="APPUYEZ SUR UNE TOUCHE";
+        else if(!std::strncmp(source,"PREMI ",6))label="PREMI UN TASTO";
+        else if(!std::strncmp(source,"START",5))label="BELIEBIGE TASTE DR\xDC" "CKEN";
+        if(label&&std::strlen(label)+1<=capacity&&TrialGuestReadable(scratch,uint32_t(std::strlen(label)+1))){
+            std::memcpy(base+scratch,label,std::strlen(label)+1);return scratch;
+        }
+        return text;
+    }
     // Only the two localized profile I/O warnings. The original render/measure
     // functions already reserve scratch strings; keep the bank and save logic
     // untouched, and use the same replacement in both presentation paths.
@@ -106,10 +128,20 @@ static bool FrontendPauseDialog(uint32_t owner){
         MEM32(owner+0x30)==0x267400&&MEM32(owner+0x34)==0x284310&&
         MEM32(owner+0x50)==0x284310;
 }
+static bool FrontendDifficultyDialog(uint32_t owner){
+    if(!menu_dialog_valid(owner))return false;
+    UcHybridFrontendSnapshot s{};s.kind=UC_HF_DIALOG;s.count=MEM32(owner+0xC);
+    if((s.count!=3&&s.count!=4)||!hf_text(MEM32(owner+4),s.title))return false;
+    for(unsigned i=0;i<s.count;++i){
+        s.rows[i].callback=MEM32(owner+0x30+4*i);
+        if(!hf_text(MEM32(owner+0x10+4*i),s.rows[i].label))return false;
+    }
+    return TrialFrontendDifficulty(s);
+}
 static void FrontendPauseDialogEnter(){
     // Reuse the original modal capture before its first glyph submission, so
     // presentation must accept the replacement before any source text hides.
-    if(!xbox_KeyboardMode()||!hf_settled()||!FrontendPauseDialog(dialog_owner)||
+    if(!xbox_KeyboardMode()||!hf_settled()||!(FrontendPauseDialog(dialog_owner)||FrontendDifficultyDialog(dialog_owner))||
        (hf_view.kind==UC_HF_DIALOG&&hf_view.owner==dialog_owner&&
         hf_view.screen==menu_screen&&TrialFrontendPresents(dialog_owner,UC_HF_DIALOG)))return;
     menu_dialog_capture();
@@ -119,7 +151,7 @@ bool TrialFrontendHidePauseDialogText(uint32_t owner){
     // Suppress at the three original text calls, before glyphs are queued.
     // The shade/backdrop and original layout, sounds and callbacks still run.
     return xbox_KeyboardMode()&&dialog_running&&dialog_owner==owner&&
-        FrontendPauseDialog(owner)&&TrialFrontendPresents(owner,UC_HF_DIALOG);
+        (FrontendPauseDialog(owner)||FrontendDifficultyDialog(owner))&&TrialFrontendPresents(owner,UC_HF_DIALOG);
 }
 static bool FrontendNameValid(uint32_t owner){
     return menu_pointer_readable(owner,0x58)&&MEM32(owner)==0x48CD08&&!MEM8(owner+4)&&
@@ -189,16 +221,56 @@ extern "C" void ucrr_native_frontend_publish(const UcHybridFrontendSnapshot* sou
                 frame.row_top=std::clamp(frame.row_top-4.f,72.f,390.f);
                 cached=frame;
             }
-            if(frame.list_kind==4||frame.list_kind==5)
+            if(frame.list_kind>=4&&frame.list_kind<=6)
                 for(unsigned i=0;i<source->count;++i)FrontendText(source->rows[i].value,frame.values[i]);
         }
     }
     TrialFrontendPublish(frame);
 }
 static bool FrontendGuestOwns(uint32_t owner,uint32_t kind){
-    return (kind==UC_HF_LEVELS||kind==UC_HF_REWARD_BROWSER||kind==UC_HF_PROFILES||kind==TRIAL_HF_NAME||
-        (kind==UC_HF_DIALOG&&(FrontendDeleteDialog(owner)||FrontendPauseDialog(owner)))||
+    return (kind==UC_HF_LEVELS||kind==UC_HF_REWARD_BROWSER||kind==UC_HF_PROFILES||kind==TRIAL_HF_NAME||kind==UC_HF_OBJECTIVES||
+        (kind==UC_HF_DIALOG&&(FrontendDeleteDialog(owner)||FrontendPauseDialog(owner)||FrontendDifficultyDialog(owner)))||
         GraphicsMenuKind(owner))&&TrialFrontendOwns(owner,kind);
+}
+
+static uint32_t frontend_objectives_owner,frontend_objectives_action;
+static bool FrontendObjectivesValid(uint32_t owner){
+    return menu_pointer_readable(owner,0xFC)&&MEM32(owner)==0x487588&&
+        MEM32(owner+4)==0x51CF9C&&MEM32(owner+0x58)<=20&&MEM32(owner+0xAC)&&
+        MEM32(owner+0xAC)!=0xffffffffu;
+}
+static void FrontendObjectivesEnter(){
+    frontend_objectives_action=0;
+    frontend_objectives_owner=FrontendObjectivesValid(g_ecx)?g_ecx:0;
+    if(frontend_objectives_owner){menu_seen=1;menu_render_count=1;}
+}
+static void FrontendObjectivesLeave(){
+    const auto owner=frontend_objectives_owner;
+    frontend_objectives_owner=frontend_objectives_action=0;
+    if(!hf_settled()||!FrontendObjectivesValid(owner)||MEM8(owner+0xB0))return;
+    UcHybridFrontendSnapshot s{};s.kind=UC_HF_OBJECTIVES;s.owner=owner;s.count=1;
+    s.back_action=MEM32(0x485A18);s.rows[0].row=owner;s.rows[0].enabled=1;
+    // Keep the original grouped objectives, progress counters and medal art.
+    std::strcpy(s.title,"NewFrontEnd-Objectives-1");hf_pause_manager=menu_manager;hf_pending=s;
+}
+static void FrontendObjectivesInput(){
+    const auto owner=frontend_objectives_owner;
+    if(owner!=g_edi||!hf_settled()||!FrontendObjectivesValid(owner)||
+       !FrontendGuestOwns(owner,UC_HF_OBJECTIVES)||hf_view.screen!=menu_screen)return;
+    UcHybridFrontendAction a{};
+    if(!TrialFrontendTakeAction(a)||a.epoch!=hf_view.epoch||a.owner!=owner||
+       a.screen!=menu_screen||a.row!=owner||a.index)return;
+    if(a.kind==UC_HF_BACK||a.kind==UC_HF_LEFT||a.kind==UC_HF_RIGHT)frontend_objectives_action=a.kind;
+}
+static bool FrontendObjectivesQuery(){
+    const auto owner=frontend_objectives_owner;
+    if(!frontend_objectives_action||g_edi!=owner||!hf_settled()||
+       !FrontendObjectivesValid(owner)||!FrontendGuestOwns(owner,UC_HF_OBJECTIVES)||
+       !menu_pointer_readable(g_esp,8))return false;
+    const uint32_t caller=MEM32(g_esp),action=MEM32(g_esp+4);
+    return (frontend_objectives_action==UC_HF_BACK&&caller==0x26316A&&action==hf_view.back_action)||
+        (frontend_objectives_action==UC_HF_LEFT&&caller==0x26319C&&action==0x1E)||
+        (frontend_objectives_action==UC_HF_RIGHT&&caller==0x2631DE&&action==0x1F);
 }
 
 static void FrontendNameEnter(){
@@ -248,10 +320,12 @@ static bool FrontendNameQuery(){
 static void FrontendListEnter(){
     if(!GraphicsMenuKind(menu_owner))TrialFrontendPublish({});
 }
+thread_local uint32_t TrialFrontendProfileDrawOwner=0;
 bool TrialFrontendHideListSprites(){
-    // Only the current list's rows; its parent still draws the animated backdrop.
-    return menu_owner&&xbox_KeyboardMode()&&GraphicsMenuKind(menu_owner)&&
-        TrialFrontendPresents(menu_owner,UC_HF_LIST);
+    // Incoming/outgoing lists can draw before host ownership changes. Hide their
+    // submissions throughout mouse mode; the parent backdrop is outside this scope.
+    return xbox_KeyboardMode()&&((menu_owner&&GraphicsMenuKind(menu_owner))||
+        (TrialFrontendProfileDrawOwner&&TrialFrontendPresents(TrialFrontendProfileDrawOwner,UC_HF_PROFILES)));
 }
 static void FrontendRewardSidebar(){
     const uint32_t owner=g_esi;

@@ -8,6 +8,18 @@
 #include "xbe_controls.h"
 
 namespace trial_controls {
+static bool spin_loaded=false;
+static unsigned spin_mode=0,spin_binding[2][2]{};
+static void LoadSpin(){
+    if(spin_loaded)return;spin_loaded=true;wchar_t path[MAX_PATH];if(!controller_path(path))return;
+    spin_mode=GetPrivateProfileIntW(L"PistolSpin",L"Mode",0,path)==1;
+    for(unsigned device=0;device<2;++device)for(unsigned slot=0;slot<2;++slot){
+        wchar_t key[32];swprintf(key,32,L"Binding%u_%u",device,slot);
+        unsigned value=GetPrivateProfileIntW(L"PistolSpin",key,0,path);
+        spin_binding[device][slot]=(device?value<=24:keyboard_valid_action(24,value))?value:0;
+    }
+}
+unsigned SpinMode(){std::lock_guard guard(input_lock);LoadSpin();return spin_mode;}
 Draft Defaults(){
     Draft d;UCRRKeyboardConfig keys;UCRRControllerConfig pad;
     keyboard_defaults(&keys);controller_defaults(&pad);
@@ -17,6 +29,7 @@ Draft Defaults(){
 }
 Draft Snapshot(){
     std::lock_guard guard(input_lock);keyboard_init();controller_init();Draft d;
+    LoadSpin();d.spin_mode=spin_mode;std::memcpy(d.spin_binding,spin_binding,sizeof(spin_binding));
     AcquireSRWLockShared(&keyboard_lock);AcquireSRWLockShared(&controller_lock);
     std::memcpy(d.keyboard,keyboard_config.binding,sizeof(d.keyboard));
     std::memcpy(d.controller,controller_config.binding,sizeof(d.controller));
@@ -47,18 +60,26 @@ static bool Save(const Draft& d){
     section[at]=0;ok=ok&&WritePrivateProfileSectionW(L"Controller",section,temp);
     swprintf(value,32,L"%u",d.sensitivity);
     ok=ok&&WritePrivateProfileStringW(L"Graphics",L"MouseSensitivity",value,temp);
+    swprintf(value,32,L"%u",d.spin_mode);ok=ok&&WritePrivateProfileStringW(L"PistolSpin",L"Mode",value,temp);
+    for(unsigned device=0;device<2;++device)for(unsigned slot=0;slot<2;++slot){
+        wchar_t key[32];swprintf(key,32,L"Binding%u_%u",device,slot);swprintf(value,32,L"%u",d.spin_binding[device][slot]);
+        ok=ok&&WritePrivateProfileStringW(L"PistolSpin",key,value,temp);
+    }
     if(ok)WritePrivateProfileStringW(nullptr,nullptr,nullptr,temp);
     ok=ok&&MoveFileExW(temp,path,MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH);
     if(!ok)DeleteFileW(temp);return ok;
 }
 bool Apply(const Draft& d,std::string& error){
     error.clear();
+    if(d.spin_mode>1){error="Invalid pistol spin mode.";return false;}
+    for(unsigned slot=0;slot<2;++slot)if(!keyboard_valid_action(24,d.spin_binding[0][slot])||d.spin_binding[1][slot]>24){error="Invalid pistol spin binding.";return false;}
     for(unsigned a=0;a<25;++a)for(unsigned s=0;s<2;++s)
         if(!keyboard_valid_action(a,d.keyboard[a][s])){error="That key cannot be assigned to this action.";return false;}
     for(auto& row:d.controller)for(auto source:row)if(source>24){error="Invalid controller button.";return false;}
-    if(d.deadzone[0]>30||d.deadzone[1]>30||d.sensitivity<25||d.sensitivity>1600){error="Invalid input sensitivity.";return false;}
+    if(d.deadzone[0]>30||d.deadzone[1]>30||d.sensitivity<1||d.sensitivity>1600){error="Invalid input sensitivity.";return false;}
     std::lock_guard guard(input_lock);keyboard_init();controller_init();
     if(!Save(d)){error="Could not save controls. Your previous bindings are unchanged.";return false;}
+    spin_loaded=true;spin_mode=d.spin_mode;std::memcpy(spin_binding,d.spin_binding,sizeof(spin_binding));
     AcquireSRWLockExclusive(&keyboard_lock);AcquireSRWLockExclusive(&controller_lock);
     std::memcpy(keyboard_config.binding,d.keyboard,sizeof(d.keyboard));
     std::memcpy(controller_config.binding,d.controller,sizeof(d.controller));
@@ -70,6 +91,14 @@ static XBOX_GAMEPAD OriginalPad(const input::Pad& p){
     XBOX_GAMEPAD pad;pad.wButtons=p.buttons;
     std::memcpy(pad.bAnalogButtons,p.analog,sizeof(p.analog));
     pad.sThumbLX=p.lx;pad.sThumbLY=p.ly;pad.sThumbRX=p.rx;pad.sThumbRY=p.ry;return pad;
+}
+bool SpinButtonDown(bool keyboard,const input::Pad& p){
+    LoadSpin();int strengths[24]{};
+    if(!keyboard&&p.connected){auto raw=OriginalPad(p);controller_strengths(&raw,strengths);}
+    for(unsigned source:spin_binding[keyboard?0:1])if(source){
+        if(keyboard?keyboard_key_down(source)!=0:strengths[source-1]>16384)return true;
+    }
+    return false;
 }
 unsigned ControllerSource(const input::Pad& p){
     if(!p.connected)return 0;

@@ -56,6 +56,7 @@ X86_FUNC(sub_003E2CC0) {
 }
 X86_FUNC(sub_003E5140) { ++swaps; ctx.eax = 0; ctx.esp += 8; }
 // GENERATED_WAIT
+X86_FUNC(__imp__sub_0008BFE0) { OriginalWait(ctx, base); }
 // GENERATED_WRAPPER
 
 static constexpr uint32_t object = 0x10000, stack = 0x20000;
@@ -88,7 +89,7 @@ static void Wait(uint32_t mode, uint32_t already, unsigned expected_blanks,
     W32(object + 0x1c, already);
     auto ctx = Context();
     blanks = swaps = flushes = wait_calls = skipped = 0;
-    OriginalWait(ctx, g_base);
+    sub_0008BFE0(ctx, g_base);
     assert(ctx.esp == stack + 4 && ctx.esi == 12 && ctx.edi == 13);
     assert(blanks == expected_blanks && swaps == 1 && R32(object + 0x1c) == 0);
     assert(flushes == 1 && skipped == expected_skips);
@@ -228,15 +229,30 @@ int main() {
 
     // Original display wait demonstrates two callbacks at retail30 and one at
     // enhanced60, for both ring modes. Already-published callbacks still count.
-    for (uint32_t cap : {30u, 60u, 0u}) {
+    for (uint32_t cap : {30u, 60u, 120u, 144u, 240u, 0u}) {
         Seed(); app::Get().fps_cap = cap;
         auto ctx = Context();
-        uint32_t interval = cap == 30 ? 2 : 1;
-        CheckSetter(ctx, interval, 0x5d0c8, 2);
-        Wait(0, 0, interval); Wait(1, 0, interval);
+        uint32_t interval = cap == 30 ? 2 : cap == 60 ? 1 : 0;
+        CheckSetter(ctx, cap == 30 ? 2 : 1, 0x5d0c8, 2);
+        Wait(0, 0, interval); Wait(1, 0, interval, interval == 0 ? 1 : 0);
         Wait(0, interval, 0);
         Wait(1, interval, cap == 30 ? 1 : 0, cap == 30 ? 0 : 1);
         Wait(2, 0, 0); // Non-vblank load mode is unchanged.
+    }
+    Qualify();
+    for (uint32_t cap : {120u, 60u, 240u, 0u, 60u}) {
+        app::Get().fps_cap = cap;
+        Wait(0, 0, cap == 60 ? 1 : 0);
+        Wait(1, 0, cap == 60 ? 1 : 0, cap == 60 ? 0 : 1);
+        assert(R32(object + 0x18) == 1);
+    }
+    // Movies/menus and unknown interval callers retain original waits at every cap.
+    for (uint32_t cap : {0u, 30u, 60u, 120u, 144u, 240u}) {
+        Seed(); app::Get().fps_cap = cap;
+        auto movie = Context(0x5d0c8, 1); CheckSetter(movie, 1, 0x5d0c8, 1);
+        Wait(0, 0, 1); Wait(1, 0, 1); Wait(1, 1, 1);
+        auto unrelated = Context(0x1fef21, 2); CheckSetter(unrelated, 2, 0x1fef21, 2);
+        Wait(0, 0, 2); Wait(1, 0, 2);
     }
     // An ordinary menu interval1 retains its unconditional white-fade blank.
     Seed(); app::Get().fps_cap = 60;

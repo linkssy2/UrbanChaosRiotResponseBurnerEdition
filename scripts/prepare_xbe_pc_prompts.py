@@ -39,8 +39,9 @@ bool TrialPromptSnapshot(unsigned id,TrialPromptInput& out,unsigned variant){
     unsigned first=id==1?0:12,last=id==1&&variant!=2?12:13;
     for(unsigned i=first;i<last;++i){unsigned action=i==12?24:i;
         out.bindings[i]=xbox_KeyboardBinding(action,0);
-        if(!out.bindings[i])out.bindings[i]=xbox_KeyboardBinding(action,1);
+        if(action!=0&&!out.bindings[i])out.bindings[i]=xbox_KeyboardBinding(action,1);
         xbox_KeyboardActionLabel(action,out.labels[i],sizeof(out.labels[i]));
+        if(action==0)std::snprintf(out.labels[i],sizeof(out.labels[i]),"%s",xbox_KeyboardSourceName(out.bindings[i]));
         if(action==8&&gameplay&&!menu_mode){
             out.bindings[i]=VK_ESCAPE;std::strcpy(out.labels[i],"Esc");
         }
@@ -50,8 +51,8 @@ bool TrialPromptSnapshot(unsigned id,TrialPromptInput& out,unsigned variant){
         if(action==0&&variant==1){
             // Interaction uses the configured secondary A binding (default F).
             unsigned secondary=xbox_KeyboardBinding(action,1);
-            if(secondary){out.bindings[i]=secondary;
-                std::snprintf(out.labels[i],sizeof(out.labels[i]),"%s",xbox_KeyboardSourceName(secondary));}
+            out.bindings[i]=secondary;
+            std::snprintf(out.labels[i],sizeof(out.labels[i]),"%s",xbox_KeyboardSourceName(secondary));
         }
     }
     out.held=id==2&&order_held&&captured&&focused()&&!TrialGraphicsOpen();

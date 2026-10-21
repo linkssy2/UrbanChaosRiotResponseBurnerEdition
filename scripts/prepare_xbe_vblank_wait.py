@@ -100,8 +100,7 @@ def check(source):
     changed = transform(source)
     old_tick = function(source, 'void VerticalBlank(X86Context& ctx) {')
     tick = function(changed, 'void VerticalBlank(X86Context& ctx) {')
-    # Readiness and the two host notifications are the only ticker changes:
-    # no cadence, event order, callback, guest counter, or clock modifications.
+    # Completion notifications only; preserve the retail ticker and callback order.
     stripped = tick.replace('        const uint64_t tick = g_vblank_completion.BeginTick();\n', '')
     stripped = stripped.replace('        g_vblank_completion.CompleteTick(tick);\n', '')
     stripped = stripped.replace('    g_vblank_ready.store(true, std::memory_order_release);\n', '')
