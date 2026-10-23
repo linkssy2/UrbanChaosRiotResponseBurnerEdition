@@ -24,6 +24,7 @@ float click_x,click_y;
 long dx=0,dy=0,order_x=0,order_y=0;
 long spin_dx=0,spin_dy=0;
 bool spin_button_held=true;
+int firearm_direction=0;
 float spin_x=0,spin_y=0;
 uint64_t spin_tick=0;
 unsigned order_phase=0,order_buttons=0,order_selection=0;
@@ -144,6 +145,7 @@ void TrialGraphicsInputChanged(){
     for(unsigned port=0;port<4;++port)release_pad[port]=last_pad[port];
     click_pending=false;dx=dy=0;
     spin_dx=spin_dy=0;spin_tick=0;spin_button_held=true;
+    firearm_direction=0;
     order_phase=order_buttons=0;order_held=false;keyboard_wheel_clear();
     xbox_KeyboardConsumeMouseClick(1);
     PostMessage(game_window,kCapture,0,0);
@@ -217,7 +219,7 @@ static unsigned OrderDirection(){return std::max(std::abs(order_x),std::abs(orde
 void xbox_KeyboardSourceEvent(unsigned source,int down){
     if(down)xbox_KeyboardNoteInput();
     int claimed=0;unsigned mask=keyboard_orders_source_mask(source,&claimed);
-    if(!mask||claimed||!captured)return;
+    if(!mask||claimed||trial_controls::PreviousFirearmClaims(source)||!captured)return;
     if(down&&!order_phase){order_held=true;order_phase=1;order_x=order_y=0;}
     else if(!down&&order_held){order_held=false;order_selection=OrderDirection();}
     dx=dy=0;
@@ -302,9 +304,10 @@ bool TrialInputMessage(void*,uint32_t msg,uintptr_t wp,intptr_t lp,intptr_t* res
 void TrialInputPad(int port,input::Pad& pad){
     std::lock_guard guard(input_lock);
     if(port<0||port>=4)return;
+    if(port==0)firearm_direction=0;
     last_pad[port]=pad;
     if(port==0)for(unsigned key=1;key<256;++key)
-        if(!(GetAsyncKeyState(key)&0x8000))release_keys[key]=false;
+        if(release_keys[key]&&!(GetAsyncKeyState(key)&0x8000))release_keys[key]=false;
     if(port==0&&controls_capture.active){
         // A chord cancels capture without reserving any single bindable button.
         if(focused()&&(pad.buttons&48)==48)controls_capture.Cancel();
@@ -349,6 +352,13 @@ void TrialInputPad(int port,input::Pad& pad){
     XBOX_GAMEPAD keys;keyboard_apply_bindings(&keys,captured);keys.wButtons|=order_buttons;
     // Gameplay A is interaction; the qualified manual-reload query reads its own edge.
     if(gameplay&&!menu_mode)keys.bAnalogButtons[0]=ActionSourceDown(1,true)?255:0;
+    if(gameplay&&!menu_mode){
+        const bool next=keys.bAnalogButtons[2]!=0,previous=trial_controls::PreviousFirearmDown(captured);
+        const int direction=int(next)-int(previous);
+        keys.bAnalogButtons[2]=direction?255:0;
+        firearm_direction=pad.analog[2]>30?1:direction;
+        if(previous)xbox_KeyboardNoteInput();
+    }
     // CONTROL capped the title-facing stick magnitude in ucrr_host_stick_axis.
     // Keep keyboard movement within that circle before merging physical input;
     // full strength on both digital axes otherwise requests sqrt(2) movement.
@@ -376,4 +386,8 @@ void TrialInputPad(int port,input::Pad& pad){
     for(unsigned i=0;i<8;i++)pad.analog[i]=std::max(pad.analog[i],keys.bAnalogButtons[i]);
     if(keys.sThumbLX)pad.lx=keys.sThumbLX;if(keys.sThumbLY)pad.ly=keys.sThumbLY;
     if(keys.sThumbRX)pad.rx=keys.sThumbRX;if(keys.sThumbRY)pad.ry=keys.sThumbRY;
+}
+int TrialFirearmDirection(){
+    std::lock_guard guard(input_lock);
+    return focused()&&gameplay&&!menu_mode&&!TrialGraphicsOpen()?firearm_direction:0;
 }

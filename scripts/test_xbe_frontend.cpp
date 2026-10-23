@@ -231,8 +231,8 @@ int TrialGuestHook(X86Context& ctx,uint8_t* base,unsigned op){
 }
 X86_FUNC(sub_00017060){ctx.esp+=8;}
 X86_FUNC(sub_00017160){ctx.esp+=12;}
-X86_FUNC(sub_00018CE0){if(pause_fixture)++pause_texts;ctx.esp+=32;}
-X86_FUNC(sub_00018DE0){if(pause_fixture)++pause_separators;ctx.esp+=24;}
+X86_FUNC(sub_00018CE0){if(pause_fixture){assert(!TrialFrontendHideListSprites());++pause_texts;}ctx.esp+=32;}
+X86_FUNC(sub_00018DE0){if(pause_fixture){assert(!TrialFrontendHideListSprites());++pause_separators;}ctx.esp+=24;}
 static void ProfileQuad(X86Context& ctx,uint8_t* base,uint32_t fn){
     const uint32_t p=X86_MEM32(ctx.esp+8),q=X86_MEM32(ctx.esp+12);
     profile_quads.push_back({fn,X86_MEM32(ctx.esp+4),0,X86_MEMF32(p),X86_MEMF32(p+4),X86_MEMF32(q),X86_MEMF32(q+4)});
@@ -376,6 +376,9 @@ static void CheckManagerHandoff(){
         assert(!TrialFrontendOwns(stable.source.owner,stable.source.kind));
         g_ecx=stable.source.owner;ucrr_menu_list_enter();
         assert(TrialFrontendHideListSprites());
+        dialog_running=1;
+        assert(!TrialFrontendHideListSprites()); // Restart/checkpoint and other original modal children remain visible.
+        dialog_running=0;
         const auto stack=context.esp;const auto quads=sidebar_quads.size();
         __imp__sub_00065550(context,ram);
         assert(context.esp==stack+4&&sidebar_quads.size()==quads);context.esp=stack;
@@ -535,7 +538,7 @@ static uint32_t PauseDialogFrame(){
     GraphicsMenuCapture();ucrr_menu_list_leave();menu_pointer_end();GraphicsMenuEnd();
     return callback;
 }
-static void CheckPauseQuit(){
+static void CheckPauseQuit(uint32_t callback=0x267400){
     pause_fixture=true;queued={};name_keyboard_mode=true;
     MEM32(0x600004)=0x601000;MEM32(0x600008)=0x10;MEM8(0x600014)=0;
     std::strcpy((char*)ram+0x473368,"NewFrontEnd-LooseProgress-1");
@@ -547,7 +550,7 @@ static void CheckPauseQuit(){
         assert(hf_pause_manager==menu_manager);
         // Execute the original shared factory with the exact265D9E arguments.
         context.esp=0x700000;
-        const uint32_t args[]={0x647000,0x473368,0,0x267400,0x284310,3};
+        const uint32_t args[]={0x647000,0x473368,0,callback,0x284310,3};
         for(unsigned i=6;i;--i){context.esp-=4;MEM32(context.esp)=args[i-1];}
         context.esp-=4;MEM32(context.esp)=0xFEEDFACE;
         __imp__sub_00258DF0(context,ram);assert(context.esp==0x700000-24);context.esp+=24;
@@ -576,7 +579,7 @@ static void CheckPauseQuit(){
     const unsigned confirm_sounds=name_sounds,back_sounds=profile_back_sounds;
     action(UC_HF_ACTIVATE,1);assert(PauseDialogFrame()==0x284310&&name_sounds==confirm_sounds+1);
     action(UC_HF_BACK);assert(PauseDialogFrame()==0x284310&&profile_back_sounds==back_sounds+1);
-    action(UC_HF_ACTIVATE,0);assert(PauseDialogFrame()==0x267400&&hf_quit_handoff);
+    action(UC_HF_ACTIVATE,0);assert(PauseDialogFrame()==callback&&bool(hf_quit_handoff)==(callback==0x267400));
     assert(name_sounds==confirm_sounds+2); // original confirmation sound still runs
 
     // Every exact factory field is required; another warning/callback keeps
@@ -615,7 +618,13 @@ static void CheckDifficultyDialog(){
         menu_pointer_begin(0x600000);g_ecx=owner;ucrr_menu_dialog_enter();
         assert(TrialFrontendDifficulty(published.source)&&TrialFrontendOwns(owner,UC_HF_DIALOG));
         assert(TrialFrontendHidePauseDialogText(owner));
-        ucrr_menu_dialog_leave();menu_pointer_end();
+        ucrr_menu_dialog_leave();
+        // The level parent finishes after its child; it must not erase the modal.
+        const auto modal_epoch=hf_view.epoch;
+        hf_capture_levels(0x647000);
+        menu_pointer_end();
+        assert(TrialFrontendDifficulty(published.source)&&published.source.owner==owner);
+        assert(hf_view.epoch==modal_epoch&&TrialFrontendOwns(owner,UC_HF_DIALOG));
         name_keyboard_mode=false;menu_pointer_begin(0x600000);g_ecx=owner;ucrr_menu_dialog_enter();
         assert(!TrialFrontendHidePauseDialogText(owner));
         ucrr_menu_dialog_leave();menu_pointer_end();name_keyboard_mode=true;
@@ -834,6 +843,6 @@ int main(){
     assert(!gate.Accept(1,false));assert(gate.Accept(1,true));
     assert(!gate.Accept(2,true));assert(!gate.Accept(2,false));assert(gate.Accept(2,false));
     controller_fixture::Check();
-    CheckProfiles();CheckDeleteProfile();CheckPauseQuit();CheckDifficultyDialog();CheckName();CheckProfileWarnings();CheckObjectives();
+    CheckProfiles();CheckDeleteProfile();CheckPauseQuit();CheckPauseQuit(0x267330);CheckPauseQuit(0x2672A0);CheckDifficultyDialog();CheckName();CheckProfileWarnings();CheckObjectives();
     std::puts("frontend: original profile bounds/actions, typed-name source validation/cancel, source-owned actions, badge/completion, manager visual handoff, controller gates and localized PC profile warnings passed");
 }

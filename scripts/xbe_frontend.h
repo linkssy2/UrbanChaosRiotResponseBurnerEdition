@@ -56,6 +56,14 @@ inline bool TrialFrontendDifficulty(const UcHybridFrontendSnapshot& s) {
         if(std::strcmp(s.rows[i].label,keys[i])||!s.rows[i].callback||s.rows[i].callback==0xffffffffu)return false;
     return true;
 }
+inline const char* TrialFrontendPauseTitle(uint32_t callback) {
+    switch(callback){
+    case 0x2672A0: return "RESTART CHECKPOINT";
+    case 0x267330: return "RESTART MISSION";
+    case 0x267400: return "QUIT MISSION";
+    default: return nullptr;
+    }
+}
 inline bool TrialFrontendSupported(const TrialFrontendFrame& f) {
     const auto& s=f.source;
     if(!s.epoch||!s.screen||!s.owner||!s.count||s.selected>=s.count||
@@ -70,7 +78,7 @@ inline bool TrialFrontendSupported(const TrialFrontendFrame& f) {
     if(s.kind==UC_HF_DIALOG)return s.count==2&&s.rows[1].callback==0x284310&&
         ((f.delete_dialog&&f.delete_name[0]&&s.rows[0].callback==0x284580)||
          (f.pause_dialog&&f.dialog_message[0]&&(s.source_kind&0x80000000u)&&
-          s.rows[0].callback==0x267400));
+          TrialFrontendPauseTitle(s.rows[0].callback)));
     return (s.kind==TRIAL_HF_NAME&&s.count==1&&f.name_capacity==15)||
            (s.kind==UC_HF_LIST&&f.list_kind>=1&&f.list_kind<=7&&s.count<=20)||
            (s.kind==UC_HF_LEVELS&&s.count<=17)||

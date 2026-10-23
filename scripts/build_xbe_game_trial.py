@@ -85,12 +85,16 @@ try:
  (AREA/'src/compat/input.cpp').write_text(controller_source)
  from prepare_xbe_input import prepare as prepare_input
  prepare_input()
+ from prepare_xbe_firearm_cycle import prepare as prepare_firearm_cycle
+ prepare_firearm_cycle(AREA)
  from prepare_xbe_event_callback import prepare as prepare_event_callback
  prepare_event_callback(SDK, AREA)
  from prepare_xbe_effect_settings import prepare as prepare_effect_settings
  prepare_effect_settings(AREA)
  from prepare_xbe_ragdoll_settings import prepare as prepare_ragdoll_settings
  prepare_ragdoll_settings(AREA)
+ from prepare_xbe_ragdoll_contacts import prepare as prepare_ragdoll_contacts
+ prepare_ragdoll_contacts(AREA)
  from prepare_xbe_intro_skip import prepare as prepare_intro_skip
  prepare_intro_skip(AREA)
  from prepare_xbe_health_pulse import prepare as prepare_health_pulse
@@ -236,6 +240,8 @@ HLE_STDCALL(UrbanChaos_StreamPitch, 2) { return VoicePitch(a); }
  ds=prepare_audio_routing(ds, AREA)
  from prepare_xbe_audio_loop import prepare as prepare_audio_loop
  ds,audio_output=prepare_audio_loop(ds,(SDK/'runtime/audio/xaudio2.cpp').read_text(),AREA)
+ from prepare_xbe_audio_decode_cache import prepare as prepare_audio_decode_cache
+ ds=prepare_audio_decode_cache(ds,AREA)
  (AREA/'src/compat/xaudio2.cpp').write_text(audio_output)
  (AREA/'src/compat/dsound.cpp').write_text(ds)
  (AREA/'src/compat/test_device_refs.cpp').write_text('''#include "device_refs.h"
@@ -299,6 +305,10 @@ int main(){uint32_t r=0;if(uc_ds_ref(r,false)!=0||uc_ds_ref(r,true)!=1||uc_ds_re
  restore_generated(AREA)
  from prepare_xbe_release_assets import prepare as prepare_release_assets
  prepare_release_assets(SDK, AREA)
+ if os.environ.get('UCRR_XBE_SHADOW_DIAG')=='1':
+  assert not RELEASE, 'Shadow captures must not enter a release build'
+  from prepare_xbe_shadow_diagnostic import prepare as prepare_shadow_diagnostic
+  prepare_shadow_diagnostic(AREA)
  (AREA/'CMakeLists.txt').write_text('''cmake_minimum_required(VERSION 3.25)
 project(UrbanChaosXbeTrial LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 20)
@@ -355,6 +365,7 @@ add_executable(test_controller_device "'''+(ROOT/'scripts/test_xbe_controller_de
 target_include_directories(test_controller_device PRIVATE "'''+(SDK/'runtime').as_posix()+'''")
 target_link_libraries(test_controller_device PRIVATE SDL3::SDL3)
 add_executable(test_device_refs src/compat/test_device_refs.cpp)
+add_executable(test_depth_clip src/compat/test_depth_clip.cpp)
 add_executable(test_event_callback src/compat/test_event_callback.cpp)
 target_include_directories(test_event_callback PRIVATE "'''+(SDK/'runtime').as_posix()+'''" generated/game)
 add_executable(test_stream_factory src/compat/test_stream_factory.cpp)
@@ -392,6 +403,7 @@ add_executable(test_perf src/compat/test_perf.cpp "'''+(SDK/'runtime/core/log.cp
 target_include_directories(test_perf PRIVATE "'''+(SDK/'runtime').as_posix()+'''")
 target_compile_definitions(test_perf PRIVATE NDEBUG)
 add_executable(test_frame_reuse src/compat/test_xbe_frame_reuse.cpp)
+add_executable(test_wall_depth src/compat/test_xbe_wall_depth.cpp)
 add_executable(test_descriptor_lifetime src/compat/test_xbe_descriptor_lifetime.cpp)
 add_executable(test_draw_reuse src/compat/test_draw_reuse.cpp)
 add_executable(test_sampler_inputs src/compat/test_sampler_inputs.cpp)
@@ -414,6 +426,8 @@ add_executable(test_effect_settings src/compat/test_effect_settings.cpp)
 target_include_directories(test_effect_settings PRIVATE src/common src/compat "'''+(SDK/'runtime').as_posix()+'''")
 add_executable(test_ragdoll_settings src/compat/test_ragdoll_settings.cpp)
 target_include_directories(test_ragdoll_settings PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
+add_executable(test_ragdoll_contacts src/compat/test_ragdoll_contacts.cpp)
+target_include_directories(test_ragdoll_contacts PRIVATE "'''+(SDK/'runtime').as_posix()+'''")
 add_executable(test_audio_rolloff src/compat/test_audio_rolloff.cpp)
 target_include_directories(test_audio_rolloff PRIVATE "'''+ROOT.as_posix()+'''" "'''+(SDK/'runtime').as_posix()+'''" generated/game)
 add_executable(test_audio_cone src/compat/test_audio_cone.cpp)
@@ -425,6 +439,7 @@ target_include_directories(test_audio_pitch PRIVATE "'''+ROOT.as_posix()+'''" "'
 add_executable(test_stream_status src/compat/test_stream_status.cpp)
 add_executable(test_audio_loop src/compat/test_audio_loop.cpp src/compat/xbe_audio_loop.cpp)
 add_executable(test_audio_routing src/compat/test_audio_routing.cpp)
+add_executable(test_audio_decode_cache src/compat/test_audio_decode_cache.cpp)
 target_include_directories(test_audio_routing PRIVATE "'''+ROOT.as_posix()+'''" "'''+(SDK/'runtime').as_posix()+'''" generated/game)
 target_compile_definitions(test_audio_loop PRIVATE XBE_AUDIO_TRACE_TEST=1)
 target_include_directories(test_stream_status PRIVATE "'''+ROOT.as_posix()+'''" "'''+(SDK/'runtime').as_posix()+'''" generated/game)
@@ -445,6 +460,8 @@ target_include_directories(test_graphics_menu_context PRIVATE src/common)
 add_executable(test_device_busy src/compat/test_device_busy.cpp)
 add_executable(test_pistol_spin src/compat/test_pistol_spin.cpp)
 target_include_directories(test_pistol_spin PRIVATE src/compat "'''+(SDK/'runtime').as_posix()+'''")
+add_executable(test_firearm_cycle src/compat/test_firearm_cycle.cpp)
+target_include_directories(test_firearm_cycle PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
 add_executable(test_view_layout src/compat/test_view_layout.cpp)
 target_include_directories(test_view_layout PRIVATE src/common src/compat "'''+(SDK/'runtime').as_posix()+'''" )
 add_executable(test_health_pulse src/compat/test_health_pulse.cpp)
@@ -536,7 +553,7 @@ target_include_directories(UrbanChaosXbeTrial PRIVATE "'''+ROOT.as_posix()+'''" 
  config=(AREA/'out-msvc/_deps/sdl3-build/include-config-relwithdebinfo/build_config/SDL_build_config.h').read_text()
  assert '#define HAVE_LIBUSB 1' in config,'Switch 2 USB driver would be silently omitted'
  run('build-game-msvc',['cmake','--build',AREA/'out-msvc','--target','UrbanChaosXbeTrial','test_device_refs','test_pc_keyboard','test_pc_camera','test_pc_memory','test_coroutines','test_voice_mode','test_stream_factory','test_io_apc','test_recorded_draws','test_visibility','test_query_resolves','test_query_resolves_gpu','test_inline_draws','test_resource_refs','test_shader_state','test_cursor','test_target60','test_signed_lighting','test_depth_alias','test_audio_rolloff','test_audio_cone','test_audio_factors','test_audio_pitch','test_stream_status','test_audio_loop','test_audio_routing','test_heap_probe','test_graphics_menu_context','test_graphics_input','test_graphics_settings','test_target_resize','test_smooth_fog','-j','4'])
- run('build-interface-fixtures',['cmake','--build',AREA/'out-msvc','--target','test_world_textures','test_pistol_spin','test_release_assets','test_language','test_release','test_prompt_handoff','test_state_costs','test_event_callback','test_shader_cache','test_perf','test_controls','test_msaa','test_effect_settings','test_ragdoll_settings','test_filter','test_intro_skip','test_conversation_skip','test_health_pulse','test_view_layout','test_pc_prompts','test_hd_ui_renderer','test_hd_ui_prompts','test_hd_ui_gpu','test_hd_ui','test_hd_ui_restored','test_hd_ui_reconstruct','test_frontend','test_level_details','test_frontend_fonts','test_menu_style','-j','4'])
+ run('build-interface-fixtures',['cmake','--build',AREA/'out-msvc','--target','test_world_textures','test_pistol_spin','test_firearm_cycle','test_release_assets','test_language','test_release','test_prompt_handoff','test_state_costs','test_event_callback','test_shader_cache','test_perf','test_controls','test_msaa','test_effect_settings','test_ragdoll_settings','test_ragdoll_contacts','test_filter','test_intro_skip','test_conversation_skip','test_health_pulse','test_view_layout','test_pc_prompts','test_hd_ui_renderer','test_hd_ui_prompts','test_hd_ui_gpu','test_hd_ui','test_hd_ui_restored','test_hd_ui_reconstruct','test_frontend','test_level_details','test_frontend_fonts','test_menu_style','-j','4'])
  run('build-controller-device',['cmake','--build',AREA/'out-msvc','--target','test_controller_device','-j','4'])
  run('test-controller-device',[AREA/'out-msvc/test_controller_device.exe'])
  run('test-language',[AREA/'out-msvc/test_language.exe'])
@@ -545,6 +562,8 @@ target_include_directories(UrbanChaosXbeTrial PRIVATE "'''+ROOT.as_posix()+'''" 
  run('test-event-callback',[AREA/'out-msvc/test_event_callback.exe'])
  run('build-frame-reuse',['cmake','--build',AREA/'out-msvc','--target','test_frame_reuse','test_descriptor_lifetime','test_readback_reuse','test_draw_reuse','test_sampler_inputs','test_vertex_costs','test_palette_init','test_texture_constants','test_texture_formats','test_draw_batches','test_vblank_wait','-j','4'])
  run('test-frame-reuse',[AREA/'out-msvc/test_frame_reuse.exe'])
+ run('build-wall-depth',['cmake','--build',AREA/'out-msvc','--target','test_wall_depth'])
+ run('test-wall-depth',[AREA/'out-msvc/test_wall_depth.exe'])
  run('test-descriptor-lifetime',[AREA/'out-msvc/test_descriptor_lifetime.exe'])
  run('test-draw-reuse',[AREA/'out-msvc/test_draw_reuse.exe'])
  run('test-sampler-inputs',[AREA/'out-msvc/test_sampler_inputs.exe'])
@@ -560,14 +579,18 @@ target_include_directories(UrbanChaosXbeTrial PRIVATE "'''+ROOT.as_posix()+'''" 
  run('test-perf-enabled',[AREA/'out-msvc/test_perf.exe','enabled'])
  run('build-device-busy',['cmake','--build',AREA/'out-msvc','--target','test_device_busy','-j','4'])
  run('test-device-busy',[AREA/'out-msvc/test_device_busy.exe'])
+ run('build-depth-clip',['cmake','--build',AREA/'out-msvc','--target','test_depth_clip','-j','4'])
+ run('test-depth-clip',[AREA/'out-msvc/test_depth_clip.exe'])
  run('test-controls',[AREA/'out-msvc/test_controls.exe'])
  run('test-msaa',[AREA/'out-msvc/test_msaa.exe'])
  run('test-msaa-hardware',[AREA/'out-msvc/test_msaa.exe','hardware'])
  run('test-effect-settings',[AREA/'out-msvc/test_effect_settings.exe'])
  run('test-ragdoll-settings',[AREA/'out-msvc/test_ragdoll_settings.exe'])
+ run('test-ragdoll-contacts',[AREA/'out-msvc/test_ragdoll_contacts.exe'])
  run('test-filter',[AREA/'out-msvc/test_filter.exe'])
  run('test-intro-skip',[AREA/'out-msvc/test_intro_skip.exe'])
  run('test-pistol-spin',[AREA/'out-msvc/test_pistol_spin.exe'])
+ run('test-firearm-cycle',[AREA/'out-msvc/test_firearm_cycle.exe'])
  run('build-menu-key-taps',['cmake','--build',AREA/'out-msvc','--target','test_menu_key_taps','-j','4'])
  run('test-menu-key-taps',[AREA/'out-msvc/test_menu_key_taps.exe'])
  run('test-conversation-skip',[AREA/'out-msvc/test_conversation_skip.exe'])
@@ -575,6 +598,7 @@ target_include_directories(UrbanChaosXbeTrial PRIVATE "'''+ROOT.as_posix()+'''" 
  run('test-view-layout',[AREA/'out-msvc/test_view_layout.exe'])
  run('test-pc-prompts',[AREA/'out-msvc/test_pc_prompts.exe'])
  run('test-world-textures',[AREA/'out-msvc/test_world_textures.exe'])
+ run('test-arm-mesh',[sys.executable,ROOT/'scripts/test_xbe_arm_mesh.py',AREA/'out-msvc/test_world_textures.exe',ROOT/'game_files'])
  run('test-hd-ui-renderer',[AREA/'out-msvc/test_hd_ui_renderer.exe'])
  run('test-hd-ui-prompts',[AREA/'out-msvc/test_hd_ui_prompts.exe'])
  run('test-hd-ui-hardware',[AREA/'out-msvc/test_hd_ui_gpu.exe'])
@@ -608,6 +632,8 @@ target_include_directories(UrbanChaosXbeTrial PRIVATE "'''+ROOT.as_posix()+'''" 
  run('test-stream-status',[AREA/'out-msvc/test_stream_status.exe'])
  run('test-audio-loop',[AREA/'out-msvc/test_audio_loop.exe'])
  run('test-audio-routing',[AREA/'out-msvc/test_audio_routing.exe'])
+ run('build-audio-decode-cache',['cmake','--build',AREA/'out-msvc','--target','test_audio_decode_cache','-j','4'])
+ run('test-audio-decode-cache',[AREA/'out-msvc/test_audio_decode_cache.exe'])
  run('test-audio-cone',[AREA/'out-msvc/test_audio_cone.exe'])
  run('test-audio-factors',[AREA/'out-msvc/test_audio_factors.exe'])
  run('test-resource-refs',[AREA/'out-msvc/test_resource_refs.exe'])

@@ -81,6 +81,9 @@ def prepare(area):
         (0x265D9E,0x5B,'5e3b6ed5258a3e5104dc322a4c8cd48f611abcf05eec5be5d57ee5533a25e6ff'),
         (0x2677C2,0x18,'c84abe247a4b78bea601fb0a11715f861ea5e0b2b2f006618cfb6351c5e9766d')]:
         assert hashlib.sha256(read(va,n)).hexdigest()==digest,hex(va)
+    # Exact checkpoint and mission restart row factories, sharing the Quit modal.
+    assert hashlib.sha256(read(0x2676ec,0x17)).hexdigest()=='5e285ea10e48ef0754451eb8f1ad30260c78c5d07a825830c18d1794795b7e8a'
+    assert hashlib.sha256(read(0x26770f,0x18)).hexdigest()=='ece4800760afe4c8b334b582a9110ba0a20c8256178d951d316718e033a27829'
     for va,label in [(0x473368,b'NewFrontEnd-LooseProgress-1\0'),
                      (0x48573C,b'NewFrontEnd-Yes-1\0'),(0x485750,b'NewFrontEnd-No-1\0')]:
         assert read(va,len(label))==label,hex(va)

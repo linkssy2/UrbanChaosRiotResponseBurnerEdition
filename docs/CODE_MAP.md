@@ -1,6 +1,6 @@
 # Code map
 
-The 0.06 PC port uses the XboxXBERecomp Direct3D 12 runtime. Maintained
+The 0.07 PC port uses the XboxXBERecomp Direct3D 12 runtime. Maintained
 integration lives in `scripts/`; generated title/runtime overlays stay private
 under `build/`. Read [build status](BUILDING.md) before attempting a clean build.
 
@@ -18,10 +18,16 @@ under `build/`. Read [build status](BUILDING.md) before attempting a clean build
 | Visibility queries | `scripts/prepare_xbe_visibility.py`, `test_xbe_query_resolves*.cpp` | Resolve completed ranges before submission and ring-slot reuse; preserve report fences. |
 | Fog and MSAA | `scripts/prepare_xbe_smooth_fog.py`, `prepare_xbe_msaa.py` | Keep target lifetime, queued state and depth sampling consistent. |
 | Audio | `scripts/prepare_xbe_audio_*.py`, `xbe_audio_loop.*` | Preserve sample rate, source ownership, deferred settings and event order. |
-| Languages | `scripts/xbe_language.*`, `xbe_language_ui.inc`, `xbe_frontend_text.h` | Select supplied original banks on restart; convert host strings to UTF-8. |
-| Body retention | `scripts/xbe_ragdoll_settings.cpp`, `prepare_xbe_ragdoll_settings.py` | Preserve original object ownership and safe cleanup. |
+| Languages | `scripts/xbe_language.*`, `xbe_language_ui.inc`, `xbe_frontend_text.h`, `xbe_spanish_ui.h`, `spanish_pc.json`, `spanish_original.json` | Select supplied banks on restart; retain ZARF translations, require the optional pack and preserve English voices for Spanish. |
+| Body retention and renderer admission | `scripts/xbe_ragdoll_settings.cpp`, `prepare_xbe_ragdoll_settings.py` | Keep renderer-wrapper overflow scoped to its exact pool and original cleanup; particle emission limits remain separate. |
+| Ragdoll contacts | `scripts/prepare_xbe_ragdoll_contacts.py`, `test_xbe_ragdoll_contacts.cpp` | Restore character/body admission without changing other collision exclusions or the solver. |
+| Directional firearms | `scripts/xbe_firearm_cycle.h`, `prepare_xbe_firearm_cycle.py` | Preserve original weapon availability and controller behavior; keep saved binding indices stable. |
+| First-person sleeves | `scripts/xbe_arm_mesh.h`, `xbe_arm_mesh_data.h`, `test_xbe_arm_mesh.py` | Match complete authored vertex/UV buffers before extending elbow rings and sleeve mapping. |
+| Wall-lighting depth | `scripts/xbe_wall_depth.h`, `test_xbe_wall_depth.cpp` | Scope depth tolerance to the captured receiver shader/state; do not change unrelated geometry. |
+| Portable shader seed | `packaging/shader-seed/`, `scripts/build_xbe_shader_seed.py`, `xbe_shader_cache.*` | Validate source/compiler/bytecode identities; preserve user cache and exclude GPU-driver pipeline blobs. |
 | Quiet release | `scripts/prepare_xbe_release*.py` | Disable diagnostics without changing gameplay; validate imported asset identity. |
 | Setup and direct Play | `launcher/burner-xbe/` | Validate staged imports into portable GameData; first import copies compatible legacy state without changing the source. |
+| Experimental Linux entry | `launcher/burner-linux/` | Run the same Windows runtime through user-supplied Proton; preserve argument boundaries and the portable data folder. Linux gameplay is unverified. |
 | Tests | `scripts/test_xbe_*`, launcher `test_setup.py` | Some fixtures require private generated title/resource inputs. |
 | Upstream identity | `dependencies.lock.json`, `licenses/` | XboxXBERecomp by TGP482 is the current runtime. |
 

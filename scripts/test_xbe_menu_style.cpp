@@ -61,6 +61,7 @@ bool MsaaSupported(uint32_t samples){return samples<32&&(sample_support&(1u<<sam
 namespace trial_language {
 bool SpanishAvailable(){return false;}
 static uint32_t selected=0,active=0;static unsigned saves=0;
+uint32_t Active(){return active;}
 uint32_t Snapshot(){return selected;}
 bool PendingRestart(){return selected!=active;}
 bool Apply(uint32_t value,std::string& status){
@@ -75,6 +76,7 @@ Draft Defaults(){
     Draft result;const unsigned first[25]={'R','X','C','V','T','E',VK_LCONTROL,VK_LBUTTON,VK_RETURN,VK_BACK,VK_SHIFT,VK_RBUTTON,
         VK_UP,VK_DOWN,VK_LEFT,VK_RIGHT,'A','D','W','S','J','L','I','K',VK_MBUTTON};
     for(unsigned i=0;i<25;++i)result.keyboard[i][0]=first[i];result.keyboard[0][1]='F';
+    result.previous_firearm[0]=257;
     for(unsigned i=0;i<24;++i)result.controller[i][0]=i+1;
     return result;
 }
@@ -436,9 +438,16 @@ static void CheckControls(const TrialFrontendFrame& options){
     CHECK(std::strcmp(ControlsName(0),"Reload")==0);
     CHECK(std::strcmp(ControlsName(28),"Interact / dialogue skip")==0);
     CHECK(&ControlsBinding(0,0)!=&ControlsBinding(28,0));
+    CHECK(std::strcmp(ControlsName(2),"Next Firearm")==0&&std::strcmp(ControlsName(29),"Previous Firearm")==0);
+    CHECK(ControlsAction(6)==2&&ControlsAction(7)==29&&ControlsSlots(2)==2&&ControlsSlots(29)==2);
+    CHECK(&ControlsBinding(2,0)!=&ControlsBinding(29,0));
+    CHECK(&ControlsBinding(29,1)==&controls_draft.previous_firearm[1]);
+    CHECK(std::strcmp(ControlsGroup(12),"COMBAT / INTERACTION")==0&&std::strcmp(ControlsGroup(13),"MOVEMENT / AIMING")==0);
+    CHECK(std::strcmp(ControlsGroup(23),"TEAMMATE ORDERS")==0&&std::strcmp(ControlsGroup(28),"MENU CONTROLS")==0);
     for(unsigned device=0;device<2;++device){
         controls_device=device;std::vector<bool> seen(ControlsCount());
         for(unsigned row=0;row<ControlsCount();++row){const auto action=ControlsAction(row);CHECK(action<ControlsCount()&&!seen[action]);seen[action]=true;}
+        if(device)CHECK(std::strcmp(ControlsName(2),"Firearms")==0&&!ControlsPreviousFirearm(29));
     }
     controls_device=0;CHECK(ControlsAction(0)==0&&ControlsAction(1)==28);
 
@@ -449,6 +458,20 @@ static void CheckControls(const TrialFrontendFrame& options){
         trial_controls::capture.Sample(controls_device?0:value,controls_device?value:0,true);
         DrawFrame();Settle();
     };
+    // Both firearm directions capture independent slots, take part in conflict
+    // replacement, save together and return to their own defaults.
+    ControlsBegin(2,0);DrawFrame();Settle();source('B');
+    ControlsBegin(29,1);DrawFrame();Settle();source('N');
+    CHECK(controls_draft.keyboard[2][0]=='B'&&controls_draft.previous_firearm[1]=='N');
+    CHECK(!trial_controls::live_controls.previous_firearm[1]);
+    ControlsBegin(29,0);DrawFrame();Settle();source('B');CHECK(controls_conflict_action==2);Click(0);
+    CHECK(!controls_draft.keyboard[2][0]&&controls_draft.previous_firearm[0]=='B'&&controls_draft.previous_firearm[1]=='N');
+    footer(0);CHECK(!ControlsDirty()&&trial_controls::live_controls.previous_firearm[0]=='B');
+    ControlsBegin(29,0);DrawFrame();Settle();trial_controls::capture.Sample(0,0,true);
+    trial_controls::capture.Wheel(257);DrawFrame();Settle();CHECK(controls_draft.previous_firearm[0]==257);
+    footer(2);const auto defaults=trial_controls::Defaults();
+    CHECK(!std::memcmp(controls_draft.previous_firearm,defaults.previous_firearm,sizeof(defaults.previous_firearm)));
+    CHECK(controls_draft.keyboard[2][0]==defaults.keyboard[2][0]);footer(0);CHECK(!ControlsDirty());
     // The first held opening input is ignored. A later fresh key edits only
     // the selected slot, with explicit conflict decisions before publication.
     Click(1);CHECK(controls_capture_action==0);
@@ -464,7 +487,7 @@ static void CheckControls(const TrialFrontendFrame& options){
     // actions but not the hold-and-drag orders action.
     Click(1);trial_controls::capture.Sample(0,0,true);trial_controls::capture.Wheel(256);DrawFrame();Settle();
     CHECK(controls_draft.keyboard[0][0]==256&&ControlsDirty());footer(1);CHECK(!ControlsDirty());
-    controls_scroll=22;Settle();
+    controls_scroll=23;Settle();
     CHECK(ControlsAction(controls_scroll)==24);Click(1);CHECK(controls_capture_action==24);
     trial_controls::capture.Sample(0,0,true);trial_controls::capture.Wheel(257);DrawFrame();Settle();
     CHECK(controls_capture_action==24&&trial_controls::CaptureWaiting()&&!ControlsDirty());
@@ -475,11 +498,11 @@ static void CheckControls(const TrialFrontendFrame& options){
     ImGui::GetIO().AddMouseButtonEvent(0,true);DrawFrame();
     CHECK(controls_capture_action<0&&!ControlsDirty());
     ImGui::GetIO().AddMouseButtonEvent(0,false);Settle();
-    controls_scroll=10;Settle();Click(1);CHECK(controls_draft.spin_mode==1&&ControlsDirty());
+    controls_scroll=11;Settle();Click(1);CHECK(controls_draft.spin_mode==1&&ControlsDirty());
     Click(3);CHECK(controls_capture_action==26);source('P');
     CHECK(controls_draft.spin_binding[0][0]=='P');
     footer(1);CHECK(!ControlsDirty()); // Discard restores mode and button together.
-    controls_scroll=17;Settle();
+    controls_scroll=18;Settle();
     CHECK(controls_draft.sensitivity==400);
     const auto slider=hits[1];const float slider_y=(slider.a.y+slider.b.y)*.5f;
     Move(418*output.width/640.f,slider_y);ImGui::GetIO().AddMouseButtonEvent(0,true);DrawFrame();
@@ -610,11 +633,11 @@ static void CheckQuit(const TrialFrontendFrame& main){
     auto pause=MakeList(2);Publish(pause);CheckStrip(pause.source.count);Click(pause.source.count-1);
     auto action=Take();CHECK(action.kind==UC_HF_ACTIVATE&&action.index==pause.source.count-1&&!quit_open);
 }
-static void CheckPauseConfirmation(){
+static void CheckPauseConfirmation(uint32_t callback=0x267400){
     const auto before=quit_posts;
     auto f=MakeList(2);f.list_kind=0;f.source.kind=UC_HF_DIALOG;f.source.count=2;
     f.source.owner=0x7800;f.source.selected=1;f.source.back_action=0x17;f.pause_dialog=true;
-    f.source.rows[0].callback=0x267400;f.source.rows[1].callback=0x284310;
+    f.source.rows[0].callback=callback;f.source.rows[1].callback=0x284310;
     std::strcpy(f.labels[0],"Yes");std::strcpy(f.labels[1],"No");
     std::strcpy(f.dialog_message,"You will lose your progress, are you sure?");
     CHECK(TrialFrontendSupported(f));
@@ -645,7 +668,7 @@ static void CheckPauseConfirmation(){
     FrontendAction(f,UC_HF_ACTIVATE,0);keyboard_mode=0;Publish(f);
     CHECK(hits.empty()&&!frontend_presentation.visible&&!TrialFrontendOwns(f.source.owner,UC_HF_DIALOG));EmptyAction();
     keyboard_mode=1;++f.source.epoch;Publish(f);CheckStrip(2);
-    auto invalid=f;invalid.source.rows[0].callback=0x267330;
+    auto invalid=f;invalid.source.rows[0].callback=0x267331;
     CHECK(!TrialFrontendSupported(invalid));
     invalid=f;invalid.source.source_kind=0;CHECK(!TrialFrontendSupported(invalid));
     invalid=f;invalid.dialog_message[0]=0;CHECK(!TrialFrontendSupported(invalid));
@@ -833,7 +856,7 @@ static void CheckSize(unsigned width,unsigned height){
     RightClick();action=Take();CHECK(action.kind==UC_HF_BACK);
     keyboard_mode=0;Publish(rewards);CHECK(hits.empty()&&!frontend_presentation.visible);
     keyboard_mode=1;
-    CheckControls(options);CheckLanguage(options);CheckProfilesAndName();CheckQuit(main);CheckPauseConfirmation();
+    CheckControls(options);CheckLanguage(options);CheckProfilesAndName();CheckQuit(main);CheckPauseConfirmation();CheckPauseConfirmation(0x267330);CheckPauseConfirmation(0x2672A0);
     CheckVisualHandoff(main);CheckVisualHandoff(pause);CheckVisualHandoff(options);CheckVisualHandoff(levels);
 
     // A queued Graphics request must never attach to a newly switched screen.
@@ -903,5 +926,21 @@ int main(){
     movie_progress=.5f;DrawFrame();
     CHECK(ImGui::FindWindowByName("Hold to skip movie")->Active);
     movie_progress=0;DrawFrame();CHECK(!ImGui::FindWindowByName("Hold to skip movie")->Active);
+    trial_language::active=4;
+    CHECK(std::strcmp(trial_language::Ui("Controls"),"Controles")==0);
+    CHECK(std::strcmp(trial_language::Ui("Next Firearm"),"Siguiente arma de fuego")==0);
+    CHECK(std::strcmp(trial_language::Ui("Previous Firearm"),"Arma de fuego anterior")==0);
+    CHECK(std::strcmp(trial_language::Ui("Equip or select the next available firearm."),"Equipa o selecciona la siguiente arma de fuego disponible.")==0);
+    CHECK(std::strcmp(trial_language::Ui("Equip or select the previous available firearm."),"Equipa o selecciona el arma de fuego anterior disponible.")==0);
+    CHECK(std::strcmp(trial_language::Ui("Nick Mason"),"Nick Mason")==0);
+    for(const auto size:{app::Mode{640,480},app::Mode{1920,1080},app::Mode{2560,1440}}){
+        output=size;auto page=MakeList(3);Publish(page);
+        Click(page.source.count);CHECK(PanelOpen());
+        CHECK(hits.size()==22);
+        for(const auto& hit:hits)CHECK(hit.a.x>=0&&hit.b.x<=float(output.width)+1);
+        RightClick();CHECK(!PanelOpen());EmptyAction();
+    }
+    trial_language::active=0;
+    CHECK(std::strcmp(trial_language::Ui("Controls"),"Controls")==0);
     ImGui::DestroyContext();std::puts("PASS actual menu UI + original fonts offline; no live scene or visual parity claim");
 }

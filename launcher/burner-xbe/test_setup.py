@@ -572,6 +572,164 @@ def check_asset_audit(tmp):
     expect_error(lambda: packager.audit(package, allowed), ValueError)
 
 
+def check_shader_seed(tmp):
+    package = tmp / 'seed-package'
+    seed_dir = package / 'runtime/shader-seed'
+    seed_dir.mkdir(parents=True)
+    (package / 'tools').mkdir()
+    files = {'Default.xbe': b'seed fixture executable'}
+    (package / 'tools/disc-manifest.json').write_text(json.dumps({'version': 1, 'files': {
+        name: {'size': len(content), 'sha256': digest(content)} for name, content in files.items()}}))
+    for name in worker.RUNTIME_FILES:
+        (package / 'runtime' / name).write_bytes(('seed-fixture-' + name).encode())
+    runtime = {name: worker.sha(package / 'runtime' / name) for name in worker.RUNTIME_FILES}
+    name = 'v1-0123456789abcdef.bin'
+    second = 'v1-1111111111111111.bin'
+    source = b'UC-D3D12-DXBC-1:' + b'0' * 64 + b'4:main6:vs_5_04:test'
+    def record(code=b'DXBCfixture-only', prefix=source):
+        return struct.pack('<10IQ', 0x5343564e, 1, 0x55434431, 0, 0, 1, 2, 47,
+                           len(prefix), len(code), 0) + prefix + code
+    contents = record()
+    (seed_dir / name).write_bytes(contents)
+    seed = {name: digest(contents)}
+    manifest_path = package / 'tools/runtime-manifest.json'
+    def write_info(entries=seed):
+        manifest_path.write_text(json.dumps({'version': packager.VERSION, 'files': runtime,
+                                              'shader_seed': entries}))
+    write_info()
+    worker.ROOT = package
+    iso = tmp / 'seed.iso'
+    make_iso(iso, files)
+    data = package / 'GameData'
+    with patch.dict(os.environ, {'LOCALAPPDATA': str(tmp / 'seed-isolated-appdata')}):
+        worker.import_iso(iso, data, tmp / 'seed-cancel')
+    seen = []
+    class Process:
+        def __init__(self, args, **kwargs):
+            seen.append((args, kwargs))
+            self.stderr = io.BytesIO()
+        def wait(self):
+            return 0
+    with patch.object(worker.subprocess, 'Popen', Process):
+        worker.launch(data)
+        state = data / 'xbe-runtime'
+        assert (state / 'shader-seed' / name).read_bytes() == contents
+        protected = {'shader-cache/d3d12/v1-fixture.bin': b'user-learned shader',
+                     'shader-cache/d3d12-pipelines/v1-fixture.bin': b'GPU-specific user cache',
+                     'settings.toml': b'user settings', 'hdd/save.dat': b'user progress'}
+        for relative, content in protected.items():
+            path = state / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(content)
+        def assert_protected():
+            for relative, content in protected.items():
+                assert (state / relative).read_bytes() == content
+        # Updating a previous import installs new seeds and retires only managed seed files.
+        (seed_dir / second).write_bytes(record(b'DXBCsecond'))
+        write_info({second: digest((seed_dir / second).read_bytes())})
+        (state / 'shader-seed/unrelated.txt').write_bytes(b'keep this file')
+        worker.launch(data)
+        assert not (state / 'shader-seed' / name).exists()
+        assert (state / 'shader-seed' / second).read_bytes() == (seed_dir / second).read_bytes()
+        assert (state / 'shader-seed/unrelated.txt').read_bytes() == b'keep this file'
+        assert_protected()
+        before = file_snapshot(state)
+        launches = len(seen)
+        for invalid in (None, [], 'seed', {name: '0' * 64}, {'../escape': '0' * 64},
+                        {'shader-cache/d3d12/' + name: '0' * 64}, {'v1-0123456789ABCDEF.bin': '0' * 64},
+                        {name: None}, {name: 'A' * 64}, {name + '.dll': '0' * 64},
+                        {f'v1-{i:016x}.bin': '0' * 64 for i in range(2049)}):
+            write_info(invalid)
+            expect_error(lambda: worker.launch(data), ValueError)
+            assert len(seen) == launches and file_snapshot(state) == before
+        write_info()
+        # Even a correctly hashed file must be DXBC, not a pipeline/driver blob.
+        for bad in (record(b'GPU-specific-PSO'), record(prefix=b'wrong key prefix'), b'truncated',
+                    contents + b'junk'):
+            (seed_dir / name).write_bytes(bad)
+            write_info({name: digest(bad)})
+            expect_error(lambda: worker.launch(data), ValueError)
+        (seed_dir / name).write_bytes(contents)
+        write_info()
+        original_stat = Path.lstat
+        for redirected in (seed_dir, state / 'shader-seed'):
+            def redirected_stat(path, *args, **kwargs):
+                if path == redirected:
+                    return SimpleNamespace(st_mode=stat.S_IFDIR,
+                                           st_file_attributes=stat.FILE_ATTRIBUTE_REPARSE_POINT)
+                return original_stat(path, *args, **kwargs)
+            with patch.object(Path, 'lstat', redirected_stat):
+                expect_error(lambda: worker.launch(data), ValueError)
+        with patch.object(worker.shader_seed, 'BYTE_LIMIT', len(contents) - 1):
+            expect_error(lambda: worker.launch(data), ValueError)
+        with (seed_dir / name).open('wb') as file:
+            file.seek(worker.shader_seed.FILE_LIMIT)
+            file.write(b'x')
+        expect_error(lambda: worker.launch(data), ValueError)
+        (seed_dir / name).write_bytes(contents)
+        # A failed staged copy does not publish a partial shader or erase the previous seed.
+        copy_file = shutil.copy2
+        def bad_copy(source_path, target):
+            if Path(source_path) == seed_dir / name:
+                Path(target).write_bytes(b'incomplete')
+                return target
+            return copy_file(source_path, target)
+        with patch.object(worker.shutil, 'copy2', bad_copy):
+            expect_error(lambda: worker.launch(data), ValueError)
+        assert len(seen) == launches and file_snapshot(state) == before
+        assert not list(state.rglob('.update-*'))
+        replace = os.replace
+        def failed_replace(source_path, target):
+            if Path(target) == state / 'shader-seed' / name:
+                raise OSError('fixture: shader seed publication failed')
+            return replace(source_path, target)
+        with patch.object(worker.os, 'replace', failed_replace):
+            expect_error(lambda: worker.launch(data), OSError)
+        assert len(seen) == launches and file_snapshot(state) == before
+        worker.launch(data)
+        assert_protected()
+        # A portable folder move must not depend on the previous absolute seed location.
+        moved = tmp / 'moved seed package'
+        package.rename(moved)
+        package = moved
+        seed_dir = package / 'runtime/shader-seed'
+        manifest_path = package / 'tools/runtime-manifest.json'
+        data = package / 'GameData'
+        state = data / 'xbe-runtime'
+        worker.ROOT = package
+        worker.launch(data)
+        assert (state / 'shader-seed' / name).read_bytes() == contents
+        assert_protected()
+
+    # Source manifest and shipped package both require an exact seed allowlist.
+    (seed_dir / second).unlink()
+    (seed_dir / 'manifest.json').write_text(json.dumps({'version': 1, 'files': seed}))
+    plan, identities = packager.shader_seed_sources(seed_dir)
+    assert identities == seed and plan == {'runtime/shader-seed/' + name: seed_dir / name}
+    (seed_dir / 'unlisted.bin').write_bytes(contents)
+    expect_error(lambda: packager.shader_seed_sources(seed_dir), ValueError)
+    (seed_dir / 'unlisted.bin').unlink()
+    for invalid in ({'version': True, 'files': seed}, {'version': 2, 'files': seed},
+                    {'version': 1, 'files': seed, 'extra': 1}):
+        (seed_dir / 'manifest.json').write_text(json.dumps(invalid))
+        expect_error(lambda: packager.shader_seed_sources(seed_dir), ValueError)
+    (seed_dir / 'manifest.json').unlink()
+    fixture_data = (package / 'GameData').resolve()
+    assert fixture_data.is_relative_to(tmp.resolve()) and fixture_data.name == 'GameData'
+    shutil.rmtree(fixture_data)  # This fixture's own imported data is not release payload.
+    for launcher in packager.LAUNCHERS:
+        (package / launcher).write_bytes(b'fixture launcher')
+    allowed = {p.relative_to(package).as_posix() for p in package.rglob('*') if p.is_file()} - packager.LAUNCHERS
+    assert packager.audit(package, allowed)['shader_seed_files'] == 1
+    write_info({})
+    expect_error(lambda: packager.audit(package, allowed), ValueError)
+    write_info()
+    return {'shader_seed_fresh_and_update_install_verified': True,
+            'shader_seed_preserves_learned_cache_saves_and_settings': True,
+            'shader_seed_portable_move_and_retired_files_verified': True,
+            'shader_seed_schema_paths_hashes_bounds_dxbc_and_copy_failure_verified': True}
+
+
 def check_artwork_manifest(tmp):
     directory = tmp / 'approved-artwork'
     directory.mkdir()
@@ -700,6 +858,7 @@ def main():
             result.update(check_portable(tmp))
             check_asset_audit(tmp)
             check_artwork_manifest(tmp)
+            result.update(check_shader_seed(tmp))
             result['strict_asset_allowlist_negative_cases'] = True
             result['approved_artwork_schema_hashes_crop_and_aliases_verified'] = True
             if args.package:

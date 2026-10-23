@@ -1,6 +1,6 @@
 # Source and build status
 
-The 0.06 release uses XboxXBERecomp by TGP482 for static recompilation and
+The 0.07 release uses XboxXBERecomp by TGP482 for static recompilation and
 the Direct3D 12 host runtime. Exact dependency versions are in
 `dependencies.lock.json`. The current entry point is
 `scripts/build_xbe_game_trial.py`; the root CMake project and `src/`, `native/`
@@ -11,8 +11,10 @@ and `shaders/` retain earlier development work.
 The snapshot includes the current build driver's maintained source closure,
 checked runtime transformations, regression fixtures, launcher/import code and
 dependency notices. It includes the HD UI service and rendering integration,
-crosshair/FOV controls, frontend fonts, and accepted vertex, texture, sampler
-and visibility-query changes. Edit maintained files under `scripts/`, not
+crosshair/FOV controls, frontend fonts, arm/sleeve repair, wall-depth handling,
+directional firearm selection, ragdoll contacts and renderer registration,
+Spanish host text, and accepted vertex, texture, sampler and visibility-query
+changes. Edit maintained files under `scripts/`, not
 generated copies under `build/`.
 
 Original disc assets, Xbox executables, generated title C++, extracted textures,
@@ -34,10 +36,17 @@ allowlist. Build both launchers, then run the packager's `--audit` mode and
 Python, zlib and Microsoft redistributable files; their paths need adjustment on
 another machine. Never archive the development workspace as a release.
 
+`launcher/burner-linux/` contains the separate experimental Proton entry script,
+instructions and its argument/path tests. Its package reuses the same Windows
+runtime and import worker. It is not an ELF/native Linux build. The Linux host
+must supply Steam/Proton and a Vulkan driver; neither is redistributed here.
+Linux gameplay, graphics, audio and input remain unverified.
+
 ## Full game build limitation
 
-A clean checkout does **not yet reproduce the complete game executable**. The
-driver requires an already qualified private workspace at
+A clean checkout does **not yet reproduce the complete game executable**.
+The source ZIP is an inspection/contribution snapshot, not a self-contained
+reproducible binary build. The driver requires an already qualified private workspace at
 `build/xbe-full-integration-20261014`, including scanned title configuration,
 generated title units, original generation backups, title adapters and local
 verification inputs. Compiler, Windows SDK, Python and zlib paths are also local.
@@ -54,6 +63,12 @@ heavy-build wrapper with `UCRR_XBE_RELEASE=1`; clear that environment variable
 afterwards. The driver builds the runtime and runs its registered fixtures.
 Routine tracing, capture hotkeys and diagnostic timing are compiled out in a
 release; bounded fatal-error reporting and the normal FPS display remain.
+
+The portable seed in `packaging/shader-seed/` contains hash-pinned compiler
+bytecode and its exact source identity. It is the sole cache payload permitted
+in the snapshot; GPU-specific pipeline blobs and player-learned caches remain
+excluded. `scripts/build_xbe_shader_seed.py` creates a fresh validated seed,
+and `scripts/test_build_xbe_shader_seed.py` checks its producer.
 
 Selected historical keyboard/controller, prompt-art and shader-cache helpers
 are preserved in `dependency-overrides/xboxrecomp/` against the older pinned

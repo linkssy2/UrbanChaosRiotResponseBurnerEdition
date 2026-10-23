@@ -13,6 +13,7 @@ historical builds; it is not the current D3D12 executable.
 | PC menu drawing | `scripts/xbe_trial_graphics_ui.cpp`, `xbe_menu_style.h` |
 | Menu state and original callbacks | `scripts/xbe_trial_guest_input.cpp`, `xbe_frontend_guest.inc` |
 | Rebinding | `scripts/xbe_controls_*.inc`, `xbe_controls.h` |
+| Body retention and character contacts | `scripts/prepare_xbe_ragdoll_settings.py`, `prepare_xbe_ragdoll_contacts.py` |
 | Languages | `scripts/xbe_language.cpp`, `xbe_language_ui.inc` |
 | Prompt classification and renderer handoff | `scripts/prepare_xbe_pc_prompts.py`, `prepare_xbe_prompt_handoff.py` |
 | Optional HD UI art and original texture matching | `scripts/xbe_hd_ui.cpp`, `xbe_hd_ui_filter.h`, `prepare_xbe_hd_ui.py` |
@@ -57,11 +58,30 @@ remain beside the build, never in the release ZIP.
 Use `launcher/burner-xbe/package.py` with the exact verified runtime SHA256 and a
 fresh output directory, compile both launchers with its `build.ps1`, then run the
 package audit and `test_setup.py --package`. Its explicit allowlist excludes game
-assets, saves, caches and diagnostics. Never archive the workspace as a release.
+assets, saves, learned caches and diagnostics. The hash-pinned portable shader
+seed is the only cache exception. Never archive the workspace as a release.
+
+The portable seed lives in `packaging/shader-seed`; regenerate it into a fresh
+directory with `scripts/build_xbe_shader_seed.py --cache <observed d3d12 cache>`.
+Multiple `--cache` inputs merge verified records. Run its Python fixture and the
+compiled `test_shader_cache.exe --seed-directory <seed>` before packaging.
+The package manifest pins every record; Play updates only `shader-seed` beside
+the installed game EXE, leaving the player's `shader-cache` untouched.
+Startup validates and warms exact source/entry/profile/flags/compiler identities.
+A different compiler rebuilds the seed source locally before gameplay, and later
+launches reuse that result. Never distribute `d3d12-pipelines` driver blobs.
+The seed covers observed shader variants, not every possible draw. New variants,
+driver pipeline creation and first-use texture uploads can still cause hitches.
 
 Offline tests prove their stated contracts, not a full campaign playthrough.
 Keep live menu, language/audio, gameplay and performance acceptance separate in
 the candidate's verification notes.
+
+Ragdoll contacts restore the earlier character/body admission change in the
+original pair filter. Only its ragdoll-kind rejection is removed; property,
+shape and collision-layer exclusions remain original. Default/More/Forever
+still controls body retention independently. Do not globally disable collision
+filters or change the physics solver to implement this behavior.
 
 ## HD HUD and menus
 

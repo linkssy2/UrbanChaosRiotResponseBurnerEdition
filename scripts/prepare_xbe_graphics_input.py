@@ -35,7 +35,7 @@ def prepare(source, area):
         ('// GENERATED_PUBLISH', function(source, 'TrialInputPublish')),
         ('// GENERATED_MENU_KEYS', '\n'.join(function(source, name) for name in
             ('TrialMenuKeysBegin', 'TrialMenuKeysEnd', 'TrialGameplay', 'ucrr_host_menu_mode')) + '\nvoid TrialMenuKeysReset(){menu_key_taps.Clear();}'),
-        ('// GENERATED_PAD', function(source, 'TrialInputPad')),
+        ('// GENERATED_PAD', function(source, 'TrialInputPad') + '\n' + function(source, 'TrialFirearmDirection', 'int ')),
         ('// GENERATED_CONTROL_STICK', control_stick),
     ):
         assert fixture.count(marker) == 1, marker

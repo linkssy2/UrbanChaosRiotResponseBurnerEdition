@@ -37,6 +37,7 @@ int main(){
     assert(GetTempFileNameW(folder,L"uct",0,directory));assert(DeleteFileW(directory));
     assert(CreateDirectoryW(directory,nullptr));swprintf(profile,MAX_PATH,L"%s\\xboxrecomp.ini",directory);
     auto defaults=trial_controls::Defaults();std::string error;
+    assert(defaults.previous_firearm[0]==257&&defaults.previous_firearm[1]==0);
     assert(GetFileAttributesW(profile)==INVALID_FILE_ATTRIBUTES);
     assert(trial_controls::Apply(defaults,error));
     assert(WritePrivateProfileStringW(L"Other",L"Unrelated",L"keep",profile));
@@ -47,16 +48,20 @@ int main(){
     changed.keyboard[1][1]=256;changed.controller[0][0]=4;changed.controller[3][0]=1;
     changed.deadzone[0]=12;changed.sensitivity=650;
     changed.spin_mode=1;changed.spin_binding[0][0]='J';changed.spin_binding[1][0]=10;
+    changed.previous_firearm[0]=VK_XBUTTON2;changed.previous_firearm[1]='B';
     assert(trial_controls::Apply(changed,error));
     assert(Same(changed,trial_controls::Snapshot()));
     assert(GetPrivateProfileIntW(L"KeyboardMouse",L"Binding4_0",0,profile)=='G');
     assert(GetPrivateProfileIntW(L"Controller",L"Binding0_0",0,profile)==4);
     assert(GetPrivateProfileIntW(L"Graphics",L"MouseSensitivity",0,profile)==650);
     assert(GetPrivateProfileIntW(L"Graphics",L"Resolution",0,profile)==2560);
+    assert(GetPrivateProfileIntW(L"Firearms",L"Previous0",0,profile)==VK_XBUTTON2);
+    assert(GetPrivateProfileIntW(L"Firearms",L"Previous1",0,profile)=='B');
     keyboard_defaults(&keyboard_config);controller_defaults(&controller_config);
     assert(keyboard_load(nullptr,nullptr,nullptr));assert(controller_load(nullptr,nullptr,nullptr));
     mouse_sensitivity=GetPrivateProfileIntW(L"Graphics",L"MouseSensitivity",400,profile);
     trial_controls::spin_loaded=false;
+    trial_controls::firearm_loaded=false;
     assert(Same(changed,trial_controls::Snapshot()));
     wchar_t kept[32];GetPrivateProfileStringW(L"Other",L"Unrelated",L"",kept,32,profile);assert(!wcscmp(kept,L"keep"));
     fail_replace=true;assert(!trial_controls::Apply(defaults,error)&&!error.empty());
@@ -65,7 +70,9 @@ int main(){
     assert(GetPrivateProfileIntW(L"Controller",L"Binding0_0",0,profile)==4);
     fail_replace=false;
     {auto bad=changed;bad.spin_mode=2;assert(!trial_controls::Apply(bad,error));
-     bad=changed;bad.spin_binding[0][0]=VK_ESCAPE;assert(!trial_controls::Apply(bad,error));}
+     bad=changed;bad.spin_binding[0][0]=VK_ESCAPE;assert(!trial_controls::Apply(bad,error));
+     for(unsigned source:{unsigned(VK_ESCAPE),unsigned(VK_LWIN),258u}){
+         bad=changed;bad.previous_firearm[0]=source;assert(!trial_controls::Apply(bad,error));}}
     for(unsigned bad=0;bad<6;++bad){
         auto d=defaults;
         if(bad==0)d.keyboard[0][0]=VK_ESCAPE;
@@ -95,6 +102,16 @@ int main(){
     p={};p.connected=true;p.lx=32767;trial_controls::Remap(p);assert(p.lx>=32766);
     p={};p.connected=true;p.ly=-20000;assert(trial_controls::ControllerSource(p)==20);
     p.connected=false;assert(trial_controls::ControllerSource(p)==0);
+    // Legacy Firearms bindings stay Next; a wheel claimed elsewhere is not stolen.
+    assert(WritePrivateProfileStringW(L"Firearms",nullptr,nullptr,profile));
+    keyboard_config.binding[2][0]='N';keyboard_config.binding[2][1]=257;
+    trial_controls::firearm_loaded=false;auto legacy=trial_controls::Snapshot();
+    assert(legacy.keyboard[2][0]=='N'&&legacy.keyboard[2][1]==257&&!legacy.previous_firearm[0]);
+    keyboard_config.binding[2][1]=0;trial_controls::firearm_loaded=false;
+    assert(trial_controls::Snapshot().previous_firearm[0]==257);
+    auto unbound=trial_controls::Snapshot();unbound.previous_firearm[0]=0;
+    assert(trial_controls::Apply(unbound,error));trial_controls::firearm_loaded=false;
+    assert(!trial_controls::Snapshot().previous_firearm[0]);
     WritePrivateProfileStringW(nullptr,nullptr,nullptr,profile);DeleteFileW(profile);RemoveDirectoryW(directory);
     puts("Controls: atomic save/failure, validation, defaults, source capture, analog remap and identity parity passed.");
 }

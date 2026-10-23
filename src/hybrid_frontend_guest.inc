@@ -94,8 +94,10 @@ static void hf_capture_list(uint32_t owner){
     hf_pending=s;
 }
 static void hf_capture_levels(uint32_t owner){
+    /* The parent can finish after its modal; preserve the child's capture. */
+    if(menu_special_active())return;
     memset(&hf_pending,0,sizeof(hf_pending));
-    if(menu_special_active()||!ucrr_native_frontend_enabled()||hf_eligible_owner!=owner||!hf_settled()||
+    if(!ucrr_native_frontend_enabled()||hf_eligible_owner!=owner||!hf_settled()||
        !menu_pointer_readable(owner,0x118)||MEM32(owner)!=0x4885FC)return;
     UcHybridFrontendSnapshot s={0};s.kind=UC_HF_LEVELS;s.owner=owner;
     s.count=MEM32(owner+0xEC);s.selected=MEM32(owner+0x1C);

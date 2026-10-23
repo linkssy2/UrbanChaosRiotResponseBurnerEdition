@@ -79,6 +79,43 @@ HLE_STDCALL(D3DDevice_SetBackBufferScale, 2) {
  vertex=prepare_vertex_costs(vertex,AREA,(SDK/'runtime/gpu/vertex.h').read_text())
  (AREA/'src/compat/vertex.cpp').write_text(vertex)
  d=(SDK/'runtime/gpu/d3d12.cpp').read_text()
+ # Guest depth clamping must survive both pipeline selection and caching.
+ d=once(d,'    uint32_t fill;','    uint32_t fill;\n    uint32_t depth_clip;')
+ d=once(d,'    k.fill = s.rs[kRsFillMode];','    k.fill = s.rs[kRsFillMode];\n    k.depth_clip = (SimpleState(s, kMDepthClipControl) & 0xF0u) != 0x10u;')
+ start=d.index('void D3D12Backend::FillPipelineDesc(')
+ end=d.index('\n}',start)+2
+ d=d[:start]+once(d[start:end],'d.RasterizerState.DepthClipEnable = TRUE;',
+                 'd.RasterizerState.DepthClipEnable = k.depth_clip;')+d[end:]
+ key=d[d.index('struct PsoKey {'):d.index('\n};',d.index('struct PsoKey {'))+3]
+ raster=d[d.index('void KeyRasterizer('):d.index('\n}',d.index('void KeyRasterizer('))+2]
+ fixture='''#undef NDEBUG
+#include <cassert>
+#include <cstdint>
+#include <cstring>
+#include <cstdio>
+enum { kRsCullMode, kRsFillMode, kCullCw=7, kMDepthClipControl=0x1D78 };
+enum class Topology { Triangles, Lines };
+struct State { uint32_t rs[2]{}, simple[0x800]{}; };
+struct Assembled { Topology topology=Topology::Triangles; };
+uint32_t SimpleState(const State& s,uint32_t m) { return s.simple[m>>2]; }
+'''+key+'\n'+raster+'''
+int main() {
+    State s; Assembled a; PsoKey clipped{},clamped{};
+    KeyRasterizer(s,a,clipped); assert(clipped.depth_clip==1);
+    s.simple[kMDepthClipControl>>2]=0x10;
+    KeyRasterizer(s,a,clamped); assert(clamped.depth_clip==0);
+    assert(std::memcmp(&clipped,&clamped,sizeof(clipped))!=0);
+    for(uint32_t unrelated: {0u,1u,0x100u,0x10000u}) {
+        s.simple[kMDepthClipControl>>2]=0x10|unrelated;
+        PsoKey k{}; KeyRasterizer(s,a,k); assert(k.depth_clip==0);
+        s.simple[kMDepthClipControl>>2]=unrelated;
+        KeyRasterizer(s,a,k); assert(k.depth_clip==1);
+        assert(std::memcmp(&clipped,&k,sizeof(k))==0);
+    }
+    puts("Guest depth clamp/cull transitions and distinct pipeline keys passed");
+}
+'''
+ (AREA/'src/compat/test_depth_clip.cpp').write_text('#include <initializer_list>\n'+fixture)
  d=once(d,'bool UnitTexcoords(const Assembled& a) {','''bool UnitTexcoords(const State& s, const Assembled& a) {
     // Only wrapped U/V samplers use this vertex-dependent clamp decision.
     bool wrapped = false;
@@ -107,6 +144,11 @@ HLE_STDCALL(D3DDevice_SetBackBufferScale, 2) {
  d=d[:start]+once(d[start:end],'float uv[4] = {0, 0, 1, 1};','float uv[4] = {0, 0, front.present_x, front.present_y};')+d[end:]
  from prepare_xbe_native_lighting import patch_source, prepare_shaders
  d=patch_source(d)
+ d=once(d,'#include "xbe_native_lighting.h"','#include "xbe_native_lighting.h"\n#include "xbe_wall_depth.h"')
+ bias_seam='        k.zslope = Bits(SimpleState(s, kMSlopeScale)) * (bound_ds_ ? float(bound_ds_->w) / bound_ds_->gw : 1.0f);'
+ d=once(d,bias_seam,bias_seam+'\n        k.zbias = uc_wall_depth::ReceiverBias(s.vs_handle, s.ps ? s.ps->handle : 0, k);')
+ for name in ('xbe_wall_depth.h','test_xbe_wall_depth.cpp'):
+  (AREA/'src/compat'/name).write_text((ROOT/'scripts'/name).read_text())
  prepare_shaders(SDK/'runtime/gpu/shaders.cpp', AREA/'src/compat/shaders.cpp')
  (AREA/'src/compat/xbe_native_lighting.h').write_text((ROOT/'scripts/xbe_native_lighting.h').read_text())
  (AREA/'src/compat/native_lighting_pixel_source.h').write_text((ROOT/'src/native_lighting_pixel_source.h').read_text())

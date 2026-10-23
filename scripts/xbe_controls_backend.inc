@@ -10,6 +10,38 @@
 namespace trial_controls {
 static bool spin_loaded=false;
 static unsigned spin_mode=0,spin_binding[2][2]{};
+static bool firearm_loaded=false;
+static unsigned previous_firearm[2]{};
+static void LoadFirearm(){
+    if(firearm_loaded)return;firearm_loaded=true;keyboard_init();
+    unsigned fallback=UCRR_KEYBOARD_WHEEL_DOWN;
+    // Do not steal an existing wheel assignment when upgrading a saved profile.
+    AcquireSRWLockShared(&keyboard_lock);
+    for(const auto& row:keyboard_config.binding)for(unsigned source:row)if(source==fallback)fallback=0;
+    ReleaseSRWLockShared(&keyboard_lock);
+    previous_firearm[0]=fallback;
+    wchar_t path[MAX_PATH];if(!controller_path(path))return;
+    for(unsigned slot=0;slot<2;++slot){
+        wchar_t key[32];swprintf(key,32,L"Previous%u",slot);
+        const unsigned source=GetPrivateProfileIntW(L"Firearms",key,slot?0:fallback,path);
+        previous_firearm[slot]=keyboard_valid(source)?source:0;
+    }
+}
+static bool PreviousFirearmClaims(unsigned source){
+    LoadFirearm();for(unsigned binding:previous_firearm)if(keyboard_source_matches(binding,source))return true;
+    return false;
+}
+static bool PreviousFirearmDown(bool mouse_active){
+    LoadFirearm();
+    AcquireSRWLockShared(&keyboard_wheel_lock);const unsigned wheel=keyboard_wheel_active;
+    ReleaseSRWLockShared(&keyboard_wheel_lock);
+    const bool consumed=InterlockedCompareExchange(&keyboard_consumed_click,0,0)!=0;
+    for(unsigned source:previous_firearm){
+        if(source>=UCRR_KEYBOARD_WHEEL_UP){if(mouse_active&&source==wheel)return true;}
+        else if(source&&!(consumed&&source==VK_LBUTTON)&&(!keyboard_is_mouse(source)||mouse_active)&&keyboard_key_down(source))return true;
+    }
+    return false;
+}
 static void LoadSpin(){
     if(spin_loaded)return;spin_loaded=true;wchar_t path[MAX_PATH];if(!controller_path(path))return;
     spin_mode=GetPrivateProfileIntW(L"PistolSpin",L"Mode",0,path)==1;
@@ -25,11 +57,13 @@ Draft Defaults(){
     keyboard_defaults(&keys);controller_defaults(&pad);
     std::memcpy(d.keyboard,keys.binding,sizeof(d.keyboard));
     std::memcpy(d.controller,pad.binding,sizeof(d.controller));
+    d.previous_firearm[0]=UCRR_KEYBOARD_WHEEL_DOWN;
     return d;
 }
 Draft Snapshot(){
     std::lock_guard guard(input_lock);keyboard_init();controller_init();Draft d;
-    LoadSpin();d.spin_mode=spin_mode;std::memcpy(d.spin_binding,spin_binding,sizeof(spin_binding));
+    LoadSpin();LoadFirearm();d.spin_mode=spin_mode;std::memcpy(d.spin_binding,spin_binding,sizeof(spin_binding));
+    std::memcpy(d.previous_firearm,previous_firearm,sizeof(previous_firearm));
     AcquireSRWLockShared(&keyboard_lock);AcquireSRWLockShared(&controller_lock);
     std::memcpy(d.keyboard,keyboard_config.binding,sizeof(d.keyboard));
     std::memcpy(d.controller,controller_config.binding,sizeof(d.controller));
@@ -65,6 +99,10 @@ static bool Save(const Draft& d){
         wchar_t key[32];swprintf(key,32,L"Binding%u_%u",device,slot);swprintf(value,32,L"%u",d.spin_binding[device][slot]);
         ok=ok&&WritePrivateProfileStringW(L"PistolSpin",key,value,temp);
     }
+    for(unsigned slot=0;slot<2;++slot){
+        wchar_t key[32];swprintf(key,32,L"Previous%u",slot);swprintf(value,32,L"%u",d.previous_firearm[slot]);
+        ok=ok&&WritePrivateProfileStringW(L"Firearms",key,value,temp);
+    }
     if(ok)WritePrivateProfileStringW(nullptr,nullptr,nullptr,temp);
     ok=ok&&MoveFileExW(temp,path,MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH);
     if(!ok)DeleteFileW(temp);return ok;
@@ -73,6 +111,7 @@ bool Apply(const Draft& d,std::string& error){
     error.clear();
     if(d.spin_mode>1){error="Invalid pistol spin mode.";return false;}
     for(unsigned slot=0;slot<2;++slot)if(!keyboard_valid_action(24,d.spin_binding[0][slot])||d.spin_binding[1][slot]>24){error="Invalid pistol spin binding.";return false;}
+    for(unsigned source:d.previous_firearm)if(!keyboard_valid(source)){error="That key cannot be assigned to this action.";return false;}
     for(unsigned a=0;a<25;++a)for(unsigned s=0;s<2;++s)
         if(!keyboard_valid_action(a,d.keyboard[a][s])){error="That key cannot be assigned to this action.";return false;}
     for(auto& row:d.controller)for(auto source:row)if(source>24){error="Invalid controller button.";return false;}
@@ -80,6 +119,7 @@ bool Apply(const Draft& d,std::string& error){
     std::lock_guard guard(input_lock);keyboard_init();controller_init();
     if(!Save(d)){error="Could not save controls. Your previous bindings are unchanged.";return false;}
     spin_loaded=true;spin_mode=d.spin_mode;std::memcpy(spin_binding,d.spin_binding,sizeof(spin_binding));
+    firearm_loaded=true;std::memcpy(previous_firearm,d.previous_firearm,sizeof(previous_firearm));
     AcquireSRWLockExclusive(&keyboard_lock);AcquireSRWLockExclusive(&controller_lock);
     std::memcpy(keyboard_config.binding,d.keyboard,sizeof(d.keyboard));
     std::memcpy(controller_config.binding,d.controller,sizeof(d.controller));

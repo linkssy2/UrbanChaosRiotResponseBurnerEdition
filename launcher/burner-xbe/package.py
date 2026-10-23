@@ -2,6 +2,7 @@
 from pathlib import Path
 import argparse
 import hashlib
+import importlib.util
 import json
 import re
 import shutil
@@ -10,7 +11,7 @@ import sys
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
-VERSION = '0.06'
+VERSION = '0.07'
 SDK = REPO / 'build/upstream-review-xboxxbe-20261014'
 RUNTIME_NAME = 'UrbanChaosXbeTrial.exe'
 RUNTIME_FILES = (RUNTIME_NAME, 'zlib1.dll', 'libusb-1.0.dll', 'msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll')
@@ -21,6 +22,31 @@ PYTHON_FILES = ('python.exe', 'python312.dll', 'python3.dll', 'python312.zip',
 LAUNCHERS = {'Burner Edition Setup.exe', 'Play Burner Edition.exe'}
 ARTWORK = REPO / 'artwork/hd-ui'
 ARTWORK_LIMIT = 32 * 1024 * 1024
+SHADER_SEED = REPO / 'packaging/shader-seed'
+
+
+def shader_seed_validator():
+    # This packager is also loaded by path by the source/artwork build tools.
+    spec = importlib.util.spec_from_file_location('burner_shader_seed', HERE / 'shader_seed.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def shader_seed_sources(directory):
+    validator = shader_seed_validator()
+    manifest = directory / 'manifest.json'
+    validator.unlinked(manifest.absolute())
+    if not manifest.is_file() or manifest.stat().st_size > 256 * 1024:
+        raise ValueError('Invalid bundled shader seed manifest.')
+    data = json.loads(manifest.read_text())
+    if (not isinstance(data, dict) or set(data) != {'version', 'files'} or
+            type(data['version']) is not int or data['version'] != 1):
+        raise ValueError('Invalid bundled shader seed schema.')
+    files = validator.validate(directory, data['files'])
+    if {path.name for path in directory.iterdir()} != {'manifest.json', *files}:
+        raise ValueError('Unlisted files in the shader seed directory.')
+    return {'runtime/shader-seed/' + name: directory / name for name in files}, files
 
 
 def valid_hash(value):
@@ -119,6 +145,7 @@ def sources(runtime):
         'tools/import_game.py': HERE / 'import_game.py',
         'tools/disc.py': HERE / 'disc.py',
         'tools/world_textures.py': HERE / 'world_textures.py',
+        'tools/shader_seed.py': HERE / 'shader_seed.py',
         'tools/disc-manifest.json': HERE.parent / 'burner/disc-manifest.json',
         'tools/xdvdfs.py': REPO / 'third_party/xboxrecomp/tools/xiso/xdvdfs.py',
         'runtime/' + RUNTIME_NAME: runtime,
@@ -191,14 +218,19 @@ def audit(package, allowlist, require_launchers=True):
         seen.add(name.lower())
     if {name for name in actual if name.startswith('runtime/hd-ui/')} != {'runtime/' + name for name in art}:
         raise ValueError('Unlisted restored artwork in package')
+    seed = shader_seed_validator().validate(package / 'runtime/shader-seed', info.get('shader_seed', {}))
+    if {name for name in actual if name.startswith('runtime/shader-seed/')} != {
+            'runtime/shader-seed/' + name for name in seed}:
+        raise ValueError('Unlisted shader seed in package')
     return {'version': VERSION, 'strict_allowlist': True, 'files': files,
             'disc_payload_hashes_checked': len(forbidden_hashes),
             'original_payload_files_in_package': 0,
             'restored_artwork_files': len(art),
-            'note': 'Generated runtime code, custom edition artwork and approved restored PNGs are permitted. No original disc payloads, imported assets, saves, settings, caches, logs or diagnostic executables are packaged. Live appearance is a separate check.'}
+            'shader_seed_files': len(seed),
+            'note': 'Generated runtime code, custom edition artwork, approved restored PNGs and the validated portable shader seed are permitted. No original disc payloads, imported assets, saves, settings, driver-specific pipeline caches, logs or diagnostic executables are packaged. Live appearance is a separate check.'}
 
 
-def assemble(runtime, expected_sha256, output):
+def assemble(runtime, expected_sha256, output, shader_seed=None):
     if sha(runtime) != expected_sha256:
         raise ValueError('Runtime does not match the explicitly selected release candidate')
     if output.exists():
@@ -206,6 +238,12 @@ def assemble(runtime, expected_sha256, output):
     plan = sources(runtime)
     restored, artwork = artwork_sources(ARTWORK)
     plan.update(restored)
+    seed = {}
+    if shader_seed is None and SHADER_SEED.exists():
+        shader_seed = SHADER_SEED
+    if shader_seed is not None:
+        seed_plan, seed = shader_seed_sources(shader_seed)
+        plan.update(seed_plan)
     for name, source in plan.items():
         if not source.is_file():
             raise ValueError('Missing package dependency: ' + str(source))
@@ -216,7 +254,8 @@ def assemble(runtime, expected_sha256, output):
         shutil.copy2(source, dest)
     (output / 'tools/python/python312._pth').write_text('python312.zip\n.\n..\n')
     info = {'version': VERSION, 'files': {
-        name: sha(plan['runtime/' + name]) for name in RUNTIME_FILES}, 'artwork': artwork}
+        name: sha(plan['runtime/' + name]) for name in RUNTIME_FILES}, 'artwork': artwork,
+        'shader_seed': seed}
     (output / 'tools/runtime-manifest.json').write_text(json.dumps(info, indent=2) + '\n')
     (output / 'licenses/DEPENDENCIES.txt').write_text(
         'XboxXBERecomp by TGP482: https://github.com/TGP482/XboxXBERecomp (MIT).\n'
@@ -240,6 +279,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--runtime', type=Path)
     parser.add_argument('--expected-runtime-sha256')
+    parser.add_argument('--shader-seed', type=Path, help='Validated seed directory; defaults to packaging/shader-seed when present')
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--audit', action='store_true')
     args = parser.parse_args()
@@ -251,7 +291,7 @@ def main():
     else:
         if args.runtime is None or not args.expected_runtime_sha256:
             parser.error('--runtime and --expected-runtime-sha256 are required for assembly')
-        assemble(args.runtime.resolve(), args.expected_runtime_sha256, args.output.resolve())
+        assemble(args.runtime.resolve(), args.expected_runtime_sha256, args.output.resolve(), args.shader_seed)
 
 
 if __name__ == '__main__':

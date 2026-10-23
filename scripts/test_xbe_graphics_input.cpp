@@ -22,6 +22,7 @@ namespace {
 // GENERATED_STATE
 bool test_focused=true,test_open=false;
 bool physical_keys[256]={};
+unsigned key_queries[256]={};
 unsigned capture_posts=0;
 bool conversation_down=false,conversation_enabled=false;
 bool reload_down=false,reload_enabled=false;
@@ -30,7 +31,7 @@ void TrialConversationPublish(bool down,bool enabled){conversation_down=down;con
 bool focused(){return test_focused;}
 bool TrialGraphicsOpen(){return test_open;}
 void TrialFrontendPad(uint32_t,uint8_t,uint8_t,int16_t,int16_t){}
-SHORT TestAsyncKeyState(int key){return key>0&&key<256&&physical_keys[key]?SHORT(0x8000):0;}
+SHORT TestAsyncKeyState(int key){if(key>0&&key<256){++key_queries[key];return physical_keys[key]?SHORT(0x8000):0;}return 0;}
 // GENERATED_KEY_DOWN
 int controller_path(wchar_t*){return 0;}
 BOOL TestPostMessage(HWND,UINT,WPARAM,LPARAM){++capture_posts;return TRUE;}
@@ -89,6 +90,22 @@ static input::Pad Controller(unsigned control){
 int main(){
     keyboard_init();keyboard_defaults(&keyboard_config);
     controller_init();controller_defaults(&controller_config);controller_publish();
+    // Unbound, unflagged keys require no physical polling in the release guard.
+    // Held transition keys remain blocked until a real release, even without focus.
+    ReleaseAll();test_open=true;
+    physical_keys[VK_F12]=true;TrialGraphicsInputChanged();
+    std::memset(key_queries,0,sizeof(key_queries));
+    Poll(0);assert(release_keys[VK_F12]&&key_queries[VK_F12]==1);
+    assert(key_queries[VK_F11]==0);
+    test_focused=false;physical_keys[VK_F12]=false;
+    Poll(0);assert(!release_keys[VK_F12]&&key_queries[VK_F12]==2);
+    Poll(0);assert(key_queries[VK_F12]==2&&key_queries[VK_F11]==0);
+    // All 255 transition keys are still discovered when a handoff starts.
+    physical_keys[VK_F11]=true;TrialGraphicsInputChanged();
+    assert(release_keys[VK_F11]);
+    std::memset(key_queries,0,sizeof(key_queries));
+    Poll(1);assert(key_queries[VK_F11]==0&&release_keys[VK_F11]);
+    Poll(0);assert(key_queries[VK_F11]==1&&release_keys[VK_F11]);
     ReleaseAll();menu_mode=false;captured=false;physical_keys['R']=true;
     TrialInputPublish();assert(!conversation_down&&conversation_enabled);
     physical_keys['F']=true;TrialInputPublish();assert(conversation_down&&conversation_enabled);
@@ -107,6 +124,30 @@ int main(){
     keyboard_config.binding[0][1]=256;captured=true;keyboard_wheel_record(WHEEL_DELTA);
     TrialInputPublish();assert(conversation_down);TrialInputPublish();assert(!conversation_down);
     keyboard_defaults(&keyboard_config);
+    // Independent firearm sources share the retail selection button but retain
+    // direction for its qualified cycle consumer; wheel pulses are repeatable.
+    gameplay=true;menu_mode=false;captured=true;ReleaseAll();
+    trial_controls::firearm_loaded=true;trial_controls::previous_firearm[0]=257;
+    trial_controls::previous_firearm[1]='B';
+    physical_keys['C']=true;assert(Poll(0).analog[2]==255&&TrialFirearmDirection()==1);ReleaseAll();
+    physical_keys['B']=true;assert(Poll(0).analog[2]==255&&TrialFirearmDirection()==-1);
+    assert(Poll(0).analog[2]==255&&TrialFirearmDirection()==-1);
+    physical_keys['C']=true;assert(Poll(0).analog[2]==0&&TrialFirearmDirection()==0);ReleaseAll();
+    keyboard_wheel_record(-2*WHEEL_DELTA);
+    for(unsigned pulse=0;pulse<2;++pulse){
+        TrialInputPublish();assert(Poll(0).analog[2]==255&&TrialFirearmDirection()==-1);
+        TrialInputPublish();assert(Poll(0).analog[2]==0&&TrialFirearmDirection()==0);
+    }
+    physical_keys['B']=true;test_focused=false;assert(Neutral(Poll(0))&&TrialFirearmDirection()==0);
+    test_focused=true;test_open=true;assert(Neutral(Poll(0))&&TrialFirearmDirection()==0);ReleaseAll();
+    menu_mode=true;physical_keys['B']=true;assert(Poll(0).analog[2]==0&&TrialFirearmDirection()==0);ReleaseAll();menu_mode=false;
+    input::Pad firearm_pad;firearm_pad.connected=true;firearm_pad.analog[2]=255;
+    physical_keys['B']=true;assert(Poll(0,firearm_pad).analog[2]==255&&TrialFirearmDirection()==1);ReleaseAll();
+    trial_controls::previous_firearm[0]=VK_XBUTTON2;trial_controls::previous_firearm[1]=0;
+    physical_keys[VK_XBUTTON2]=true;captured=false;assert(Poll(0).analog[2]==0);captured=true;
+    assert(Poll(0).analog[2]==255&&TrialFirearmDirection()==-1);ReleaseAll();
+    trial_controls::previous_firearm[0]=0;physical_keys[VK_XBUTTON2]=true;assert(Poll(0).analog[2]==0);ReleaseAll();
+    trial_controls::previous_firearm[0]=257;
 
     // Only Interact reaches retail A during gameplay, including rebound keys.
     gameplay=true;menu_mode=false;captured=true;ReleaseAll();

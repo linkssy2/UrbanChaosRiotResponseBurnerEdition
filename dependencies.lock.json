@@ -17,7 +17,7 @@
   "XboxXBERecomp": {
     "url": "https://github.com/TGP482/XboxXBERecomp.git",
     "commit": "c1f7d60c8728c6151bcfbb1d05e397eaf0618dc7",
-    "role": "Current 0.06 static recompiler and Direct3D12 host runtime",
+    "role": "Current 0.07 static recompiler and Direct3D12 host runtime",
     "checkout": "build/upstream-review-xboxxbe-20261014",
     "local_changes": "scripts/prepare_xbe_*.py stage reviewed overlays; the pinned SDK checkout is unmodified.",
     "entry": "scripts/build_xbe_game_trial.py",
@@ -28,7 +28,14 @@
       "SDL": "release-3.4.16"
     },
     "license": "licenses/XboxXBERecomp.txt",
-    "third_party_notices": "licenses/XboxXBERecomp-third-party.txt"
+    "third_party_notices": "licenses/XboxXBERecomp-third-party.txt",
+    "selected_backports": [
+      {
+        "commit": "1bb872b181c40de83ca2f69d9cd45b442a362d1d",
+        "scope": "Two-block ADPCM decode cache only, with local cross-mix invalidation correction.",
+        "integration": "scripts/prepare_xbe_audio_decode_cache.py"
+      }
+    ]
   },
   "libusb": {
     "version": "1.0.29",

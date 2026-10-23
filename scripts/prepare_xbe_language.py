@@ -3,6 +3,7 @@ from pathlib import Path
 import hashlib
 import re
 import struct
+import json
 
 
 def once(source,old,new):
@@ -40,8 +41,13 @@ def prepare(sdk,area):
         (0x8da07,50,'40a0a5ece2e355980bd64ec1d7b5c1f9b92b2b9d7cc721841281842037eba7eb'),
         (0x875ff,23,'03bc262e42a0fc3898abc18fff8cc2eb65cc3aad31275b7f858796549540a628')]:
         assert hashlib.sha256(read(va,size)).hexdigest()==digest,hex(va)
-    for name in ('xbe_language.h','xbe_language.cpp','xbe_spanish.h'):
+    for name in ('xbe_language.h','xbe_language.cpp','xbe_spanish.h','xbe_spanish_ui.h'):
         (area/'src/common'/name).write_text((local/name).read_text())
+    labels=json.loads((local/'spanish_pc.json').read_text(encoding='utf-8'))
+    def literal(text):
+        return '"'+''.join('\\%03o'%b for b in text.encode('utf-8'))+'"'
+    (area/'src/common/xbe_spanish_ui_data.inc').write_text(''.join(
+        '{'+literal(a)+','+literal(b)+'},\n' for a,b in labels.items()))
     files=(sdk/'runtime/kernel/files.cpp').read_text()
     files='#include "../common/xbe_language.h"\n#include "../common/xbe_spanish.h"\n'+files
     files=once(files,'    return {MatchCase(best->second, parts).string()};',

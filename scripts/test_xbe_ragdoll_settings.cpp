@@ -1,6 +1,7 @@
 // Original pool bodies and production retention hooks. Guest allocation,
 // ragdoll construction/activation, world attachment and destruction are modeled
-// boundaries; this qualifies ownership/ABI, not solver or live visual parity.
+// boundaries; renderer-list insertion/removal is modeled too. This qualifies
+// ownership/ABI and admission, not solver or live visual parity.
 #undef NDEBUG
 #include <array>
 #include <cassert>
@@ -21,11 +22,13 @@ static constexpr uint32_t kStack=0xf00000,kFs=0x600000,kLists=0x610000,kJoints=0
 static constexpr uint32_t kManager=0x630000,kWorld=0x640000,kVtable=0x650000,kBody=0x700000;
 static unsigned allocated,destroyed,attached,activated,deactivated;
 static bool fail_alloc,setup_released,clobber_host_call;
-static bool raw_object_pool,expect_trap,fail_object_alloc;
+static bool raw_object_pool,raw_object_query,expect_trap,fail_object_alloc;
 static uint32_t object_heap=0x800000;
 static std::unordered_map<uint32_t,uint32_t> object_allocations;
 static unsigned object_frees;
 static unsigned action_destroyed;
+static constexpr uint32_t kRenderer=0x6a0000,kRenderList=0x6b0000;
+static std::unordered_map<uint32_t,uint32_t> render_wrappers;
 struct Activation {uint32_t body;std::array<uint32_t,6> args;};
 static std::vector<Activation> activations;
 X86_EXTERN_FUNC(sub_002A5030);X86_EXTERN_FUNC(sub_002A5070);X86_EXTERN_FUNC(sub_002A5D50);
@@ -33,6 +36,9 @@ X86_EXTERN_FUNC(sub_002A6790);X86_EXTERN_FUNC(sub_002A6850);X86_EXTERN_FUNC(sub_
 X86_EXTERN_FUNC(sub_0029E4F0);
 X86_EXTERN_FUNC(sub_002383C0);X86_EXTERN_FUNC(sub_00238430);X86_EXTERN_FUNC(original_00238430);
 X86_EXTERN_FUNC(sub_00238440);X86_EXTERN_FUNC(sub_002384C0);X86_EXTERN_FUNC(sub_002384F0);
+X86_EXTERN_FUNC(original_002384C0);
+X86_EXTERN_FUNC(sub_00089EB0);X86_EXTERN_FUNC(sub_00089F90);X86_EXTERN_FUNC(sub_00089FF0);X86_EXTERN_FUNC(sub_0008A100);
+X86_EXTERN_FUNC(sub_00089AB0);X86_EXTERN_FUNC(sub_00089E80);X86_EXTERN_FUNC(sub_00089840);
 X86_EXTERN_FUNC(sub_002BA100);X86_EXTERN_FUNC(sub_002BA020);X86_EXTERN_FUNC(sub_002B9F40);
 X86_EXTERN_FUNC(sub_002B9130);X86_EXTERN_FUNC(sub_002B8C00);X86_EXTERN_FUNC(sub_002B9080);X86_EXTERN_FUNC(sub_002B90B0);
 X86_EXTERN_FUNC(sub_002B8650);X86_EXTERN_FUNC(sub_002B8B70);X86_EXTERN_FUNC(sub_002B8BA0);
@@ -73,6 +79,14 @@ X86_FUNC(sub_002D73A4){
     const uint32_t object=X86_MEM32(ctx.esp+4);assert(object_allocations.erase(object)==1);++object_frees;ctx.esp+=4;
 }
 X86_FUNC(sub_00011030){assert(X86_MEM32(ctx.esp+4));ctx.esp+=4;}
+X86_FUNC(sub_000958B0){
+    const uint32_t object=X86_MEM32(ctx.esp+4);
+    assert(ctx.ecx==kRenderList&&object&&X86_MEM32(ctx.esp+8)==0);
+    assert(render_wrappers.emplace(object,R32(object+4)).second);ctx.esp+=12;
+}
+X86_FUNC(sub_00095090){
+    assert(ctx.ecx==kRenderList&&render_wrappers.erase(X86_MEM32(ctx.esp+4))==1);ctx.esp+=8;
+}
 void x86_icall(X86Context& ctx,uint8_t* base,uint32_t fn){
     switch(fn){
     case 0x2d57fb:sub_002D57FB(ctx,base);break;
@@ -84,6 +98,8 @@ void x86_icall(X86Context& ctx,uint8_t* base,uint32_t fn){
     case 0x2d73a4:sub_002D73A4(ctx,base);break;
     case 0x238430:if(raw_object_pool)original_00238430(ctx,base);else sub_00238430(ctx,base);break;
     case 0x238440:sub_00238440(ctx,base);break;
+    case 0x2384c0:if(raw_object_query)original_002384C0(ctx,base);else sub_002384C0(ctx,base);break;
+    case 0x89e80:sub_00089E80(ctx,base);break;
     case 0x2b8650:sub_002B8650(ctx,base);break;
     case 0xf1000020:ctx.eax=0;ctx.esp+=4;break; // Source action needs a CombinerAction wrapper.
     case 0xf1000024:assert(X86_MEM32(ctx.esp+4)==1);++action_destroyed;ctx.esp+=8;break;
@@ -148,7 +164,7 @@ static uint32_t ObjectCall(Function f,uint32_t owner,std::initializer_list<uint3
 static constexpr uint32_t kObjectPool=0x690000,kObjectPool2=0x690100;
 static void ObjectsSetup(uint32_t mode){
     assert(extra.empty()&&object_pools.empty());memory.fill(0);object_allocations.clear();object_frees=0;
-    object_heap=0x800000;trial_graphics::mode=mode;raw_object_pool=false;fail_object_alloc=false;
+    object_heap=0x800000;trial_graphics::mode=mode;raw_object_pool=raw_object_query=false;fail_object_alloc=false;
     W32(kFs,0xffffffff);W32(0x44bf94,0x3f800000);
     W32(0x482e98,0x238430);W32(0x482e9c,0x238440);W32(0x51dc94,kObjectPool);
     W32(0x5150b0,kManager);W32(kManager,kVtable);W32(kVtable+0x80,0xf1000010);
@@ -187,8 +203,8 @@ static void ObjectPoolRegression(){
         assert(R32(kObjectPool+20)==15);
         assert(ObjectCall(sub_00238430,kObjectPool)==created[14]);
         ObjectCall(sub_00238440,kObjectPool,{created[14]},8);
-        // An unrelated instance of the same generic class keeps its original
-        // exhaustion result. Ragdoll mode must not raise particle/render caps.
+        // An unrelated instance of the generic class keeps its exhaustion
+        // result. Only the exact renderer-wrapper pool changes admission.
         ObjectCall(sub_002383C0,kObjectPool2,{0x48f4f0,0x50,1},16);trial_graphics::mode=0;
         auto p2=ObjectCall(sub_00238430,kObjectPool2);
         const auto before_query=object_allocations.size();
@@ -271,9 +287,9 @@ static void LayerRegression(){
 static void OtherPoolProfiles(){
     // Constructor bytes for each original profile are pinned by preparation.
     struct Profile{uint32_t name,stride,capacity;};
-    for(const auto p:{Profile{0x48f0d8,8,15},Profile{0x48e28c,0x80,15},
+    for(uint32_t mode:{0u,1u,2u})for(const auto p:{Profile{0x48f0d8,8,15},Profile{0x48e28c,0x80,15},
         Profile{0x48eff0,0x18,150},Profile{0x4830d4,0x140,100},Profile{0x455dd8,0x10,64}}){
-        ObjectsSetup(0);ObjectCall(sub_002384F0,kObjectPool);
+        ObjectsSetup(mode);ObjectCall(sub_002384F0,kObjectPool);
         ObjectCall(sub_002383C0,kObjectPool,{p.name,p.stride,p.capacity},16);
         std::vector<uint32_t> objects;
         for(unsigned i=0;i<p.capacity;++i){
@@ -286,6 +302,67 @@ static void OtherPoolProfiles(){
         assert(ObjectCall(sub_002384C0,kObjectPool)==1);
         for(auto object:objects)ObjectCall(sub_00238440,kObjectPool,{object},8);
         assert(R32(kObjectPool+20)==p.capacity);
+        ObjectCall(sub_002384F0,kObjectPool);assert(object_allocations.empty()&&object_pools.empty());
+    }
+}
+static void RendererSetup(uint32_t mode){
+    assert(render_wrappers.empty());ObjectsSetup(mode);ObjectCall(sub_002384F0,kObjectPool);
+    // Original3A79A0 profile; the four byte-pinned factories share this owner.
+    ObjectCall(sub_002383C0,kObjectPool,{0x455dc0,16,256},16);W32(0x519f64,kObjectPool);
+    W32(0x482ea0,0x2384c0);W32(kRenderer+0x48,kRenderList);
+    for(uint32_t table:{0x455f20u,0x455ff0u,0x455eb8u,0x4560c0u})W32(table,0x89e80);
+}
+static void QueryAbi(uint32_t owner,bool expected){
+    X86Context original{},candidate{};original.ecx=owner;original.esp=kStack;
+    original.eax=0xabcdef00;original.edx=0x1234;original.cf=original.zf=1;
+    original.xmm[6].u[2]=0x12345678;candidate=original;
+    original_002384C0(original,g_base);sub_002384C0(candidate,g_base);
+    assert(candidate.eax==uint32_t(expected));candidate.eax=original.eax;
+    assert(!std::memcmp(&original,&candidate,sizeof(original)));
+}
+static void RendererAdmissionRegression(){
+    struct Factory{Function call;uint32_t table;};
+    const Factory factories[]={{sub_00089EB0,0x455f20},{sub_00089F90,0x455ff0},
+        {sub_00089FF0,0x455eb8},{sub_0008A100,0x4560c0}};
+    for(uint32_t mode:{0u,1u,2u}){
+        RendererSetup(mode);raw_object_query=true;std::vector<uint32_t> created;
+        auto make=[&](unsigned i){
+            const auto& f=factories[i%4];const auto source=0x6c0000+i*4;
+            const auto object=ObjectCall(f.call,kRenderer,{source},8);
+            if(object){assert(R32(object)==f.table&&R32(object+4)==source);
+                assert(render_wrappers.at(object)==source);}
+            return object;
+        };
+        for(unsigned i=0;i<256;++i)created.push_back(make(i));
+        assert(render_wrappers.size()==256&&R32(kObjectPool+20)==0);
+        const auto allocated_before=object_allocations.size();
+        // Original checked factories drop all four render kinds once full.
+        for(unsigned i=256;i<260;++i)assert(!make(i));
+        assert(object_allocations.size()==allocated_before&&render_wrappers.size()==256);
+        raw_object_query=false;QueryAbi(kObjectPool,false);
+        for(unsigned i=256;i<320;++i){const auto p=make(i);assert(p);created.push_back(p);}
+        assert(render_wrappers.size()==320&&object_pools.at(kObjectPool).slots.size()==64);
+        assert(R32(kObjectPool+20)==0);
+        const auto allocated_after=object_allocations.size();
+        // Exact original unlink + deleting destructor returns overflow slots.
+        for(unsigned i=0;i<32;++i){ObjectCall(sub_00089AB0,kRenderer,{created.back()},8);created.pop_back();}
+        for(unsigned i=320;i<352;++i){const auto p=make(i);assert(p);created.push_back(p);}
+        assert(object_allocations.size()==allocated_after&&render_wrappers.size()==320);
+        // Same layout but a different owner, malformed profile, or different
+        // capacity must still report full without allocating anything.
+        W32(0x519f64,kObjectPool2);QueryAbi(kObjectPool,true);W32(0x519f64,kObjectPool);
+        for(auto field:{std::array<uint32_t,2>{0,0x482e94},std::array<uint32_t,2>{8,16},std::array<uint32_t,2>{12,256}}){
+            W32(kObjectPool+field[0],field[1]+1);QueryAbi(kObjectPool,true);W32(kObjectPool+field[0],field[1]);
+        }
+        assert(object_allocations.size()==allocated_after);
+        ObjectCall(sub_00089AB0,kRenderer,{0},8); // Original null cleanup remains safe.
+        for(auto p:created)ObjectCall(sub_00089AB0,kRenderer,{p},8);
+        assert(render_wrappers.empty()&&R32(kObjectPool+20)==256);QueryAbi(kObjectPool,false);
+        ObjectCall(sub_002384F0,kObjectPool);assert(object_allocations.empty()&&object_pools.empty());
+        // A new scene may rebuild the same pool object address.
+        RendererSetup(mode);for(unsigned i=0;i<257;++i)assert(make(i));
+        std::vector<uint32_t> remaining;for(const auto& p:render_wrappers)remaining.push_back(p.first);
+        for(auto p:remaining)ObjectCall(sub_00089AB0,kRenderer,{p},8);
         ObjectCall(sub_002384F0,kObjectPool);assert(object_allocations.empty()&&object_pools.empty());
     }
 }
@@ -329,6 +406,6 @@ int main(){
     Setup(0);W32(0x51da70,UINT32_MAX-1);assert(Acquire()==UINT32_MAX-1);assert(Acquire()==UINT32_MAX);
     assert(!Lookup(UINT32_MAX));assert(Acquire()==0&&Lookup(0));Run(sub_002A5030);
     ObjectPoolRegression();
-    LayerRegression();OtherPoolProfiles();
-    std::puts("Ragdoll retention passed: original shadow/Layer underflow witnesses use modeled heap backlinks; shared allocation-only overflow, untouched capacity queries, linked Layer/helper lifetimes, Default mode transitions, reuse, cleanup and OOM passed");
+    LayerRegression();OtherPoolProfiles();RendererAdmissionRegression();
+    std::puts("Ragdoll retention passed: original shadow/Layer underflow witnesses, renderer admission beyond256 through all four original factories, original unlink/destructor reuse, other capacity queries, all modes, cleanup and OOM passed");
 }

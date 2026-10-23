@@ -17,6 +17,14 @@ OBJECT_ENTRIES={
     0x2384f0:(38,'8ba1e43f36bb3e584810f2e25306d13703c842700e55d315b4369767081346f4'),
 }
 OBJECT_WITNESS={
+    0x3a79a0:(30,'dec3f58e923208a271920e204b2fcc39f63d14b512f4058d470f3a44d5da5b91'),
+    0x89eb0:(92,'00734eda871d4adaa0f621b2242a14ace8c5ed34b65319ee18e5d2c474f399f9'),
+    0x89f90:(92,'dd7ea198a3e670dba1b00f91aa37d002d9d431a9f99b5881b8e68a2930f7d4fa'),
+    0x89ff0:(92,'0983bb9c7a40fc459a415e0ce28b12579bbc4d5a986ec71969f8a828d75240c8'),
+    0x8a100:(92,'3b3a7f7c531b0bca6050e202d0cb5c7a4a84604cbc524bbb3aa140cb19e4692d'),
+    0x89ab0:(30,'14b591978ec6335769a172d9b629427bd7bed7dcbfe6a5ff5da86564f086acb6'),
+    0x89e80:(33,'f56e6f3f68665555c2b438c91265c145ef0ff2e9686f0f695e0955789e77b7ef'),
+    0x89840:(7,'511edc61f5cbf9624c268c7fea901dd772ffe688b1deb88798681a2bbb302a07'),
     0x2384c0:(11,'2f3f0b515d7f39773eab490d991949899d9978c2dbff8cb500e815a0cf8c69eb'),
     0x2383c0:(103,'28c08d8e4c5dd65c4420abc656d06dfef0c85f2ca209fb8f1b25a902d67ced60'),
     0x2ba100:(102,'881b2e2100245cec722b469752f9115bd6208939924577e1dd28467c6e690527'),
@@ -57,6 +65,9 @@ def prepare(area):
     for va,(size,digest) in (ENTRIES|OBJECT_ENTRIES|OBJECT_WITNESS).items():assert hashlib.sha256(image(va,size)).hexdigest()==digest,hex(va)
     name=b'Body::ManualBlobShadow\0'
     assert image(0x48f4f0,len(name))==name
+    assert image(0x455dc0,len(b'Okre::SlimlineRenderers\0'))==b'Okre::SlimlineRenderers\0'
+    for va in (0x455f20,0x455ff0,0x455eb8,0x4560c0):
+        assert image(va,4)==struct.pack('<I',0x89e80)
     assert image(0x29e4f0,9)==bytes.fromhex('a110d951008b4010c3')
     for va,data in [(0xe7953,'0f2f053cc14400'),(0x3cbd4,'8b56088b3e528bcbe86ffcffff8bf7eb02'),(0x3cc26,'3bea0f47ea85ed7456')]:
         assert image(va,len(bytes.fromhex(data)))==bytes.fromhex(data),hex(va)
@@ -68,9 +79,12 @@ def prepare(area):
         pool=once(pool,old,old+f'\tif(TrialRagdollPool(ctx,base,0x{va:x}))return;\n')
     path.write_text(pool)
     path=area/'generated/game/x86_recomp.59.cpp';objects=header(path.read_text())
-    # Undo the previous candidate's query override. Explicit particle/render
-    # exhaustion checks must retain the original fixed-capacity result.
+    # Keep the original query's register/flag/stack effects. Only the exact
+    # renderer-wrapper owner may use the existing allocation overflow path.
     objects=objects.replace('\tif(TrialRetainedObjectPool(ctx,base,0x2384c0))return;\n','')
+    query_adjust='\tctx.eax=TrialRetainedObjectPoolFull(ctx.ecx,ctx.eax!=0);\n'
+    original_query=body(objects,0x2384c0).replace(query_adjust,'')
+    objects=once(objects,'\t// 002384CA ret\n',query_adjust+'\t// 002384CA ret\n')
     original_alloc=body(objects,0x238430).replace('\tif(TrialRetainedObjectPool(ctx,base,0x238430))return;\n','')
     for va in OBJECT_ENTRIES:
         old=f'X86_FUNC(__imp__sub_{va:08X}) {{\n'
@@ -92,7 +106,10 @@ def prepare(area):
     generated=body(world,0x29e4f0).replace('__imp__sub_0029E4F0','sub_0029E4F0',1)+'\n'
     generated+='\n'.join(body(pool,va).replace(f'__imp__sub_{va:08X}',f'sub_{va:08X}',1)for va in ENTRIES)
     generated+='\n'+original_alloc.replace('__imp__sub_00238430','original_00238430',1)
+    generated+='\n'+original_query.replace('__imp__sub_002384C0','original_002384C0',1)
     generated+='\n'+'\n'.join(body(objects,va).replace(f'__imp__sub_{va:08X}',f'sub_{va:08X}',1)for va in [0x2383c0,0x2384c0,*OBJECT_ENTRIES])
+    renderers=(area/'generated/game/x86_recomp.13.cpp').read_text()
+    generated+='\n'+'\n'.join(body(renderers,va).replace(f'__imp__sub_{va:08X}',f'sub_{va:08X}',1)for va in (0x89eb0,0x89f90,0x89ff0,0x8a100,0x89ab0,0x89e80,0x89840))
     controllers=(area/'generated/game/x86_recomp.73.cpp').read_text()
     generated+='\n'+'\n'.join(body(controllers,va).replace(f'__imp__sub_{va:08X}',f'sub_{va:08X}',1)for va in (0x2ba100,0x2ba020,0x2b9f40,0x2b9130,0x2b8c00,0x2b9080,0x2b90b0,0x2b8650,0x2b8b70,0x2b8ba0))
     retire=npc[npc.index('loc_0003CC26:'):npc.index('\t// 0003CC2F nop')]

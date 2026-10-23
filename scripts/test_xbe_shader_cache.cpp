@@ -22,7 +22,6 @@ namespace app {
 static std::filesystem::path fixture_directory;
 std::filesystem::path ExeDir(){return fixture_directory;}
 }
-#include "xbe_shader_cache.cpp"
 static unsigned compile_calls=0;
 static UINT last_flags=0,last_effect_flags=0;
 static std::vector<std::string> errors;
@@ -31,11 +30,12 @@ static HRESULT CountedCompile(LPCVOID source,SIZE_T size,LPCSTR filename,const D
     ++compile_calls;last_flags=flags;last_effect_flags=effect_flags;
     return D3DCompile(source,size,filename,defines,include,entry,profile,flags,effect_flags,code,error);
 }
+#define D3DCompile CountedCompile
+#include "xbe_shader_cache.cpp"
 static void Error(const char* format,...){
     char text[2048];va_list args;va_start(args,format);std::vsnprintf(text,sizeof(text),format,args);va_end(args);
     errors.emplace_back(text);
 }
-#define D3DCompile CountedCompile
 #define LOGE(...) Error(__VA_ARGS__)
 struct {double compile=0;uint64_t shaders=0,shader_disk_hits=0;} g_perf;
 struct PerfScope{double& counter;};
@@ -108,12 +108,88 @@ static void Pipeline(ID3DBlob* vs,ID3DBlob* ps){
     uc_xbe_shader_cache::FlushWrites();
 }
 
-int main(){
+static void SeedChecks(const uc_xbe_shader_cache::Identity& identity,ID3DBlob* compiled){
+    namespace cache=uc_xbe_shader_cache;
+    const auto original_local=cache::Active(),original_seed=cache::Seed();
+    const auto root=app::fixture_directory/"seed-checks";
+    cache::Active()=cache::Store(root/"local",identity);
+    cache::Seed()=cache::Store(root/"seed",identity);
+    auto& seed=cache::Seed();auto& local=cache::Active();
+    std::string key;std::array<uint32_t,6> contract{};char path[1024];
+    CHECK(seed.Key(source,"first","vs_5_0",D3DCOMPILE_OPTIMIZATION_LEVEL1,0,key,contract));
+    CHECK(nv_shader_path(path,seed.directory.c_str(),key.c_str(),contract.data()));
+    CHECK(nv_shader_disk_save(seed.directory.c_str(),key.c_str(),contract.data(),compiled->GetBufferPointer(),compiled->GetBufferSize()));
+    unsigned before=compile_calls;uint64_t hash=0;
+    D3D12Backend direct;CHECK(Bytes(direct.Compile(source,"first","vs_5_0",hash))==Bytes(compiled)&&compile_calls==before);
+    unsigned warmed=0;cache::Warm([&](const auto&,const auto&,const auto&,ID3DBlob* code){++warmed;CHECK(Bytes(code)==Bytes(compiled));});
+    CHECK(warmed==1&&compile_calls==before);
+    const auto writable=local;{std::ofstream file(root/"blocked");file<<"not a directory";}
+    cache::Active()=cache::Store(root/"blocked"/"child",identity);CHECK(local.directory.empty());
+    D3D12Backend readonly;CHECK(Bytes(readonly.Compile(source,"first","vs_5_0",hash))==Bytes(compiled)&&compile_calls==before);
+    cache::Active()=writable;
+    // An invalid writable record still falls back to the read-only bundled shader.
+    CHECK(nv_shader_disk_save(local.directory.c_str(),key.c_str(),contract.data(),"invalid DXBC",12));
+    D3D12Backend damaged;CHECK(Bytes(damaged.Compile(source,"first","vs_5_0",hash))==Bytes(compiled)&&compile_calls==before);
+    CHECK(nv_shader_disk_save(local.directory.c_str(),key.c_str(),contract.data(),compiled->GetBufferPointer(),compiled->GetBufferSize()));
+    warmed=0;cache::Warm([&](const auto&,const auto&,const auto&,ID3DBlob*){++warmed;});CHECK(warmed==1&&compile_calls==before);
+
+    // Different compiler DLLs must rebuild the seed source with current flags before gameplay.
+    cache::Active()=cache::Store(root/"foreign-local",identity);
+    auto foreign=identity;foreign.digest[0]^=1;foreign.contract[3]^=1;
+    cache::Store foreign_seed(root/"foreign-seed",foreign);
+    CHECK(foreign_seed.Key(source,"first","vs_5_0",D3DCOMPILE_OPTIMIZATION_LEVEL1,0,key,contract));
+    CHECK(nv_shader_disk_save(foreign_seed.directory.c_str(),key.c_str(),contract.data(),compiled->GetBufferPointer(),compiled->GetBufferSize()));
+    cache::Seed()=cache::Store(root/"foreign-seed",identity,false);
+    ComPtr<ID3DBlob> missing;CHECK(!cache::Load(source,"first","vs_5_0",D3DCOMPILE_OPTIMIZATION_LEVEL1,0,&missing));
+    // A duplicate source under another compiler identity is compiled only once.
+    foreign.digest[1]^=1;foreign_seed=cache::Store(root/"foreign-seed",foreign);
+    CHECK(foreign_seed.Key(source,"first","vs_5_0",D3DCOMPILE_OPTIMIZATION_LEVEL1,0,key,contract));
+    CHECK(nv_shader_disk_save(foreign_seed.directory.c_str(),key.c_str(),contract.data(),compiled->GetBufferPointer(),compiled->GetBufferSize()));
+    // The shipped set must warm even when an old local cache fills the visitation budget.
+    for(unsigned i=0;i<2048;++i){std::ofstream file(std::filesystem::path(local.directory)/("garbage-"+std::to_string(i)+".bin"));file<<"truncated";}
+    warmed=0;cache::Warm([&](const auto&,const auto&,const auto&,ID3DBlob* code){++warmed;CHECK(Bytes(code)==Bytes(compiled));});
+    CHECK(warmed==1&&compile_calls==before+1&&last_flags==D3DCOMPILE_OPTIMIZATION_LEVEL1&&last_effect_flags==0);
+    cache::FlushWrites();
+    CHECK(cache::Load(source,"first","vs_5_0",D3DCOMPILE_OPTIMIZATION_LEVEL1,0,&missing));CHECK(Bytes(missing.Get())==Bytes(compiled));
+    warmed=0;cache::Warm([&](const auto&,const auto&,const auto&,ID3DBlob*){++warmed;});CHECK(warmed==1&&compile_calls==before+1);
+    missing.Reset();
+    CHECK(!cache::Load(source+"\n// changed shader","first","vs_5_0",D3DCOMPILE_OPTIMIZATION_LEVEL1,0,&missing));
+
+    // Malformed or checksum-valid non-DXBC seeds never trigger startup compilation.
+    cache::Active()=cache::Store(root/"invalid-local",identity);
+    cache::Seed()=cache::Store(root/"invalid-seed",identity);
+    CHECK(nv_shader_disk_save(cache::Seed().directory.c_str(),key.c_str(),contract.data(),"invalid DXBC",12));
+    warmed=0;cache::Warm([&](const auto&,const auto&,const auto&,ID3DBlob*){++warmed;});CHECK(!warmed&&compile_calls==before+1);
+    D3D12Backend fallback;CHECK(Bytes(fallback.Compile(source,"first","vs_5_0",hash))==Bytes(compiled)&&compile_calls==before+2);
+    cache::FlushWrites();
+    const auto absent=root/"absent";cache::Seed()=cache::Store(absent,identity,false);
+    CHECK(cache::Seed().directory.empty()&&!std::filesystem::exists(absent));
+    cache::Active()=original_local;cache::Seed()=original_seed;
+}
+
+int main(int argc,char** argv){
     namespace cache=uc_xbe_shader_cache;
     app::fixture_directory=std::filesystem::current_path()/
         ("shader-cache-test-"+std::to_string(GetCurrentProcessId())+"-"+std::to_string(GetTickCount64()));
     const auto identity=cache::CompilerIdentity();CHECK(identity.valid);
     CHECK(cache::CompilerIdentity().digest==identity.digest);
+    if(argc==3&&std::string(argv[1])=="--seed-directory"){
+        cache::Seed()=cache::Store(std::filesystem::path(argv[2]),identity,false);
+        CHECK(!cache::Seed().directory.empty());
+        struct Record {std::string source,entry,profile;std::vector<uint8_t> bytes;};
+        std::vector<Record> records;size_t files=0;
+        for(const auto& item:std::filesystem::directory_iterator(argv[2]))if(item.path().extension()==".bin")++files;
+        cache::Warm([&](const std::string& src,const std::string& entry,const std::string& profile,ID3DBlob* code){records.push_back({src,entry,profile,Bytes(code)});});
+        CHECK(files&&records.size()==files);cache::FlushWrites();const auto before=compile_calls;
+        for(const auto& record:records){
+            uint64_t hash=0;D3D12Backend backend;
+            CHECK(Bytes(backend.Compile(record.source,record.entry.c_str(),record.profile.c_str(),hash))==record.bytes);
+        }
+        CHECK(compile_calls==before);
+        std::printf("PASS curated seed: %zu validated shaders, %u startup recompiles, zero demand compiles, exact byte equality\n",records.size(),before);
+        std::error_code error;std::filesystem::remove_all(app::fixture_directory,error);CHECK(!error);return 0;
+    }
+    CHECK(argc==1);
     uint64_t hash=0;D3D12Backend cold;
     auto* first=cold.Compile(source,"first","vs_5_0",hash);auto bytes=Bytes(first);
     CHECK(compile_calls==1&&g_perf.shaders==1&&g_perf.shader_disk_hits==0&&errors.empty());
@@ -215,6 +291,7 @@ int main(){
     CHECK(!bad.Compile(invalid,"first","vs_5_0",hash)&&compile_calls==before+1);
     CHECK(!store.Load(invalid,"first","vs_5_0",D3DCOMPILE_OPTIMIZATION_LEVEL1,0,&missed));
     cache::FlushWrites();
+    SeedChecks(identity,vs);
     std::error_code error;std::filesystem::remove_all(app::fixture_directory,error);CHECK(!error);
-    std::puts("PASS actual Compile: disk reuse and byte equality, WARP PSO, exact source/entry/profile/flags/compiler identity, corrupt/unavailable fallback and original compile error behavior");
+    std::puts("PASS actual Compile: local/seed reuse, compiler-change startup rebuild and deduplication, byte equality, WARP PSO, exact source/entry/profile/flags/compiler identity, corrupt/unavailable fallback and original compile error behavior");
 }

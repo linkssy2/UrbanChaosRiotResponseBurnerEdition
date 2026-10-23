@@ -1,4 +1,4 @@
-Urban Chaos: Riot Response - Burner Edition 0.06
+Urban Chaos: Riot Response - Burner Edition 0.07
 
 HD HUD is still a work in progress and has known prompt/display issues.
 Turn HD UI Off to use the original HUD, which works normally.
@@ -8,18 +8,19 @@ Windows x64 PC port using XboxXBERecomp by TGP482, with native Direct3D12 render
 PC controls and menus. Original gameplay is statically recompiled from Xbox code.
 XboxXBERecomp: https://github.com/TGP482/XboxXBERecomp
 
-NEW IN 0.06
-- Mouse-friendly Profile Select, Difficulty, Mission Failed, Objectives and quit menus; original controller layouts retained.
-- Removed underlying controller-menu rows from mouse menus and their transitions.
-- Organized, scrollable Controls with separate Reload/Interact bindings and merged game/controller options.
-- Mouse sensitivity slider supports settings down to 1%.
-- Hold Enter or left-click to skip FMVs, with a bottom-right progress bar; release between videos.
-- Improved FMV pacing, menu input transitions and title-screen any-key/click support.
-- Fixed widescreen rifle scope masking and the gameplay cap above 60 FPS.
-- Pistol spin supports the original gesture or an assignable button.
-- Fixed missing blue pipe flames when HD HUD is enabled.
-- Optional HD game textures: separate ZIP, installed through Setup. Option stays unavailable until installed.
-- Optional Spanish beta support by ZARF (English voices; translation files separate).
+NEW IN 0.07 (SINCE 0.06)
+- Fixed widescreen rifle-scope edge coverage and incomplete red tint.
+- Ladder views follow your FOV; improved climbing/shield-bash arm coverage and sleeve mapping, and corrected taser-arc alignment at changed FOV.
+- Fixed invisible restart confirmations and Difficulty-menu flicker. Mission/checkpoint restart now use mouse-friendly dialogs; controller layouts remain available.
+- Fixed the reported dynamic wall-lighting flicker and restored original depth-clamp handling.
+- Added a targeted stone-ledge texture-mapping repair for original and HD textures.
+- Fixed disappearing blue pipe flames caused by exhausted renderer registrations; no texture-pack reinstall needed.
+- Added automatic shader warm-up for known shaders to reduce first-use stutters while preserving your learned cache.
+- Reduced repeated audio decoding using a selected upstream improvement and reduced unnecessary keyboard polling.
+- Added separate Next Firearm/Previous Firearm bindings and restored character collision with ragdoll bodies.
+- Added Spanish PC menus/control descriptions and launcher language selection. Additional game-text translations use the updated optional Spanish pack; English voices remain.
+- Separate experimental Linux package runs this Windows build through Proton; it is not a native Linux port and has not been gameplay-tested on Linux.
+
 INSTALL
 1. Extract the entire ZIP to a writable folder (not Program Files or inside ZIP).
 2. Run Burner Edition Setup.exe and choose your supported original Xbox ISO.
@@ -35,8 +36,19 @@ matching original UI textures when HD UI is enabled; other UI art is prepared
 locally from your game. Missing or invalid restored images keep the source art.
 Keep the entire runtime folder, including hd-ui, with the launcher. The launcher
 verifies the bundled files and asks you to re-extract the ZIP if it is damaged.
+The bundled shader seed is installed automatically on Play, including when
+updating an existing GameData folder. It prepares known shaders before gameplay
+and keeps your learned shader cache. It contains no GPU-specific driver cache.
+On a different Windows shader compiler, first startup may take longer while
+the seed is compiled locally. Previously unseen shaders and other first-use
+work can still cause pauses; the seed does not cover every scene in the game.
 
 SETTINGS AND SAVES
+Controls has separate Next Firearm and Previous Firearm keyboard/mouse bindings.
+Next keeps your existing Firearms assignment. Previous defaults to Wheel Down
+unless that input is already assigned in your saved profile; both are editable.
+Character collision with ragdoll bodies is restored. Ragdoll amount controls
+body retention independently: Default, More or Forever.
 Settings: GameData\xbe-runtime\settings.toml
 Saves: GameData\xbe-runtime\hdd
 Imported assets: GameData\installed\game_files
@@ -52,7 +64,8 @@ The launcher has an Open Saves button.
 Choose the original game language in Options > Language, then restart the game.
 The supported disc supplies English, French, Italian and German. Spanish is not
 present in this disc's text/voice banks, regardless of some ISO filenames.
-Custom PC settings and controls descriptions remain in English.
+PC settings and control descriptions also support Spanish when the optional
+Spanish pack is installed and selected (see below).
 
 NOTES
 Switch 2 USB support is experimental: the native SDL USB driver and libusb DLL
@@ -76,7 +89,14 @@ Then start the game and enable Graphics > HD game textures > Apply.
 The option is grayed out when the pack is not installed or is incomplete.
 The pack stays in portable GameData and is separate from HD HUD and menus.
 HD textures use more video memory. Original textures remain available with Off.
+The 0.06 HD game texture pack remains compatible; its artwork has not changed.
 HD game texture artwork: xXthe.RockoXx; converted from the PS2 HD texture pack.
+
+KNOWN ISSUES
+HD HUD still has prompt/display issues; the original HUD remains available.
+The intermittent missing injured officer in Angel Heights remains under investigation.
+The targeted stone-ledge mapping repair still needs confirmation at the reporter's exact wall.
+Spanish additions need community review. The experimental Linux package is unverified in gameplay.
 
 CREDITS
 XboxXBERecomp: TGP482. Earlier xboxrecomp work and retained helpers: sp00nz.
@@ -87,6 +107,9 @@ locally by the user.
 Optional community Spanish text
 The ZARF beta translation is supported as a separately converted local pack in
 GameData/xbe-runtime/translations/es-zarf. Choose Espanol (ZARF beta) in
-Options > Language, Apply, then restart. English voices and untranslated text
-are retained. PC-specific menus remain English. No translated game archives
-are included in the base package.
+Options > Language, Apply, then restart. You can also select the game language
+in Burner Edition Setup before pressing PLAY. Spanish requires the optional pack.
+The updated pack fills remaining English messages and the PC menus and control
+descriptions support Spanish. Existing ZARF translations and English voices are
+retained. Additional translations still need community review. No translated
+game archives are included in the base package.

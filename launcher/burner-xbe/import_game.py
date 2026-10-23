@@ -10,6 +10,8 @@ import stat
 import subprocess
 import sys
 import uuid
+import tomllib
+import shader_seed
 
 from disc import Disc, XisoError, BLOCK, sha, supported_hash, progress, check_cancel, safe_name
 
@@ -194,7 +196,7 @@ def import_iso(iso_path, data, cancel):
         check_cancel(cancel)
         (stage / 'installed.json').write_text(json.dumps({
             'version': 1, 'disc_manifest': sha(ROOT / 'tools/disc-manifest.json'),
-            'files': len(required), 'importer': 'burner-xbe-0.06'}))
+            'files': len(required), 'importer': 'burner-xbe-0.07'}))
         staged_runtime = stage_legacy_state(data, stage, cancel)
         publish_import(data, stage, staged_runtime, cancel)
         progress('Ready to play', 100)
@@ -260,10 +262,56 @@ def runtime_files():
                 not (ROOT / 'runtime' / name).is_file() or sha(ROOT / 'runtime' / name) != digest):
             raise ValueError('The release runtime is incomplete or damaged. Extract the entire ZIP again.')
     artwork_files(info)
+    shader_seed.validate(ROOT / 'runtime/shader-seed', info.get('shader_seed', {}))
     return info
 
 
-def launch(data):
+def language_settings(data, selected=None):
+    """Read/write only the portable language key; preserve every other setting."""
+    runtime=Path(data)/'xbe-runtime'
+    config=runtime/'settings.toml'
+    unlinked_path(config)
+    text=config.read_text(encoding='utf-8') if config.exists() else ''
+    settings=tomllib.loads(text)
+    current=settings.get('language',0)
+    if type(current) is not int or current not in range(5): current=0
+    pack=runtime/'translations/es-zarf'
+    available=False
+    if (pack/'manifest.txt').is_file():
+        unlinked_path(pack/'manifest.txt')
+        rows=(pack/'manifest.txt').read_text().splitlines()
+        names=set()
+        for row in rows:
+            fields=row.split()
+            if len(fields)!=2 or not re.fullmatch(r'[0-9]{1,2}-01\.ent',fields[0]) or not fields[1].isdigit():break
+            name,size=fields[0],int(fields[1]);path=pack/name
+            unlinked_path(path)
+            if name in names or not 200<=size<=64*1024*1024 or not path.is_file() or path.stat().st_size!=size:break
+            names.add(name)
+        else: available=len(names)==27
+    if selected is not None:
+        if type(selected) is not int or selected not in range(5):raise ValueError('Invalid language selection.')
+        if selected==4 and not available:raise ValueError('Install the ZARF Spanish pack before selecting Spanish.')
+        # Insert a root key before any TOML table; never change a similarly named table key.
+        lines=text.splitlines(keepends=True);end=next((i for i,s in enumerate(lines) if s.lstrip().startswith('[')),len(lines))
+        matches=[i for i in range(end) if re.match(r'\s*language\s*=',lines[i])]
+        if len(matches)>1:raise ValueError('Duplicate language setting.')
+        if matches:lines[matches[0]]='language = '+str(selected)+'\n'
+        else:lines.insert(0,'language = '+str(selected)+'\n')
+        updated=''.join(lines)
+        check=tomllib.loads(updated)
+        assert check==dict(settings,language=selected)
+        runtime.mkdir(parents=True,exist_ok=True)
+        temp=runtime/('.language-'+uuid.uuid4().hex)
+        try:
+            temp.write_text(updated,encoding='utf-8');os.replace(temp,config)
+        finally:
+            if temp.exists():temp.unlink()
+        current=selected
+    return {'language':current,'spanish_available':available}
+
+
+def launch(data, language=None):
     """Keep new runtime settings/hdd separate; diagnostic environment never leaks in."""
     unlinked_path(data)
     if not ready(data):
@@ -274,7 +322,17 @@ def launch(data):
     if linked(runtime) or runtime.resolve().parent != data:
         raise ValueError('The runtime directory must stay inside the game data folder.')
     runtime.mkdir(parents=True, exist_ok=True)
-    files = {**info['files'], **info.get('artwork', {})}
+    seed = info.get('shader_seed', {})
+    files = {**info['files'], **info.get('artwork', {}),
+             **{'shader-seed/' + name: digest for name, digest in seed.items()}}
+    seed_directory = runtime / 'shader-seed'
+    unlinked_path(seed_directory)
+    obsolete_seed = [path for path in seed_directory.glob('v1-*.bin')
+                     if shader_seed.filename(path.name) and path.name not in seed]
+    for path in obsolete_seed:
+        unlinked_path(path)
+        if not path.is_file():
+            raise ValueError('Invalid managed shader seed entry.')
     # Validate every destination before copying any part of an update.
     for name in files:
         dest = runtime / name
@@ -294,6 +352,10 @@ def launch(data):
         finally:
             if temp.exists():
                 temp.unlink()
+    # Retire only the managed seed; never erase the player's learned shader cache.
+    for path in obsolete_seed:
+        path.unlink()
+    if language is not None:language_settings(data,language)
     env = {k: v for k, v in os.environ.items()
            if not k.upper().startswith(('UCRR_', 'XBE_', 'XBOX_LOG_'))}
     env['UCRR_GAME_ASSETS'] = str(data / 'installed/game_files')
@@ -320,11 +382,12 @@ def launch(data):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('action', choices=['import', 'status', 'launch', 'textures'])
+    parser.add_argument('action', choices=['import', 'status', 'launch', 'textures', 'language'])
     parser.add_argument('--data', type=Path, default=ROOT / 'GameData')
     parser.add_argument('--iso', type=Path)
     parser.add_argument('--pack', type=Path)
     parser.add_argument('--cancel', type=Path)
+    parser.add_argument('--language', type=int, choices=range(5))
     args = parser.parse_args()
     try:
         if args.action == 'import':
@@ -338,8 +401,10 @@ def main():
             install(args.pack, args.data, args.cancel)
         elif args.action == 'status':
             return 0 if ready(args.data) else 2
+        elif args.action == 'language':
+            print(json.dumps(language_settings(args.data, args.language)))
         else:
-            launch(args.data)
+            launch(args.data,args.language)
         return 0
     except Exception as error:
         progress(str(error), 0)

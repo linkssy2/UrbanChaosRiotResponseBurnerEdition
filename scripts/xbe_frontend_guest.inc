@@ -119,13 +119,13 @@ static bool FrontendDeleteParent(){
         FrontendDeleteDialog(frontend_delete.dialog);
 }
 static bool FrontendPauseDialog(uint32_t owner){
-    // 2677C2 -> 263520 -> 265D9E/258DF0: only the pause Quit warning.
+    // Pause restart/checkpoint/quit rows share 263520 -> 265D9E/258DF0.
     // Its No and Back both return through the original 284310 callback.
     return menu_manager&&hf_pause_manager==menu_manager&&
         menu_pointer_readable(menu_manager,0x15)&&MEM32(menu_manager+4)==menu_screen&&
         menu_dialog_valid(owner)&&MEM32(owner+4)==0x473368&&MEM32(owner+0xC)==2&&
         MEM32(owner+0x10)==0x48573C&&MEM32(owner+0x14)==0x485750&&
-        MEM32(owner+0x30)==0x267400&&MEM32(owner+0x34)==0x284310&&
+        TrialFrontendPauseTitle(MEM32(owner+0x30))&&MEM32(owner+0x34)==0x284310&&
         MEM32(owner+0x50)==0x284310;
 }
 static bool FrontendDifficultyDialog(uint32_t owner){
@@ -322,6 +322,8 @@ static void FrontendListEnter(){
 }
 thread_local uint32_t TrialFrontendProfileDrawOwner=0;
 bool TrialFrontendHideListSprites(){
+    // Modal children share the parent's draw scope; only their own accepted replacement may hide them.
+    if(dialog_running)return false;
     // Incoming/outgoing lists can draw before host ownership changes. Hide their
     // submissions throughout mouse mode; the parent backdrop is outside this scope.
     return xbox_KeyboardMode()&&((menu_owner&&GraphicsMenuKind(menu_owner))||

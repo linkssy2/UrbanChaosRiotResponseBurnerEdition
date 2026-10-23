@@ -19,6 +19,13 @@ void TrialPlayerCameraCreated(const X86Context&,const uint8_t*);
 float TrialCameraTarget(const X86Context&,const uint8_t*);
 // BAC10's draw-local first-person projection, before the original publication.
 void TrialWeaponProjection(const X86Context&,uint8_t*);
+void TrialLadderHands(const X86Context&,const uint8_t*);
+struct TrialTaserVertices {
+    uint8_t* base_;uint32_t vertices_=0,count_=0;
+    float camera_[16]{},scale_[2]{1,1};
+    TrialTaserVertices(const X86Context&,uint8_t*);
+    ~TrialTaserVertices();
+};
 void TrialScopeBorders(X86Context&,uint8_t*);
 struct TrialHudLayoutScope {
     TrialHudLayoutScope* previous_;float scale_=1;
@@ -27,7 +34,7 @@ struct TrialHudLayoutScope {
 };
 void TrialHudLayout(const X86Context&,uint8_t*);
 uint32_t TrialHudCenterBits();
-// OPITEMS brackets already use the camera's projected viewport coordinates.
+// Projected brackets and the scope tint already use viewport coordinates.
 struct TrialProjectedHudScope {
     TrialHudLayoutScope* previous_;
     TrialProjectedHudScope(const X86Context&,const uint8_t*);

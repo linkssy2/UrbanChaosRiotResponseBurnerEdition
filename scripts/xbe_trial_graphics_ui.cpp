@@ -17,6 +17,7 @@
 #include "xbe_pc_prompts.h"
 #include "xbe_controls.h"
 #include "xbe_language.h"
+#include "xbe_spanish_ui.h"
 #include "xbe_controls_capture.h"
 #include "third_party/xboxrecomp/include/host_controller.h"
 
@@ -133,12 +134,14 @@ struct MenuCanvas {
     ImVec2 Point(float x,float y)const{return {view->Pos.x+x*sx,view->Pos.y+y*sy};}
     ImFont* Font(bool title=false)const{return TrialFrontendFontForUi(title&&title_font?title_font:body_font?body_font:ImGui::GetFont());}
     float Width(const char* text,float height,bool title=false)const{
+        text=trial_language::Ui(text);
         return Font(title)->CalcTextSizeA(height*sy,100000,0,text).x/sx;
     }
     void Rect(float x,float y,float w,float h,ImU32 color){draw->AddRectFilled(Point(x,y),Point(x+w,y+h),color);}
     void Line(float x,float y,float w,ImU32 color=frame_color){draw->AddLine(Point(x,y),Point(x+w,y),color,std::max(1.f,sy));}
-    void Text(const char* text,float x,float y,float height,ImU32 color=white,float max_width=0,bool title=false){
-        if(max_width>0)height*=std::min(1.f,max_width/std::max(1.f,Width(text,height,title)));
+    void Text(const char* text,float x,float y,float height,ImU32 color=white,float max_width=0,bool title=false,bool translate=true){
+        if(translate)text=trial_language::Ui(text);
+        if(max_width>0)height*=std::min(1.f,max_width/std::max(1.f,Font(title)->CalcTextSizeA(height*sy,100000,0,text).x/sx));
         const auto p=Point(x,y);const float px=height*sy;
         draw->AddText(Font(title),px,{p.x+sy,p.y+sy},IM_COL32(0,0,0,210),text);
         draw->AddText(Font(title),px,p,color,text);
@@ -286,7 +289,7 @@ void ConfirmationUi(const TrialFrontendFrame& f,const ImGuiViewport* view,bool i
     const unsigned events=interactive?frontend_events.exchange(0):0;
     const bool confirm=TakeNativeConfirm(ready);
     BeginMenu("Original confirmation",view);MenuCanvas c(view);
-    c.SettingsFrame(f.pause_dialog,f.pause_dialog?"QUIT MISSION":"DELETE PROFILE");
+    c.SettingsFrame(f.pause_dialog,f.pause_dialog?TrialFrontendPauseTitle(f.source.rows[0].callback):"DELETE PROFILE");
     if(f.pause_dialog)c.Text(f.dialog_message,56,115,16,white,528);
     else{
         c.Rect(3,73,634,306,IM_COL32(0,0,0,255));
@@ -405,7 +408,7 @@ void FrontendUi(const TrialFrontendFrame& f,const ImGuiViewport* view,bool inter
             if(canvas.Hit("profile",50,y,320,27))activate(i);
             if(ImGui::IsItemHovered()&&PointerMoved())choose(i);
             if(profile_slot==i)canvas.Selection(50,y,320,27);
-            canvas.Text(f.labels[i],61,y+6,15,src.rows[i].enabled?white:muted,298);
+            canvas.Text(f.labels[i],61,y+6,15,src.rows[i].enabled?white:muted,298,false,false);
             ImGui::EndDisabled();ImGui::PopID();
         }
         canvas.Text("Select a profile to continue, or choose an empty slot to create one.",61,340,11,muted,300);
@@ -602,7 +605,7 @@ void SettingChoice(MenuCanvas& c,const char* label,T& value,const T(&values)[N],
 // Sliders share the menu's row hit target and controller/key navigation.
 void SettingSlider(MenuCanvas& c,const char* label,uint32_t& value,int low,int high,int increment,
                    const char* suffix,unsigned index,unsigned& focus,int key_delta,float top,float step=16){
-    char text[32];std::snprintf(text,sizeof(text),"%u%s",value,suffix);
+    char text[32];std::snprintf(text,sizeof(text),"%u%s",value,trial_language::Ui(suffix));
     const int delta=SettingRow(c,label,text,index,focus,key_delta,step,top);
     const float grab_x=(ImGui::GetIO().MouseClickedPos[0].x-c.view->Pos.x)/c.sx;
     const bool track_grab=grab_x>=410&&grab_x<=548;

@@ -86,9 +86,16 @@ float TrialRagdollSeconds(){const auto mode=Mode();return mode==2?std::numeric_l
 bool TrialRagdollKeepUnseen(float seconds){const auto mode=Mode();return mode==2||(mode==1&&seconds<=120.f);}
 uint32_t TrialRagdollRetireCount(uint32_t original,uint32_t dead){const auto mode=Mode();return mode==2?0:mode==1?(dead>32?dead-32:0):original;}
 
+bool TrialRetainedObjectPoolFull(uint32_t owner,bool full){
+    // A dropped renderer registration is never retried; its wrappers can use
+    // the existing overflow allocator without raising particle emission caps.
+    return full&&!(owner==R32(0x519f64)&&Span(owner,28)&&
+        R32(owner)==0x482e94&&R32(owner+8)==16&&R32(owner+12)==256);
+}
+
 bool TrialRetainedObjectPool(X86Context& ctx,uint8_t* base,uint32_t entry){
-    // A checked factory still observes the original capacity. Only an actual
-    // unchecked allocation at zero needs overflow storage instead of array[-1].
+    // Fullness policy stays in the original query; allocation alone owns and
+    // reuses overflow storage instead of reading the free-list's array[-1].
     if(entry==0x2384c0)return false;
     std::lock_guard<std::recursive_mutex> lock(object_pool_lock);
     const uint32_t owner=ctx.ecx;

@@ -19,15 +19,34 @@ static constexpr unsigned view=0x71000,model=0x72000;
 static std::vector<std::array<float,16>> projections;
 static unsigned model_draws;
 static std::vector<std::array<float,5>> scope_borders;
+X86_FUNC(sub_000656D0);
+X86_FUNC(sub_000731E0);
+static bool retail_borders=false;
+static std::vector<std::array<float,5>> queued_borders;
 namespace kernel {
 uint32_t CallGuest(X86Context& c,uint32_t target,const uint32_t* p,size_t count){
     assert(target==0x656d0&&count==3);
     scope_borders.push_back({Real(memory.data(),p[0]),Real(memory.data(),p[0]+4),
         Real(memory.data(),p[1]),Real(memory.data(),p[1]+4),float(Word(memory.data(),p[2])>>24)});
-    c.eax=0xbad;c.esp-=40;return 0;
+    if(retail_borders){
+        const X86Context saved=c;
+        for(size_t i=count;i;--i){c.esp-=4;W(memory.data(),c.esp,p[i-1]);}
+        c.esp-=4;W(memory.data(),c.esp,0);sub_000656D0(c,memory.data());c=saved;
+    }else{c.eax=0xbad;c.esp-=40;}
+    return 0;
 }
 }
 void x86_icall(X86Context& c,uint8_t* b,uint32_t target){
+    if(target==0x731e0){sub_000731E0(c,b);return;}
+    if(target==0x701004){c.eax=42;c.esp+=8;return;} // Untextured material lookup.
+    if(target==0x701005){c.eax=0x6a200;c.esp+=4;return;} // Sprite queue.
+    if(target==0x701006){
+        TrialHudQuadScope quad(c,b);
+        const auto a=Word(b,c.esp+4),z=Word(b,c.esp+8);
+        queued_borders.push_back({Real(b,a),Real(b,a+4),Real(b,z),Real(b,z+4),float(Word(b,c.esp+12)>>24)});
+        c.esp+=36;return;
+    }
+    if(target==0x701003){c.esp+=8;return;} // Scope's child mask renderer.
     if(target==0x701001||target==0x701002){
         assert(c.ecx==0x76000);x87_push(c,target==0x701001?640.0:480.0);c.esp+=4;return;
     }
@@ -51,6 +70,80 @@ X86_FUNC(sub_000BAFB0){++model_draws;ctx.esp+=12;}
 X86_FUNC(sub_0008BD60){assert(ctx.ecx==0x770d0);ctx.eax=0x76000;ctx.esp+=4;}
 // GENERATED_MODEL_OPERATION
 // GENERATED_POINT_PROJECTION
+// GENERATED_TASER_DRAW
+X86_FUNC(sub_000BE210){ctx.eax=0x69000;ctx.esp+=4;}
+X86_FUNC(sub_000658C0);
+bool TrialFrontendHideListSprites(){return false;}
+X86_FUNC(sub_0022B210){ctx.eax=0x6a300;ctx.esp+=4;}
+X86_FUNC(sub_002E0E00){ctx.eax=0x6a300;ctx.esp+=4;}
+X86_FUNC(sub_002A7B50){ctx.eax=ctx.ecx;ctx.esp+=12;}
+X86_FUNC(sub_002D666E){double value;std::memcpy(&value,base+ctx.esp+4,8);x87_push(ctx,std::floor(value));ctx.esp+=4;}
+// GENERATED_RECT_QUEUE
+// GENERATED_RECT_ROUND
+// GENERATED_RECT_DRAW
+// GENERATED_FULLSCREEN_RECT
+// GENERATED_SCOPE_TINT
+// GENERATED_SCOPE_COLOR
+// GENERATED_SCOPE_DRAW
+// GENERATED_DESCRIPTOR_COPY
+// GENERATED_HUD_INSET
+
+static void CheckScopeDraw(uint8_t* b){
+    const unsigned owner=0x68000,descriptor=0x68100,player=0x68200,tree=0x68800;
+    W(b,owner,0x4530bc);W(b,owner+4,player);W(b,owner+8,tree);
+    W(b,tree,tree+16);W(b,tree+24,0x701003);W(b,player+0x35c,1);
+    Put(b,0x44bf94,1);Put(b,0x4505cc,255);Put(b,player+0x4dc,0);
+    for(unsigned i=0;i<4;++i){Put(b,descriptor+16+i*4,1);Put(b,0x690d0+i*4,1);}
+    // Live scope uses 30% for the fullscreen dimmer, not for its opaque mask.
+    Put(b,0x690dc,.3f);
+    Put(b,descriptor,0);Put(b,descriptor+4,0);Put(b,descriptor+8,640/.75f);Put(b,descriptor+12,480);
+    X86Context c{};c.ecx=owner;c.esp=0x70000;W(b,c.esp+4,descriptor);
+    scope_borders.clear();
+    W(b,0x5150b0,0x6a000);W(b,0x6a000,0x6a100);W(b,0x6a1b4,0x701004);
+    W(b,0x6a148,0x701005);W(b,0x6a200,0x6a210);W(b,0x6a214,0x701006);
+    Put(b,0x44c1f8,.5f);Put(b,0x4523d4,640);Put(b,0x4523d0,480);
+    retail_borders=true;queued_borders.clear();
+    TrialHudLayoutScope h(c,b);h.scale_=.75f;
+    sub_000731E0(c,b);
+    assert(c.esp==0x70008);
+    assert(scope_borders.size()==2);
+    assert(queued_borders.size()==3);
+    assert(queued_borders[0][0]==-.5f&&queued_borders[0][2]==639.5f);
+    assert(queued_borders[1][4]==255&&queued_borders[2][4]==255);
+    assert(queued_borders[1][0]==-.5f&&queued_borders[2][2]>639);
+    // The retail safe-area container passes an inset descriptor to its child.
+    const unsigned inset=0x6b000;
+    W(b,0x4530bc+8,0x731e0);W(b,inset+8,owner);
+    Put(b,inset+12,48);Put(b,inset+16,48);Put(b,inset+20,36);Put(b,inset+24,36);
+    unsigned cases=0;
+    for(unsigned fov:{53u,90u})for(unsigned weapon:{100u,150u})for(unsigned reticle:{50u,100u})
+        for(float dim:{.3f,1.f})for(float zoom_fade:{0.f,.5f,1.f})
+        for(float fade:{0.f,.5f,1.f})for(float margin:{0.f,48.f}){
+        trial_graphics::fov=fov;trial_graphics::weapon_percent=weapon;trial_graphics::reticle_percent=reticle;
+        Put(b,inset+12,margin);Put(b,inset+16,margin);Put(b,player+0x4dc,zoom_fade);
+        Put(b,0x690dc,dim);Put(b,descriptor+28,1-fade);
+        c.ecx=inset;c.esp=0x70000;W(b,c.esp+4,descriptor);
+        scope_borders.clear();queued_borders.clear();sub_0007C1E0(c,b);
+        assert(scope_borders.size()==(fade==1?0:2)&&queued_borders.size()==scope_borders.size()+1);
+        assert(queued_borders[0][0]==-.5f&&queued_borders[0][2]==639.5f);
+        if(fade!=1){
+            assert(queued_borders[1][0]==-.5f&&queued_borders[2][2]>=639.5f);
+            assert(queued_borders[1][4]==(fade==0?255:128));
+            assert(queued_borders[1][2]==79&&queued_borders[2][0]==559);
+        }
+        assert(c.esp==0x70008);++cases;
+    }
+    Put(b,player+0x4dc,0);Put(b,descriptor+28,1);
+    for(bool off_center:{false,true}){
+        h.scale_=off_center?.75f:1.f;Put(b,inset+12,off_center?47.f:48.f);Put(b,inset+16,48);
+        c.ecx=inset;c.esp=0x70000;W(b,c.esp+4,descriptor);
+        scope_borders.clear();queued_borders.clear();sub_0007C1E0(c,b);
+        assert(scope_borders.empty()&&queued_borders.size()==1);
+        assert(queued_borders[0][0]==-.5f&&queued_borders[0][2]==639.5f);
+    }
+    std::printf("PASS %u retail inset/scope/rectangle draw cases; fades, reported FOV/reticle settings, 4:3/off-center exclusions\n",cases);
+    retail_borders=false;
+}
 
 static void CheckProjectedHud(uint8_t* b){
     const unsigned owner=0x78000,point=0x78100,matrix=0x78200,screen=0x78300;
@@ -115,7 +208,7 @@ static void CheckWeaponProjection(uint8_t* b){
     const uint32_t destinations[]={0xbae4a,0xbaedb,0xbae9d,0xbaecc,0xbaeaa,0xbaebb,0xbae66};
     std::memcpy(b+0xbaf54,destinations,sizeof(destinations));
     unsigned checks=0;
-    for(float aspect:{4.f/3,16.f/9})for(float degrees:{38.f,48.f,53.f})
+    for(bool climbing:{false,true})for(float aspect:{4.f/3,16.f/9})for(float degrees:{38.f,48.f,53.f})
         for(unsigned percent=50;percent<=150;++percent)for(unsigned op=0;op<7;++op){
             trial_graphics::weapon_percent=percent;
             // Independent world FOV: changing it must never enter this path.
@@ -123,6 +216,11 @@ static void CheckWeaponProjection(uint8_t* b){
             const float y=1.f/std::tan(degrees*float(3.14159265358979323846/360));
             std::array<float,16> alternate{y/aspect,0,0,0,0,y,0,0,0,0,1.0005f,1,0,0,-25.0125f,0};
             std::array<float,16> world{1,0,0,0,0,2,0,0,0,0,1.0005f,1,0,0,-25.0125f,0};
+            world[5]=1.f/std::tan(trial_graphics::fov*float(3.14159265358979323846/360));
+            world[0]=world[5]/aspect;
+            Put(b,model+0x110,climbing?0.f:.1f);Put(b,model+0x114,climbing?1.f:.15f);
+            X86Context ladder{};ladder.esi=0x79000;ladder.eax=model;
+            W(b,ladder.esi+0x170,climbing?11:0);TrialLadderHands(ladder,b);
             std::memcpy(b+view+0xd0,world.data(),64);std::memcpy(b+view+0x110,alternate.data(),64);
             std::array<uint8_t,0x118> model_before;std::memcpy(model_before.data(),b+model,model_before.size());
             X86Context c{};c.ecx=model;c.esp=0x80000;c.esi=11;c.edi=12;c.ebx=13;c.ebp=14;
@@ -131,8 +229,11 @@ static void CheckWeaponProjection(uint8_t* b){
             assert(c.esp==0x80008&&c.esi==11&&c.edi==12&&c.ebx==13&&c.ebp==14);
             assert(model_draws==(op==1?0:1)&&projections.size()==2);
             auto expected=alternate;
-            expected[0]*=100.f/percent;expected[5]*=100.f/percent;
-            for(unsigned row=0;row<4;++row)expected[row*4+2]=alternate[row*4+3]*.1f+alternate[row*4+2]*(.15f-.1f);
+            if(climbing){expected[0]=world[0];expected[5]=world[5];}
+            else{
+                expected[0]*=100.f/percent;expected[5]*=100.f/percent;
+                for(unsigned row=0;row<4;++row)expected[row*4+2]=alternate[row*4+3]*.1f+alternate[row*4+2]*(.15f-.1f);
+            }
             for(unsigned i=0;i<16;++i)assert(std::fabs(projections[0][i]-expected[i])<.00001f);
             assert(!std::memcmp(projections[1].data(),world.data(),64));
             assert(!std::memcmp(b+view+0xd0,world.data(),64)&&!std::memcmp(b+view+0x110,alternate.data(),64));
@@ -150,6 +251,11 @@ static void CheckWeaponProjection(uint8_t* b){
         assert(!std::memcmp(before.data(),b+matrix,64));
     };
     std::memcpy(b+matrix,matrix_data.data(),64);
+    // Leaving the ladder must immediately stop matching the retained arm model.
+    trial_graphics::weapon_percent=150;W(b,0x79000+0x170,0);unchanged();
+    W(b,0x79000+0x170,11);W(b,model,0x453160);unchanged();W(b,model,0x457880);
+    X86Context reset{};TrialLadderHands(reset,b);unchanged();
+    Put(b,model+0x110,.1f);Put(b,model+0x114,.15f);
     for(unsigned percent:{0u,49u,100u,151u,0xffffffffu}){trial_graphics::weapon_percent=percent;unchanged();}
     trial_graphics::weapon_percent=150;
     for(unsigned flags:{0u,0x80u,0x100u}){W(b,model+0x60,flags);unchanged();}W(b,model+0x60,0x180);
@@ -169,6 +275,55 @@ static void CheckWeaponProjection(uint8_t* b){
     TrialWeaponProjection(c,b);assert(_mm_getcsr()==0xffc0);_mm_setcsr(csr);
     assert(Real(b,matrix)==1.f*(100.f/150)&&Real(b,matrix+20)==2.f*(100.f/150));
     std::printf("PASS %u original BAC10 weapon projections: original/zoomed framing, all draw operations, depth/aspect and world restoration\n",checks);
+}
+static void CheckTaser(uint8_t* b){
+    constexpr uint32_t owner=0x40000,beam=0x42000,camera=0x43000,output=0x44000;
+    player=owner;W(b,owner+0x4fc,1);
+    for(unsigned i=0;i<3;++i)W(b,owner+0x814+i*4,101+i);
+    W(b,beam,0x470058);const uint32_t ribbon=beam+0x80;
+    for(unsigned i=0;i<21;++i){
+        Put(b,ribbon+0x38+i*12,float(i+1));Put(b,ribbon+0x3c+i*12,2);Put(b,ribbon+0x40+i*12,100);
+        Put(b,ribbon+0x134+i*12,1);Put(b,ribbon+0x138+i*12,0);Put(b,ribbon+0x13c+i*12,0);
+    }
+    Put(b,ribbon+0x234,1);Put(b,ribbon+0x240,21);Put(b,ribbon+0x254,1);
+    Put(b,0x4700b8,.05f);Put(b,0x453424,1);Put(b,0x44bf94,1);Put(b,0x44c1f8,.5f);
+    auto draw=[&]{
+        X86Context c{};c.ecx=ribbon;c.esp=0x80000;W(b,c.esp,0);
+        const uint32_t args[]={0,40,camera,output,0x45000,0x46000};
+        std::memcpy(b+c.esp+4,args,sizeof(args));sub_00175820(c,b);assert(c.esp==0x8001c);
+        std::array<float,360> result;std::memcpy(result.data(),b+output,sizeof(result));return result;
+    };
+    unsigned cases=0;
+    for(float angle:{0.f,.7f,1.5f})for(unsigned fov:{40u,53u,70u,90u})for(unsigned percent:{50u,100u,150u}){
+        const float cs=std::cos(angle),sn=std::sin(angle);
+        const float cam[]={cs,0,-sn,0,0,1,0,0,sn,0,cs,0,3,4,5,1};std::memcpy(b+camera,cam,64);
+        W(b,beam+0x54,101);weapon_effect_scale=0;auto original=draw();
+        X86Context c{};c.esi=model;c.edi=view;c.ecx=view;c.esp=0x80000;
+        W(b,model,0x457880);W(b,model+0x60,0x180);Put(b,model+0x110,.1f);Put(b,model+0x114,.15f);
+        W(b,view,0x456d88);W(b,c.esp,c.esp+0x54);
+        const float wy=1.f/std::tan(fov*float(3.14159265358979323846/360));
+        const float gy=1.f/std::tan(53*float(3.14159265358979323846/360));
+        Put(b,view+0xd0,wy*.75f);Put(b,view+0xe4,wy);
+        std::memset(b+c.esp+0x54,0,64);Put(b,c.esp+0x54,gy*.75f);Put(b,c.esp+0x68,gy);
+        trial_graphics::weapon_percent=percent;TrialWeaponProjection(c,b);
+        const float ratio=gy*(100.f/percent)/wy;
+        for(unsigned id:{101u,102u,103u,104u}){
+            W(b,beam+0x54,id);std::array<uint8_t,0x300> before;std::memcpy(before.data(),b+beam,before.size());
+            auto corrected=draw();assert(!std::memcmp(before.data(),b+beam,before.size()));
+            for(unsigned i=0;i<120;++i){
+                float old_view[3]{},new_view[3]{};
+                for(unsigned row=0;row<3;++row)for(unsigned j=0;j<3;++j){
+                    old_view[row]+=(original[i*3+j]-cam[12+j])*cam[row*4+j];
+                    new_view[row]+=(corrected[i*3+j]-cam[12+j])*cam[row*4+j];
+                }
+                for(unsigned j=0;j<3;++j)assert(std::abs(new_view[j]-old_view[j]*(id<104&&j<2?ratio:1.f))<.0002f);
+            }
+            ++cases;
+        }
+        W(b,owner+0x4fc,2);W(b,beam+0x54,101);assert(draw()==original);W(b,owner+0x4fc,1);
+    }
+    player=0;weapon_effect_scale=0;
+    std::printf("PASS %u original taser ribbon draws: camera/weapon FOV alignment, rotated cameras, foreign effects and simulation unchanged\n",cases);
 }
 int main(){
     auto*b=kernel::memory.data();X86Context c{};c.esi=0x20000;c.eax=17;c.ecx=0x30000;c.esp=0x40000;
@@ -281,16 +436,20 @@ int main(){
     }
     assert(!hud&&!reticle);
     CheckWeaponProjection(b);
+    CheckTaser(b);
     CheckProjectedHud(b);
+    CheckScopeDraw(b);scope_borders.clear();
     {
         TrialHudLayoutScope h(c,b);h.scale_=.75f;c.esi=0x68000;c.edi=0x68100;c.esp=0x70000;
         W(b,c.esi,0x4530bc);Put(b,c.edi,0);Put(b,c.edi+4,0);Put(b,c.edi+8,640/.75f);Put(b,c.edi+12,480);
-        Put(b,c.esp+28,.5f);const X86Context saved=c;TrialScopeBorders(c,b);
+        Put(b,c.edi+28,.5f);Put(b,c.esp+28,.3f);const X86Context saved=c;TrialScopeBorders(c,b);
         assert(!std::memcmp(&saved,&c,sizeof(c))&&scope_borders.size()==2);
         assert(scope_borders[0][0]==0&&std::abs(scope_borders[0][2]-106.6667f)<.01f&&scope_borders[0][4]==128);
-        assert(std::abs(scope_borders[1][0]-746.6667f)<.01f&&scope_borders[1][2]==640/.75f);
+        assert(std::abs(scope_borders[1][0]-746.6667f)<.01f&&scope_borders[1][2]==std::ceil(640/.75f));
         h.scale_=1;TrialScopeBorders(c,b);assert(scope_borders.size()==2);
-        h.scale_=.75f;Put(b,c.esp+28,0);TrialScopeBorders(c,b);assert(scope_borders.size()==2);
+        h.scale_=.75f;Put(b,c.edi+28,0);TrialScopeBorders(c,b);assert(scope_borders.size()==2);
     }
     std::printf("PASS player FOV/zoom, HUD aspect/anchors; %u reticle size/center/restoration cases, scope/menu/invalid exclusions\n",reticle_checks);
 }
+
+

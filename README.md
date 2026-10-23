@@ -1,37 +1,47 @@
-# Urban Chaos: Riot Response â€” Burner Edition
+# Urban Chaos: Riot Response - Burner Edition
 
-**PC port Â· 0.06 Â· Windows x64 release**
+**PC port - 0.07**
 
-An unofficial PC port powered by [XboxXBERecomp by TGP482](https://github.com/TGP482/XboxXBERecomp), with native Direct3D 12 rendering and statically recompiled original Xbox gameplay. Earlier Burner Edition work and retained helpers use [xboxrecomp by sp00nz](https://github.com/sp00nznet/xboxrecomp).
+An unofficial PC port powered by [XboxXBERecomp by TGP482](https://github.com/TGP482/XboxXBERecomp), with Direct3D 12 rendering and statically recompiled original Xbox gameplay. Earlier Burner Edition work and retained helpers use [xboxrecomp by sp00nz](https://github.com/sp00nznet/xboxrecomp).
 
-## New in 0.06
+## Changes since 0.06
 
-- More mouse-friendly menus, scrollable Controls, separate Reload/Interact bindings and a lower mouse sensitivity slider.
-- Improved FMV pacing and hold-to-skip confirmation, widescreen scope masking, higher FPS limits and configurable pistol spin.
-- Fixed blue pipe flames with HD HUD enabled. Optional HD game textures by **xXthe.RockoXx** are a separate download installed through Setup.
-- Optional Spanish beta translation support by **ZARF**; English voices, translation files separate.
+- Corrected widescreen rifle-scope borders and red tint, ladder and weapon-effect FOV alignment, and extended first-person sleeves with matching fabric mapping.
+- Corrected the reported wall-lighting flicker and added mouse-friendly mission/checkpoint restart confirmations.
+- Added separate Next Firearm and Previous Firearm bindings and restored character collision with ragdoll bodies.
+- Included a portable shader seed to reduce known first-use shader stalls, plus focused audio/input work reductions.
+- Expanded Spanish text and PC-menu coverage, with language selection in Setup. The optional ZARF translation pack is still required; voices remain in English.
+- Fixed a separate renderer-registration exhaustion case that could hide active blue pipe flames with HD options enabled.
 
-**HD HUD still has known prompt/display issues. The original HUD works normally with HD UI Off.**
+See [the release change list](docs/CHANGES-0.07.md) for the complete scope and remaining reports.
 
-See [all fixes and additions since 0.05](docs/CHANGES-0.06.md).
+**HD HUD still has known prompt/display issues. Turn HD HUD and menus Off to use the original HUD.**
 
-## Install
+## Install and update
 
-1. Extract the entire matching **0.06 Windows x64 ZIP**.
+1. Extract the entire matching Windows x64 ZIP to a writable folder.
 2. Run **Burner Edition Setup.exe** and select your supported original Xbox ISO or XISO.
 3. After import, use **Play Burner Edition.exe** to launch directly.
 
-Requires Windows 10/11 x64 and a Direct3D 12-capable GPU. No original game executable, ISO, extracted UI art, videos or saves are included. Original textures, fonts, levels and audio still come from your disc. This release includes newly restored HD replacement artwork and the existing custom Burner Edition cover/icon; see `artwork/README.md`.
+Windows requires Windows 10/11 x64 and a Direct3D 12-capable GPU. No original game executable, ISO, extracted UI art, videos or saves are included. Original textures, fonts, levels and audio still come from your disc. Newly restored HD replacement artwork and the existing custom Burner Edition cover/icon are included; see `artwork/README.md`.
 
-Settings and saves live in `GameData\xbe-runtime` (profiles inside `hdd`). For updates, copy your existing `GameData` beside the new launchers. On the first ISO import, compatible XBE saves, settings and cache from `%LOCALAPPDATA%\UrbanChaosBurnerEdition` are copied without changing the old installation. Existing portable data takes priority. Play never falls back to AppData. Pre-XBE saves stay separate. Setup includes **Open Saves**. Extract to a writable folder; the original ISO is unnecessary after import.
+Settings and saves live in `GameData/xbe-runtime` (profiles inside `hdd`). To update, extract into a new folder and copy your existing `GameData` beside the new launchers. Keep a backup before removing the older installation. Existing portable data takes priority over first-import migration from the earlier AppData installation. Play does not fall back to AppData. Pre-XBE saves remain separate. Setup includes **Open Saves**. The original ISO is unnecessary after successful import.
 
-Choose the supplied original language in **Options â†’ Language**, then restart: English, French, Italian or German. Spanish is available through the optional community beta by ZARF, with English voices; translation files are separate. Custom PC setting descriptions remain in English.
+The supplied original language banks are English, French, Italian and German. Select a language in Setup or **Options > Language**, then restart. Spanish requires the separately converted community pack by **ZARF**. Supplemental messages, PC menus and control descriptions support Spanish; the additions still need community review.
 
-Dynamic scenery lighting, character lighting, effects and retained ragdolls can still cause slowdowns. Routine release diagnostics are disabled; failed launches can leave a bounded error report. Switch 2 USB support remains experimental and untested on hardware; Bluetooth is unsupported.
+The bundled shader seed prepares observed shader variants before gameplay and preserves the player's learned cache. It contains no GPU-driver pipeline cache. A different shader compiler rebuilds those records locally; new shader variants and other first-use work can still cause hitches.
+
+## Experimental Linux package
+
+The separate Linux package runs the same Windows executable through user-supplied Steam/Proton. It is not a native Linux port. Its `burner.sh` supports ISO import, optional HD texture installation, language selection and Play without the Windows setup window. See [the Linux instructions](launcher/burner-linux/README-linux.txt). Linux gameplay, rendering, FMVs, audio and controllers remain unverified; the command tests only check dispatch, quoting, path handling and failure propagation.
 
 ## Optional HD game textures
 
-Download the separate **0.06 HD Game Textures ZIP**. In **Burner Edition Setup**, choose **Install HD Texture Pack** and select the ZIP without extracting it. Restart the game, enable **HD game textures** in Graphics, and Apply. The option is unavailable until installed. This pack replaces game textures only; HD HUD is a separate setting. Credit: **xXthe.RockoXx**, original PS2 U.C.riot.v.1.2.HD.textures pack, converted for this port.
+The HD game texture pack is a **separate download**. In Setup, choose **Install HD Texture Pack** and select its ZIP without extracting it. Restart the game, enable **HD game textures** in Graphics, and Apply. The option is unavailable until a valid pack is installed. This replaces game textures only; HD HUD is a separate setting. Credit: **xXthe.RockoXx**, original PS2 U.C.riot.v.1.2.HD.textures pack, converted for this port.
+
+## Verification limits
+
+The missing injured officer in Angel Heights remains an unresolved report. The targeted HD wall-ledge repair has offline checks, but the reporter's exact location was unavailable for visual confirmation. Performance depends on settings, GPU and scene; no campaign-wide fixed frame rate is promised. Switch 2 USB support remains experimental and untested on hardware; Bluetooth is unsupported. Routine release diagnostics are disabled; failed launches can leave a bounded error report.
 
 ## Development
 
