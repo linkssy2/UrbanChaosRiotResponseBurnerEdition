@@ -1,6 +1,8 @@
 # Urban Chaos: Riot Response - Burner Edition
 
-**PC port - 0.07**
+**Windows release: 0.07 · Linux compatibility test/patch: 0.07.5**
+
+Linux users: download [0.07.5](https://github.com/linkssy2/UrbanChaosRiotResponseBurnerEdition/releases/tag/v0.07.5) and follow the [Steam setup instructions](launcher/burner-linux/README-linux.txt). This revision corrects Wine shader parsing and refreshes the shader seed. See [changes and testing limits](docs/CHANGES-0.07.5.md).
 
 An unofficial PC port powered by [XboxXBERecomp by TGP482](https://github.com/TGP482/XboxXBERecomp), with Direct3D 12 rendering and statically recompiled original Xbox gameplay. Earlier Burner Edition work and retained helpers use [xboxrecomp by sp00nz](https://github.com/sp00nznet/xboxrecomp).
 
@@ -35,7 +37,7 @@ The bundled shader seed prepares observed shader variants before gameplay and pr
 
 ## Experimental Linux package
 
-The separate Linux package runs the same Windows executable through user-supplied Steam/Proton. It is not a native Linux port. Its `burner.sh` supports ISO import, optional HD texture installation, language selection and Play without the Windows setup window. See [the Linux instructions](launcher/burner-linux/README-linux.txt). Linux gameplay, rendering, FMVs, audio and controllers remain unverified; the command tests only check dispatch, quoting, path handling and failure propagation.
+The separate Linux package runs the same Windows executable through user-supplied Steam/Proton. It is not a native Linux port. Use the recommended Steam setup for import and Play. The direct `burner.sh` wrapper is an advanced alternative and does not set up the Steam Linux Runtime container. See [the Linux instructions](launcher/burner-linux/README-linux.txt). Linux gameplay, rendering, FMVs, audio and controllers remain unverified; the command tests only check dispatch, quoting, path handling and failure propagation.
 
 ## Optional HD game textures
 

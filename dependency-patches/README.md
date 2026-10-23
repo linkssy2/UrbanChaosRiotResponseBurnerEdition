@@ -20,3 +20,5 @@ snapshot; generated game output and original disc art are excluded.
 runtime work. Current preparation reuses selected keyboard/controller,
 procedural prompt and shader-cache helpers from those overrides. Read
 `docs/BUILDING.md` for the remaining private generated-input requirement.
+
+The 0.07.5 Linux compatibility revision replaces Microsoft infinity literals with exact IEEE bit casts in the private shader preparation. See `scripts/test_xbe_shader_infinity.py` and `docs/LINUX-SHADER-COMPATIBILITY.md`. The SDK pin and shader cache validation are unchanged.

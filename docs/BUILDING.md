@@ -90,3 +90,7 @@ acceptance are separate. This is not a clean Windows VM qualification, an
 independent source-only rebuild, or an exhaustive campaign/language playthrough.
 HD UI has known prompt/display issues; the original HUD remains available with
 HD UI Off. Offline coverage does not establish complete live visual acceptance.
+
+## Linux-only 0.07.5 packaging
+
+This revision uses the same shared Windows runtime through Proton. The global Windows package version remains 0.07; the Linux archive, README and staged runtime-manifest version are labeled 0.07.5. Build the maintained source normally, use the current packaging/shader-seed directory as an exact set, and include launcher/burner-linux instructions and burner.sh (mode 0755). Do not merge old seed filenames. No extra compiler DLL is shipped. Existing saved data and installed HD textures remain compatible.

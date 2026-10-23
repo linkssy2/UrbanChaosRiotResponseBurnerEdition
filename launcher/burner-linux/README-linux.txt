@@ -1,120 +1,135 @@
 Urban Chaos: Riot Response - Burner Edition
 EXPERIMENTAL LINUX / PROTON PACKAGE
 
-This package runs the same Windows x64 game through Proton. It is not a native
-Linux executable. Linux gameplay, rendering, audio, FMVs and controllers have
-not yet been verified on Linux hardware. Please treat this as a testing build.
+This runs the Windows x64 game through Proton. Linux gameplay, rendering, audio,
+FMVs and controllers still need hardware testing; this is not a native port.
 
-REQUIREMENTS
-- Linux x86-64, Bash, Steam, and Proton Experimental installed through Steam.
-- A Vulkan-capable GPU and working Vulkan drivers supported by your Proton
-  version. Proton translates Direct3D 12 through vkd3d-proton.
-- Your supported original Xbox ISO, or an existing portable GameData folder.
-- A writable extracted folder on a Linux filesystem. Do not run inside an
-  archive. The complete runtime, tools and licenses folders must stay together.
+SET UP THROUGH STEAM (RECOMMENDED)
+Use Steam for both setup and play so it supplies Proton's Linux runtime.
+You need Linux x86-64, Steam with Proton Experimental installed, working Vulkan
+drivers for your GPU, and your supported original Xbox ISO or portable GameData.
+On Steam Deck, do the setup in Desktop Mode.
 
-No Proton, Wine, drivers or game-disc content are downloaded or installed by
-our launcher. Proton manages its own compatibility prefix in .proton beside
-burner.sh. The Windows .NET setup window is not required for these commands.
+1. Extract the complete Linux archive to a writable folder. Keep tools, runtime
+   and licenses together. Do not run from inside the archive.
+2. If you already imported the game, COPY your GameData folder into this folder
+   and skip step 5. Keep a backup of the original.
+   Otherwise, place your ISO in this folder and name it game.iso. Both supported
+   full-disc ISO and extracted XISO layouts are accepted; renaming does not
+   change the disc layout or make an unsupported disc compatible.
+3. In Steam, choose Games > Add a Non-Steam Game > Browse. Select the extracted
+   tools/python/python.exe (show all files if necessary), then add it. Rename
+   the shortcut to Urban Chaos - Burner Edition.
+4. Open that shortcut's Properties. Set Start In to the extracted package folder
+   containing tools and runtime, enclosed in double quotes. Under Compatibility,
+   enable "Force the use of a specific Steam Play compatibility tool" and choose
+   Proton Experimental. Keep this same shortcut for setup and play.
+5. For the first import, set Launch Options to this exact line:
 
-FIRST SETUP
-Extract the Linux archive. Open a terminal in that extracted folder, then run:
+   -B "tools/import_game.py" import --iso "game.iso" --cancel ".cancel-import"
 
-  ./burner.sh import "/absolute/path/to/your game.iso"
-  ./burner.sh play
+   Press Play and wait for Steam to return to Play. This import command has no
+   graphical setup window and can take several minutes. A successful import
+   creates GameData/installed/installed.json. If that file is missing, see
+   IF SETUP OR PLAY FAILS below; do not proceed as though import succeeded.
+6. Set Launch Options to the normal play command:
 
-Both the verified full-disc ISO and extracted .xiso.iso layouts are accepted.
-The same import validation as the Windows release is used. Import and texture
-installation print progress messages. Ctrl+C interrupts the running command.
-If your extraction tool lost the executable permission, use:
+   -B "tools/import_game.py" launch
 
-  bash burner.sh import "/absolute/path/to/your game.iso"
-  bash burner.sh play
+   Press Play. Keep these launch options for future runs. The first launch can
+   take longer while it prepares game files and known shaders. The ISO is no
+   longer required after a successful import.
 
-OPTIONS
-Install the separate HD game texture download without extracting that ZIP:
+Steam/Flatpak must have access to the extracted folder and its files. This path
+uses the bundled Python worker; the Windows .NET setup window is not required.
+Our package does not install Proton, Wine or GPU drivers. Keep launching through
+the worker above so runtime updates and bundled translations are applied.
 
-  ./burner.sh textures "/absolute/path/to/HD-Game-Textures.zip"
+OPTIONAL HD GAME TEXTURES
+Place the separate HD texture ZIP in the extracted package folder and name it
+HD-Game-Textures.zip. Do not extract it. Temporarily use these Launch Options:
 
-Then enable Graphics > HD game textures in the game. HD HUD is bundled; it is
-separate from the optional game texture pack and still has known prompt issues.
+  -B "tools/import_game.py" textures --pack "HD-Game-Textures.zip" --cancel ".cancel-textures"
 
-Select a language before playing, or display the current selection:
+Press Play and wait for Steam to return to Play, then restore the normal play
+command from step 6. In the game, enable Graphics > HD game textures > Apply.
+If the option remains gray, installation did not complete; use the failure
+instructions below with the texture command. The same HD ZIP works on Windows
+and Linux. HD HUD is bundled separately and still has known prompt issues.
 
-  ./burner.sh language english
-  ./burner.sh language spanish
-  ./burner.sh language
+LANGUAGE
+Choose Options > Language in the game, then restart. To select Spanish before
+playing, temporarily use these Launch Options and press Play once:
 
-Supported names: english, french, italian, german, spanish. Spanish text data
-from ZARF and supplemental translations are bundled in this package. The first
-Play after import or upgrade prepares the translated files automatically from
-your imported game; selecting Spanish with the language command also prepares
-them. No separate Spanish download is needed. Voices remain in English.
-Changing the language preserves other settings. Restart after changes.
+  -B "tools/import_game.py" language --language 4
 
-Check whether the original game data has been imported:
+Restore the normal play command afterward. Values are 0 English, 1 French,
+2 Italian, 3 German and 4 Spanish. Changing language keeps your other settings.
+ZARF's Spanish text and supplemental translations are included in this package.
+The first Play after import or upgrade prepares them from your imported game;
+the Spanish language command also prepares them. No separate Spanish download
+is needed. Voices remain in English when using Spanish.
 
-  ./burner.sh status
+IF SETUP OR PLAY FAILS
+For a black screen with audio or an FPS counter, record which of those appears.
+To collect a Proton log, temporarily replace the normal Launch Options with:
 
-A successful status exits with 0; missing/incompatible game data exits with 2.
-It does not start the game. For all commands and configuration help:
+  PROTON_LOG=1 %command% -B "tools/import_game.py" launch
 
-  ./burner.sh --help
+Reproduce the problem, then close the game. Open your Linux home folder and find
+the newest steam-*.log file (the * is the shortcut's numeric ID). Proton writes
+logs there by default; if you set PROTON_LOG_DIR yourself, check that folder.
+For an import or HD-pack failure, instead put PROTON_LOG=1 %command% before that
+command's existing -B arguments, run it once, and collect the same log.
 
-PROTON LOCATION
-The launcher looks for Steam in the usual desktop and Flatpak locations, then
-uses steamapps/common/Proton - Experimental/proton. If Proton is in another
-Steam library or you want to test another installed version:
+Send the log, exact error text, release version, Linux distribution, GPU/driver,
+Proton version and the step that failed. Include GameData/last-error.txt if it
+exists. Restore the normal Launch Options after collecting the log. Logging is
+optional troubleshooting, not a required setting or a rendering fix.
 
-  BURNER_PROTON="/path/to/Proton/proton" ./burner.sh play
+UPDATES AND SAVES
+Extract the new release and COPY your GameData folder beside tools and runtime.
+Keep a backup. Update the existing Steam shortcut's Target and Start In paths
+if the package moved. The next Play updates the runtime, restored UI, shader
+seed and bundled Spanish text without replacing saves, settings or HD textures.
 
-For a nonstandard Steam installation, also provide its client folder:
-
-  BURNER_STEAM="/path/to/Steam" BURNER_PROTON="/path/to/Proton/proton" ./burner.sh play
-
-These direct commands depend on the host libraries required by your Proton
-installation. If Proton reports missing Linux libraries, use the Steam launch
-method below so Steam supplies its compatibility runtime. No Windows DLL
-overrides, graphics workarounds or lower-fidelity settings are forced.
-
-STEAM LAUNCH METHOD
-Add tools/python/python.exe as a Non-Steam Game. In its Properties:
-1. Set Start In to this extracted package folder.
-2. Set Launch Options to: -B "tools/import_game.py" launch
-3. In Compatibility, force Proton Experimental.
-4. Start the shortcut. Keep using this same shortcut for the same Proton prefix.
-
-For first import through that shortcut, temporarily change Launch Options to:
-  -B "tools/import_game.py" import --iso "Z:\home\YOUR_USER\game.iso" --cancel ".cancel-import"
-Replace the example ISO path with the location of your own ISO. Restore the
-launch options from step 2 after import. For the separate HD pack use:
-  -B "tools/import_game.py" textures --pack "Z:\home\YOUR_USER\HD-Game-Textures.zip" --cancel ".cancel-textures"
-Steam sandbox/Flatpak users must allow access to the package and input files.
-This Steam method uses Steam's prefix; the shell method uses the local .proton
-prefix. Both use the same GameData folder for game saves and settings.
-
-UPDATES AND PORTABILITY
-Copy your GameData folder beside burner.sh in the new release; keep a backup.
-The verified runtime, restored UI and portable shader seed are updated on Play.
-The refreshed 0.07 package also includes the previously omitted Spanish text
-data. Replace the release files while keeping GameData, or copy GameData into
-a fresh extraction. The next Play or explicit Spanish language selection
-prepares it locally without replacing saves, other settings or HD textures.
-The same optional HD texture ZIP works with Windows and this Proton package.
 Saves: GameData/xbe-runtime/hdd
 Settings: GameData/xbe-runtime/settings.toml
 Game content: GameData/installed/game_files
-Never delete GameData to troubleshoot a Proton prefix. No cache or save folders
-are removed automatically. Keep filenames and capitalization as extracted.
 
-TESTING LIMITS
-Command quoting, paths with spaces, installer dispatch, private-prefix behavior
-and failure propagation have automated checks. Those checks do not establish
-working Linux graphics, frame pacing, audio, video codecs or controller support.
-The bundled shader seed is portable game shader data, not a Linux driver cache.
-Please report distro, GPU, driver, Proton version and the failing step when
-reporting Linux problems. No promise of Steam Deck verification is made.
+Never delete GameData to troubleshoot a Proton prefix. Steam manages its own
+prefix for this shortcut. No cache or save folders are removed automatically.
+Keep filenames and capitalization as extracted.
 
-Details and credits for the game release are in README.txt and licenses/.
-Proton: https://github.com/ValveSoftware/Proton
+ADVANCED ONLY: DIRECT COMMAND-LINE WRAPPER
+burner.sh invokes Proton directly. It does NOT set up the Steam Linux Runtime
+container, so it may fail on host libraries even when the Steam route works.
+Use the Steam instructions above for the recommended setup and for reports.
+For users who already have a compatible host environment, run from the package:
+
+  bash burner.sh import "/absolute/path/to/your game.iso"
+  bash burner.sh play
+  bash burner.sh textures "/absolute/path/to/HD-Game-Textures.zip"
+  bash burner.sh language spanish
+  bash burner.sh language
+  bash burner.sh status
+  bash burner.sh --help
+
+Language names: english, french, italian, german, spanish. Status does not launch
+the game; exit 0 means imported data is ready, 2 means missing or incompatible.
+The wrapper uses .proton beside burner.sh, separate from Steam's prefix. Both
+routes use the same portable GameData. The wrapper finds Proton Experimental
+in the main Steam library; for another installed version or Steam location:
+
+  BURNER_STEAM="/path/to/Steam" BURNER_PROTON="/path/to/Proton/proton" bash burner.sh play
+
+VERIFICATION LIMITS
+Automated checks cover wrapper dispatch, quoting and failure handling. They do
+not establish Linux graphics, frame pacing, audio, FMVs or controller support.
+The shader seed is portable shader data, not a Linux GPU driver cache. No Steam
+Deck verification or confirmed fix for every black-screen report is claimed.
+
+Release details and credits: README.txt and licenses/
+Proton and logging: https://github.com/ValveSoftware/Proton#runtime-config-options
+Steam Linux Runtime: https://github.com/ValveSoftware/steam-runtime
 Direct3D 12 translation: https://github.com/HansKristian-Work/vkd3d-proton

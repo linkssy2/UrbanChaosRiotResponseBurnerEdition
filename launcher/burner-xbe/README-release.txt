@@ -22,6 +22,8 @@ NEW IN 0.07 (SINCE 0.06)
 - Separate experimental Linux package runs this Windows build through Proton; it is not a native Linux port and has not been gameplay-tested on Linux.
 
 INSTALL
+Linux package users: follow README-linux.txt and its recommended Steam setup.
+The steps below apply to the Windows package.
 1. Extract the entire ZIP to a writable folder (not Program Files or inside ZIP).
 2. Run Burner Edition Setup.exe and choose your supported original Xbox ISO.
    Both the verified full-disc ISO and extracted .xiso.iso layouts are accepted.

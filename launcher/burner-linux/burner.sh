@@ -7,6 +7,9 @@ usage() {
     cat <<'HELP'
 Urban Chaos: Riot Response - experimental Linux / Proton package
 
+Advanced direct-Proton wrapper. Recommended setup: use Steam as described in
+README-linux.txt. This wrapper does not set up the Steam Linux Runtime container.
+
   ./burner.sh import "/path/to/your Xbox game.iso"
   ./burner.sh play
   ./burner.sh textures "/path/to/HD-Game-Textures.zip"
