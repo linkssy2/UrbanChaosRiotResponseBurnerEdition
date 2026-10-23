@@ -10,7 +10,7 @@ An unofficial PC port powered by [XboxXBERecomp by TGP482](https://github.com/TG
 - Corrected the reported wall-lighting flicker and added mouse-friendly mission/checkpoint restart confirmations.
 - Added separate Next Firearm and Previous Firearm bindings and restored character collision with ragdoll bodies.
 - Included a portable shader seed to reduce known first-use shader stalls, plus focused audio/input work reductions.
-- Expanded Spanish text and PC-menu coverage, with language selection in Setup. The optional ZARF translation pack is still required; voices remain in English.
+- Integrated ZARF's Spanish text, supplemental translations and PC menus, with language selection in Setup. Text-only translation data is bundled; voices remain in English.
 - Fixed a separate renderer-registration exhaustion case that could hide active blue pipe flames with HD options enabled.
 
 See [the release change list](docs/CHANGES-0.07.md) for the complete scope and remaining reports.
@@ -27,7 +27,9 @@ Windows requires Windows 10/11 x64 and a Direct3D 12-capable GPU. No original ga
 
 Settings and saves live in `GameData/xbe-runtime` (profiles inside `hdd`). To update, extract into a new folder and copy your existing `GameData` beside the new launchers. Keep a backup before removing the older installation. Existing portable data takes priority over first-import migration from the earlier AppData installation. Play does not fall back to AppData. Pre-XBE saves remain separate. Setup includes **Open Saves**. The original ISO is unnecessary after successful import.
 
-The supplied original language banks are English, French, Italian and German. Select a language in Setup or **Options > Language**, then restart. Spanish requires the separately converted community pack by **ZARF**. Supplemental messages, PC menus and control descriptions support Spanish; the additions still need community review.
+The supplied original language banks are English, French, Italian and German. Select a language in Setup or **Options > Language**, then restart. ZARF's community Spanish translation, supplemental messages, PC menus and control descriptions are integrated. The launcher prepares translated files locally from your imported game on the first Play after import or upgrade. Only translation data is bundled, not complete translated game archives, and voices remain in English. The additions still need community review.
+
+**0.07 packaging correction:** the refreshed Windows and experimental Linux/Proton downloads include the Spanish translation data omitted from the initial 0.07 packages. Keep `GameData` when replacing the release files; the next Play prepares the translation automatically. No separate Spanish download is needed.
 
 The bundled shader seed prepares observed shader variants before gameplay and preserves the player's learned cache. It contains no GPU-driver pipeline cache. A different shader compiler rebuilds those records locally; new shader variants and other first-use work can still cause hitches.
 

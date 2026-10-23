@@ -12,6 +12,7 @@ import sys
 import uuid
 import tomllib
 import shader_seed
+import spanish_text
 
 from disc import Disc, XisoError, BLOCK, sha, supported_hash, progress, check_cancel, safe_name
 
@@ -263,7 +264,75 @@ def runtime_files():
             raise ValueError('The release runtime is incomplete or damaged. Extract the entire ZIP again.')
     artwork_files(info)
     shader_seed.validate(ROOT / 'runtime/shader-seed', info.get('shader_seed', {}))
+    spanish_bundle(info)
     return info
+
+
+def spanish_bundle(info=None):
+    if info is None:
+        info = json.loads((ROOT / 'tools/runtime-manifest.json').read_text())
+    files = info.get('spanish', {})
+    if not files:
+        return None
+    if not isinstance(files, dict) or set(files) != {'spanish/text.json', 'spanish/credits.txt'}:
+        raise ValueError('Invalid bundled Spanish file list.')
+    for name, digest in files.items():
+        path = ROOT / 'runtime' / name
+        unlinked_path(path)
+        if (not isinstance(digest, str) or not re.fullmatch(r'[0-9a-f]{64}', digest) or
+                not path.is_file() or not 0 < path.stat().st_size <= 8 * BLOCK or sha(path) != digest):
+            raise ValueError('The bundled Spanish translation is damaged. Extract the entire release again.')
+    path = ROOT / 'runtime/spanish/text.json'
+    return path, spanish_text.load_bundle(path)
+
+
+def ensure_spanish(data, info=None, cancel=None):
+    """Generate only the managed translation; keep imported originals and saves untouched."""
+    bundled = spanish_bundle(info)
+    if bundled is None:
+        return
+    path, bundle = bundled
+    original = data / 'installed/game_files'
+    parent = data / 'xbe-runtime/translations'
+    dest = parent / 'es-zarf'
+    unlinked_path(original)
+    unlinked_path(dest)
+    check = lambda: check_cancel(cancel) if cancel is not None else None
+    check()
+    expected = ''.join(f"{row['file']} {row['size']}\n" for row in bundle['files'])
+    paths = [dest / row['file'] for row in bundle['files']]
+    for target in [dest / 'manifest.txt', *paths]:
+        unlinked_path(target)
+    if ((dest / 'manifest.txt').is_file() and
+            (dest / 'manifest.txt').stat().st_size <= 8192 and
+            (dest / 'manifest.txt').read_bytes().replace(b'\r\n', b'\n') == expected.encode('ascii') and
+            all(p.is_file() and p.stat().st_size == row['size'] and sha(p) == row['sha256']
+                for p, row in zip(paths, bundle['files']))):
+        return
+    check()
+    parent.mkdir(parents=True, exist_ok=True)
+    stage = parent / ('.spanish-' + uuid.uuid4().hex)
+    backup = parent / ('.previous-es-zarf-' + uuid.uuid4().hex)
+    moved = installed = False
+    try:
+        spanish_text.build(original, path, stage, cancel=check)
+        check()
+        if dest.exists():
+            dest.rename(backup)
+            moved = True
+        stage.rename(dest)
+        installed = True
+        check()
+    except BaseException:
+        if installed:
+            dest.rename(stage)
+        if moved:
+            backup.rename(dest)
+        raise
+    finally:
+        if stage.exists():
+            assert stage.resolve().parent == parent.resolve() and stage.name.startswith('.spanish-')
+            shutil.rmtree(stage)
 
 
 def language_settings(data, selected=None):
@@ -275,9 +344,10 @@ def language_settings(data, selected=None):
     settings=tomllib.loads(text)
     current=settings.get('language',0)
     if type(current) is not int or current not in range(5): current=0
+    bundled = spanish_bundle()
     pack=runtime/'translations/es-zarf'
     available=False
-    if (pack/'manifest.txt').is_file():
+    if bundled is None and (pack/'manifest.txt').is_file():
         unlinked_path(pack/'manifest.txt')
         rows=(pack/'manifest.txt').read_text().splitlines()
         names=set()
@@ -289,9 +359,12 @@ def language_settings(data, selected=None):
             if name in names or not 200<=size<=64*1024*1024 or not path.is_file() or path.stat().st_size!=size:break
             names.add(name)
         else: available=len(names)==27
+    if bundled is not None:
+        available = ready(data)
     if selected is not None:
         if type(selected) is not int or selected not in range(5):raise ValueError('Invalid language selection.')
-        if selected==4 and not available:raise ValueError('Install the ZARF Spanish pack before selecting Spanish.')
+        if selected==4 and not available:raise ValueError('Import your supported Xbox ISO before selecting Spanish.')
+        if selected==4 and bundled is not None:ensure_spanish(data)
         # Insert a root key before any TOML table; never change a similarly named table key.
         lines=text.splitlines(keepends=True);end=next((i for i,s in enumerate(lines) if s.lstrip().startswith('[')),len(lines))
         matches=[i for i in range(end) if re.match(r'\s*language\s*=',lines[i])]
@@ -317,6 +390,7 @@ def launch(data, language=None):
     if not ready(data):
         raise ValueError('Please import your supported Xbox ISO first.')
     info = runtime_files()
+    ensure_spanish(data, info)
     data = data.resolve()
     runtime = data / 'xbe-runtime'
     if linked(runtime) or runtime.resolve().parent != data:

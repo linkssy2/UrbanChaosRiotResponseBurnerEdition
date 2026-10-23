@@ -12,6 +12,9 @@ import import_game as setup
 
 with tempfile.TemporaryDirectory() as folder:
     data=Path(folder)
+    setup.ROOT=data/'package'
+    (setup.ROOT/'tools').mkdir(parents=True)
+    (setup.ROOT/'tools/runtime-manifest.json').write_text('{}')
     assert setup.language_settings(data)=={'language':0,'spanish_available':False}
     setup.language_settings(data,2)
     config=data/'xbe-runtime/settings.toml'

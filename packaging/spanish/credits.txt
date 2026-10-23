@@ -1,0 +1,13 @@
+Spanish text for Urban Chaos: Riot Response - Burner Edition
+
+Community translation: ZARF, "Traduccion Beta Urban Chaos RRX".
+Missing-text supplements and PC-menu translations: Burner Edition project.
+
+This included bundle contains translated string changes only. Setup combines
+them with the user's imported Xbox ISO files on the first Play after import or
+upgrade. No separate Spanish download or installation is needed.
+Select Spanish in Setup to use the Spanish text and translated PC menus.
+
+The original English voices and other language banks are preserved. Spanish
+translation remains a community beta and may still need wording corrections.
+No original level archives, audio, Xbox executable, or personal saves are included.

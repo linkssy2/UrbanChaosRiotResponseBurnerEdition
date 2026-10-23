@@ -48,7 +48,7 @@ class BurnerLauncher : Form {
         languageRow.Controls.Add(new Label{Text="Language",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft});
         language.DropDownStyle=ComboBoxStyle.DropDownList;language.Dock=DockStyle.Fill;language.AccessibleName="Game language";
         language.Items.AddRange(new object[]{"English","Français","Italiano","Deutsch","Español (ZARF beta)"});language.SelectedIndex=0;
-        language.SelectionChangeCommitted+=(s,e)=>{if(language.SelectedIndex==4&&!spanishAvailable){status.Text="Install the ZARF Spanish pack first. English voices are retained.";language.SelectedIndex=0;}else status.Text="Language will be saved when you press PLAY.";};
+        language.SelectionChangeCommitted+=(s,e)=>{if(language.SelectedIndex==4&&!spanishAvailable){status.Text="Import your Xbox ISO first. Spanish is included; voices remain English.";language.SelectedIndex=0;}else status.Text="Language will be saved when you press PLAY.";};
         languageRow.Controls.Add(language);panel.Controls.Add(languageRow);
         play=MakeButton("PLAY",async(s,e)=>await Play());play.Enabled=false;play.BackColor=Color.FromArgb(138,56,19);panel.Controls.Add(play);
         import=MakeButton("SELECT XBOX ISO",async(s,e)=>await Import());panel.Controls.Add(import);
@@ -82,7 +82,7 @@ class BurnerLauncher : Form {
         try{Directory.CreateDirectory(Data);await RunWorker("textures"," --pack "+Quote(d.FileName)+" --cancel "+Quote(cancelPath));Busy(false);play.Enabled=await Ready();}
         catch(Exception ex){Busy(false);status.Text=ex.Message;}finally{if(File.Exists(cancelPath))File.Delete(cancelPath);}
     }}
-    async Task Play(){Busy(true,true);status.Text="Game running. Your settings and saves stay in this folder's GameData.";
+    async Task Play(){Busy(true,true);status.Text="Preparing game and bundled languages. Saves stay in this folder's GameData.";
         try{int code=await RunWorker("launch"," --language "+language.SelectedIndex);Busy(false);if(code==0)await RefreshReady();else play.Enabled=await Ready();}catch(Exception ex){Busy(false);status.Text=ex.Message;}}
     protected override void Dispose(bool disposing){if(disposing&&cover!=null)cover.Dispose();base.Dispose(disposing);}
     [STAThread] static int Main(string[] args) {

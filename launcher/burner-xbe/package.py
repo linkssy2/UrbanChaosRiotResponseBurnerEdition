@@ -23,6 +23,8 @@ LAUNCHERS = {'Burner Edition Setup.exe', 'Play Burner Edition.exe'}
 ARTWORK = REPO / 'artwork/hd-ui'
 ARTWORK_LIMIT = 32 * 1024 * 1024
 SHADER_SEED = REPO / 'packaging/shader-seed'
+SPANISH = REPO / 'packaging/spanish'
+SPANISH_FILES = {'spanish/text.json', 'spanish/credits.txt'}
 
 
 def shader_seed_validator():
@@ -47,6 +49,33 @@ def shader_seed_sources(directory):
     if {path.name for path in directory.iterdir()} != {'manifest.json', *files}:
         raise ValueError('Unlisted files in the shader seed directory.')
     return {'runtime/shader-seed/' + name: directory / name for name in files}, files
+
+
+def spanish_text_validator():
+    spec = importlib.util.spec_from_file_location('burner_spanish_text', HERE / 'spanish_text.py')
+    module = importlib.util.module_from_spec(spec)
+    old_path = sys.path[:]
+    try:
+        sys.path.insert(0, str(HERE))
+        spec.loader.exec_module(module)
+    finally:
+        sys.path[:] = old_path
+    return module
+
+
+def spanish_sources(directory):
+    """Ship translated strings; rebuild the game archives from the user's ISO."""
+    for name in ('text.json', 'credits.txt'):
+        shader_seed_validator().unlinked((directory / name).absolute())
+    if {path.name for path in directory.iterdir()} != {'text.json', 'credits.txt'}:
+        raise ValueError('Unexpected files in the bundled Spanish directory.')
+    spanish_text_validator().load_bundle(directory / 'text.json')
+    credits = directory / 'credits.txt'
+    if not credits.is_file() or not 0 < credits.stat().st_size <= 16 * 1024:
+        raise ValueError('Invalid bundled Spanish credits.')
+    credits.read_text(encoding='utf-8')
+    plan = {'runtime/spanish/' + name: directory / name for name in ('text.json', 'credits.txt')}
+    return plan, {name[8:]: sha(path) for name, path in plan.items()}
 
 
 def valid_hash(value):
@@ -146,6 +175,7 @@ def sources(runtime):
         'tools/disc.py': HERE / 'disc.py',
         'tools/world_textures.py': HERE / 'world_textures.py',
         'tools/shader_seed.py': HERE / 'shader_seed.py',
+        'tools/spanish_text.py': HERE / 'spanish_text.py',
         'tools/disc-manifest.json': HERE.parent / 'burner/disc-manifest.json',
         'tools/xdvdfs.py': REPO / 'third_party/xboxrecomp/tools/xiso/xdvdfs.py',
         'runtime/' + RUNTIME_NAME: runtime,
@@ -222,12 +252,24 @@ def audit(package, allowlist, require_launchers=True):
     if {name for name in actual if name.startswith('runtime/shader-seed/')} != {
             'runtime/shader-seed/' + name for name in seed}:
         raise ValueError('Unlisted shader seed in package')
+    spanish = info.get('spanish', {})
+    if not isinstance(spanish, dict) or (spanish and set(spanish) != SPANISH_FILES):
+        raise ValueError('Invalid bundled Spanish file map')
+    if {name for name in actual if name.startswith('runtime/spanish/')} != {
+            'runtime/' + name for name in spanish}:
+        raise ValueError('Unlisted Spanish payload in package')
+    if spanish:
+        _, expected_spanish = spanish_sources(package / 'runtime/spanish')
+        if (any(not valid_hash(value) for value in spanish.values()) or
+                spanish != expected_spanish):
+            raise ValueError('Bundled Spanish identity changed')
     return {'version': VERSION, 'strict_allowlist': True, 'files': files,
             'disc_payload_hashes_checked': len(forbidden_hashes),
             'original_payload_files_in_package': 0,
             'restored_artwork_files': len(art),
             'shader_seed_files': len(seed),
-            'note': 'Generated runtime code, custom edition artwork, approved restored PNGs and the validated portable shader seed are permitted. No original disc payloads, imported assets, saves, settings, driver-specific pipeline caches, logs or diagnostic executables are packaged. Live appearance is a separate check.'}
+            'spanish_text_files': len(spanish),
+            'note': 'Generated runtime code, custom edition artwork, approved restored PNGs, translated Spanish strings and the validated portable shader seed are permitted. No original disc payloads, imported assets, saves, settings, driver-specific pipeline caches, logs or diagnostic executables are packaged. Live appearance is a separate check.'}
 
 
 def assemble(runtime, expected_sha256, output, shader_seed=None):
@@ -238,6 +280,8 @@ def assemble(runtime, expected_sha256, output, shader_seed=None):
     plan = sources(runtime)
     restored, artwork = artwork_sources(ARTWORK)
     plan.update(restored)
+    spanish_plan, spanish = spanish_sources(SPANISH)
+    plan.update(spanish_plan)
     seed = {}
     if shader_seed is None and SHADER_SEED.exists():
         shader_seed = SHADER_SEED
@@ -255,7 +299,7 @@ def assemble(runtime, expected_sha256, output, shader_seed=None):
     (output / 'tools/python/python312._pth').write_text('python312.zip\n.\n..\n')
     info = {'version': VERSION, 'files': {
         name: sha(plan['runtime/' + name]) for name in RUNTIME_FILES}, 'artwork': artwork,
-        'shader_seed': seed}
+        'shader_seed': seed, 'spanish': spanish}
     (output / 'tools/runtime-manifest.json').write_text(json.dumps(info, indent=2) + '\n')
     (output / 'licenses/DEPENDENCIES.txt').write_text(
         'XboxXBERecomp by TGP482: https://github.com/TGP482/XboxXBERecomp (MIT).\n'
@@ -265,7 +309,8 @@ def assemble(runtime, expected_sha256, output, shader_seed=None):
         'Python3.12 and included OpenSSL: tools/python/LICENSE.txt. zlib: zlib.txt.\n'
         'Microsoft Visual C++2015-2022 runtime: app-local DLLs from the official VS2022 Redist folder; Microsoft-Visual-Cpp-Redistribution.txt and accompanying Microsoft notices.\n'
         'Direct3D12, XAudio2 and other Windows components are supplied by Windows.\n'
-        'The launcher cover/icon is custom Burner Edition artwork. Approved restored HD UI PNGs are included under runtime/hd-ui; original disc files are still supplied by the user.\n')
+        'The launcher cover/icon is custom Burner Edition artwork. Approved restored HD UI PNGs are included under runtime/hd-ui; original disc files are still supplied by the user.\n'
+        'Spanish game-text translations by ZARF with supplemental Burner Edition translations are bundled as strings under runtime/spanish; see runtime/spanish/credits.txt. The launcher rebuilds translated archives from the user-provided ISO. English voices are retained.\n')
     allowlist = set(plan) | {'tools/python/python312._pth', 'tools/runtime-manifest.json',
                             'licenses/DEPENDENCIES.txt'}
     result = audit(output, allowlist, require_launchers=False)

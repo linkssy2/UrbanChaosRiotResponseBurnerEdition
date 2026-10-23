@@ -45,9 +45,12 @@ Select a language before playing, or display the current selection:
   ./burner.sh language spanish
   ./burner.sh language
 
-Supported names: english, french, italian, german, spanish. Spanish requires
-the separately installed ZARF pack in GameData/xbe-runtime/translations/es-zarf.
-Changing the language preserves other settings. Restart the game after changes.
+Supported names: english, french, italian, german, spanish. Spanish text data
+from ZARF and supplemental translations are bundled in this package. The first
+Play after import or upgrade prepares the translated files automatically from
+your imported game; selecting Spanish with the language command also prepares
+them. No separate Spanish download is needed. Voices remain in English.
+Changing the language preserves other settings. Restart after changes.
 
 Check whether the original game data has been imported:
 
@@ -93,6 +96,10 @@ prefix. Both use the same GameData folder for game saves and settings.
 UPDATES AND PORTABILITY
 Copy your GameData folder beside burner.sh in the new release; keep a backup.
 The verified runtime, restored UI and portable shader seed are updated on Play.
+The refreshed 0.07 package also includes the previously omitted Spanish text
+data. Replace the release files while keeping GameData, or copy GameData into
+a fresh extraction. The next Play or explicit Spanish language selection
+prepares it locally without replacing saves, other settings or HD textures.
 The same optional HD texture ZIP works with Windows and this Proton package.
 Saves: GameData/xbe-runtime/hdd
 Settings: GameData/xbe-runtime/settings.toml

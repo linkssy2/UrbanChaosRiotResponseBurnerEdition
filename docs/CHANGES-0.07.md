@@ -1,5 +1,7 @@
 Urban Chaos: Riot Response — Burner Edition **0.07** is ready, with these updates since **0.06**:
 
+**0.07 packaging correction:** the Windows and experimental Linux/Proton downloads now include the Spanish translation data omitted from the first 0.07 packages. No separate Spanish download is needed. Keep your **GameData** folder when replacing the release files; the next Play prepares the translation automatically.
+
 - **Rifle scope:** corrected the remaining widescreen border gaps and incomplete red tint.
 - **FOV and first-person arms:** climbing keeps your selected FOV. Improved arm coverage during climbing and shield bashes, corrected stretched sleeve mapping, and aligned the taser's electrical arc at changed FOV settings.
 - **Menus:** fixed invisible restart confirmations and Difficulty-menu flicker. Mission/checkpoint restart dialogs now use mouse-friendly controls when playing with keyboard and mouse; controller layouts remain available.
@@ -9,16 +11,18 @@ Urban Chaos: Riot Response — Burner Edition **0.07** is ready, with these upda
 - **Shader warm-up:** included known shader variants to reduce first-use stutters while preserving your existing learned cache. New shaders and other first-use work can still cause hitches.
 - **Performance:** reduced repeated audio decoding using a selected upstream improvement and reduced unnecessary keyboard polling.
 - **Controls and ragdolls:** added separate **Next Firearm** and **Previous Firearm** bindings, and restored character collision with ragdoll bodies.
-- **Spanish:** added Spanish PC menus and control descriptions, plus language selection in Setup. Additional original-game translations use the updated optional Spanish pack; voices remain in English.
+- **Spanish:** integrated ZARF's community translation, supplemental game text, Spanish PC menus and control descriptions, plus language selection in Setup and in the game. Translation data is bundled and prepared automatically from your imported game on the first Play after import or upgrade; voices remain in English.
 - **Experimental Linux support:** added a separate Proton package with launch/setup scripts for running the same Windows game on Linux. It is **not a native Linux port**, and Linux gameplay is not yet verified.
 
 **Downloads and updating**
 
 Choose the Windows ZIP or the experimental Linux/Proton archive. Linux users need their own Steam/Proton installation; the package includes setup instructions but does not bundle Proton. Source and checksums are also included with this release.
 
-The **HD game texture pack remains a separate download**. The unchanged **0.06 HD pack is compatible with 0.07**; existing users do not need to reinstall it. Spanish game archives are also optional and are not bundled in the base game download. Credit for the HD textures goes to **xXthe.RockoXx**, and for the community Spanish translation to **ZARF**.
+The **HD game texture pack remains a separate download**. The unchanged **0.06 HD pack is compatible with 0.07**; existing users do not need to reinstall it. **Spanish text is included in the main downloads.** Only translation data is bundled; the launcher builds the translated game files locally from your imported ISO. Credit for the HD textures goes to **xXthe.RockoXx**, and for the community Spanish translation to **ZARF**.
 
 For a new Windows installation, extract the complete package and import your supported original Xbox ISO through Setup. Linux users should follow `README-linux.txt` and use `burner.sh`. For an update, copy your existing **GameData** folder beside the new launchers and keep a backup. No original disc files or personal saves are bundled.
+
+Select Spanish in **Burner Edition Setup** or **Options > Language**, then restart the game. Linux users can also run `./burner.sh language spanish`. Updating preserves your saves, other settings and installed HD textures.
 
 On first ISO import, Setup can automatically copy matching saves and settings from the older `%LOCALAPPDATA%\UrbanChaosBurnerEdition` installation. **A freshly extracted folder therefore does not necessarily start with a fresh profile.** Existing portable saves take priority, and the older installation is left untouched.
 
