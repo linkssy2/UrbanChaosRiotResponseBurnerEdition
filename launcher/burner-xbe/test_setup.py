@@ -47,13 +47,16 @@ def make_iso(path, files, base=0):
         for i in range(len(parts) - 1):
             dirs.setdefault('/'.join(parts[:i+1]), [])
     dir_sectors = {name: 40 + i for i, name in enumerate(dirs)}
-    file_sectors = {name: 64 + i for i, name in enumerate(files)}
+    file_sectors = {}
+    next_sector = 64
+    for name, content in files.items():
+        file_sectors[name] = next_sector
+        next_sector += max(1, (len(content) + 2047) // 2048)
     for name in dirs:
         if name:
             parent, _, leaf = name.rpartition('/')
             dirs[parent].append((leaf, dir_sectors[name], 2048, 0x10))
     for name, content in files.items():
-        assert len(content) <= 2048
         parent, _, leaf = name.rpartition('/')
         dirs[parent].append((leaf, file_sectors[name], len(content), 0))
     with path.open('wb') as out:
@@ -501,7 +504,20 @@ def check_portable(tmp):
                 return SimpleNamespace(st_mode=stat.S_IFDIR if junction else stat.S_IFLNK,
                                        st_file_attributes=0x400 if junction else 0)
             return lstat(path)
-        for index, suspect in enumerate((legacy, legacy.parent, legacy / 'xbe-runtime',
+        # Wine drive mappings/Steam library links are outside the managed roots.
+        _, target = new_package('mapped-host-ancestors')
+        with patch.object(Path, 'lstat', lambda path: redirect_info(path, base, True)), \
+                patch.object(worker.subprocess, 'Popen', Process):
+            worker.import_iso(iso, target, cancel)
+            assert worker.ready(target)
+            worker.launch(target)
+            assert_state(target)
+        _, target = new_package('mapped-legacy-ancestor')
+        with patch.object(Path, 'lstat', lambda path: redirect_info(path, legacy.parent, True)):
+            worker.import_iso(iso, target, cancel)
+            assert_state(target)
+        assert file_snapshot(legacy) == legacy_before
+        for index, suspect in enumerate((legacy, legacy / 'xbe-runtime',
                                         legacy / 'xbe-runtime/hdd', legacy / 'xbe-runtime/hdd/E/save.dat')):
             _, target = new_package('linked-source-' + str(index))
             with patch.object(Path, 'lstat', lambda path, p=suspect, j=bool(index % 2):
@@ -523,6 +539,7 @@ def check_portable(tmp):
             'portable_move_assets_saves_settings_cache_and_cwd': True,
             'portable_repair_prefers_current_state': True,
             'portable_migration_cancel_copy_commit_rollback': True,
+            'mapped_host_and_legacy_ancestors_allowed': True,
             'portable_migration_identity_and_reparse_rejections': True}
 
 
@@ -601,7 +618,14 @@ def check_shader_seed(tmp):
     iso = tmp / 'seed.iso'
     make_iso(iso, files)
     data = package / 'GameData'
-    with patch.dict(os.environ, {'LOCALAPPDATA': str(tmp / 'seed-isolated-appdata')}):
+    original_stat = Path.lstat
+    def mapped_ancestor(path, *args, **kwargs):
+        if path == tmp:
+            return SimpleNamespace(st_mode=stat.S_IFDIR,
+                                   st_file_attributes=stat.FILE_ATTRIBUTE_REPARSE_POINT)
+        return original_stat(path, *args, **kwargs)
+    with patch.dict(os.environ, {'LOCALAPPDATA': str(tmp / 'seed-isolated-appdata')}), \
+            patch.object(Path, 'lstat', mapped_ancestor):
         worker.import_iso(iso, data, tmp / 'seed-cancel')
     seen = []
     class Process:
@@ -611,7 +635,8 @@ def check_shader_seed(tmp):
         def wait(self):
             return 0
     with patch.object(worker.subprocess, 'Popen', Process):
-        worker.launch(data)
+        with patch.object(Path, 'lstat', mapped_ancestor):
+            worker.launch(data)
         state = data / 'xbe-runtime'
         assert (state / 'shader-seed' / name).read_bytes() == contents
         protected = {'shader-cache/d3d12/v1-fixture.bin': b'user-learned shader',

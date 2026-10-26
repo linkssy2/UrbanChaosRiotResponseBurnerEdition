@@ -15,6 +15,11 @@ def prepare(area):
     def read(va,n):
         s=next(s for s in sections if s[1]<=va and va+n<=s[1]+s[4])
         return image[s[3]+va-s[1]:s[3]+va-s[1]+n]
+    # Private co-op reuses this exact retail campaign row and its original callback.
+    assert read(0x272124,5)==bytes.fromhex('b8f48d4800')
+    assert read(0x27212f,11)==bytes.fromhex('683017270050e8e613ffff')
+    campaign_key=b'NewFrontend-Singleplayer-1\0'
+    assert read(0x488df4,len(campaign_key))==campaign_key
     for va,data in [(0x270927,'e884e8ffff'),(0x270949,'e862e7ffff'),
                     (0x26f1b0,'558bec83e4f0'),(0x17b39,'8bf1'),(0x25c71f,'8bf157'),(0x25c89e,'e87d7a0100')]:
         assert read(va,len(bytes.fromhex(data)))==bytes.fromhex(data),hex(va)
@@ -45,8 +50,9 @@ def prepare(area):
         source=source.replace(original,body,1);path.write_text(source)
         warning_functions.append(body)
     assert set(struct.unpack('<4I',read(0x26f688,16)))=={0x26f621,0x26f653,0x26f5ee}
-    for name in ('xbe_frontend.h','xbe_frontend_guest.inc','xbe_frontend_text.h'):
+    for name in ('xbe_frontend.h','xbe_frontend_guest.inc','xbe_frontend_text.h','xbe_coop_menu.h'):
         (out/name).write_text((local/name).read_text())
+    (area/'src/compat/test_coop_menu.cpp').write_text((local/'test_xbe_coop_menu.cpp').read_text())
     # Drop only list-owned sprite submissions, retaining original row updates,
     # hit bounds and callbacks. The parent background is outside this scope.
     assert hashlib.sha256(read(0x9d9b0,242)).hexdigest()=='26966356054def9572634c6237ec90e69eaac615c3ec40db4f7a8cfe4801d4c7'
@@ -157,6 +163,33 @@ def prepare(area):
         assert text.count(marker)==1;text=text.replace(marker,replacement,1)
     special.write_text(text)
     path=area/'generated/game/x86_recomp.65.cpp';text=path.read_text()
+    # 270320 draws the campaign details before updating/drawing its +10C modal.
+    assert read(0x270328,6)==bytes.fromhex('8b8e0c010000')
+    assert read(0x270BB8,6)==bytes.fromhex('8bb60c010000')
+    assert read(0x25A2F3,6)==bytes.fromhex('c700845c4800')
+    assert read(0x25A260,3)==bytes.fromhex('8b5104')
+    assert read(0x2703F5,6)==bytes.fromhex('8b86ec000000')
+    # Difficulty factory258D40 adds253FF0's shade wrapper;2546B0 draws its +4 child.
+    assert read(0x258DD2,5)==bytes.fromhex('e819b2ffff')
+    assert read(0x254006,3)==bytes.fromhex('894804')
+    assert read(0x254010,6)==bytes.fromhex('c700a4464800')
+    assert read(0x2546C1,5)==bytes.fromhex('8b4e048b01')
+    text=text.replace('extern void TrialFrontendLevelDrawEnd();\n','')
+    declaration=('extern thread_local bool TrialFrontendLevelDrawHidden;\n'
+                 'extern bool TrialFrontendLevelDrawBegin(uint32_t);\n')
+    if declaration not in text:
+        text=text.replace('#include "x86_recomp_shared.h"\n','#include "x86_recomp_shared.h"\n'+declaration,1)
+    marker='\tTrialGuestHook(ctx, base, 10);\n'
+    text=text.replace('TrialFrontendLevelDrawEnd(); TrialFrontendLevelDrawHidden=previous;',
+                      'TrialFrontendLevelDrawHidden=previous;')
+    hook=('\tstruct LevelDrawScope { bool previous=TrialFrontendLevelDrawHidden; '
+          '~LevelDrawScope() { TrialFrontendLevelDrawHidden=previous; } } level_draw_scope;\n')
+    if hook not in text:
+        assert text.count(marker)==1;text=text.replace(marker,marker+hook,1)
+    hook='\tTrialFrontendLevelDrawHidden=TrialFrontendLevelDrawBegin(ctx.esi);\n'
+    marker='loc_002703F5:\n'
+    if hook not in text:
+        assert text.count(marker)==1;text=text.replace(marker,marker+hook,1)
     for address,op in [('0026F1B0',27),('0026F0B0',28)]:
         marker=f'X86_FUNC(__imp__sub_{address}) {{\n'
         hook=f'\tif (TrialGuestHook(ctx, base, {op})) {{ ctx.esp += 4; return; }}\n'

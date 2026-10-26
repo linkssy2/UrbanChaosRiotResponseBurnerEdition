@@ -321,12 +321,31 @@ static void FrontendListEnter(){
     if(!GraphicsMenuKind(menu_owner))TrialFrontendPublish({});
 }
 thread_local uint32_t TrialFrontendProfileDrawOwner=0;
+thread_local bool TrialFrontendLevelDrawHidden=false;
+bool TrialFrontendLevelDrawBegin(uint32_t owner){
+    if(!xbox_KeyboardMode()||!hf_settled()||!menu_pointer_readable(owner,0x118)||
+       MEM32(owner)!=0x4885FC)return false;
+    const uint32_t wrapper=MEM32(owner+0x10C);
+    if(!menu_pointer_readable(wrapper,0x14)||MEM32(wrapper)!=0x485C84)return false;
+    // 258D40 wraps the actual modal in253FF0's shade object before25A150
+    // installs it in the campaign wrapper.2546B0 delegates to its +4 child.
+    const uint32_t shade=MEM32(wrapper+4);
+    if(!menu_pointer_readable(shade,0x10)||MEM32(shade)!=0x4846A4)return false;
+    const uint32_t child=MEM32(shade+4);
+    if(!FrontendDifficultyDialog(child))return false;
+    // Accept the actual modal before its parent's sprites are submitted.
+    const uint32_t saved_owner=dialog_owner;const int saved_running=dialog_running;
+    dialog_owner=child;dialog_running=1;FrontendPauseDialogEnter();
+    dialog_owner=saved_owner;dialog_running=saved_running;
+    return hf_view.screen==menu_screen&&hf_view.owner==child&&
+        TrialFrontendDifficulty(hf_view)&&TrialFrontendPresents(child,UC_HF_DIALOG);
+}
 bool TrialFrontendHideListSprites(){
     // Modal children share the parent's draw scope; only their own accepted replacement may hide them.
     if(dialog_running)return false;
     // Incoming/outgoing lists can draw before host ownership changes. Hide their
     // submissions throughout mouse mode; the parent backdrop is outside this scope.
-    return xbox_KeyboardMode()&&((menu_owner&&GraphicsMenuKind(menu_owner))||
+    return xbox_KeyboardMode()&&(TrialFrontendLevelDrawHidden||(menu_owner&&GraphicsMenuKind(menu_owner))||
         (TrialFrontendProfileDrawOwner&&TrialFrontendPresents(TrialFrontendProfileDrawOwner,UC_HF_PROFILES)));
 }
 static void FrontendRewardSidebar(){

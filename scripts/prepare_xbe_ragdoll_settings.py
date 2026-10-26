@@ -17,6 +17,13 @@ OBJECT_ENTRIES={
     0x2384f0:(38,'8ba1e43f36bb3e584810f2e25306d13703c842700e55d315b4369767081346f4'),
 }
 OBJECT_WITNESS={
+    0x3aa5c0:(166,'6d232c34ff6d2f1d101502468f39471c5cd0cb2bfafb3f684759482caebc7f08'),
+    0x2a59a3:(85,'432854e98979c1d693613418ef56b5172ba99b5bab294e175716be2860cb5270'),
+    0x2a6580:(7,'783da520f5db994c658b5ab57ec34d562cc627bbff9de52a020c287af04339ea'),
+    0x2a5798:(13,'7334713dfbbafdc37febb5d09f2d9c3dffd189e8e0693a5cbe4fe2a157dc82f2'),
+    0x2a5841:(112,'a4cd6cf5efb15a91ad9cd3d56a0d81c03be0fad6971a4795a0ef8ec32d1053bb'),
+    0x44c178:(4,'2238f30df488055daf5e8f362cf904e370011a172d20df193c1b7ae8e5db8e01'),
+    0x48dd60:(16,'62a80f291d19f4df7fc53a41605071cec9db5950ce7ca55dc0a53576d78852af'),
     0x3a79a0:(30,'dec3f58e923208a271920e204b2fcc39f63d14b512f4058d470f3a44d5da5b91'),
     0x89eb0:(92,'00734eda871d4adaa0f621b2242a14ace8c5ed34b65319ee18e5d2c474f399f9'),
     0x89f90:(92,'dd7ea198a3e670dba1b00f91aa37d002d9d431a9f99b5881b8e68a2930f7d4fa'),
@@ -105,6 +112,13 @@ def prepare(area):
     world=(area/'generated/game/x86_recomp.70.cpp').read_text()
     generated=body(world,0x29e4f0).replace('__imp__sub_0029E4F0','sub_0029E4F0',1)+'\n'
     generated+='\n'.join(body(pool,va).replace(f'__imp__sub_{va:08X}',f'sub_{va:08X}',1)for va in ENTRIES)
+    generated+='\n'+body(pool,0x2a6580).replace('__imp__sub_002A6580','OriginalRepresentativeBody',1)
+    scale=pool[pool.index('\t// 002A5841 '):pool.index('\t// 002A58B1 ')]
+    generated+='\nX86_FUNC(OriginalRagdollWorldScale) {\n'+scale+'}\n'
+    static_init=(area/'generated/game/x86_recomp.113.cpp').read_text()
+    generated+='\n'+body(static_init,0x3aa5c0).replace('__imp__sub_003AA5C0','OriginalRagdollAxisBasis',1)
+    axis=pool[pool.index('\t// 002A59A3 '):pool.index('\t// 002A59F8 ')]
+    generated+='\nX86_FUNC(OriginalRagdollAxisConversion) {\n'+axis+'}\n'
     generated+='\n'+original_alloc.replace('__imp__sub_00238430','original_00238430',1)
     generated+='\n'+original_query.replace('__imp__sub_002384C0','original_002384C0',1)
     generated+='\n'+'\n'.join(body(objects,va).replace(f'__imp__sub_{va:08X}',f'sub_{va:08X}',1)for va in [0x2383c0,0x2384c0,*OBJECT_ENTRIES])

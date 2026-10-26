@@ -1,40 +1,40 @@
 # Code map
 
-The 0.07 PC port uses the XboxXBERecomp Direct3D 12 runtime. Maintained
-integration lives in `scripts/`; generated title/runtime overlays stay private
-under `build/`. Read [build status](BUILDING.md) before attempting a clean build.
+The 0.08 PC port uses XboxXBERecomp's Direct3D 12 runtime. Maintained integration
+lives in `scripts/`; generated title/runtime output stays private under `build/`.
+Read [BUILDING.md](BUILDING.md) before attempting a clean build.
 
-| Area | Maintained source | Editing notes |
+| Area | Maintained source | Editing contract |
 | --- | --- | --- |
-| Build and checks | `scripts/build_xbe_game_trial.py` | Stages checked overlays against the pinned SDK, then builds and tests. |
-| Original function hooks | `scripts/prepare_xbe_*.py` | Preserve expected source shapes and original-byte admission checks. |
-| PC menus | `scripts/xbe_trial_graphics_ui.cpp`, `xbe_frontend_guest.inc`, `xbe_menu_style.h` | Keep original profile/mission state authoritative and prevent menu click-through. |
-| Input and rebinding | `scripts/xbe_trial_menu_input.cpp`, `xbe_controls_*.inc` | Preserve device switching, focus/capture and Apply/discard behavior. |
-| Graphics, FOV and crosshair | `scripts/xbe_graphics_settings.*`, `prepare_xbe_view_layout.py`, `prepare_xbe_hd_ui.py` | Publish accepted settings together; leave original size at 100%. |
-| HD UI | `scripts/xbe_hd_ui.*`, `xbe_hd_ui_restored.h`, `xbe_hd_ui_reconstruct.h`, `prepare_xbe_hd_ui.py`, `artwork/hd-ui/manifest.json` | Restore local glyphs once; load hash-pinned artwork and preserve source bounds/resource lifetimes. |
-| Host fonts and symbols | `scripts/xbe_frontend_fonts.*`, `prepare_xbe_pc_prompts.py`, `prepare_xbe_prompt_handoff.py` | Keep glyph metrics, controller families and queued prompt context consistent. |
-| Vertex assembly | `scripts/prepare_xbe_vertex_costs.py`, `xbe_packed_vertices.inc` | Preserve authored values, stream bounds, index order and fallback behavior. |
-| Draw/resource reuse | `scripts/prepare_xbe_draw_reuse.py`, `xbe_sampler_inputs.h`, `prepare_xbe_frame_reuse.py` | Reuse only exact inputs within valid descriptor/resource lifetimes. |
-| Visibility queries | `scripts/prepare_xbe_visibility.py`, `test_xbe_query_resolves*.cpp` | Resolve completed ranges before submission and ring-slot reuse; preserve report fences. |
-| Fog and MSAA | `scripts/prepare_xbe_smooth_fog.py`, `prepare_xbe_msaa.py` | Keep target lifetime, queued state and depth sampling consistent. |
-| Audio | `scripts/prepare_xbe_audio_*.py`, `xbe_audio_loop.*` | Preserve sample rate, source ownership, deferred settings and event order. |
-| Languages | `scripts/xbe_language.*`, `xbe_language_ui.inc`, `xbe_frontend_text.h`, `xbe_spanish_ui.h`, `spanish_pc.json`, `spanish_original.json`, `launcher/burner-xbe/` | Select banks on restart; prepare bundled Spanish text locally on first Play or explicit Spanish CLI selection. Preserve atomic ISO import and English voices. |
-| Body retention and renderer admission | `scripts/xbe_ragdoll_settings.cpp`, `prepare_xbe_ragdoll_settings.py` | Keep renderer-wrapper overflow scoped to its exact pool and original cleanup; particle emission limits remain separate. |
-| Ragdoll contacts | `scripts/prepare_xbe_ragdoll_contacts.py`, `test_xbe_ragdoll_contacts.cpp` | Restore character/body admission without changing other collision exclusions or the solver. |
-| Directional firearms | `scripts/xbe_firearm_cycle.h`, `prepare_xbe_firearm_cycle.py` | Preserve original weapon availability and controller behavior; keep saved binding indices stable. |
-| First-person sleeves | `scripts/xbe_arm_mesh.h`, `xbe_arm_mesh_data.h`, `test_xbe_arm_mesh.py` | Match complete authored vertex/UV buffers before extending elbow rings and sleeve mapping. |
-| Wall-lighting depth | `scripts/xbe_wall_depth.h`, `test_xbe_wall_depth.cpp` | Scope depth tolerance to the captured receiver shader/state; do not change unrelated geometry. |
-| Portable shader seed | `packaging/shader-seed/`, `scripts/build_xbe_shader_seed.py`, `xbe_shader_cache.*` | Validate source/compiler/bytecode identities; preserve user cache and exclude GPU-driver pipeline blobs. |
-| Quiet release | `scripts/prepare_xbe_release*.py` | Disable diagnostics without changing gameplay; validate imported asset identity. |
-| Setup and direct Play | `launcher/burner-xbe/` | Validate staged imports into portable GameData; first import copies compatible legacy state without changing the source. |
-| Experimental Linux entry | `launcher/burner-linux/` | Run the same Windows runtime through user-supplied Proton; preserve argument boundaries and the portable data folder. Linux gameplay is unverified. |
-| Tests | `scripts/test_xbe_*`, launcher `test_setup.py` | Some fixtures require private generated title/resource inputs. |
-| Upstream identity | `dependencies.lock.json`, `licenses/` | XboxXBERecomp by TGP482 is the current runtime. |
+| Build and verification | `scripts/build_xbe_game_trial.py`, `run_animation_resume.ps1` | Preserve checked preparation order and serialized builds. |
+| Original-function hooks | `scripts/prepare_xbe_*.py` | Keep original-byte admission checks, source pins and exact calling conventions. |
+| PC menus and co-op selector | `scripts/xbe_trial_graphics_ui.cpp`, `xbe_frontend_guest.inc`, `xbe_coop_menu.h` | Normal font startup enables menu availability; gameplay activation still requires selection, readiness and resources. |
+| Native character previews | `scripts/xbe_coop_preview*`, `scripts/xbe_coop_preview_assets_checks/` | Cache original body geometry and atlas data; preserve independent Ready input and fallback UI. |
+| Preview asset dependencies | `native/archive_reader/`, `texture_asset/`, `model_*`, `material_asset.*`, `texture_sequence.*`, `animation_*` | Active parsers/pose helpers used by current selection UI; do not classify all native code as obsolete. |
+| Settings and pause ownership | `scripts/xbe_graphics_settings.*`, `xbe_trial_menu_input.cpp`, `xbe_coop_pause.h`, `xbe_coop_input.h`, `xbe_coop_guest_input.h` | Accepted pause owns editing; whole game pauses. Prevent partner input from changing the menu. |
+| Per-player controls | `scripts/xbe_controls_*`, `xbe_coop_controls.*` | Apply/discard and native profile transactions preserve the other player; validate owner lifecycle. |
+| Gameplay actors and presentation | `scripts/xbe_coop_guest.cpp`, `xbe_coop_body.*`, `xbe_coop_resources.*`, `xbe_coop_effects.*`, `xbe_coop_cinematics.*` | Preserve independent views, actors and frame state while sharing campaign world/cinematics. |
+| Death and revival | `scripts/xbe_coop_death.*`, `xbe_coop_downed_camera.*`, `xbe_coop_downed_blur.*`, `xbe_health_packs.*` | Keep finite inventory, downed timer, body/camera ownership and one-time restored visibility coherent. |
+| Orders and contextual hints | `scripts/xbe_coop_orders.*`, `xbe_view_layout.*`, `xbe_prompt_context.*`, `prepare_xbe_prompt_handoff.py` | Validate target/look eligibility, owner queue and per-view placement independently. |
+| Personal pickups and rewards | `scripts/xbe_coop_pickups.*`, `xbe_coop_spin.*`, `xbe_coop_rewards.*`, `xbe_coop_ko_rewards.*`, `xbe_coop_collectibles.*` | Grant to collector/instigator once; retain shared mission counts and profile progression. |
+| Campaign cooperation | `scripts/xbe_coop_shields.*`, `xbe_coop_progression.*`, `xbe_coop_interactions.*`, `xbe_coop_turrets.*`, `xbe_coop_turret_view.*` | Preserve authored state transitions and shared script semantics; finite supplies remain finite. |
+| Derived co-op resources | `scripts/coop_assets.py`, `coop_injection_assets.py`, `coop_turret_assets.py`, `coop_progression_assets.py` | Validate original input hashes; prepare resources locally rather than distributing disc payloads. |
+| HUD, FOV and reticle | `scripts/xbe_hd_ui.*`, `xbe_view_layout.*`, `xbe_graphics_settings.*`, `artwork/hd-ui/manifest.json` | Art and layout remain separate; isolate player FOV from shared graphics settings. |
+| Arm extensions | `scripts/xbe_arm_mesh.h`, `xbe_arm_mesh_data.h`, `test_xbe_arm_mesh.py` | Match authored meshes; preserve skinning, animation and sleeve texture density for all arm variants. |
+| FMV presentation | `scripts/prepare_xbe_fmv_layout.py`, `xbe_fmv_layout.*` | Proportional Fill/4:3 geometry, original UVs and proper clear/lifecycle behavior. |
+| Vertex/draw reuse | `scripts/prepare_xbe_vertex_costs.py`, `xbe_packed_vertices.inc`, `prepare_xbe_draw_reuse.py`, `xbe_sampler_inputs.h` | Preserve authored data, resource lifetime, and fallback paths. |
+| Visibility, lighting and depth | `scripts/prepare_xbe_visibility.py`, `prepare_xbe_msaa.py`, `xbe_wall_depth.h` | Preserve report fences and target/depth semantics; fixes remain narrowly admitted. |
+| Audio | `scripts/prepare_xbe_audio_*.py`, `xbe_audio_loop.*`, `xbe_voice_mode.h` | Preserve source ownership, sample timing, deferred settings and shared output. |
+| Language and voice import | `scripts/xbe_language.*`, `xbe_spanish_ui.h`, `launcher/burner-xbe/spanish_*.py`, `ps2_audio.py`, `xbox_adpcm.py` | Bundled text, optional user-supplied PS2 audio, transactional local conversion, no game-audio download. |
+| Portable shader seed | `packaging/shader-seed/`, `scripts/build_xbe_shader_seed.py`, `xbe_shader_cache.*` | Exact source/compiler/bytecode identities; preserve learned cache and exclude driver blobs. |
+| Quiet release | `scripts/prepare_xbe_release*.py`, `test_xbe_aim_release.cpp` | Compile out diagnostics without changing gameplay; fatal errors remain bounded. |
+| Windows setup and Play | `launcher/burner-xbe/` | Atomic import and exact payload validation; both game modes use the normal launcher. |
+| Linux/Proton entry | `launcher/burner-linux/` | Same runtime via Steam/Proton with safe quoting, standard prefix symlinks and visible errors. |
+| Dependency identity | `dependencies.lock.json`, `licenses/`, `dependency-patches/` | Keep the SDK pin and enumerate only qualified backports. |
 
-The historical `src/`, `native/`, `shaders/`, root CMake project and
-`dependency-patches/xboxrecomp.patch` remain in their established locations.
-Only selected reviewed helpers are reused by current preparation scripts;
-their presence does not mean every historical experiment is active. This avoids
-moving include paths or introducing runtime changes during source packaging.
-
-See [menu and input maintenance](XBE-MENUS-AND-INPUT.md) for frontend ownership, profile selection, bindings and FMV hold behavior.
+The historical root CMake project, unrelated `src/`, native reconstruction and
+`shaders/` remain in their established locations. Their presence does not mean
+all earlier experiments run in the current title path. Some tests require
+private original/generated inputs; fixtures, full compilation and live acceptance
+are distinct. See [menu/input maintenance](XBE-MENUS-AND-INPUT.md) and
+[runtime maintenance](XBE-RUNTIME-MAINTENANCE.md).

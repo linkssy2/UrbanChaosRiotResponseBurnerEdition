@@ -14,6 +14,12 @@ def prepare(area):
     assert ui.count(marker)==1
     # Observation only: the real production InvisibleButton still owns input.
     observed=ui.replace(marker,'RecordMenuHit(id,Point(x,y),{width*sx,height*sy});\n        '+marker,1)
+    marker='    c.Text("Revive Partner",x+key_width+15,y+6,14,white,232-key_width,true);'
+    assert observed.count(marker)==1
+    observed=observed.replace(marker,'    RecordRevivePrompt(slot,source,binding,trial_language::Ui("Revive Partner"));\n'+marker,1)
+    marker='    c.Center(timer,245,y-8,150,28,number_color,true);'
+    assert observed.count(marker)==1
+    observed=observed.replace(marker,marker+'\n    RecordReviveCountdown(slot,seconds,c.Point(320,y),trial_language::Ui("Revive time remaining"));',1)
     fixture=(local/'test_xbe_menu_style.cpp').read_text()
     assert fixture.count('// PRODUCTION_MENU_UI')==1
     fixture=fixture.replace('// PRODUCTION_MENU_UI',observed)

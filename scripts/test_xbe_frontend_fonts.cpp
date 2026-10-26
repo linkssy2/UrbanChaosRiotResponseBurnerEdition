@@ -198,9 +198,18 @@ int main(int argc,char** argv){
     atlas->SetTexID(ImTextureID(1));io.DisplaySize=ImVec2(1280,720);io.DeltaTime=1.f/60;
     ImGui::NewFrame();DrawChecks(body,medium);DrawChecks(title,large);
     DrawChecks(hd_body,medium);DrawChecks(hd_title,large);ImGui::EndFrame();
+    float old_icon[4]{};CHECK(TrialMenuIconUV(13,old_icon));
     ImFontAtlas missing_atlas;ImFont *missing_body=nullptr,*missing_title=nullptr;
     CHECK(!TrialLoadFrontendFonts(&missing_atlas,std::filesystem::path(/* GAME_PATH */)/"missing-font-test",missing_body,missing_title));
     CHECK(!missing_body&&!missing_title&&missing_atlas.Fonts.empty()&&missing_atlas.CustomRects.empty());
+    float new_icon[4]{};CHECK(!TrialMenuIconUV(13,new_icon));
+    // A later successful startup publishes the newly packed coordinates;
+    // failed startup cannot leave a previous GPU atlas's coordinates active.
+    ImFontAtlas rebuilt;rebuilt.TexDesiredWidth=8192;
+    CHECK(TrialLoadFrontendFonts(&rebuilt,/* GAME_PATH */,missing_body,missing_title));
+    CHECK(TrialMenuIconUV(13,new_icon)&&std::memcmp(old_icon,new_icon,sizeof(old_icon)));
+    CHECK(!TrialLoadFrontendFonts(nullptr,/* GAME_PATH */,missing_body,missing_title));
+    CHECK(!TrialMenuIconUV(13,new_icon));
     ImGui::DestroyContext();
-    std::puts("PASS original/HD medium/large atlas pixels, unchanged ASCII/Latin-1/CP1252 glyph metrics and draw vertices, resident toggle, button variants and missing-asset startup fallback");
+    std::puts("PASS original/HD medium/large atlas pixels, unchanged ASCII/Latin-1/CP1252 glyph metrics and draw vertices, resident toggle, button variants, startup/rebuild lifetime");
 }

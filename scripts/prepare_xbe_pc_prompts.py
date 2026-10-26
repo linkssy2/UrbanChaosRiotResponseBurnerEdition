@@ -18,18 +18,21 @@ def once(s,old,new):
 
 INPUT=r'''
 // A renderer read must never consume or advance the original command gesture.
-bool TrialPromptSnapshot(unsigned id,TrialPromptInput& out,unsigned variant){
+bool TrialPromptSnapshot(unsigned id,TrialPromptInput& out,unsigned variant,unsigned player){
     std::lock_guard guard(input_lock);out={};
-    if(!xbox_KeyboardMode()){
+    const bool second=player==2;
+    if(second||(player!=1&&!xbox_KeyboardMode())){
         if(id!=1)return false;
         controller_init();
         out.family=trial_controller::family.load();
-        const bool remap=gameplay&&!menu_mode&&InterlockedCompareExchange(&controller_custom,0,0);
+        if(second)trial_controls::LoadSecond();
+        const bool remap=second||(gameplay&&!menu_mode&&InterlockedCompareExchange(&controller_custom,0,0));
         if(!out.family&&!remap)return false;
         bool changed=out.family!=0;out.controller=true;
         for(unsigned action=0;action<12;++action){
-            unsigned source=remap?xbox_ControllerBinding(action,0):action+1;
-            if(remap&&!source)source=xbox_ControllerBinding(action,1);
+            unsigned source=second?trial_controls::second_controller.binding[action][0]:
+                remap?xbox_ControllerBinding(action,0):action+1;
+            if(remap&&!source)source=second?trial_controls::second_controller.binding[action][1]:xbox_ControllerBinding(action,1);
             out.bindings[action]=source;
             std::snprintf(out.labels[action],sizeof(out.labels[action]),"%s",trial_controller::Label(source,out.family));
             changed|=source!=action+1;
@@ -62,15 +65,15 @@ bool TrialPromptSnapshot(unsigned id,TrialPromptInput& out,unsigned variant){
 '''
 
 METHOD=r'''
-ID3D12Resource* D3D12Backend::BindPcPrompt(unsigned id,unsigned variant,const TextureDesc& original,DrawTextures& stages,int stage) {
+ID3D12Resource* D3D12Backend::BindPcPrompt(unsigned id,unsigned variant,unsigned player,const TextureDesc& original,DrawTextures& stages,int stage) {
     TrialPromptInput input;
     if(id!=1||variant>2)variant=0;
-    if(!TrialPromptSnapshot(id,input,variant))return nullptr;
+    if(!TrialPromptSnapshot(id,input,variant,player))return nullptr;
     auto& slot=pc_prompts_[input.controller?3:variant==2?4:variant?variant+1:id-1];
     const ULONGLONG now=GetTickCount64();
     bool changed=!slot.texture.res||!uc_pc_prompts::Equal(slot.input,input);
-    // Same bounded refresh as CONTROL; release/press transitions are immediate.
-    if(changed&&(!slot.texture.res||now-slot.updated>=33||input.held!=slot.input.held)){
+    // Bindings change immediately; only the moving Orders cue is rate limited.
+    if(changed&&(id==1||!slot.texture.res||now-slot.updated>=33||input.held!=slot.input.held)){
         std::vector<uint8_t> pixels;unsigned width=0,height=0;
         const auto* raw=static_cast<const uint8_t*>(kernel::HostPtr(original.data));
         if(!TrialPromptArtwork(id,raw,input,pixels,width,height))return nullptr;
@@ -137,12 +140,13 @@ def prepare(input_source,graphics_source,area):
         (area/'src/common'/name).write_text((local/name).read_text())
     state_path=area/'src/gpu/state.h';state=state_path.read_text()
     field='    unsigned uc_prompt_variant = 0; // original queued text identity\n'
+    player_field='    unsigned uc_prompt_player = 0; // queued HUD owner, independent of global input mode\n'
     # StateRanges starts at simple, so metadata before that member is never
     # transmitted to the renderer. Keep this POD in its material-to-end range,
     # alongside fog metadata. Remove the old placement on repeated preparation.
-    state=state.replace(field,'')
+    state=state.replace(field,'').replace(player_field,'')
     state=once(state,'    uint32_t light_enable = 0;                         // bit per light\n',
-                     '    uint32_t light_enable = 0;                         // bit per light\n'+field)
+                     '    uint32_t light_enable = 0;                         // bit per light\n'+field+player_field)
     state_path.write_text(state)
     art=(ROOT/'third_party/xboxrecomp/src/nv2a/nv2a_pc_hud_art.h').read_text()
     art=once(art,'#include "../../include/host_controller.h"','')
@@ -167,7 +171,7 @@ static int pc_hud_load_pixels(){return pc_hud_supplied;}''')
     input_source=once(input_source,old,'')
     input_source=once(input_source,'    if(port==0)pad.connected=true;',
         '''    if(port==0)pad.connected=true;
-    if(port==0&&focused()&&uc_pc_prompts::ControllerActive(pad)&&InterlockedExchange(&keyboard_mode,0))PostMessage(game_window,kCapture,0,0);''')
+    if(port==0&&focused()&&!TrialCoopMenuOpen()&&uc_pc_prompts::ControllerActive(pad)&&InterlockedExchange(&keyboard_mode,0))PostMessage(game_window,kCapture,0,0);''')
     input_source=once(input_source,'    if(TrialGraphicsMessage(msg,wp,lp)){', '''    static uc_pc_prompts::PointerActivity pointer_activity;
     auto note_pointer_input=[&]{
         const bool changed=!xbox_KeyboardMode();xbox_KeyboardNoteInput();
@@ -184,7 +188,7 @@ static int pc_hud_load_pixels(){return pc_hud_supplied;}''')
     graphics_source=once(graphics_source,'    uint32_t levels = 1;\n', '    uint32_t levels = 1;\n    unsigned pc_prompt_id = 0;\n')
     graphics_source=once(graphics_source,'    ID3D12Resource* BindTexture(const State& s, int stage, DrawTextures& stages);',
         '    ID3D12Resource* BindTexture(const State& s, int stage, DrawTextures& stages);\n'
-        '    ID3D12Resource* BindPcPrompt(unsigned,unsigned,const TextureDesc&,DrawTextures&,int);')
+        '    ID3D12Resource* BindPcPrompt(unsigned,unsigned,unsigned,const TextureDesc&,DrawTextures&,int);')
     field='''    struct PcPromptSlot { Tex texture;TrialPromptInput input;ULONGLONG updated=0;
         D3D12_RESOURCE_STATES state=D3D12_RESOURCE_STATE_COPY_DEST; };
     PcPromptSlot pc_prompts_[5];
@@ -196,7 +200,7 @@ static int pc_hud_load_pixels(){return pc_hud_supplied;}''')
     graphics_source=once(graphics_source,'    FillTextureView(tx, d, stages.sv[stage]);',
         '''    FillTextureView(tx, d, stages.sv[stage]);
     if(tx.pc_prompt_id)
-        if(auto* replacement=BindPcPrompt(tx.pc_prompt_id,s.uc_prompt_variant,d,stages,stage))return replacement;''')
+        if(auto* replacement=BindPcPrompt(tx.pc_prompt_id,s.uc_prompt_variant,s.uc_prompt_player,d,stages,stage))return replacement;''')
     graphics_source=once(graphics_source,'ID3D12Resource* D3D12Backend::BindGuestTexture(',METHOD+'\nID3D12Resource* D3D12Backend::BindGuestTexture(')
     stage_tests(area,art)
     from prepare_xbe_prompt_handoff import prepare as prepare_handoff
@@ -206,7 +210,7 @@ static int pc_hud_load_pixels(){return pc_hud_supplied;}''')
 def strip_guest(source):
     source=re.sub(r'\t// uc_pc_prompt_gate: accepted CONTROL visibility boundary\n\tif \([^\n]+\) goto loc_[0-9A-F]+;\n','',source)
     source=re.sub(r'loc_[0-9A-F]+: // uc_pc_prompt_label\n','',source)
-    return source.replace('\nextern int xbox_KeyboardMode(); // uc_pc_prompt_decl','')
+    return re.sub(r'\nextern [^\n]+ // uc_pc_prompt_decl','',source)
 
 def transform_guest(source):
     # Duplicated translated interior entries contain the same retail gate; patch
@@ -216,7 +220,7 @@ def transform_guest(source):
         text=m[0]
         for i,(start,target,condition) in enumerate((
             ('00075458','000754BC','X86_MEM32(ctx.ebx)>0'),
-            ('00158D1B','00158D24','xbox_KeyboardMode()'))):
+            ('00158D1B','00158D24','TrialPromptOrdersKeyboard(ctx,base)'))):
             marker='\t// '+start+' '
             if marker not in text:continue
             destination='\t// '+target+' '
@@ -228,7 +232,7 @@ def transform_guest(source):
         return text
     result=re.sub(r'X86_FUNC\(__imp__sub_[0-9A-F]+\) \{.*?^\}',body,source,flags=re.S|re.M)
     if result!=source:
-        result=once(result,'#include "x86_recomp_shared.h"','#include "x86_recomp_shared.h"\nextern int xbox_KeyboardMode(); // uc_pc_prompt_decl')
+        result=once(result,'#include "x86_recomp_shared.h"','#include "x86_recomp_shared.h"\nextern bool TrialPromptOrdersKeyboard(const X86Context&,const uint8_t*); // uc_pc_prompt_decl')
     return result,counts
 
 def prepare_guest(area):
@@ -240,6 +244,13 @@ def prepare_guest(area):
         s=next(s for s in sections if s[1]<=va and va+size<=s[1]+s[4]);at=s[3]+va-s[1]
         return data[at:at+size]
     assert read(0x158D11,0x19).hex()=='8a86d500000084c0740d83bed8000000ff7504b001eb0232c0'
+    # Ownership evidence for the update-side keyboard-only Orders gate.
+    for address,size,digest in (
+        (0x1592bd,6,'e21a6ac00515f9f501a3bad60304be0cfccf6f8847702688532ff0508f86a325'),
+        (0x159333,48,'e0d761ddade488ffecd0a6b3aaaf401c78ceeed7111d97ee25dab48271a1868b'),
+        (0x1589cd,21,'59b91a634375ca701c4aa5d8c292aba3c9c41515107d37e9b51b4c1fddacd807'),
+        (0x15895a,31,'7d3959a06d25473369d49fa9e62338627db14d12918da9cc86b0a8aff3705ed1')):
+        assert hashlib.sha256(read(address,size)).hexdigest()==digest,hex(address)
     assert read(0x75458,5).hex()=='6aff6a00e8'
     counts=[0,0]
     for name in ('x86_recomp.11.cpp','x86_recomp.34.cpp'):
@@ -257,7 +268,18 @@ CONTEXT_HOOKS={
         ('0009DB30','TrialPromptQueueReset(ctx.ecx);'),
         ('0009D860','TrialPromptQueueReset(ctx.ecx);'),
         ('0009DB90','TrialPromptDrawScope uc_prompt_draw(base,ctx.ecx);')],
+    54:[('00215380','TrialPromptPlayerScope uc_prompt_player;'),
+        ('002153EB','uc_prompt_player.Select(ctx,base);'),
+        ('00215429','uc_prompt_player.Clear();')],
 }
+
+def unprepare_prompt_context(area):
+    """Remove only our metadata hooks before earlier original-source pins."""
+    for chunk in CONTEXT_HOOKS:
+        path=Path(area)/f'generated/game/x86_recomp.{chunk}.cpp'
+        if not path.exists():continue
+        source=path.read_text();clean=re.sub(r'^.*// uc_prompt_context\n','',source,flags=re.M)
+        if clean!=source:path.write_text(clean)
 
 def transform_prompt_context(source,chunk):
     declaration='#include "../../src/common/xbe_prompt_context.h" // uc_prompt_context'
@@ -283,6 +305,7 @@ def prepare_prompt_context(area,read):
         (0x9db90,1048,'e0d9502bef18e3e7c3537c354f34c4084215763adb44902ec99fbcd157b8232c'),
         (0x9d860,155,'a10f04a4b7ede9355acc2174ed4a113666f4e3ea83d0f776471fc2f769e49677'),
         (0x9e257,44,'2b8ded20a829a5514926a23c837b1d409968d3d3cf5403b5dd7d7d12cdf594b9'),
+        (0x215380,214,'12f02f0a14aa4baefa093cca221de9fe72d3bb71879ae04aab5e167b0c1f6a4c'),
         (0x273410,379,'7af30456e1fbba4180561d068fe672b32e9ba7d98d08aab4563a3ff507a34834'),
         (0x273590,147,'afb6022af2d7e27d2cc98e28ca73244a92292bb4b739c036606c93d7ef3fa404'),
         (0x273860,281,'5e6001ceef33b5965ba6b0459efbd1ab10b54fcbf8d3bd60863516f5ee1ded72'),
@@ -350,7 +373,9 @@ def stage_tests(area,art):
     def gate(text,name):
         begin=text.index('\t// 00158D11 ');end=text.index('\t// 00158D2A ',begin)
         return 'static void '+name+'(X86Context& ctx,uint8_t* base){\nuint32_t ca=0,cb=0,cf=0,of=0,zf=0,sf=0,pf=0;\n'+text[begin:end]+'return;\n}\n'
-    fixture=fixture.replace('/* ORIGINAL_AND_CANDIDATE_GATES */',gate(source,'OriginalGate')+gate(candidate,'CandidateGate'))
+    fixture=fixture.replace('/* ORIGINAL_AND_CANDIDATE_GATES */',
+        'bool TrialPromptOrdersKeyboard(const X86Context&,const uint8_t*);\n'+
+        gate(source,'OriginalGate')+gate(candidate,'CandidateGate'))
     context=(local/'test_xbe_prompt_context.inc').read_text()
     def no_includes(text):return re.sub(r'^#(?:include|pragma)[^\n]*\n','',text,flags=re.M)
     context=context.replace('/* PROMPT_CONTEXT_DECLARATIONS */',no_includes((local/'xbe_prompt_context.h').read_text()))
@@ -371,6 +396,16 @@ def stage_tests(area,art):
     selector=selector[selector.index('\t// 0009E257 '):selector.index('\t// 0009E280 ')]
     bodies.append('X86_FUNC(PromptOriginalSelectRecord) {\nX86_LOAD_FLAGS();\nuint32_t ca=0,cb=0;\n'+selector+
                   '\nreturn;\nloc_0009E298:\nloc_0009E288:\nctx.eax=0;return;\n}')
+    hud=(area/'generated/game/x86_recomp.54.cpp').read_text()
+    hud=re.sub(r'^.*// uc_prompt_context\n','',hud,flags=re.M)
+    hud=hud.replace('\tif(trial_coop_cinematic.Hud())goto loc_00215429;\n','')
+    hud=hud[hud.index('\t// 002153A2 '):hud.index('\t// 00215429 ')]
+    assert hashlib.sha256(hud.encode()).hexdigest()=='afaa2521592b85a4a30ab2a863f68d76784e314bfb8d67121c0959cf54f28e29'
+    for owned in (False,True):
+        part=hud.replace('\t// 002153EB ','\tuc_prompt_player.Select(ctx,base);\n\t// 002153EB ',1) if owned else hud
+        bodies.append('X86_FUNC(Prompt'+('Owned' if owned else 'Original')+'HudLayer) {\n'
+            'TrialPromptPlayerScope uc_prompt_player;\nX86_LOAD_FLAGS();\nuint32_t ca=0,cb=0;\n'+part+
+            '\tuc_prompt_player.Clear();\n}\n')
     for chunk,begin,end,name in ((28,'00115310','0011531B','PromptSimpleCutsceneQuery'),
                                (42,'001AC8F4','001AC905','PromptCinematicQuery'),
                                (62,'002548D8','00254996','PromptOwnedFooter'),

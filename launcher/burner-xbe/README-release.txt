@@ -1,4 +1,4 @@
-Urban Chaos: Riot Response - Burner Edition 0.07
+Urban Chaos: Riot Response - Burner Edition 0.08
 
 HD HUD is still a work in progress and has known prompt/display issues.
 Turn HD UI Off to use the original HUD, which works normally.
@@ -8,18 +8,22 @@ Windows x64 PC port using XboxXBERecomp by TGP482, with native Direct3D12 render
 PC controls and menus. Original gameplay is statically recompiled from Xbox code.
 XboxXBERecomp: https://github.com/TGP482/XboxXBERecomp
 
-NEW IN 0.07 (SINCE 0.06)
-- Fixed widescreen rifle-scope edge coverage and incomplete red tint.
-- Ladder views follow your FOV; improved climbing/shield-bash arm coverage and sleeve mapping, and corrected taser-arc alignment at changed FOV.
-- Fixed invisible restart confirmations and Difficulty-menu flicker. Mission/checkpoint restart now use mouse-friendly dialogs; controller layouts remain available.
-- Fixed the reported dynamic wall-lighting flicker and restored original depth-clamp handling.
-- Added a targeted stone-ledge texture-mapping repair for original and HD textures.
-- Fixed disappearing blue pipe flames caused by exhausted renderer registrations; no texture-pack reinstall needed.
-- Added automatic shader warm-up for known shaders to reduce first-use stutters while preserving your learned cache.
-- Reduced repeated audio decoding using a selected upstream improvement and reduced unnecessary keyboard polling.
-- Added separate Next Firearm/Previous Firearm bindings and restored character collision with ragdoll bodies.
-- Integrated Spanish game text, PC menus/control descriptions and launcher language selection. Translation data is bundled and prepared automatically from your imported ISO; English voices remain.
-- Separate experimental Linux package runs this Windows build through Proton; it is not a native Linux port and has not been gameplay-tested on Linux.
+NEW IN 0.08 (SINCE 0.07)
+- Experimental local split-screen co-op from the normal main menu, with rotating character previews and character-specific bodies and first-person arms.
+- Independent player controls and world/weapon FOV. The player who pauses owns the settings screen; both players pause together.
+- Stored health packs in single-player and co-op, medic resupply, partner revival and a ten-second downed timer with pulsing red edges and blurred vision.
+- Co-op HUD/prompt ownership, shared objective notifications, personal headshot/stun/spin rewards, pickups, scripted progression and shared cinematic presentation.
+- Co-op fixes for revival crashes and hidden weapons, missing sounds/props, shield and weapon animations, and effects crossing between views.
+- More natural elbow/shoulder behavior for T-Zero and Burner first-person arms at wider FOV, preserving texture density.
+- Less added darkening on Mission Failed so the original death scene is easier to see.
+- Proportional FMV framing: Fill crops to fill the widescreen view; 4:3 preserves the complete image.
+- Optional Spanish voices imported locally from your European PS2 ISO. Spanish text remains included; no game-audio download is distributed.
+- Carries forward the Linux setup/symlink fixes and clearer Steam instructions from the 0.07.5 compatibility work.
+- Selected XboxXBERecomp fixes for missing-texture behavior and consistent stereo audio configuration.
+
+Co-op is experimental. Full-campaign progression, all character/action combinations,
+helicopter sections and Proton co-op still need gameplay testing. Investigation of
+a reported co-op aiming offset remains open.
 
 INSTALL
 Linux package users: follow README-linux.txt and its recommended Steam setup.
@@ -37,6 +41,9 @@ Spanish translation data is included in the main download. The first Play
 after import prepares it from your game automatically; no separate Spanish
 download is needed.
 Only translation data is bundled, not complete translated game archives.
+Single-player and Co-op use this same launcher and main menu. No separate co-op
+executable or private launch flag is needed. First Play may take longer while
+preparing character and animation resources locally from your imported game.
 Approved restored HD UI PNGs are bundled in runtime/hd-ui. They replace only
 matching original UI textures when HD UI is enabled; other UI art is prepared
 locally from your game. Missing or invalid restored images keep the source art.
@@ -73,6 +80,30 @@ present in this disc's text/voice banks, regardless of some ISO filenames.
 The bundled community translation adds Spanish game text, PC settings and
 control descriptions. Select Spanish in Setup or Options > Language (see below).
 
+LOCAL CO-OP AND HEALTH PACKS
+Connect one controller, start normally, then choose Co-op on the main menu.
+Player 1 uses keyboard/mouse and the upper view; Player 2 uses the controller and
+the lower view. Select a character for each player, mark both Ready, then choose
+a campaign level. This is local split-screen, not online multiplayer.
+Opening either pause menu pauses both players. Controls and world/weapon FOV
+edits apply to the player who paused; other graphics settings are shared.
+Shared objectives appear in both views. Personal combat and interaction prompts
+follow their player. Authored in-game cutscenes use one fullscreen view.
+
+Each fresh level starts each player with one stored health pack, up to three.
+Get more from a medic while their original supplies last. Assign Use health pack
+in Controls (keyboard default H; set a controller binding for Player 2).
+Use a pack to heal yourself or revive a nearby downed partner. A downed player
+has ten seconds to be revived; expiry or both players falling fails the mission.
+The downed view pulses red and blurs; shared audio stays clear for the partner.
+Stored packs also work in single-player. Existing checkpoints without stored-pack
+data restore zero packs; they do not grant another free pack on every reload.
+
+MOVIES
+Graphics > FMV scaling has Fill and 4:3 modes. Fill keeps picture proportions
+and crops the top and bottom to fill the widescreen view. 4:3 keeps the complete
+picture with side bars. Bars already present in the source movie may remain.
+
 NOTES
 Switch 2 USB support is experimental: the native SDL USB driver and libusb DLL
 are included, with Nintendo button prompts. Bluetooth is not implemented.
@@ -95,14 +126,38 @@ Then start the game and enable Graphics > HD game textures > Apply.
 The option is grayed out when the pack is not installed or is incomplete.
 The pack stays in portable GameData and is separate from HD HUD and menus.
 HD textures use more video memory. Original textures remain available with Off.
-The 0.06 HD game texture pack remains compatible; its artwork has not changed.
+The unchanged 0.06 HD game texture pack is compatible with 0.08 on both platforms.
+Existing installations do not need to reinstall it for this update.
 HD game texture artwork: xXthe.RockoXx; converted from the PS2 HD texture pack.
+
+OPTIONAL SPANISH VOICES
+Spanish text and PC-menu translations remain included in the main build.
+Import your Xbox ISO first and close the game. In Burner Edition Setup choose
+IMPORT SPANISH VOICES (PS2 ISO) and select your own European multilingual PS2
+Urban Chaos ISO (SLES-53991). If it is in a ZIP or RAR, extract the ISO first.
+Setup verifies the disc and converts its Spanish dialogue and cutscene audio
+locally. Allow at least 8.4 GiB of free space for conversion. This can take a
+while; keep Setup open until it finishes. You can cancel
+without replacing your previous voice installation. Then choose Spanish and Play.
+No PS2 audio files or downloadable voice pack are included. The conversion tools
+are bundled; FFmpeg does not need to be installed separately. Original game
+files, other languages, saves and settings are kept. Previously installed voices
+remain usable. Without imported voices, Spanish text uses English audio.
+Windows and Proton use the same import process (see README-linux.txt).
+The dub is from the European PS2 edition; ZARF's text translation is separate.
+Two cutscene voice tracks are slightly accelerated without changing pitch to
+fit the Xbox video timing. Clips that cannot be matched safely retain their
+original recording. In-game audio and lip synchronization need testing.
 
 KNOWN ISSUES
 HD HUD still has prompt/display issues; the original HUD remains available.
+Co-op is experimental, with incomplete campaign/character/turret gameplay coverage.
+A reported co-op aiming offset remains under investigation.
 The intermittent missing injured officer in Angel Heights remains under investigation.
 The targeted stone-ledge mapping repair still needs confirmation at the reporter's exact wall.
-Spanish additions need community review. The experimental Linux package is unverified in gameplay.
+Spanish text and imported voice synchronization need community review.
+A Linux tester confirmed setup and gameplay in the earlier compatibility build;
+that does not verify this release's new features or co-op under Proton.
 
 CREDITS
 XboxXBERecomp: TGP482. Earlier xboxrecomp work and retained helpers: sp00nz.
@@ -114,15 +169,10 @@ INTEGRATED COMMUNITY SPANISH TEXT
 The ZARF beta translation and supplemental translations are included as text
 data. On the first Play after import or upgrade, the launcher builds the
 translated files locally from your imported game in
-GameData/xbe-runtime/translations/es-zarf. English voices are retained.
+GameData/xbe-runtime/translations/es-zarf. English voices are retained unless
+Spanish voices have been imported from your European PS2 ISO.
 Choose Espanol (ZARF beta) in Options > Language, Apply, then restart. You can
 also select Spanish in Burner Edition Setup before pressing PLAY.
 The translation fills remaining English messages and includes Spanish PC menus
 and control descriptions. Additional translations still need community review.
 
-0.07 PACKAGING CORRECTION
-The refreshed 0.07 downloads include Spanish translation data that was omitted
-from the first 0.07 packages. To update, replace the release files while keeping
-GameData, or copy GameData into a fresh extraction as described above. The next
-Play, either in Setup or through the Play launcher, prepares it automatically.
-Your saves, other settings and installed HD game textures are preserved.

@@ -18,6 +18,8 @@ static uint32_t denied=0xffffffff;
 bool IsCommitted(uint32_t page){return page<kernel::memory.size()&&page!=denied;}
 }
 static bool keyboard_mode=true,original_a_edge=false;
+static unsigned conversation_player=0;
+unsigned TrialCoopInteractionPlayer(const uint8_t*,uint32_t){return conversation_player;}
 int xbox_KeyboardMode(){return keyboard_mode;}
 #include "../common/xbe_conversation_skip.cpp"
 static constexpr uint32_t owner=0x600000,world=0x601000,fade=0x602000,stack=0x700000;
@@ -73,6 +75,12 @@ static void Queries(){
     TrialConversationPublish(true,true);assert(!Leaf(true));
     TrialConversationPublish(false,true);TrialConversationPublish(true,true);assert(Leaf(true));
     keyboard_mode=false;original_a_edge=false;assert(!Leaf(true));original_a_edge=true;assert(Leaf(true));keyboard_mode=true;
+    // A controller-owned co-op conversation keeps the native A result even
+    // when the keyboard player supplies an F edge on the same frame.
+    conversation_player=2;original_a_edge=false;assert(!Leaf(true));
+    original_a_edge=true;assert(Leaf(true));
+    conversation_player=1;keyboard_mode=false;original_a_edge=false;assert(Leaf(true));
+    conversation_player=0;keyboard_mode=true;original_a_edge=true;
     // Non-conversation callers/owners continue through the original query.
     TrialConversationPublish(false,true);assert(Leaf(true,0x11531b));
     W32(owner,0xdeadbeef);assert(Leaf(true));W32(owner,0x471060);
@@ -106,6 +114,12 @@ static void Reload(){
     TrialReloadQuery(ctx,g_base);assert(X87_ST(0)==0.);
     keyboard_mode=false;X87_ST(0)=.75;TrialReloadQuery(ctx,g_base);assert(X87_ST(0)==.75);
     keyboard_mode=true;W32(owner+0x368,1);TrialReloadQuery(ctx,g_base);assert(X87_ST(0)==.75);
+    // Interleaved local actors must keep the controller's original A/reload
+    // result and leave the keyboard reload edge available to its own player.
+    TrialReloadPublish(false,true);TrialReloadPublish(true,true);
+    X87_ST(0)=0.;TrialReloadQuery(ctx,g_base);assert(X87_ST(0)==0.);
+    W32(owner+0x368,0);TrialReloadQuery(ctx,g_base);assert(X87_ST(0)==1.);
+    W32(owner+0x368,1);X87_ST(0)=.75;TrialReloadQuery(ctx,g_base);assert(X87_ST(0)==.75);
     W32(owner+0x368,0);
 }
 int main(){Queries();Prompts();Reload();std::puts("PASS retail conversation skip delay/allow flag, F press-edge snapshot, repeated readers, release/repress, blocked holds, controller/original fallback, x87/stdcall stack, exact original HUD publication and teardown; no live claim");}

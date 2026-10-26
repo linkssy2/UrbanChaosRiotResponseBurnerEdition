@@ -10,6 +10,7 @@ uint32_t TrialLanguage=0;
 namespace trial_language {
 static std::atomic<uint32_t> active{0};
 bool SpanishAvailable(){return trial_spanish::Available();}
+bool SpanishVoicesAvailable(){return trial_spanish::VoicesAvailable();}
 uint32_t Active(){return active.load();}
 uint32_t XboxLanguage(){
     // Original16C50 maps Xbox1/4/6/3 to title0/1/2/3 respectively.
@@ -28,7 +29,7 @@ void Initialize(){
 bool PendingRestart(){return Snapshot()!=Active();}
 bool Apply(uint32_t language,std::string& message){
     std::lock_guard lock(app::UiLock());
-    if(language>=Count||(language==4&&!SpanishAvailable())){message=language==4?"Install the ZARF Spanish pack, then restart the game.":"That language is not available.";return false;}
+    if(language>=Count||(language==4&&!SpanishAvailable())){message=language==4?"Prepare the bundled Spanish text in Setup, then restart the game.":"That language is not available.";return false;}
     const uint32_t previous=TrialLanguage;
     if(language!=previous){
         TrialLanguage=language;

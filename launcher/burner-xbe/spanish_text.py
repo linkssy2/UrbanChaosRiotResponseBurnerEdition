@@ -23,9 +23,9 @@ def _unique(items):
     return result
 
 
-def load_bundle(path):
+def load_bundle(path, *, root=None):
     path = Path(path).absolute()
-    unlinked(path)
+    unlinked(path, root=root)
     if not path.is_file() or not 0 < path.stat().st_size <= 8 * 1024 * 1024:
         raise ValueError('The included Spanish text bundle is missing or damaged.')
     bundle = json.loads(path.read_text(encoding='utf-8'), object_pairs_hook=_unique)
@@ -153,20 +153,21 @@ def _translate(original, changes):
     return bytes(result)
 
 
-def build(original_game_directory, bundle_path, output_directory, cancel=None):
+def build(original_game_directory, bundle_path, output_directory, cancel=None, *,
+          source_root=None, bundle_root=None, output_root=None):
     """Create a fresh staging folder; the caller owns atomic installation/rollback."""
-    bundle = load_bundle(bundle_path)
+    bundle = load_bundle(bundle_path, root=bundle_root)
     original_game_directory = Path(original_game_directory).absolute()
     output_directory = Path(output_directory).absolute()
-    unlinked(original_game_directory)
-    unlinked(output_directory)
+    unlinked(original_game_directory, root=source_root)
+    unlinked(output_directory, root=output_root)
     output_directory.mkdir(parents=True, exist_ok=False)
     result = []
     for item in bundle['files']:
         if cancel:
             cancel()
         path = original_game_directory / item['file']
-        unlinked(path)
+        unlinked(path, root=source_root)
         if not path.is_file() or path.stat().st_size != item['source_size']:
             raise ValueError('Spanish requires the supported, unmodified Xbox ISO files.')
         original = path.read_bytes()

@@ -38,8 +38,10 @@ with tempfile.TemporaryDirectory(prefix='spanish-setup-', dir=HERE.parents[1] / 
     manifest = ''.join(f"{r['file']} {r['size']}\n" for r in rows)
     calls = []
 
-    def build(source, path, output, cancel=None):
+    def build(source, path, output, cancel=None, *, source_root=None,
+              bundle_root=None, output_root=None):
         assert source == original and path == bundle[0]
+        assert source_root == output_root == data and bundle_root == worker.ROOT
         calls.append(output)
         output.mkdir()
         for row in rows:

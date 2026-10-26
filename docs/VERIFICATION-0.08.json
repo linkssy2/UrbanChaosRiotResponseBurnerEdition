@@ -1,0 +1,59 @@
+{
+  "version": "0.08",
+  "runtime_sha256": "599422db921ae2707928d434fc50d6f58955f45ba1752c7641be0517589d1fc7",
+  "maintained_source_manifest_sha256": "6af992e8fe569de77611ce9c7584da30b54f79c36d2c56db66f10b31d2dedba1",
+  "runtime_build_and_fixture_steps_passed": 151,
+  "additional_asset_check_groups_passed": 4,
+  "installer_launcher_build_and_test_groups_passed": 13,
+  "preparation_repeatable": true,
+  "prepared_files_compared": 443,
+  "release_diagnostics_removed": true,
+  "unified_single_player_coop_menu": true,
+  "windows_automated_checks": true,
+  "windows_live_tested": true,
+  "proton_live_tested": false,
+  "full_clean_source_build_verified": false,
+  "game_launched_during_release_preparation": true,
+  "scope": "Qualified-workspace production integration, offline checks, and a bounded Windows visual smoke test of the exact packaged runtime. Live Proton and full-campaign acceptance remain unverified.",
+  "remaining_reports": [
+    "Co-op aiming offset",
+    "Full campaign and helicopter co-op acceptance",
+    "All character/action combinations",
+    "Proton co-op and local Spanish-voice import live acceptance",
+    "Angel Heights missing officer",
+    "Exact-location HD wall-ledge appearance",
+    "Remaining HD HUD prompt/display issues"
+  ],
+  "evidence_hashes": {
+    "verification.json": "324b56acee23fd1590a505802152496cfbc17d0b9c44348b2ac7a46b7d8c623c",
+    "package-verification.json": "4bdca3aaa2cea0afca1e9c3bfe6b47465a46baae8139386079d3481e78d3c8a4",
+    "preparation-check.json": "f5a573af11035152a8011087c6786353d87a1da61390016720273ceb27621f9d"
+  },
+  "windows_visual_smoke_test": {
+    "completed_at": "2026-10-26T11:45:07.541189-07:00",
+    "package_sha256": "6ee1f211925332fd085aae40906fc093ce40c3bdf0079f6ee8247bfdba58e5c6",
+    "runtime_sha256": "599422db921ae2707928d434fc50d6f58955f45ba1752c7641be0517589d1fc7",
+    "passed": [
+      "Normal packaged Play launcher boots with visible, progressing intro video and Profile Select.",
+      "Profile Select, Main Menu, Options, scrolling Controls, Graphics, Audio and General render and navigate with mouse/keyboard.",
+      "Difficulty menu is visible, Rookie selects and returns to level selection.",
+      "Single Player Hope Street loads with scenery, actors, arms, weapon and HUD; click fires, ammo 15 to 14.",
+      "Pause, Objectives and Restart Mission confirmation are visible; No cancels restart. Quit confirmation returns to level select.",
+      "Co-op entry is available in the same main menu. Rotating T-Zero and Avenger previews, mouse character selection, both Ready and Continue work.",
+      "Hope Street co-op loads two distinct views with first-person weapons, other character visible, separate HUDs, black divider and device-specific prompts.",
+      "Player 1 firing changes only upper ammunition from 15 to 14; Player 2 stays at 15.",
+      "Player 1 pause opens Controls - Player 1 and Graphics - Player 1. World FOV slider applies 83 while Player 2 remains at 70; resumed upper view widens and lower view retains framing.",
+      "Quit co-op, return to main menu and deploy Canals in Single Player: full-frame scenery, effects, arms, weapon and HUD appear without split-screen."
+    ],
+    "not_verified": [
+      "Physical Player 2 movement, firing and pause-menu ownership; tool has no controller input interface.",
+      "Live Linux/Proton gameplay or rendering; no usable live Proton environment on this host.",
+      "Full campaign, mission failure/death/revive paths, NPC progression and co-op aim accuracy (aim investigation remains on hold).",
+      "Audio quality and performance/frame pacing; another game occasionally took desktop focus.",
+      "Optional HD game textures were not installed in this isolated live test; separate installer check covers pack compatibility.",
+      "FMV hold-to-skip completion was not tested because the UI tool does not expose held-key duration."
+    ],
+    "evidence_receipt": "build/release-0.08/visual/20261026-105805-568684/visual-result.json",
+    "evidence_receipt_sha256": "b787051d363f4a98815a970721ef4ecddd086661cbadc0d66cef2f990be98db2"
+  }
+}

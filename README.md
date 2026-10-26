@@ -1,52 +1,53 @@
 # Urban Chaos: Riot Response - Burner Edition
 
-**Windows release: 0.07 · Linux compatibility test/patch: 0.07.5**
-
-Linux users: download [0.07.5](https://github.com/linkssy2/UrbanChaosRiotResponseBurnerEdition/releases/tag/v0.07.5) and follow the [Steam setup instructions](launcher/burner-linux/README-linux.txt). This revision corrects Wine shader parsing and refreshes the shader seed. See [changes and testing limits](docs/CHANGES-0.07.5.md).
+**PC port - 0.08**
 
 An unofficial PC port powered by [XboxXBERecomp by TGP482](https://github.com/TGP482/XboxXBERecomp), with Direct3D 12 rendering and statically recompiled original Xbox gameplay. Earlier Burner Edition work and retained helpers use [xboxrecomp by sp00nz](https://github.com/sp00nznet/xboxrecomp).
 
-## Changes since 0.06
+## Changes since 0.07
 
-- Corrected widescreen rifle-scope borders and red tint, ladder and weapon-effect FOV alignment, and extended first-person sleeves with matching fabric mapping.
-- Corrected the reported wall-lighting flicker and added mouse-friendly mission/checkpoint restart confirmations.
-- Added separate Next Firearm and Previous Firearm bindings and restored character collision with ragdoll bodies.
-- Included a portable shader seed to reduce known first-use shader stalls, plus focused audio/input work reductions.
-- Integrated ZARF's Spanish text, supplemental translations and PC menus, with language selection in Setup. Text-only translation data is bundled; voices remain in English.
-- Fixed a separate renderer-registration exhaustion case that could hide active blue pipe flames with HD options enabled.
+- Experimental local split-screen co-op from the normal main menu, rotating character previews, and character-specific bodies and first-person arms.
+- Separate player controls and world/weapon FOV. Pausing stops both players; the player who pauses owns the settings screen.
+- Stored health packs in single-player and co-op, medic resupply, partner revival, and a ten-second downed timer with pulsing red edges and blurred vision.
+- Co-op ownership fixes for HUD, contextual prompts, personal combat rewards and pickups, plus shared objectives, campaign events and cinematic presentation.
+- Revival, missing sound/prop, shield/weapon animation and cross-viewport effects fixes; improved arm bends and sleeve mapping at wider FOV.
+- More visible death scenes, proportional FMV Fill/4:3 modes, and optional Spanish voices extracted locally from a supported PS2 ISO.
+- Linux setup and path fixes carried forward from the compatibility release, and selected upstream missing-texture/stereo audio corrections.
 
-See [the release change list](docs/CHANGES-0.07.md) for the complete scope and remaining reports.
+See [changes and testing limits](docs/CHANGES-0.08.md). Co-op is experimental; the reported co-op aiming offset and full-campaign acceptance remain open. HD HUD still has known prompt/display issues; the original HUD remains available with HD HUD and menus Off.
 
-**HD HUD still has known prompt/display issues. Turn HD HUD and menus Off to use the original HUD.**
+## Install and play
 
-## Install and update
-
-1. Extract the entire matching Windows x64 ZIP to a writable folder.
+1. Extract the matching Windows x64 package to a writable folder.
 2. Run **Burner Edition Setup.exe** and select your supported original Xbox ISO or XISO.
-3. After import, use **Play Burner Edition.exe** to launch directly.
+3. Use **Play Burner Edition.exe**. Choose **Single player** or **Co-op** from the same main menu.
 
-Windows requires Windows 10/11 x64 and a Direct3D 12-capable GPU. No original game executable, ISO, extracted UI art, videos or saves are included. Original textures, fonts, levels and audio still come from your disc. Newly restored HD replacement artwork and the existing custom Burner Edition cover/icon are included; see `artwork/README.md`.
+No separate co-op shortcut, executable or private launch flag is needed. Co-op currently uses keyboard/mouse for Player 1 (upper view) and one controller for Player 2 (lower view). Select characters, mark both Ready, then select a campaign level. Assign Player 2's Use health pack binding in Controls before relying on revival.
 
-Settings and saves live in `GameData/xbe-runtime` (profiles inside `hdd`). To update, extract into a new folder and copy your existing `GameData` beside the new launchers. Keep a backup before removing the older installation. Existing portable data takes priority over first-import migration from the earlier AppData installation. Play does not fall back to AppData. Pre-XBE saves remain separate. Setup includes **Open Saves**. The original ISO is unnecessary after successful import.
+Windows requires Windows 10/11 x64 and a Direct3D 12-capable GPU. Original disc files, Xbox executables, game audio, movies, fonts and saves are not distributed. Setup derives required resources from the user's imported game. Approved restored HD UI replacement artwork and the custom Burner Edition cover/icon are included; see `artwork/README.md`.
 
-The supplied original language banks are English, French, Italian and German. Select a language in Setup or **Options > Language**, then restart. ZARF's community Spanish translation, supplemental messages, PC menus and control descriptions are integrated. The launcher prepares translated files locally from your imported game on the first Play after import or upgrade. Only translation data is bundled, not complete translated game archives, and voices remain in English. The additions still need community review.
+Settings and saves are portable under `GameData/xbe-runtime`; profiles are inside `hdd`. For an update, extract into a new folder and **copy** your existing `GameData` beside the new launchers. Keep a backup. Existing portable data takes priority over first-import migration from the old AppData installation. Play uses portable data and does not fall back to AppData. The original ISO is unnecessary after successful import.
 
-**0.07 packaging correction:** the refreshed Windows and experimental Linux/Proton downloads include the Spanish translation data omitted from the initial 0.07 packages. Keep `GameData` when replacing the release files; the next Play prepares the translation automatically. No separate Spanish download is needed.
+## Languages and optional Spanish voices
 
-The bundled shader seed prepares observed shader variants before gameplay and preserves the player's learned cache. It contains no GPU-driver pipeline cache. A different shader compiler rebuilds those records locally; new shader variants and other first-use work can still cause hitches.
+Select a language in Setup or **Options > Language**, then restart. The supported Xbox disc supplies English, French, Italian and German. ZARF's Spanish text, supplemental translations and PC menus are bundled. The launcher prepares translated game files locally on first Play after import or update; no separate Spanish text download is needed.
 
-## Experimental Linux package
+Spanish voices are optional. Use Setup's Spanish-voice import with your own supported European multilingual PS2 ISO (SLES-53991, En/Fr/De/Es/It). Extract the ISO first if it is inside a ZIP. The launcher converts dialogue and cutscene audio locally, leaving other languages and your original Xbox import intact. Without this import, Spanish uses English voices. No Spanish game-audio archive is provided for download. Translation and voice coverage still need community review.
 
-The separate Linux package runs the same Windows executable through user-supplied Steam/Proton. It is not a native Linux port. Use the recommended Steam setup for import and Play. The direct `burner.sh` wrapper is an advanced alternative and does not set up the Steam Linux Runtime container. See [the Linux instructions](launcher/burner-linux/README-linux.txt). Linux gameplay, rendering, FMVs, audio and controllers remain unverified; the command tests only check dispatch, quoting, path handling and failure propagation.
+## Linux through Proton
 
-## Optional HD game textures
+The experimental Linux package uses the **same Windows runtime**, release version and asset recipes through user-supplied Steam/Proton. It is not a native Linux port. Follow [the Linux instructions](launcher/burner-linux/README-linux.txt) for the recommended Steam setup and normal worker launch command, including local ISO/voice import.
 
-The HD game texture pack is a **separate download**. In Setup, choose **Install HD Texture Pack** and select its ZIP without extracting it. Restart the game, enable **HD game textures** in Graphics, and Apply. The option is unavailable until a valid pack is installed. This replaces game textures only; HD HUD is a separate setting. Credit: **xXthe.RockoXx**, original PS2 U.C.riot.v.1.2.HD.textures pack, converted for this port.
+A Linux tester confirmed setup and gameplay with the earlier compatibility build. That does not verify 0.08's new features, co-op, every GPU, or Steam Deck. Offline launcher checks and Windows success are not live Proton acceptance.
 
-## Verification limits
+## Optional HD game textures and shader seed
 
-The missing injured officer in Angel Heights remains an unresolved report. The targeted HD wall-ledge repair has offline checks, but the reporter's exact location was unavailable for visual confirmation. Performance depends on settings, GPU and scene; no campaign-wide fixed frame rate is promised. Switch 2 USB support remains experimental and untested on hardware; Bluetooth is unsupported. Routine release diagnostics are disabled; failed launches can leave a bounded error report.
+HD game textures remain a separate download credited to **xXthe.RockoXx**, creator of the original PS2 U.C.riot.v.1.2.HD.textures pack. The unchanged 0.06 pack is compatible with 0.08. Install its ZIP through Setup, restart, then enable **Graphics > HD game textures**. Existing valid installations do not need reinstalling. This setting is separate from HD HUD.
 
-## Development
+The bundled portable shader seed prepares observed shader variants and preserves learned caches. It contains no GPU-driver pipeline cache. New variants and other first-use work can still cause stalls; a fixed campaign-wide frame rate is not promised.
 
-See [the code map](docs/CODE_MAP.md), [runtime maintenance](docs/XBE-RUNTIME-MAINTENANCE.md), [source/build status](docs/BUILDING.md) and [credits](CREDITS.md). Maintained source and tests are supplied for inspection and contribution. A clean checkout cannot yet rebuild the complete game without the private generated title inputs described in the build notes.
+## Source and verification
+
+See [the code map](docs/CODE_MAP.md), [runtime maintenance](docs/XBE-RUNTIME-MAINTENANCE.md), [source/build status](docs/BUILDING.md), and [credits](CREDITS.md). This archive is an inspection and contribution snapshot. A clean checkout cannot yet reproduce the complete game without qualified private generated title inputs. It includes no such generated game code or original disc payloads.
+
+Keep offline semantic tests, production compilation, and live visual/audio/input acceptance separate. The Angel Heights missing-officer report remains unresolved; the HD wall-ledge repair lacks confirmation at the reporter's exact location. Co-op campaign coverage, helicopter sequences, all character/action combinations and Proton co-op need further gameplay testing. Switch 2 USB hardware support remains experimental; Bluetooth is unsupported. Normal release tracing is disabled; failures can produce bounded error reports.

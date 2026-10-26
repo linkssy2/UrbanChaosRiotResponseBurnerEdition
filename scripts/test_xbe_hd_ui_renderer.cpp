@@ -64,7 +64,7 @@ struct TextureKey {uint32_t data,palette,signs;bool operator==(const TextureKey&
 struct TextureKeyHash {size_t operator()(const TextureKey& k)const{return k.data^(k.palette<<1)^(k.signs<<2);}};
 static uint32_t CubeSigns(const TextureDesc&,uint32_t signs){return signs;}
 }
-struct State {unsigned uc_prompt_variant=0; std::array<std::array<unsigned,1>,4> tss{};};
+struct State {unsigned uc_prompt_variant=0,uc_prompt_player=0; std::array<std::array<unsigned,1>,4> tss{};};
 static constexpr unsigned kTssColorSign=0;
 struct TexInfo {unsigned shadow=0;};
 struct DrawTextures {
@@ -98,7 +98,10 @@ const Image* Match(uint32_t w,uint32_t h,uint32_t f,const uint8_t* p,size_t n){
 }
 namespace trial_graphics {static bool enabled=false;bool HdUi(){return enabled;}}
 static bool prompt_active=false;static TrialPromptInput prompt_input;
-bool TrialPromptSnapshot(unsigned,TrialPromptInput& out,unsigned){out=prompt_input;return prompt_active;}
+static unsigned seen_player=0,seen_variant=0;
+bool TrialPromptSnapshot(unsigned,TrialPromptInput& out,unsigned variant,unsigned player){
+    seen_player=player;seen_variant=variant;out=prompt_input;return prompt_active;
+}
 static bool art_enabled=false;static unsigned art_calls=0;static ULONGLONG now=100;
 static ULONGLONG GetTickCount64(){return now;}
 bool TrialPromptArtwork(unsigned,const uint8_t*,const TrialPromptInput&,std::vector<uint8_t>& px,
@@ -122,7 +125,7 @@ public:
     void MatchHdUi(Tex&,const TextureDesc&,const FormatInfo&,const uint8_t*,uint32_t);
     ID3D12Resource* BindHdUi(Tex&,DrawTextures&,int);
     ID3D12Resource* BindGuestTexture(const State&,int,const TextureDesc&,const FormatInfo&,DrawTextures&);
-    ID3D12Resource* BindPcPrompt(unsigned,unsigned,const TextureDesc&,DrawTextures&,int);
+    ID3D12Resource* BindPcPrompt(unsigned,unsigned,unsigned,const TextureDesc&,DrawTextures&,int);
     void ReleaseOldTextures();
     void UploadTexture(Tex&,const TextureDesc&,const FormatInfo&,const uint8_t*,const uint32_t*,bool){++original_uploads;}
     void UploadTextureLevel(Tex& tx,uint32_t f,uint32_t l,const std::vector<uint8_t>& px,uint32_t pitch){
@@ -178,19 +181,30 @@ int main(){
     b.frame.garbage.clear();CHECK(held.expired());
     // Dynamic prompts have priority; toggles force immediate redraw inside 33ms.
     prompt_active=true;trial_graphics::enabled=false;now=100;
-    auto* prompt=b.BindPcPrompt(1,0,d,stages,0);CHECK(prompt&&art_calls==1&&!art_enabled);
-    now=101;trial_graphics::enabled=true;CHECK(b.BindPcPrompt(1,0,d,stages,0)==prompt);
+    auto* prompt=b.BindPcPrompt(1,0,0,d,stages,0);CHECK(prompt&&art_calls==1&&!art_enabled);
+    now=101;trial_graphics::enabled=true;CHECK(b.BindPcPrompt(1,0,0,d,stages,0)==prompt);
     CHECK(art_calls==2&&art_enabled&&prompt->pixels[0]==0xaa);
-    trial_graphics::enabled=false;CHECK(b.BindPcPrompt(1,0,d,stages,0)==prompt);
+    trial_graphics::enabled=false;CHECK(b.BindPcPrompt(1,0,0,d,stages,0)==prompt);
     CHECK(art_calls==3&&!art_enabled&&prompt->pixels[0]==0x55);
-    prompt_input.held=true;CHECK(b.BindPcPrompt(2,0,d,stages,0));CHECK(art_calls==4);
+    prompt_input.held=true;CHECK(b.BindPcPrompt(2,0,0,d,stages,0));CHECK(art_calls==4);
     // Orders text, drag cue, interaction text and controller art cannot alias.
-    auto* orders=b.BindPcPrompt(1,2,d,stages,0);
-    auto* interaction=b.BindPcPrompt(1,1,d,stages,0);
-    prompt_input.controller=true;auto* controller=b.BindPcPrompt(1,2,d,stages,0);
+    auto* orders=b.BindPcPrompt(1,2,0,d,stages,0);
+    auto* interaction=b.BindPcPrompt(1,1,0,d,stages,0);
+    prompt_input.controller=true;auto* controller=b.BindPcPrompt(1,2,0,d,stages,0);
     CHECK(orders&&interaction&&controller&&orders!=prompt&&orders!=interaction&&orders!=controller);
     CHECK(orders!=b.pc_prompts_[1].texture.res.Get());
-    prompt_input.controller=false;CHECK(b.BindPcPrompt(1,2,d,stages,0)==orders);
+    prompt_input.controller=false;CHECK(b.BindPcPrompt(1,2,0,d,stages,0)==orders);
+    // The same atlas is bound for both queued HUD owners without global mode reads.
+    bind(); // finish the preceding layout/content refresh before tagging this fixture atlas
+    tx.pc_prompt_id=1;state.uc_prompt_variant=1;state.uc_prompt_player=1;
+    CHECK(bind()==interaction&&seen_player==1&&seen_variant==1);
+    prompt_input.controller=true;state.uc_prompt_player=2;
+    CHECK(bind()==controller&&seen_player==2&&seen_variant==1);
+    const unsigned prior_art=art_calls;
+    prompt_input.bindings[0]=4;
+    CHECK(bind()==controller&&art_calls==prior_art+1); // no 33ms stale binding
+    prompt_input.controller=false;state.uc_prompt_player=0;state.uc_prompt_variant=0;
+    CHECK(bind()==prompt&&seen_player==0&&seen_variant==0);
     // Normal idle eviction also retains the prepared image until the frame fence.
     b.textures_.clear();b.frame.garbage.clear();d.width=32;
     Tex sample;CHECK(b.CreateTexture(sample,d,fi,{d.data,0,0}));sample.hd_ui_image=&uc_hd_ui::first;

@@ -11,7 +11,7 @@ class BurnerLauncher : Form {
     static readonly string Root=AppDomain.CurrentDomain.BaseDirectory;
     static readonly string Data=Path.Combine(Root,"GameData");
     readonly Label status=new Label(); readonly ProgressBar progress=new ProgressBar();
-    readonly Button play=new Button(), import=new Button(), textures=new Button(), cancel=new Button();
+    readonly Button play=new Button(), import=new Button(), textures=new Button(), voices=new Button(), cancel=new Button();
     readonly ComboBox language=new ComboBox();
     bool spanishAvailable;
     bool busy, running; string cancelPath; Image cover;
@@ -36,8 +36,8 @@ class BurnerLauncher : Form {
         Icon=Icon.ExtractAssociatedIcon(Application.ExecutablePath);
         var layout=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,Padding=new Padding(20)};layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,45));layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,55));Controls.Add(layout);
         cover=Image.FromFile(Path.Combine(Root,"cover.png"));layout.Controls.Add(new PictureBox{Image=cover,SizeMode=PictureBoxSizeMode.Zoom,Dock=DockStyle.Fill,Margin=new Padding(0,0,24,0)},0,0);
-        var panel=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=1,RowCount=12,Padding=new Padding(12,22,8,16)};
-        int[] heights={35,60,60,65,25,38,58,58,58,50,50};foreach(int h in heights)panel.RowStyles.Add(new RowStyle(SizeType.Absolute,h));panel.RowStyles.Add(new RowStyle(SizeType.Percent,100));layout.Controls.Add(panel,1,0);
+        var panel=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=1,RowCount=13,Padding=new Padding(12,12,8,12),AutoScroll=true};
+        int[] heights={30,52,52,60,25,38,52,52,52,52,46,46};foreach(int h in heights)panel.RowStyles.Add(new RowStyle(SizeType.Absolute,h));panel.RowStyles.Add(new RowStyle(SizeType.Absolute,40));layout.Controls.Add(panel,1,0);
         panel.Controls.Add(new Label{Text="URBAN CHAOS  /  RIOT RESPONSE",Dock=DockStyle.Fill,ForeColor=Color.FromArgb(190,190,169),Font=new Font("Segoe UI",11,FontStyle.Bold)});
         panel.Controls.Add(new Label{Text="BURNER EDITION",Dock=DockStyle.Fill,ForeColor=Color.FromArgb(245,175,49),Font=new Font("Segoe UI",29,FontStyle.Bold)});
         panel.Controls.Add(new Label{Text="Your Xbox disc. Ready for PC.\nPortable game data and saves stay in GameData.",Dock=DockStyle.Fill,Font=new Font("Segoe UI",12),ForeColor=Color.FromArgb(206,207,199)});
@@ -48,14 +48,15 @@ class BurnerLauncher : Form {
         languageRow.Controls.Add(new Label{Text="Language",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft});
         language.DropDownStyle=ComboBoxStyle.DropDownList;language.Dock=DockStyle.Fill;language.AccessibleName="Game language";
         language.Items.AddRange(new object[]{"English","Français","Italiano","Deutsch","Español (ZARF beta)"});language.SelectedIndex=0;
-        language.SelectionChangeCommitted+=(s,e)=>{if(language.SelectedIndex==4&&!spanishAvailable){status.Text="Import your Xbox ISO first. Spanish is included; voices remain English.";language.SelectedIndex=0;}else status.Text="Language will be saved when you press PLAY.";};
+        language.SelectionChangeCommitted+=(s,e)=>{if(language.SelectedIndex==4&&!spanishAvailable){status.Text="Import your Xbox ISO first. Spanish text is included; optional voices come from your European PS2 ISO.";language.SelectedIndex=0;}else status.Text="Language will be saved when you press PLAY.";};
         languageRow.Controls.Add(language);panel.Controls.Add(languageRow);
         play=MakeButton("PLAY",async(s,e)=>await Play());play.Enabled=false;play.BackColor=Color.FromArgb(138,56,19);panel.Controls.Add(play);
         import=MakeButton("SELECT XBOX ISO",async(s,e)=>await Import());panel.Controls.Add(import);
         textures=MakeButton("INSTALL HD TEXTURE PACK",async(s,e)=>await InstallTextures());panel.Controls.Add(textures);
+        voices=MakeButton("IMPORT SPANISH VOICES (PS2 ISO)",async(s,e)=>await InstallVoices());panel.Controls.Add(voices);
         panel.Controls.Add(MakeButton("OPEN SAVES",(s,e)=>{string saves=Path.Combine(Data,"xbe-runtime","hdd");if(Directory.Exists(saves))Process.Start("explorer.exe",Quote(saves));else status.Text="No portable saves yet. Import your ISO and create a profile first.";}));
         cancel=MakeButton("QUIT",(s,e)=>{if(busy&&!running){File.WriteAllText(cancelPath,"");status.Text="Cancelling import...";cancel.Enabled=false;}else Close();});panel.Controls.Add(cancel);
-        panel.Controls.Add(new Label{Text="v0.07  |  Windows x64 / Direct3D 12\nPortable edition. No disc files are included.",Dock=DockStyle.Fill,Font=new Font("Segoe UI",9),ForeColor=Color.FromArgb(138,143,138),TextAlign=ContentAlignment.BottomLeft});
+        panel.Controls.Add(new Label{Text="v0.08  |  Windows x64 / Direct3D 12\nPortable edition. No disc files are included.",Dock=DockStyle.Fill,Font=new Font("Segoe UI",9),ForeColor=Color.FromArgb(138,143,138),TextAlign=ContentAlignment.BottomLeft});
         Shown+=async(s,e)=>await RefreshReady();FormClosing+=(s,e)=>{if(busy){e.Cancel=true;status.Text=running?"Close the game before exiting the launcher.":"Use Cancel Import to stop safely.";}};
     }
     async Task RefreshReady(){bool ready=await Ready();play.Enabled=ready;
@@ -70,7 +71,7 @@ class BurnerLauncher : Form {
             if(p.ExitCode!=0&&!String.IsNullOrWhiteSpace(error))status.Text="Setup could not finish. "+error.Trim();return p.ExitCode;
         }
     }
-    void Busy(bool value,bool game=false){busy=value;running=value&&game;language.Enabled=!value;import.Enabled=!value;textures.Enabled=!value;play.Enabled=!value;cancel.Text=value&&!game?"CANCEL IMPORT":"QUIT";cancel.Enabled=true;}
+    void Busy(bool value,bool game=false){busy=value;running=value&&game;language.Enabled=!value;import.Enabled=!value;textures.Enabled=!value;voices.Enabled=!value;play.Enabled=!value;cancel.Text=value&&!game?"CANCEL IMPORT":"QUIT";cancel.Enabled=true;}
     async Task Import(){using(var d=new OpenFileDialog{Title="Select your Urban Chaos Xbox ISO",Filter="Xbox disc image (*.iso)|*.iso",CheckFileExists=true}){
         if(d.ShowDialog(this)!=DialogResult.OK)return;cancelPath=Path.Combine(Data,"cancel-"+Guid.NewGuid().ToString("N"));Busy(true);progress.Value=0;
         try{Directory.CreateDirectory(Data);int code=await RunWorker("import"," --iso "+Quote(d.FileName)+" --cancel "+Quote(cancelPath));Busy(false);if(code==0)await RefreshReady();else play.Enabled=await Ready();}
@@ -84,6 +85,12 @@ class BurnerLauncher : Form {
     }}
     async Task Play(){Busy(true,true);status.Text="Preparing game and bundled languages. Saves stay in this folder's GameData.";
         try{int code=await RunWorker("launch"," --language "+language.SelectedIndex);Busy(false);if(code==0)await RefreshReady();else play.Enabled=await Ready();}catch(Exception ex){Busy(false);status.Text=ex.Message;}}
+    async Task InstallVoices(){if(!await Ready()){status.Text="Import your Xbox ISO before importing Spanish voices.";return;}using(var d=new OpenFileDialog{Title="Select your European Urban Chaos PS2 ISO (SLES-53991)",Filter="PS2 disc image (*.iso)|*.iso",CheckFileExists=true}){
+        if(d.ShowDialog(this)!=DialogResult.OK)return;
+        cancelPath=Path.Combine(Data,"cancel-"+Guid.NewGuid().ToString("N"));Busy(true);progress.Value=0;
+        try{Directory.CreateDirectory(Data);int code=await RunWorker("voices"," --iso "+Quote(d.FileName)+" --cancel "+Quote(cancelPath));Busy(false);play.Enabled=await Ready();if(code==0){language.SelectedIndex=4;status.Text="Spanish voices imported. Press PLAY to use Spanish.";}}
+        catch(Exception ex){Busy(false);status.Text=ex.Message;}finally{if(File.Exists(cancelPath))File.Delete(cancelPath);}
+    }}
     protected override void Dispose(bool disposing){if(disposing&&cover!=null)cover.Dispose();base.Dispose(disposing);}
     [STAThread] static int Main(string[] args) {
         Application.EnableVisualStyles();Application.SetCompatibleTextRenderingDefault(false);

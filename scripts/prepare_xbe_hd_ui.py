@@ -68,8 +68,8 @@ def renderer_changes():
     ComPtr<ID3D12Resource> hd_ui_res;
     bool hd_ui_attempted = false;
 '''),
-        ('    ID3D12Resource* BindPcPrompt(unsigned,unsigned,const TextureDesc&,DrawTextures&,int);',
-         '''    ID3D12Resource* BindPcPrompt(unsigned,unsigned,const TextureDesc&,DrawTextures&,int);
+        ('    ID3D12Resource* BindPcPrompt(unsigned,unsigned,unsigned,const TextureDesc&,DrawTextures&,int);',
+         '''    ID3D12Resource* BindPcPrompt(unsigned,unsigned,unsigned,const TextureDesc&,DrawTextures&,int);
     void RetireHdUi(Tex&);
     void MatchHdUi(Tex&, const TextureDesc&, const FormatInfo&, const uint8_t*, uint32_t);
     ID3D12Resource* BindHdUi(Tex&, DrawTextures&, int);'''),
@@ -88,8 +88,8 @@ def renderer_changes():
         ('    bool changed=!slot.texture.res||!uc_pc_prompts::Equal(slot.input,input);',
          '''    const bool hd_ui=trial_graphics::HdUi();
     bool changed=!slot.texture.res||slot.hd_ui!=hd_ui||!uc_pc_prompts::Equal(slot.input,input);'''),
-        ('    if(changed&&(!slot.texture.res||now-slot.updated>=33||input.held!=slot.input.held)){',
-         '    if(changed&&(!slot.texture.res||slot.hd_ui!=hd_ui||now-slot.updated>=33||input.held!=slot.input.held)){'),
+        ('    if(changed&&(id==1||!slot.texture.res||now-slot.updated>=33||input.held!=slot.input.held)){',
+         '    if(changed&&(id==1||!slot.texture.res||slot.hd_ui!=hd_ui||now-slot.updated>=33||input.held!=slot.input.held)){'),
         ('        if(!TrialPromptArtwork(id,raw,input,pixels,width,height))return nullptr;',
          '        if(!TrialPromptArtwork(id,raw,input,pixels,width,height,hd_ui))return nullptr;'),
         ('        slot.input=input;slot.updated=now;',

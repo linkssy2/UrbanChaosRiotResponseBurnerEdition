@@ -21,8 +21,8 @@ struct CaptureGate {
     }
     unsigned Take(){const auto value=pending;pending=0;return value;}
 };
-void BeginCapture(unsigned device);
-void CancelCapture();
-unsigned TakeCapture();
-bool CaptureWaiting();
+void BeginCapture(unsigned device,unsigned player=0);
+void CancelCapture(unsigned player=0);
+unsigned TakeCapture(unsigned player=0);
+bool CaptureWaiting(unsigned player=0);
 }

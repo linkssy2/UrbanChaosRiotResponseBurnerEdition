@@ -2,6 +2,8 @@
 #include "core/input.h"
 #include <SDL3/SDL.h>
 #include "xbe_controller_device.h"
+#include "xbe_coop.h"
+#include "xbe_coop_input.h"
 #include <cstdio>
 #include <cstdlib>
 #define CHECK(x) do{if(!(x)){std::fprintf(stderr,"FAIL %d: %s (%s)\n",__LINE__,#x,SDL_GetError());std::exit(1);}}while(0)
@@ -31,6 +33,13 @@ int main(){
     SDL_UpdateJoysticks();SDL_Delay(3);
     for(int i=0;i<4;++i){auto p=input::Poll(i);if(p.analog[0]==255&&(p.buttons&2)&&p.lx==20000){port=i;CHECK(p.ly==19999);}}
     CHECK(port>=0);
+    trial_coop::Request();
+    CHECK(input::Poll(port).analog[0]==255); // Requesting a session does not steal the main-menu pad.
+    trial_coop::SetActive(true);
+    CHECK(!input::Poll(0).connected&&!input::Poll(2).connected&&!input::Poll(3).connected);
+    if(port==0){auto second=input::Poll(1);CHECK(second.connected&&second.analog[0]==255&&(second.buttons&2)&&second.lx==20000&&second.ly==19999);}
+    else std::puts("Co-op virtual pad route not exercised: an existing physical controller owns slot 0.");
+    trial_coop::Reset();CHECK(input::Poll(port).analog[0]==255);
     CHECK(SDL_SetJoystickVirtualButton(joystick,SDL_GAMEPAD_BUTTON_SOUTH,false));
     CHECK(SDL_SetJoystickVirtualButton(joystick,SDL_GAMEPAD_BUTTON_DPAD_DOWN,false));
     SDL_UpdateJoysticks();SDL_Delay(3);auto p=input::Poll(port);CHECK(!p.analog[0]&&!(p.buttons&2));

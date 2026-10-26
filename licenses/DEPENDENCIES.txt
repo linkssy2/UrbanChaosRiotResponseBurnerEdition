@@ -1,13 +1,16 @@
-Current 0.03 runtime:
+Current 0.08 runtime and setup tools:
+
 - XboxXBERecomp by TGP482: XboxXBERecomp.txt (MIT), pinned in dependencies.lock.json.
 - XboxXBERecomp dependencies: XboxXBERecomp-third-party.txt (Zydis, toml++, Dear ImGui and SDL).
-- Reused sp00nznet/xboxrecomp helpers/importer: xboxrecomp.txt, xboxrecomp-notice.txt and LGPL-2.1.txt.
-- Embedded Python and zlib: their unmodified notices accompany the binary release.
-- Microsoft Visual C++ runtime: redistribution notices accompany the binary release and are maintained in launcher/burner-xbe/.
+- Retained sp00nznet/xboxrecomp helpers/importer: xboxrecomp.txt, xboxrecomp-notice.txt and LGPL-2.1.txt.
+- libusb 1.0.29 (LGPL-2.1-or-later): the binary packages include the unmodified DLL, license and corresponding upstream source archive.
+- Embedded Python, OpenSSL and zlib: their unmodified notices accompany the binary packages.
+- Microsoft Visual C++ runtime: redistribution notices accompany the binary packages and are maintained in launcher/burner-xbe/.
+- FFmpeg 8.1.2 full shared build by www.gyan.dev (GPLv3): FFmpeg-LICENSE.txt and FFmpeg-README.txt contain the license, source and build information. Used as a separate program for local PS2 movie-audio conversion; binaries are included only in the Windows/Proton packages.
 
-Historical runtime/source notices (not all components are used by 0.03):
-- FFmpeg 8.1.2: shared build source https://github.com/FFmpeg/FFmpeg/commit/38b88335f9; the historical package included its notices.
+Historical source notices:
 - Jolt Physics: JoltPhysics.txt (earlier standalone-native work).
 
-Launcher artwork was generated for Burner Edition from the local cover reference; it is not extracted disc content.
-Original game content is not licensed or supplied by this project.
+The source snapshot is for inspection/contribution; see docs/BUILDING.md for its complete-game rebuild limitation.
+Launcher artwork was generated for Burner Edition from the local cover reference; it is not extracted disc content. Approved restored HD UI artwork is documented in artwork/README.md.
+Original game content is not licensed or supplied by this project. Co-op resources and optional Spanish audio are derived locally from the user's discs.

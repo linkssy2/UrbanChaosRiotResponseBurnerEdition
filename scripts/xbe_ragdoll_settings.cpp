@@ -2,6 +2,8 @@
 // The original constructors, activation, simulation and destruction still own
 // each body. Only the number of pool slots and automatic retirement change.
 #include <algorithm>
+#include <cmath>
+#include <cstring>
 #include <initializer_list>
 #include <limits>
 #include <mutex>
@@ -85,6 +87,34 @@ ObjectSlot& AvailableObject(X86Context& ctx,uint8_t* base,uint32_t owner){
 float TrialRagdollSeconds(){const auto mode=Mode();return mode==2?std::numeric_limits<float>::infinity():mode==1?120.f:30.f;}
 bool TrialRagdollKeepUnseen(float seconds){const auto mode=Mode();return mode==2||(mode==1&&seconds<=120.f);}
 uint32_t TrialRagdollRetireCount(uint32_t original,uint32_t dead){const auto mode=Mode();return mode==2?0:mode==1?(dead>32?dead-32:0):original;}
+
+bool TrialRagdollWorldPosition(const uint8_t* base,uint32_t handle,float (&position)[3]){
+    if(!base||handle==UINT32_MAX||!Span(pool,48)||!base[initialized])return false;
+    const auto word=[&](uint32_t p){uint32_t v;std::memcpy(&v,base+p,4);return v;};
+    uint32_t object=0;
+    for(size_t i=0;i<Count();++i){
+        const Slot slot=i<5?Slot{word(pool+uint32_t(i)*8),word(pool+uint32_t(i)*8+4)}:extra[i-5];
+        if(slot.id==handle){object=slot.body;break;}
+    }
+    if(!Span(object,0xa0)||word(object)!=0x48dd60u||!word(object+0x1c)||!word(object+0x20))return false;
+    const uint32_t count=word(object+0x74),list=word(object+0x70);
+    // Retail virtual +0C (2A6580) selects physical body[2]. 2A55A0 reads
+    // motion+40 and converts meters to game units before applying bone poses.
+    // Its 3AA5C0 basis swaps physics Y/Z back into game coordinates;
+    // the parent entity transform is the old death location, not this pose.
+    if(count<3||!Span(list,uint64_t(count)*4))return false;
+    const uint32_t body=word(list+8);
+    if(!Span(body,0x54))return false;
+    const uint32_t motion=word(body+0x50);
+    if(!Span(motion,0x4c))return false;
+    struct Restore {unsigned csr=_mm_getcsr();~Restore(){_mm_setcsr(csr);}} restore;
+    float result[3];constexpr unsigned physics_axis[3]={0,2,1};
+    for(unsigned axis=0;axis<3;++axis){
+        float value;std::memcpy(&value,base+motion+0x40+physics_axis[axis]*4,4);
+        result[axis]=value*100.f;if(!std::isfinite(result[axis]))return false;
+    }
+    std::memcpy(position,result,sizeof result);return true;
+}
 
 bool TrialRetainedObjectPoolFull(uint32_t owner,bool full){
     // A dropped renderer registration is never retried; its wrappers can use

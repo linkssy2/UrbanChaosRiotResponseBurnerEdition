@@ -20,6 +20,11 @@ static long order_x=0,order_y=0;
 static unsigned order_phase=3,order_buttons=0,order_selection=0;
 static unsigned bindings[25][2]{};
 static unsigned controller_bindings[24][2]{};
+namespace trial_controls {
+static struct {unsigned binding[24][2]{};} second_controller;
+static unsigned loads=0;
+static void LoadSecond(){++loads;}
+}
 static LONG controller_custom=0;
 static char labels[25][64]{};
 int xbox_KeyboardMode(){return keyboard_mode;}
@@ -154,6 +159,33 @@ static void ControllerSnapshotChecks(){
     keyboard_mode=true;CHECK(TrialPromptSnapshot(1,out)&&!out.controller&&out.bindings[0]=='R');
     controller_custom=0;
 }
+static void CoopSnapshotChecks(){
+    gameplay=true;menu_mode=false;controller_custom=1;
+    controller_bindings[0][0]=4;
+    for(unsigned action=0;action<24;++action)trial_controls::second_controller.binding[action][0]=action+1;
+    TrialPromptInput p1,p2;
+    for(bool mode:{false,true})for(unsigned variant=0;variant<3;++variant){
+        keyboard_mode=mode;
+        CHECK(TrialPromptSnapshot(1,p1,variant,1)&&!p1.controller);
+        CHECK(p1.bindings[0]==unsigned(variant==1?'F':'R'));
+        CHECK(!TrialPromptSnapshot(1,p2,variant,2)&&p2.controller&&p2.bindings[0]==1);
+        CHECK(!p2.labels[12][0]);
+        CHECK(!TrialPromptSnapshot(2,p2,variant,2)&&!p2.held);
+        CHECK(TrialPromptSnapshot(2,p1,variant,1)&&!p1.controller);
+    }
+    // The queued P2 HUD keeps its profile even if a menu opened before replay.
+    gameplay=false;menu_mode=true;
+    for(unsigned family=0;family<4;++family)for(unsigned source=0;source<=24;++source){
+        trial_controller::family=family;
+        trial_controls::second_controller.binding[0][0]=0;
+        trial_controls::second_controller.binding[0][1]=source;
+        CHECK(TrialPromptSnapshot(1,p2,0,2)==bool(family||source!=1));
+        CHECK(p2.controller&&p2.family==family&&p2.bindings[0]==source);
+        CHECK(!std::strcmp(p2.labels[0],trial_controller::Label(source,family)));
+    }
+    CHECK(trial_controls::loads>0&&controller_bindings[0][0]==4);
+    trial_controller::family=0;keyboard_mode=true;gameplay=true;menu_mode=false;controller_custom=0;
+}
 static void FamilyChecks(){
     keyboard_mode=false;menu_mode=true;controller_custom=0;
     TrialPromptInput prior{};
@@ -172,17 +204,48 @@ static void FamilyChecks(){
     trial_controller::family=0;keyboard_mode=true;menu_mode=false;
 }
 static void GateChecks(){
-    std::vector<uint8_t> mem(512);uint8_t* base=mem.data();
-    for(bool pc:{false,true})for(unsigned available:{0u,1u,2u})for(uint32_t target:{UINT32_MAX,0u,42u}){
-        keyboard_mode=pc;X86Context ref{},got{};ref.esi=got.esi=128;ref.eax=got.eax=0xaabbccdd;
-        ref.ebx=got.ebx=123;ref.edi=got.edi=456;ref.esp=got.esp=400;
-        X86_MEM8(128+0xd5)=uint8_t(available);X86_MEM32(128+0xd8)=target;auto before=mem;
-        OriginalGate(ref,base);CandidateGate(got,base);
-        CHECK((ref.eax&255)==unsigned(available&&target==UINT32_MAX));
-        CHECK((got.eax&255)==unsigned(available&&(target==UINT32_MAX||pc)));
-        CHECK((got.eax&0xffffff00)==0xaabbcc00&&got.esi==128&&got.ebx==123&&got.edi==456&&got.esp==400&&mem==before);
+    std::vector<uint8_t> mem(kPromptRam);uint8_t* base=mem.data();
+    constexpr uint32_t behavior=0x72000;
+    // The original update executes before HUD drawing. It must use the
+    // behavior's actual parent/input slot rather than a transient render scope.
+    for(unsigned scenario=0;scenario<12;++scenario)for(bool pc:{false,true}){
+        trial_coop::prompt_active=scenario!=0;keyboard_mode=pc;
+        for(unsigned slot=0;slot<2;++slot){
+            const uint32_t owner=prompt_players[slot];
+            X86_MEM32(owner)=0x46fbe8;X86_MEM32(owner+0x54)=100+slot;
+            X86_MEM32(owner+0x5c)=0;X86_MEM32(owner+0x368)=slot;
+        }
+        X86_MEM32(behavior)=0x46caa8;X86_MEM32(behavior+0x58)=100;
+        X86_MEM32(behavior+0x5c)=0;X86_MEM32(behavior+0x98)=0;
+        if(scenario==2){X86_MEM32(behavior+0x58)=101;X86_MEM32(behavior+0x98)=1;}
+        if(scenario==3)X86_MEM32(behavior)=0;
+        if(scenario==4)X86_MEM32(behavior+0x5c)=1;
+        if(scenario==5)X86_MEM32(behavior+0x58)=101;
+        if(scenario==6)X86_MEM32(behavior+0x98)=1;
+        if(scenario==7)X86_MEM32(prompt_players[0])=0;
+        if(scenario==8)X86_MEM32(prompt_players[0]+0x54)=UINT32_MAX;
+        if(scenario==9)X86_MEM32(prompt_players[0]+0x5c)=1;
+        if(scenario==10)X86_MEM32(prompt_players[0]+0x368)=1;
+        if(scenario==11)X86_MEM32(behavior+0x58)=UINT32_MAX;
+        const bool keyboard_override=scenario==0?pc:scenario==1;
+        for(unsigned available:{0u,1u,2u})for(uint32_t target:{UINT32_MAX,0u,42u}){
+            X86Context ref{},got{};ref.esi=got.esi=behavior;ref.eax=got.eax=0xaabbccdd;
+            ref.ebx=got.ebx=123;ref.edi=got.edi=456;ref.esp=got.esp=0x74000;
+            ref.cf=got.cf=1;ref.of=got.of=1;ref.st[0]=got.st[0]=19.25;
+            ref.xmm[7].u[2]=got.xmm[7].u[2]=0x87654321;
+            X86_MEM8(behavior+0xd5)=uint8_t(available);X86_MEM32(behavior+0xd8)=target;
+            const auto before=mem;auto expected=got;
+            OriginalGate(ref,base);CandidateGate(got,base);
+            CHECK((ref.eax&255)==unsigned(available&&target==UINT32_MAX));
+            CHECK((got.eax&255)==unsigned(available&&(target==UINT32_MAX||keyboard_override)));
+            expected.eax=(expected.eax&0xffffff00u)|(got.eax&255);
+            CHECK(std::memcmp(&got,&expected,sizeof(got))==0&&mem==before);
+            if(scenario==2)CHECK(std::memcmp(&ref,&got,sizeof(got))==0);
+        }
     }
-    keyboard_mode=true;
+    trial_coop::prompt_active=true;
+    for(uint32_t address:{0u,0xfffffff0u}){X86Context c{};c.esi=address;CHECK(!TrialPromptOrdersKeyboard(c,base));}
+    trial_coop::prompt_active=false;keyboard_mode=true;
 }
 static void ArtworkChecks(){
     auto source=Read(/* PATH_SOURCE */),reference=Read(/* PATH_PIXELS */);auto before=source;
@@ -259,6 +322,6 @@ static void ArtworkChecks(){
     CHECK(source==before);
 }
 int main(){
-    SnapshotChecks();ControllerSnapshotChecks();FamilyChecks();GateChecks();ArtworkChecks();PromptContextChecks();
+    SnapshotChecks();ControllerSnapshotChecks();CoopSnapshotChecks();FamilyChecks();GateChecks();ArtworkChecks();PromptContextChecks();
     std::puts("PASS PC prompt production snapshot/input binding assembly, exact BC3 atlas conversion, untouched original rows, binding/hold/drag/release artwork, controller remap row copies/direction badges/default and menu bypass, original medic gate, cinematic Skip producer, reward Continue literal footer and queued R/F glyph identity through original record selector/emitter; no live GPU claim");
 }

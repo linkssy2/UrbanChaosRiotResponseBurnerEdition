@@ -87,3 +87,4 @@ void TrialTitleFinish();
 
 void TrialIntroAdvance(float seconds);
 float TrialIntroProgress();
+bool TrialIntroPlaying();

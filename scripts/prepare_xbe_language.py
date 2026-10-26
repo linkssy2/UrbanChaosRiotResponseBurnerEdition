@@ -51,8 +51,8 @@ def prepare(sdk,area):
     files=(sdk/'runtime/kernel/files.cpp').read_text()
     files='#include "../common/xbe_language.h"\n#include "../common/xbe_spanish.h"\n'+files
     files=once(files,'    return {MatchCase(best->second, parts).string()};',
-        '    if(best->first==kCdRom&&parts.size()==1&&trial_language::Active()==4){\n'
-        '        const auto translated=trial_spanish::Override(parts[0]);\n'
+        '    if(best->first==kCdRom&&!parts.empty()&&parts.size()<=2&&trial_language::Active()==4){\n'
+        '        const auto translated=trial_spanish::Override(parts.size()==1?parts[0]:parts[0]+"/"+parts[1]);\n'
         '        if(!translated.empty())return {translated};\n'
         '    }\n    return {MatchCase(best->second, parts).string()};')
     (area/'src/compat/files.cpp').write_text(files)

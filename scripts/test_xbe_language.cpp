@@ -119,6 +119,17 @@ int main(){
     assert(trial_spanish::ReadFiles(temporary).size()==27);
     {std::ofstream manifest(temporary/"manifest.txt",std::ios::app);manifest<<"truncated";}
     assert(trial_spanish::ReadFiles(temporary).empty());
+    // Imported voices must be complete; paths cannot escape the managed set.
+    assert(trial_spanish::VoiceName("movies/intro_1.xmv"));
+    assert(trial_spanish::VoiceName("5.saf"));
+    assert(trial_spanish::VoiceName("99-01.ent"));
+    for(const char* bad:{"../1.saf","movies/../x.xmv","1.ent","C:/1.saf","movies/a/b.xmv"})assert(!trial_spanish::VoiceName(bad));
+    {std::ofstream manifest(temporary/"manifest.txt");manifest<<"UCSPANISHVOICES 1 28\n";
+        for(unsigned i=10;i<37;++i)manifest<<i<<"-01.ent 200\n";
+        manifest<<"5.saf 4\n";std::ofstream(temporary/"5.saf")<<"saf5";}
+    assert(trial_spanish::ReadVoiceFiles(temporary).size()==28);
+    {std::ofstream manifest(temporary/"manifest.txt",std::ios::app);manifest<<"trailing";}
+    assert(trial_spanish::ReadVoiceFiles(temporary).empty());
     std::filesystem::remove_all(temporary);
     const uint32_t ids[]={1,4,6,3};
     for(unsigned language=0;language<4;++language){

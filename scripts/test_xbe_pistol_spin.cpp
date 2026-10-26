@@ -10,20 +10,26 @@
 namespace kernel {static std::array<uint8_t,0x800000> memory{};uint8_t* g_base=memory.data();}
 using namespace kernel;
 static std::recursive_mutex input_lock;
-static bool keyboard=true,focus=true,gameplay=true,menu_mode=false,ui=false,button=false;
+static bool keyboard=true,focus=true,gameplay=true,menu_mode=false,ui=false,button=false,coop=false;
+static bool second_button=false;static unsigned second_mode=0;
 static unsigned mode=0,spins=0;static uint64_t now=100;
-static long spin_dx=0,spin_dy=0;static bool spin_button_held=true,spin_button=false;
+static unsigned presentation=0;
+static unsigned TrialCoopPresentation(){return presentation;}
+static long spin_dx=0,spin_dy=0;static bool spin_button_held[2]={true,true},spin_button=false;
 static float spin_x=0,spin_y=0;static uint64_t spin_tick=0;
 static int last_pad[4]{};
 static bool focused(){return focus;}static bool TrialGraphicsOpen(){return ui;}
 static int xbox_KeyboardMode(){return keyboard;}static uint64_t GetTickCount64(){return now;}
-namespace trial_controls {unsigned SpinMode(){return mode;}bool SpinButtonDown(bool,int){return button;}}
+namespace trial_coop {bool Active(){return coop;}}
+namespace trial_controls {unsigned SpinMode(unsigned p){return p?second_mode:mode;}bool SpinButtonDown(bool,int,unsigned p){return p?second_button:button;}}
+static uint32_t TrialCoopPlayer(unsigned slot){return coop&&slot==1?0x600000:0;}
 // PRODUCTION_HOST_SAMPLE
 static bool menu_pointer_readable(uint32_t a,uint32_t n){return a>=0x10000&&uint64_t(a)+n<=memory.size();}
 static bool MouseObject(uint32_t a){return menu_pointer_readable(a,0x694)&&G<uint32_t>(a+0x368)==0;}
 #define g_esi ctx.esi
 #define g_esp ctx.esp
 #define MEMF(a) G<float>(a)
+#define MEM32(a) G<uint32_t>(a)
 static int TrialGuestHook(X86Context& ctx,uint8_t*,unsigned op){int result=0;switch(op){
 // PRODUCTION_GUEST_SAMPLE
 }return result;}
@@ -46,7 +52,8 @@ static void reset(){
     W32(0x610000,0x610100);W32(0x610120,0xf0002);G<uint8_t>(0x620034)=1;
     G<float>(0x44e548)=.9f;G<float>(0x4583dc)=12.566370964f;
     mode=0;keyboard=focus=gameplay=true;menu_mode=ui=button=blocked=false;pistol=true;
-    spin_dx=spin_dy=0;spin_tick=0;spin_button_held=true;spins=0;pad_x=pad_y=0;
+    spin_dx=spin_dy=0;spin_tick=0;spin_button_held[0]=spin_button_held[1]=true;spins=0;pad_x=pad_y=0;
+    coop=second_button=false;second_mode=presentation=0;
 }
 static void tick(){
     now+=8;X86Context c{};c.ecx=player;c.esp=stack;c.esi=0x12345678;c.ebx=0x87654321;
@@ -74,5 +81,34 @@ int main(){
     }
     reset();mode=1;tick();pistol=false;button=true;tick();assert(!spins&&G<uint8_t>(0x51bdf4));
     reset();mode=1;tick();G<uint8_t>(0x620034)=0;button=true;tick();assert(!G<uint8_t>(0x51bdf4));
+    // In local co-op the keyboard remains active for player one while player
+    // two uses a controller. Its retail stick gesture must not consume player
+    // one's queued mouse sample or inherit the assignable PC spin button.
+    for(int direction:{-1,1}){
+        reset();coop=true;W32(player+0x368,1);mode=1;button=true;
+        spin_dx=123;spin_dy=-456;spin_button_held[0]=false;
+        tick();assert(!spins&&!G<uint8_t>(0x51bdf4));
+        for(unsigned i=0;i<67;++i){
+            const double angle=direction*i*6.283185307179586/32;
+            pad_x=float(std::cos(angle));pad_y=float(std::sin(angle));tick();
+            assert(spin_dx==123&&spin_dy==-456&&!spin_button_held[0]);
+        }
+        assert(G<uint8_t>(0x51bdf4)&&spins>0);
+    }
+    reset();coop=true;W32(player+0x368,1);second_mode=1;tick();
+    second_button=true;tick();assert(spins==1&&G<uint8_t>(0x51bdf4));
+    tick();assert(spins==1);second_button=false;tick();second_button=true;tick();assert(spins==2);
+    reset();coop=true;W32(player+0x368,1);second_mode=1;tick();presentation=2;
+    second_button=true;tick();assert(!spins&&!G<uint8_t>(0x51bdf4));
+    presentation=1;tick();assert(!spins&&!G<uint8_t>(0x51bdf4));
+    second_button=false;tick();second_button=true;tick();assert(spins==1&&G<uint8_t>(0x51bdf4));
+    reset();coop=true;W32(player+0x368,1);presentation=2;
+    for(unsigned i=0;i<67;++i){
+        const double angle=i*6.283185307179586/32;
+        pad_x=float(std::cos(angle));pad_y=float(std::sin(angle));tick();
+    }
+    assert(!spins&&!G<uint8_t>(0x51bdf4)); // Raw stick samples cannot bypass the cinematic gate.
+    reset();coop=true;keyboard=false;spin_dx=500;spin_dy=100;tick();
+    assert(spin_dx==0&&spin_dy==0); // P2 input-device activity cannot disable P1's mouse gesture.
     std::puts("pistol spin: retail two-circle detector, both devices/directions, button edges, gameplay gates and original reward passed");
 }

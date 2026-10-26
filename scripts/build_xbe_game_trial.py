@@ -31,6 +31,48 @@ try:
  report['live_status']='New executable pending checks and live verification'
  save()
  (AREA/'src/compat').mkdir(parents=True,exist_ok=True)
+ from prepare_xbe_coop_cinematics import unprepare as unprepare_coop_cinematics
+ from prepare_xbe_coop_spin import unprepare as unprepare_coop_spin
+ from prepare_xbe_coop_pickups import unprepare as unprepare_coop_pickups
+ from prepare_xbe_coop_orders import unprepare as unprepare_coop_orders
+ from prepare_xbe_coop_controls import unprepare as unprepare_coop_controls
+ from prepare_xbe_coop_input import unprepare as unprepare_coop_input
+ from prepare_xbe_aim_diagnostic import unprepare as unprepare_aim_diagnostic
+ from prepare_xbe_coop_downed_blur import unprepare as unprepare_coop_downed_blur
+ from prepare_xbe_coop_death import unprepare as unprepare_coop_death
+ from prepare_xbe_coop_downed_camera import unprepare as unprepare_coop_downed_camera
+ from prepare_xbe_health_packs import unprepare as unprepare_health_packs
+ from prepare_xbe_coop_shields import unprepare as unprepare_coop_shields
+ from prepare_xbe_coop_progression import unprepare as unprepare_coop_progression
+ from prepare_xbe_coop_interactions import unprepare as unprepare_coop_interactions
+ from prepare_xbe_coop_rewards import unprepare as unprepare_coop_rewards
+ from prepare_xbe_coop_collectibles import unprepare as unprepare_coop_collectibles
+ from prepare_xbe_coop_ko_rewards import unprepare as unprepare_coop_ko_rewards
+ from prepare_xbe_coop_turrets import unprepare as unprepare_coop_turrets
+ from prepare_xbe_coop_turret_assets import unprepare as unprepare_coop_turret_assets
+ from prepare_xbe_coop_turret_view import unprepare as unprepare_coop_turret_view
+ from prepare_xbe_pc_prompts import unprepare_prompt_context
+ unprepare_coop_spin(AREA)
+ unprepare_coop_pickups(AREA)
+ unprepare_coop_orders(AREA)
+ unprepare_coop_controls(AREA)
+ unprepare_coop_input(AREA)
+ unprepare_aim_diagnostic(AREA)
+ unprepare_coop_turret_view(AREA)
+ unprepare_coop_turret_assets(AREA)
+ unprepare_coop_turrets(AREA)
+ unprepare_coop_interactions(AREA)
+ unprepare_coop_ko_rewards(AREA)
+ unprepare_coop_collectibles(AREA)
+ unprepare_coop_rewards(AREA)
+ unprepare_coop_progression(AREA)
+ unprepare_prompt_context(AREA)
+ unprepare_coop_downed_blur(AREA)
+ unprepare_coop_cinematics(AREA)
+ unprepare_coop_downed_camera(AREA)
+ unprepare_coop_death(AREA)
+ unprepare_health_packs(AREA)
+ unprepare_coop_shields(AREA)
  from prepare_xbe_graphics_compat import prepare
  prepare()
  from prepare_xbe_visibility import prepare as prepare_visibility
@@ -41,6 +83,8 @@ try:
  prepare_resource_refs(SDK, AREA)
  from prepare_xbe_shader_state import prepare as prepare_shader_state
  prepare_shader_state(SDK, AREA)
+ from prepare_xbe_missing_texture import prepare as prepare_missing_texture
+ prepare_missing_texture(AREA)
  from prepare_xbe_target60 import prepare as prepare_target60
  d3d_path=AREA/'src/compat/d3d8.cpp'
  d3d_path.write_text(prepare_target60(d3d_path.read_text(), AREA))
@@ -56,6 +100,10 @@ try:
  from prepare_xbe_graphics_settings import prepare as prepare_graphics_settings
  settings_source,main_source,renderer_source=prepare_graphics_settings(
   (SDK/'runtime/app/settings.cpp').read_text(),(SDK/'runtime/app/main.cpp').read_text(),renderer_path.read_text(),AREA)
+ main_source=main_source.replace('#include "xbe_trial_graphics_ui.h"','#include "xbe_trial_graphics_ui.h"\n#include "xbe_health_packs.h"',1)
+ boot='    if (!kernel::Boot(std::move(game.xbe), IMAGE_XBE, game.dir.string(), (app::ExeDir() / hdd).string())) {'
+ assert main_source.count(boot)==1
+ main_source=main_source.replace(boot,'    TrialHealthPackStorage(app::ExeDir() / hdd / "health-packs");\n'+boot,1)
  (AREA/'src/compat/settings.cpp').write_text(settings_source)
  (AREA/'src/compat/main.cpp').write_text(main_source)
  from prepare_xbe_msaa import prepare as prepare_msaa
@@ -73,18 +121,54 @@ try:
   import re
   controller_source,n=re.subn(r'    SDL_SetHint\('+hint+r', "[01]"\);\n','',controller_source)
   assert n==1,hint
- for name in ('xbe_controller_style.h','xbe_controller_device.h'):
+ for name in ('xbe_controller_style.h','xbe_controller_device.h','xbe_coop.h','xbe_coop_input.h'):
   (AREA/'src/compat'/name).write_text((ROOT/'scripts'/name).read_text())
- controller_source=controller_source.replace('#include "core/input.h"','#include "core/input.h"\n#include "xbe_controller_device.h"')
+ controller_source=controller_source.replace('#include "core/input.h"','#include "core/input.h"\n#include "xbe_controller_device.h"\n#include "xbe_coop.h"\n#include "xbe_coop_input.h"')
  controller_source=controller_source.replace('    SDL_SetHint(SDL_HINT_JOYSTICK_THREAD, "1");',
   '    SDL_SetHint("SDL_GAMECONTROLLER_USE_BUTTON_LABELS", "0"); // Keep physical face positions consistent.\n    SDL_SetHint(SDL_HINT_JOYSTICK_THREAD, "1");')
  controller_source=controller_source.replace('            p.connected = true;',
-  '            p.connected = true;\n            if(port==0)trial_controller::family.store(trial_controller::Identify(SDL_GetRealGamepadType(pad)));')
+  '            p.connected = true;\n            if(physical==0)trial_controller::family.store(trial_controller::Identify(SDL_GetRealGamepadType(pad)));')
  controller_source=controller_source.replace('        g_pads[i] = nullptr;',
   '        g_pads[i] = nullptr;\n        if(i==0)trial_controller::family.store(trial_controller::Xbox);')
+ old='        if (SDL_Gamepad* pad = port >= 0 && port < 4 ? g_pads[port] : nullptr) {'
+ assert controller_source.count(old)==1
+ controller_source=controller_source.replace(old,'        const int physical=trial_coop::PhysicalPort(port,trial_coop::Active());\n        if (SDL_Gamepad* pad = physical >= 0 ? g_pads[physical] : nullptr) {')
+ old='    if (port >= 0 && port < 4 && g_pads[port]) SDL_RumbleGamepad(g_pads[port], left, right, 0);'
+ assert controller_source.count(old)==1
+ controller_source=controller_source.replace(old,'    const int physical=trial_coop::PhysicalPort(port,trial_coop::Active());\n    if (physical >= 0 && g_pads[physical]) SDL_RumbleGamepad(g_pads[physical], left, right, 0);')
  (AREA/'src/compat/input.cpp').write_text(controller_source)
  from prepare_xbe_input import prepare as prepare_input
  prepare_input()
+ from prepare_xbe_coop_input import prepare as prepare_coop_input
+ prepare_coop_input(AREA)
+ from prepare_xbe_coop import prepare as prepare_coop
+ prepare_coop(AREA)
+ from prepare_xbe_coop_shields import prepare as prepare_coop_shields
+ prepare_coop_shields(AREA)
+ from prepare_xbe_coop_progression import prepare as prepare_coop_progression
+ prepare_coop_progression(AREA)
+ from prepare_xbe_coop_resources import prepare as prepare_coop_resources
+ prepare_coop_resources(AREA)
+ from prepare_xbe_coop_body import prepare as prepare_coop_body
+ prepare_coop_body(AREA)
+ from prepare_xbe_coop_effects import prepare as prepare_coop_effects
+ prepare_coop_effects(AREA)
+ from prepare_xbe_coop_cinematics import prepare as prepare_coop_cinematics
+ prepare_coop_cinematics(AREA)
+ from prepare_xbe_coop_downed_blur import prepare as prepare_coop_downed_blur
+ prepare_coop_downed_blur(AREA)
+ from prepare_xbe_coop_rewards import prepare as prepare_coop_rewards
+ prepare_coop_rewards(AREA,SDK)
+ from prepare_xbe_coop_collectibles import prepare as prepare_coop_collectibles
+ prepare_coop_collectibles(AREA)
+ from prepare_xbe_coop_ko_rewards import prepare as prepare_coop_ko_rewards
+ prepare_coop_ko_rewards(AREA)
+ from prepare_xbe_coop_turrets import prepare as prepare_coop_turrets
+ prepare_coop_turrets(AREA)
+ from prepare_xbe_coop_turret_assets import prepare as prepare_coop_turret_assets
+ prepare_coop_turret_assets(AREA)
+ from prepare_xbe_coop_turret_view import prepare as prepare_coop_turret_view
+ prepare_coop_turret_view(AREA)
  from prepare_xbe_firearm_cycle import prepare as prepare_firearm_cycle
  prepare_firearm_cycle(AREA)
  from prepare_xbe_event_callback import prepare as prepare_event_callback
@@ -95,12 +179,20 @@ try:
  prepare_ragdoll_settings(AREA)
  from prepare_xbe_ragdoll_contacts import prepare as prepare_ragdoll_contacts
  prepare_ragdoll_contacts(AREA)
+ from prepare_xbe_coop_death import prepare as prepare_coop_death
+ prepare_coop_death(AREA)
+ from prepare_xbe_health_packs import prepare as prepare_health_packs
+ prepare_health_packs(AREA)
  from prepare_xbe_intro_skip import prepare as prepare_intro_skip
  prepare_intro_skip(AREA)
+ from prepare_xbe_fmv_layout import prepare as prepare_fmv_layout
+ prepare_fmv_layout(AREA)
  from prepare_xbe_health_pulse import prepare as prepare_health_pulse
  prepare_health_pulse(SDK, AREA)
  from prepare_xbe_view_layout import prepare as prepare_view_layout
  prepare_view_layout(AREA)
+ from prepare_xbe_coop_downed_camera import prepare as prepare_coop_downed_camera
+ prepare_coop_downed_camera(AREA)
  from prepare_xbe_pc_prompts import prepare as prepare_pc_prompts, prepare_guest as prepare_pc_prompt_guest
  prepare_pc_prompt_guest(AREA)
  from prepare_xbe_frontend import prepare as prepare_frontend
@@ -115,10 +207,18 @@ try:
  prepare_coroutines()
  from prepare_xbe_io_apc import prepare as prepare_io_apc
  prepare_io_apc(SDK, AREA)
+ from prepare_xbe_audio_config import prepare as prepare_audio_config
+ prepare_audio_config(SDK, AREA)
  from prepare_xbe_language import prepare as prepare_language
  prepare_language(SDK, AREA)
  from prepare_xbe_heap_probe import prepare as prepare_heap_probe
  prepare_heap_probe(AREA)
+ from prepare_xbe_coop_spin import prepare as prepare_coop_spin
+ prepare_coop_spin(AREA)
+ from prepare_xbe_coop_pickups import prepare as prepare_coop_pickups
+ prepare_coop_pickups(AREA)
+ from prepare_xbe_coop_orders import prepare as prepare_coop_orders
+ prepare_coop_orders(AREA)
  xbe=(AREA/'assets/Default.xbe').read_bytes()
  u=lambda o:struct.unpack_from('<I',xbe,o)[0]
  base=u(0x104); table=u(0x120)-base
@@ -252,6 +352,8 @@ int main(){uint32_t r=0;if(uc_ds_ref(r,false)!=0||uc_ds_ref(r,true)!=1||uc_ds_re
  from prepare_xbe_cursor import prepare as prepare_cursor
  from prepare_xbe_graphics_input import prepare as prepare_graphics_input
  for name in ('xbe_trial_menu_input.cpp','xbe_trial_hud.cpp','xbe_trial_graphics_ui.cpp','xbe_trial_graphics_ui.h',
+              'xbe_coop_controls.cpp','xbe_coop_controls.h',
+              'xbe_coop_preview.h','xbe_coop_preview.cpp','xbe_coop_preview_assets.h','xbe_coop_preview_assets.cpp',
               'xbe_window_keys.h','xbe_menu_key_taps.h','xbe_controls.h','xbe_controls_backend.inc','xbe_controls_capture.h','xbe_controls_ui.inc','xbe_language_ui.inc'):
   source=(ROOT/'scripts'/name).read_text()
   if name=='xbe_trial_menu_input.cpp':
@@ -264,6 +366,10 @@ int main(){uint32_t r=0;if(uc_ds_ref(r,false)!=0||uc_ds_ref(r,true)!=1||uc_ds_re
   prepare_input_diagnostic(AREA)
  from prepare_xbe_conversation_skip import prepare as prepare_conversation_skip
  prepare_conversation_skip(AREA)
+ from prepare_xbe_coop_interactions import prepare as prepare_coop_interactions
+ prepare_coop_interactions(AREA)
+ from prepare_xbe_coop_controls import prepare as prepare_coop_controls
+ prepare_coop_controls(AREA)
  info=(SDK/'templates/game/src/common/game_info.cpp').read_text()
  info=info.replace('#include "app/app.h"','#include "app/app.h"\n#include "xbe_graphics_settings.h"\nextern bool TrialInputMessage(void*, uint32_t, uintptr_t, intptr_t, intptr_t*);\nextern void TrialInputWindow(void*);\nextern void TrialInputPad(int, input::Pad&);\nextern void TrialHudUi(double);\nextern bool TrialShowFps;\nextern bool TrialSmoothFog;\nextern bool TrialDistanceFog;\nextern uint32_t TrialFogDistanceMode;')
  info=info.replace('.window = nullptr,','.window = TrialInputWindow,')
@@ -274,7 +380,7 @@ int main(){uint32_t r=0;if(uc_ds_ref(r,false)!=0||uc_ds_ref(r,true)!=1||uc_ds_re
  info=info.replace('.init = nullptr,','.init = trial_graphics::Initialize,')
  info=info.replace('#include "xbe_graphics_settings.h"','#include "xbe_graphics_settings.h"\n#include "xbe_language.h"')
  info=info.replace('{"ragdoll_amount", nullptr, &TrialRagdollMode}',
-                   '{"ragdoll_amount", nullptr, &TrialRagdollMode}, {"language", nullptr, &TrialLanguage}, {"world_textures", &TrialWorldTextures, nullptr}, {"hd_ui", &TrialHdUi, nullptr}, {"reticle_scale", nullptr, &TrialReticleScale}, {"weapon_fov_scale", nullptr, &TrialWeaponFovScale}')
+                   '{"ragdoll_amount", nullptr, &TrialRagdollMode}, {"language", nullptr, &TrialLanguage}, {"world_textures", &TrialWorldTextures, nullptr}, {"hd_ui", &TrialHdUi, nullptr}, {"reticle_scale", nullptr, &TrialReticleScale}, {"weapon_fov_scale", nullptr, &TrialWeaponFovScale}, {"player2_field_of_view", nullptr, &TrialPlayer2FieldOfView}, {"player2_weapon_fov_scale", nullptr, &TrialPlayer2WeaponFovScale}, {"fmv_scale", nullptr, &TrialFmvScale}')
  info=info.replace('.init = trial_graphics::Initialize,',
                    '.init = []{trial_graphics::Initialize();trial_language::Initialize();},')
  info=info.replace('Game Title','Urban Chaos XboxXBERecomp Integration').replace('L"Game"','L"UrbanChaosXbeTrial"').replace('"game",','"urban_chaos_xbe_trial",').replace('"Game"}}','"UrbanChaosXbeTrial"}}')
@@ -300,15 +406,22 @@ int main(){uint32_t r=0;if(uc_ds_ref(r,false)!=0||uc_ds_ref(r,true)!=1||uc_ds_re
  prepare_hd_ui(AREA)
  from prepare_xbe_world_textures import prepare as prepare_world_textures
  prepare_world_textures(AREA)
+ from prepare_xbe_coop_blur import prepare as prepare_coop_blur
+ prepare_coop_blur(AREA)
  # The brightness experiment added a second readback in live Canals captures.
  from prepare_xbe_brightness import restore_generated
  restore_generated(AREA)
  from prepare_xbe_release_assets import prepare as prepare_release_assets
  prepare_release_assets(SDK, AREA)
+ # Add the read-only recorder after production-body fixtures are exported.
+ from prepare_xbe_aim_diagnostic import prepare as prepare_aim_diagnostic
+ prepare_aim_diagnostic(AREA)
  if os.environ.get('UCRR_XBE_SHADOW_DIAG')=='1':
   assert not RELEASE, 'Shadow captures must not enter a release build'
   from prepare_xbe_shadow_diagnostic import prepare as prepare_shadow_diagnostic
   prepare_shadow_diagnostic(AREA)
+ from prepare_xbe_coop_input import prepare_host as prepare_coop_pause_host
+ prepare_coop_pause_host(AREA)
  (AREA/'CMakeLists.txt').write_text('''cmake_minimum_required(VERSION 3.25)
 project(UrbanChaosXbeTrial LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 20)
@@ -329,6 +442,18 @@ add_library(uc_native_texture STATIC "'''+(ROOT/'native/texture_asset/texture_as
 add_dependencies(uc_native_texture trial_zlib_import)
 target_include_directories(uc_native_texture PRIVATE "${UC_ZLIB_INCLUDE}" PUBLIC "'''+(ROOT/'native/archive_reader').as_posix()+'''")
 target_link_libraries(uc_native_texture PUBLIC "${CMAKE_CURRENT_BINARY_DIR}/zlib-existing.lib")
+add_library(uc_native_preview STATIC
+    "'''+(ROOT/'native/model_asset.c').as_posix()+'''"
+    "'''+(ROOT/'native/model_pose.c').as_posix()+'''"
+    "'''+(ROOT/'native/model_render.c').as_posix()+'''"
+    "'''+(ROOT/'native/material_asset.c').as_posix()+'''"
+    "'''+(ROOT/'native/texture_sequence.c').as_posix()+'''"
+    "'''+(ROOT/'native/animation_asset.c').as_posix()+'''"
+    "'''+(ROOT/'native/animation_sample.c').as_posix()+'''"
+    "'''+(ROOT/'native/animation_blend.c').as_posix()+'''"
+    "'''+(ROOT/'native/animation_skeleton.c').as_posix()+'''"
+    "'''+(ROOT/'native/animation_binding.c').as_posix()+'''")
+target_link_libraries(uc_native_preview PUBLIC uc_native_texture)
 configure_file("${UC_ZLIB_DLL}" "${CMAKE_CURRENT_BINARY_DIR}/zlib1.dll" COPYONLY)
 file(GLOB XBE_HOST_SOURCES CONFIGURE_DEPENDS src/common/*.cpp)
 list(FILTER XBE_HOST_SOURCES EXCLUDE REGEX "/test_[^/]*[.]cpp$")
@@ -464,9 +589,73 @@ add_executable(test_firearm_cycle src/compat/test_firearm_cycle.cpp)
 target_include_directories(test_firearm_cycle PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
 add_executable(test_view_layout src/compat/test_view_layout.cpp)
 target_include_directories(test_view_layout PRIVATE src/common src/compat "'''+(SDK/'runtime').as_posix()+'''" )
+add_executable(test_coop_input src/compat/test_coop_input.cpp)
+target_include_directories(test_coop_input PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
+add_executable(test_coop_controls src/compat/test_coop_controls.cpp)
+target_include_directories(test_coop_controls PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
+add_executable(test_pause_imgui src/compat/test_pause_imgui.cpp
+    ${imgui_SOURCE_DIR}/imgui.cpp ${imgui_SOURCE_DIR}/imgui_draw.cpp ${imgui_SOURCE_DIR}/imgui_tables.cpp ${imgui_SOURCE_DIR}/imgui_widgets.cpp)
+target_include_directories(test_pause_imgui PRIVATE src/common ${imgui_SOURCE_DIR})
+add_executable(test_coop_guest src/compat/test_coop_guest.cpp)
+target_include_directories(test_coop_guest PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
+add_executable(test_coop_resources src/compat/test_coop_resources.cpp)
+target_include_directories(test_coop_resources PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
+foreach(release_fixture IN ITEMS coop_guest coop_resources aim)
+    if(release_fixture STREQUAL "aim")
+        add_executable(test_aim_release src/compat/test_aim_release.cpp)
+    else()
+        add_executable(test_${release_fixture}_release src/compat/test_${release_fixture}.cpp)
+    endif()
+    target_include_directories(test_${release_fixture}_release PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
+    target_compile_definitions(test_${release_fixture}_release PRIVATE UC_BURNER_RELEASE)
+endforeach()
+add_executable(test_coop_body src/compat/test_coop_body.cpp)
+target_include_directories(test_coop_body PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
+add_executable(test_coop_effects src/compat/test_coop_effects.cpp)
+target_include_directories(test_coop_effects PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
+add_executable(test_coop_cinematics src/compat/test_coop_cinematics.cpp)
+target_include_directories(test_coop_cinematics PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
+add_executable(test_coop_spin src/compat/test_coop_spin.cpp)
+target_include_directories(test_coop_spin PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
+add_executable(test_coop_pickups src/compat/test_coop_pickups.cpp)
+target_include_directories(test_coop_pickups PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
+add_executable(test_coop_orders src/compat/test_coop_orders.cpp)
+target_include_directories(test_coop_orders PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
+add_executable(test_aim_diagnostic src/compat/test_aim_diagnostic.cpp)
+target_include_directories(test_aim_diagnostic PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
+add_executable(test_coop_death src/compat/test_coop_death.cpp)
+target_include_directories(test_coop_death PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
+add_executable(test_coop_downed_camera src/compat/test_coop_downed_camera.cpp)
+target_include_directories(test_coop_downed_camera PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
+add_executable(test_coop_downed_blur src/compat/test_coop_downed_blur.cpp)
+target_include_directories(test_coop_downed_blur PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
+add_executable(test_coop_shields src/compat/test_coop_shields.cpp)
+target_include_directories(test_coop_shields PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
+add_executable(test_coop_progression src/compat/test_coop_progression.cpp)
+target_include_directories(test_coop_progression PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
+add_executable(test_coop_interactions src/compat/test_coop_interactions.cpp)
+target_include_directories(test_coop_interactions PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
+add_executable(test_coop_rewards src/compat/test_coop_rewards.cpp)
+target_include_directories(test_coop_rewards PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
+add_executable(test_coop_collectibles src/compat/test_coop_collectibles.cpp)
+target_include_directories(test_coop_collectibles PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
+add_executable(test_coop_ko_rewards src/compat/test_coop_ko_rewards.cpp)
+target_include_directories(test_coop_ko_rewards PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
+add_executable(test_coop_turrets src/compat/test_coop_turrets.cpp)
+target_include_directories(test_coop_turrets PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
+add_executable(test_coop_turret_assets src/compat/test_coop_turret_assets.cpp)
+target_include_directories(test_coop_turret_assets PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
+add_executable(test_coop_turret_view src/compat/test_coop_turret_view.cpp)
+target_include_directories(test_coop_turret_view PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
+add_executable(test_health_packs src/compat/test_health_packs.cpp)
+target_include_directories(test_health_packs PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
+add_executable(test_coop_menu src/compat/test_coop_menu.cpp)
+target_include_directories(test_coop_menu PRIVATE src/common "'''+ROOT.as_posix()+'''")
 add_executable(test_health_pulse src/compat/test_health_pulse.cpp)
 target_include_directories(test_health_pulse PRIVATE src src/compat "'''+ROOT.as_posix()+'''" "'''+(SDK/'runtime').as_posix()+'''")
 add_executable(test_intro_skip src/compat/test_intro_skip.cpp)
+add_executable(test_fmv_layout src/compat/test_fmv_layout.cpp)
+target_include_directories(test_fmv_layout PRIVATE src/common src/compat "'''+(SDK/'runtime').as_posix()+'''")
 add_executable(test_menu_key_taps "'''+(ROOT/'scripts/test_xbe_menu_key_taps.cpp').as_posix()+'''")
 add_executable(test_conversation_skip src/compat/test_conversation_skip.cpp)
 target_include_directories(test_conversation_skip PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''" generated/game)
@@ -482,6 +671,9 @@ target_link_libraries(test_hd_ui_prompts PRIVATE gdi32 user32)
 add_executable(test_hd_ui_gpu src/compat/test_hd_ui_gpu.cpp)
 target_include_directories(test_hd_ui_gpu PRIVATE src/compat src "'''+(SDK/'runtime').as_posix()+'''")
 target_link_libraries(test_hd_ui_gpu PRIVATE d3d12 dxgi d3dcompiler)
+add_executable(test_coop_blur_gpu src/compat/test_coop_blur_gpu.cpp)
+target_include_directories(test_coop_blur_gpu PRIVATE src/compat src/common src "'''+(SDK/'runtime').as_posix()+'''")
+target_link_libraries(test_coop_blur_gpu PRIVATE d3d12 dxgi d3dcompiler)
 add_executable(test_hd_ui src/compat/test_hd_ui.cpp src/compat/xbe_hd_ui.cpp "'''+(ROOT/'native/font.c').as_posix()+'''")
 target_include_directories(test_hd_ui PRIVATE src/compat "'''+ROOT.as_posix()+'''" "'''+(SDK/'runtime').as_posix()+'''")
 target_link_libraries(test_hd_ui PRIVATE uc_native_texture windowscodecs ole32 bcrypt)
@@ -500,6 +692,11 @@ add_executable(test_state_costs src/compat/test_state_costs.cpp)
 target_include_directories(test_state_costs PRIVATE src "'''+(SDK/'runtime').as_posix()+'''")
 target_compile_options(test_state_costs PRIVATE -fno-strict-aliasing)
 add_executable(test_language src/compat/test_language.cpp)
+add_executable(test_audio_config src/compat/test_audio_config.cpp)
+target_include_directories(test_audio_config PRIVATE "'''+ROOT.as_posix()+'''" src/common src/compat src "'''+(SDK/'runtime').as_posix()+'''" generated/game)
+add_executable(test_missing_texture src/compat/test_missing_texture.cpp src/compat/shaders.cpp)
+target_include_directories(test_missing_texture PRIVATE src src/compat "'''+(SDK/'runtime').as_posix()+'''")
+target_link_libraries(test_missing_texture PRIVATE d3d11 d3dcompiler)
 target_include_directories(test_language PRIVATE "'''+ROOT.as_posix()+'''" src/common src/compat src "'''+(SDK/'runtime').as_posix()+'''" generated/game)
 add_executable(test_release src/compat/test_release.cpp src/compat/log.cpp)
 target_include_directories(test_release PRIVATE src src/compat "'''+(SDK/'runtime').as_posix()+'''")
@@ -520,6 +717,17 @@ add_executable(test_menu_style src/compat/test_menu_style.cpp src/compat/xbe_fro
     ${imgui_SOURCE_DIR}/imgui.cpp ${imgui_SOURCE_DIR}/imgui_draw.cpp ${imgui_SOURCE_DIR}/imgui_tables.cpp ${imgui_SOURCE_DIR}/imgui_widgets.cpp)
 target_include_directories(test_menu_style PRIVATE src/common src/compat "'''+ROOT.as_posix()+'''" "'''+(SDK/'runtime').as_posix()+'''" ${imgui_SOURCE_DIR})
 target_link_libraries(test_menu_style PRIVATE uc_native_texture gdi32 user32 windowscodecs ole32 bcrypt)
+add_executable(test_coop_preview "'''+(ROOT/'scripts/test_xbe_coop_preview.cpp').as_posix()+'''" src/common/xbe_coop_preview.cpp
+    ${imgui_SOURCE_DIR}/imgui.cpp ${imgui_SOURCE_DIR}/imgui_draw.cpp ${imgui_SOURCE_DIR}/imgui_tables.cpp ${imgui_SOURCE_DIR}/imgui_widgets.cpp)
+target_include_directories(test_coop_preview PRIVATE src/common ${imgui_SOURCE_DIR})
+add_executable(test_coop_preview_assets "'''+(ROOT/'scripts/test_xbe_coop_preview_assets.cpp').as_posix()+'''" src/common/xbe_coop_preview_assets.cpp)
+target_include_directories(test_coop_preview_assets PRIVATE src/common src/compat "'''+ROOT.as_posix()+'''")
+target_link_libraries(test_coop_preview_assets PRIVATE uc_native_preview)
+add_executable(test_coop_preview_render "'''+(ROOT/'scripts/test_xbe_coop_preview_render.cpp').as_posix()+'''" src/common/xbe_coop_preview.cpp src/common/xbe_coop_preview_assets.cpp
+    src/compat/xbe_frontend_fonts.cpp src/compat/xbe_hd_ui.cpp src/compat/xbe_pc_prompt_art.cpp "'''+(ROOT/'native/font.c').as_posix()+'''"
+    ${imgui_SOURCE_DIR}/imgui.cpp ${imgui_SOURCE_DIR}/imgui_draw.cpp ${imgui_SOURCE_DIR}/imgui_tables.cpp ${imgui_SOURCE_DIR}/imgui_widgets.cpp)
+target_include_directories(test_coop_preview_render PRIVATE src/common src/compat "'''+ROOT.as_posix()+'''" "'''+(SDK/'runtime').as_posix()+'''" ${imgui_SOURCE_DIR})
+target_link_libraries(test_coop_preview_render PRIVATE uc_native_preview gdi32 windowscodecs ole32 bcrypt)
 add_executable(test_graphics_input src/compat/test_graphics_input.cpp)
 target_include_directories(test_graphics_input PRIVATE src/common "'''+ROOT.as_posix()+'''" "'''+(SDK/'runtime').as_posix()+'''")
 target_link_libraries(test_graphics_input PRIVATE user32 xinput)
@@ -540,7 +748,7 @@ if(UC_BURNER_RELEASE)
     target_compile_definitions(UrbanChaosXbeTrial PRIVATE UC_BURNER_RELEASE)
 endif()
 target_compile_definitions(UrbanChaosXbeTrial PRIVATE UC_PRESENT_SURFACE_LAYOUT=2)
-target_link_libraries(UrbanChaosXbeTrial PRIVATE SDL3::SDL3 bcrypt gdi32 xinput uc_native_texture windowscodecs ole32)
+target_link_libraries(UrbanChaosXbeTrial PRIVATE SDL3::SDL3 bcrypt gdi32 xinput uc_native_texture uc_native_preview windowscodecs ole32)
 # Generated GPU headers must precede the pinned SDK in every game translation unit.
 target_include_directories(UrbanChaosXbeTrial BEFORE PRIVATE src)
 target_include_directories(UrbanChaosXbeTrial PRIVATE "'''+ROOT.as_posix()+'''" src/compat src/common)
@@ -553,10 +761,12 @@ target_include_directories(UrbanChaosXbeTrial PRIVATE "'''+ROOT.as_posix()+'''" 
  config=(AREA/'out-msvc/_deps/sdl3-build/include-config-relwithdebinfo/build_config/SDL_build_config.h').read_text()
  assert '#define HAVE_LIBUSB 1' in config,'Switch 2 USB driver would be silently omitted'
  run('build-game-msvc',['cmake','--build',AREA/'out-msvc','--target','UrbanChaosXbeTrial','test_device_refs','test_pc_keyboard','test_pc_camera','test_pc_memory','test_coroutines','test_voice_mode','test_stream_factory','test_io_apc','test_recorded_draws','test_visibility','test_query_resolves','test_query_resolves_gpu','test_inline_draws','test_resource_refs','test_shader_state','test_cursor','test_target60','test_signed_lighting','test_depth_alias','test_audio_rolloff','test_audio_cone','test_audio_factors','test_audio_pitch','test_stream_status','test_audio_loop','test_audio_routing','test_heap_probe','test_graphics_menu_context','test_graphics_input','test_graphics_settings','test_target_resize','test_smooth_fog','-j','4'])
- run('build-interface-fixtures',['cmake','--build',AREA/'out-msvc','--target','test_world_textures','test_pistol_spin','test_firearm_cycle','test_release_assets','test_language','test_release','test_prompt_handoff','test_state_costs','test_event_callback','test_shader_cache','test_perf','test_controls','test_msaa','test_effect_settings','test_ragdoll_settings','test_ragdoll_contacts','test_filter','test_intro_skip','test_conversation_skip','test_health_pulse','test_view_layout','test_pc_prompts','test_hd_ui_renderer','test_hd_ui_prompts','test_hd_ui_gpu','test_hd_ui','test_hd_ui_restored','test_hd_ui_reconstruct','test_frontend','test_level_details','test_frontend_fonts','test_menu_style','-j','4'])
+ run('build-interface-fixtures',['cmake','--build',AREA/'out-msvc','--target','test_world_textures','test_pistol_spin','test_firearm_cycle','test_release_assets','test_language','test_audio_config','test_missing_texture','test_release','test_prompt_handoff','test_state_costs','test_event_callback','test_shader_cache','test_perf','test_controls','test_msaa','test_effect_settings','test_ragdoll_settings','test_ragdoll_contacts','test_filter','test_intro_skip','test_conversation_skip','test_health_pulse','test_view_layout','test_coop_input','test_coop_controls','test_pause_imgui','test_coop_guest','test_coop_resources','test_coop_body','test_coop_effects','test_coop_cinematics','test_coop_death','test_coop_downed_blur','test_coop_shields','test_coop_progression','test_coop_interactions','test_coop_rewards','test_coop_collectibles','test_coop_ko_rewards','test_coop_turrets','test_coop_turret_assets','test_coop_turret_view','test_health_packs','test_coop_menu','test_pc_prompts','test_hd_ui_renderer','test_hd_ui_prompts','test_hd_ui_gpu','test_coop_blur_gpu','test_hd_ui','test_hd_ui_restored','test_hd_ui_reconstruct','test_frontend','test_level_details','test_frontend_fonts','test_menu_style','-j','4'])
  run('build-controller-device',['cmake','--build',AREA/'out-msvc','--target','test_controller_device','-j','4'])
  run('test-controller-device',[AREA/'out-msvc/test_controller_device.exe'])
  run('test-language',[AREA/'out-msvc/test_language.exe'])
+ run('test-audio-config',[AREA/'out-msvc/test_audio_config.exe'])
+ run('test-missing-texture',[AREA/'out-msvc/test_missing_texture.exe'])
  run('test-release',[AREA/'out-msvc/test_release.exe'])
  run('test-release-assets',[AREA/'out-msvc/test_release_assets.exe',AREA/'assets/Default.xbe',ROOT/'game_files/Default.xbe'])
  run('test-event-callback',[AREA/'out-msvc/test_event_callback.exe'])
@@ -589,6 +799,8 @@ target_include_directories(UrbanChaosXbeTrial PRIVATE "'''+ROOT.as_posix()+'''" 
  run('test-ragdoll-contacts',[AREA/'out-msvc/test_ragdoll_contacts.exe'])
  run('test-filter',[AREA/'out-msvc/test_filter.exe'])
  run('test-intro-skip',[AREA/'out-msvc/test_intro_skip.exe'])
+ run('build-fmv-layout',['cmake','--build',AREA/'out-msvc','--target','test_fmv_layout','-j','4'])
+ run('test-fmv-layout',[AREA/'out-msvc/test_fmv_layout.exe'])
  run('test-pistol-spin',[AREA/'out-msvc/test_pistol_spin.exe'])
  run('test-firearm-cycle',[AREA/'out-msvc/test_firearm_cycle.exe'])
  run('build-menu-key-taps',['cmake','--build',AREA/'out-msvc','--target','test_menu_key_taps','-j','4'])
@@ -596,6 +808,44 @@ target_include_directories(UrbanChaosXbeTrial PRIVATE "'''+ROOT.as_posix()+'''" 
  run('test-conversation-skip',[AREA/'out-msvc/test_conversation_skip.exe'])
  run('test-health-pulse',[AREA/'out-msvc/test_health_pulse.exe'])
  run('test-view-layout',[AREA/'out-msvc/test_view_layout.exe'])
+ run('test-coop-input',[AREA/'out-msvc/test_coop_input.exe'])
+ run('test-coop-controls',[AREA/'out-msvc/test_coop_controls.exe'])
+ run('test-pause-imgui',[AREA/'out-msvc/test_pause_imgui.exe'])
+ run('test-coop-guest',[AREA/'out-msvc/test_coop_guest.exe'])
+ run('test-coop-resources',[AREA/'out-msvc/test_coop_resources.exe'])
+ run('build-quiet-coop-fixtures',['cmake','--build',AREA/'out-msvc','--target','test_coop_guest_release','test_coop_resources_release','test_aim_release','-j','4'])
+ run('test-coop-guest-release',[AREA/'out-msvc/test_coop_guest_release.exe'])
+ run('test-coop-resources-release',[AREA/'out-msvc/test_coop_resources_release.exe'])
+ run('test-aim-release',[AREA/'out-msvc/test_aim_release.exe'])
+ run('test-coop-body',[AREA/'out-msvc/test_coop_body.exe'])
+ run('test-coop-effects',[AREA/'out-msvc/test_coop_effects.exe'])
+ run('test-coop-cinematics',[AREA/'out-msvc/test_coop_cinematics.exe'])
+ run('build-coop-spin',['cmake','--build',AREA/'out-msvc','--target','test_coop_spin','-j','4'])
+ run('test-coop-spin',[AREA/'out-msvc/test_coop_spin.exe'])
+ run('build-coop-pickups',['cmake','--build',AREA/'out-msvc','--target','test_coop_pickups','-j','4'])
+ run('test-coop-pickups',[AREA/'out-msvc/test_coop_pickups.exe'])
+ run('build-coop-orders',['cmake','--build',AREA/'out-msvc','--target','test_coop_orders','-j','4'])
+ run('test-coop-orders',[AREA/'out-msvc/test_coop_orders.exe'])
+ run('build-aim-diagnostic',['cmake','--build',AREA/'out-msvc','--target','test_aim_diagnostic','-j','4'])
+ run('test-aim-diagnostic-off',['cmake','-E','env','--unset=BURNER_AIM_LOG',AREA/'out-msvc/test_aim_diagnostic.exe','off'])
+ run('test-aim-diagnostic-on',['cmake','-E','env','BURNER_AIM_LOG='+str(AREA/'aim-fixture.log'),AREA/'out-msvc/test_aim_diagnostic.exe',AREA/'aim-fixture.log'])
+ run('test-coop-death',[AREA/'out-msvc/test_coop_death.exe'])
+ run('test-coop-downed-blur',[AREA/'out-msvc/test_coop_downed_blur.exe'])
+ run('build-coop-downed-camera',['cmake','--build',AREA/'out-msvc','--target','test_coop_downed_camera','-j','4'])
+ run('test-coop-downed-camera',[AREA/'out-msvc/test_coop_downed_camera.exe'])
+ run('test-health-packs',[AREA/'out-msvc/test_health_packs.exe'])
+ run('test-coop-shields',[AREA/'out-msvc/test_coop_shields.exe'])
+ run('test-coop-progression',[AREA/'out-msvc/test_coop_progression.exe'])
+ run('test-coop-progression-assets',[sys.executable,ROOT/'scripts/test_coop_progression_assets.py'])
+ run('test-coop-interactions',[AREA/'out-msvc/test_coop_interactions.exe'])
+ run('test-coop-rewards',[AREA/'out-msvc/test_coop_rewards.exe'])
+ run('test-coop-collectibles',[AREA/'out-msvc/test_coop_collectibles.exe'])
+ run('test-coop-ko-rewards',[AREA/'out-msvc/test_coop_ko_rewards.exe'])
+ run('test-coop-turrets',[AREA/'out-msvc/test_coop_turrets.exe'])
+ run('test-coop-turret-assets',[AREA/'out-msvc/test_coop_turret_assets.exe'])
+ run('test-coop-turret-assets-archive',[sys.executable,ROOT/'scripts/test_coop_turret_assets.py'])
+ run('test-coop-turret-view',[AREA/'out-msvc/test_coop_turret_view.exe'])
+ run('test-coop-menu',[AREA/'out-msvc/test_coop_menu.exe'])
  run('test-pc-prompts',[AREA/'out-msvc/test_pc_prompts.exe'])
  run('test-world-textures',[AREA/'out-msvc/test_world_textures.exe'])
  run('test-arm-mesh',[sys.executable,ROOT/'scripts/test_xbe_arm_mesh.py',AREA/'out-msvc/test_world_textures.exe',ROOT/'game_files'])
@@ -603,6 +853,8 @@ target_include_directories(UrbanChaosXbeTrial PRIVATE "'''+ROOT.as_posix()+'''" 
  run('test-hd-ui-prompts',[AREA/'out-msvc/test_hd_ui_prompts.exe'])
  run('test-hd-ui-hardware',[AREA/'out-msvc/test_hd_ui_gpu.exe'])
  run('test-hd-ui-warp',[AREA/'out-msvc/test_hd_ui_gpu.exe','--warp'])
+ run('test-coop-blur-hardware',[AREA/'out-msvc/test_coop_blur_gpu.exe'])
+ run('test-coop-blur-warp',[AREA/'out-msvc/test_coop_blur_gpu.exe','--warp'])
  run('test-hd-ui-missing',[AREA/'out-msvc/test_hd_ui.exe','--missing'])
  run('test-hd-ui-assets',[AREA/'out-msvc/test_hd_ui.exe',AREA/'assets','--require-restored'])
  run('test-hd-ui-restored',[AREA/'out-msvc/test_hd_ui_restored.exe'])
@@ -615,6 +867,10 @@ target_include_directories(UrbanChaosXbeTrial PRIVATE "'''+ROOT.as_posix()+'''" 
  run('test-frontend-fonts',[AREA/'out-msvc/test_frontend_fonts.exe'])
  run('test-hd-ui-font-fallback',[AREA/'out-msvc/test_frontend_fonts.exe','--font-fallback'])
  run('test-menu-style',[AREA/'out-msvc/test_menu_style.exe'])
+ run('build-coop-preview-fixtures',['cmake','--build',AREA/'out-msvc','--target','test_coop_preview','test_coop_preview_assets','test_coop_preview_render','-j','4'])
+ run('test-coop-preview',[AREA/'out-msvc/test_coop_preview.exe'])
+ run('test-coop-preview-assets',[AREA/'out-msvc/test_coop_preview_assets.exe',AREA/'assets'])
+ run('test-coop-preview-render',[AREA/'out-msvc/test_coop_preview_render.exe',AREA/'assets',AREA/'coop-character-previews.bmp'])
  run('test-graphics-menu-context',[AREA/'out-msvc/test_graphics_menu_context.exe'])
  run('test-graphics-input',[AREA/'out-msvc/test_graphics_input.exe'])
  run('test-graphics-settings',[AREA/'out-msvc/test_graphics_settings.exe'])

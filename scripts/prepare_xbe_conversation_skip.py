@@ -45,9 +45,14 @@ extern void TrialReloadQuery(X86Context&,uint8_t*);'''
     for chunk in (21,38,55):
         path=area/f'generated/game/x86_recomp.{chunk}.cpp'
         source=path.read_text()
-        if declarations not in source:
-            source=source.replace('#include "x86_recomp_shared.h"',
-                                  '#include "x86_recomp_shared.h"\n'+declarations,1)
+        # Older prepared files have only the three conversation declarations.
+        owned=set(declarations.splitlines())
+        source=''.join(line for line in source.splitlines(keepends=True)
+                       if line.rstrip('\r\n') not in owned)
+        shared='#include "x86_recomp_shared.h"\n'
+        assert source.count(shared)==1
+        source=source.replace(shared,shared+declarations+'\n',1)
+        assert all(source.splitlines().count(line)==1 for line in owned)
         if chunk==21:
             hooks=[('000CF7FF','TrialReloadQuery(ctx,base);')]
         elif chunk==38:

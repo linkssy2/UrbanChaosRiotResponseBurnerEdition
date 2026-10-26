@@ -13,12 +13,15 @@ README-linux.txt. This wrapper does not set up the Steam Linux Runtime container
   ./burner.sh import "/path/to/your Xbox game.iso"
   ./burner.sh play
   ./burner.sh textures "/path/to/HD-Game-Textures.zip"
+  ./burner.sh voices "/path/to/Urban Chaos PS2 Europe.iso"
   ./burner.sh status
   ./burner.sh language [english|french|italian|german|spanish]
 
 Install Proton Experimental through Steam first. For another installed Proton:
   BURNER_PROTON="/path/to/Proton/proton" ./burner.sh play
 For a nonstandard Steam installation, also set BURNER_STEAM to its folder.
+Spanish voices require your European multilingual PS2 ISO (SLES-53991).
+Import your Xbox game first, then select Spanish after importing the voices.
 This runs the Windows game through Proton; it is not a native Linux port.
 HELP
 }
@@ -27,7 +30,7 @@ action=${1:-play}
 if (( $# )); then shift; fi
 case "$action" in
     help|-h|--help) usage; exit 0 ;;
-    import|textures) [[ $# == 1 ]] || fail "$action requires exactly one file path." ;;
+    import|textures|voices) [[ $# == 1 ]] || fail "$action requires exactly one file path." ;;
     play|status) [[ $# == 0 ]] || fail "$action does not take arguments." ;;
     language) [[ $# -le 1 ]] || fail 'language accepts one language name.' ;;
     *) usage >&2; fail "Unknown command: $action" ;;
@@ -50,7 +53,7 @@ for payload in tools/python/python.exe tools/import_game.py tools/runtime-manife
     [[ -f "$root/$payload" ]] || fail "Missing $payload. Extract the entire Linux package again."
 done
 input=''
-if [[ $action == import || $action == textures ]]; then
+if [[ $action == import || $action == textures || $action == voices ]]; then
     [[ -f $1 ]] || fail "File not found: $1"
     input=$(CDPATH= cd -- "$(dirname -- "$1")" && pwd -P)/$(basename -- "$1")
 fi

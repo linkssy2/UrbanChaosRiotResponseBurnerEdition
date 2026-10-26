@@ -39,6 +39,10 @@ def prepare(area):
     section=next(s for s in sections if s[1]<=0xa6220 and 0xa6220+1249<=s[1]+s[4])
     offset=section[3]+0xa6220-section[1]
     assert hashlib.sha256(xbe[offset:offset+1249]).hexdigest()=='cf1c78d64204f977d0f23b6c601b9d44e079c2979791a19fd59630c19c02d55e'
+    # The apparent vertex-buffer unlock at A63CF is the retail no-op RET.
+    # There is no upload/snapshot before the final skin stream read at A665A.
+    section=next(s for s in sections if s[1]<=0x11030<s[1]+s[4])
+    assert xbe[section[3]+0x11030-section[1]]==0xc3
     out=Path(area)/'src/compat';p=out/'d3d12.cpp';s=p.read_text()
     s=once(s,'#include "xbe_hd_ui.h" // UC_HD_UI_TEXTURES','#include "xbe_hd_ui.h" // UC_HD_UI_TEXTURES\n#include "xbe_world_textures.h"')
     s=once(s,'    bool hd_ui_attempted = false;','''    bool hd_ui_attempted = false;
@@ -77,6 +81,36 @@ def prepare(area):
 \t}
 '''
     s=s.replace(arm_hook,'')
+    # Retain the locked position/UV destinations across A6220's later temporary
+    # index allocations. Commit only after the companion skin stream is read.
+    arm_locals='\tuint32_t trial_arm_positions=0,trial_arm_uv=0,trial_arm_count=0;\n'
+    capture='''\tif (TrialGuestReadable(ctx.esi,0x20)&&TrialGuestReadable(ctx.esp,0x24)&&X86_MEM32(ctx.esi+0x1c)==17) {
+\t\ttrial_arm_count=X86_MEM32(ctx.esi+8);
+\t\tif (trial_arm_count==1614||trial_arm_count==2387||trial_arm_count==3103) {
+\t\t\ttrial_arm_positions=X86_MEM32(ctx.esp+0x20);trial_arm_uv=X86_MEM32(ctx.esp+0x10);
+\t\t} else trial_arm_count=0;
+\t}
+'''
+    skin_read='\t{ uint32_t t = X86_MEM32((uint32_t)(ctx.edx + 0x4u)); X86_PUSH32(0xA665Du); x86_icall(ctx, base, t); }'
+    corrected_read='''\t{
+\t\tconst uint32_t trial_arm_skin=TrialGuestReadable(ctx.esp,8)?X86_MEM32(ctx.esp):0;
+\t\tuint32_t t = X86_MEM32((uint32_t)(ctx.edx + 0x4u)); X86_PUSH32(0xA665Du); x86_icall(ctx, base, t);
+\t\tif (trial_arm_count&&TrialGuestReadable(trial_arm_positions,trial_arm_count*10)&&
+\t\t\tTrialGuestReadable(trial_arm_uv,trial_arm_count*8)&&TrialGuestReadable(trial_arm_skin,trial_arm_count*8))
+\t\t\tuc_arm_mesh::Apply({base+trial_arm_positions,size_t(trial_arm_count)*10},
+\t\t\t\t{base+trial_arm_uv,size_t(trial_arm_count)*8},{base+trial_arm_skin,size_t(trial_arm_count)*8});
+\t}
+'''.rstrip('\n')
+    s=s.replace(arm_locals,'').replace(capture,'')
+    local_anchor='\t// 000A6220 mov eax, fs:[0x00000000]'
+    # The lift also has an overlapping A64CD tail. Only the complete loader owns
+    # captured stream pointers; never inject locals into the independent tail.
+    begin=s.index('X86_FUNC(__imp__sub_000A6220) {')
+    end=s.index('X86_WEAK_FUNC(sub_000A6220, __imp__sub_000A6220)',begin)
+    body=s[begin:end].replace(corrected_read,skin_read)
+    assert body.count(local_anchor)==1 and body.count(skin_read)==1
+    body=body.replace(local_anchor,arm_locals+local_anchor,1).replace(skin_read,corrected_read,1)
+    s=s[:begin]+body+s[end:]
     hook='''	// Repair exact static ledges before the original vertex-buffer unlock.
 	if (TrialGuestReadable(ctx.esi,0x20)&&TrialGuestReadable(ctx.esp,0x20)) {
 		const uint32_t count=X86_MEM32(ctx.esi+8), flags=X86_MEM32(ctx.esi+0x1c);
@@ -90,5 +124,5 @@ def prepare(area):
     s=s.replace(include,'').replace(hook,'')
     anchor='\t// 000A63CC mov ecx, [esi+0x20]'
     assert s.count(anchor)==1
-    s=s.replace('#include "x86_recomp_shared.h"\n','#include "x86_recomp_shared.h"\n'+include+arm_include,1).replace(anchor,hook+arm_hook+anchor,1)
+    s=s.replace('#include "x86_recomp_shared.h"\n','#include "x86_recomp_shared.h"\n'+include+arm_include,1).replace(anchor,hook+capture+anchor,1)
     p.write_text(s)

@@ -1,0 +1,20 @@
+cmake_minimum_required(VERSION 3.20)
+project(uc_native_archive LANGUAGES C)
+set(CMAKE_C_STANDARD 11)
+# Reuse an installed x64 zlib DLL and public headers. No downloads or guest runtime.
+if(NOT MSVC OR NOT EXISTS "${UC_ZLIB_DLL}" OR NOT EXISTS "${UC_ZLIB_INCLUDE}/zlib.h")
+    message(FATAL_ERROR "Supply existing x64 UC_ZLIB_DLL and UC_ZLIB_INCLUDE; MSVC required for this isolated Windows target")
+endif()
+get_filename_component(zlib_name "${UC_ZLIB_DLL}" NAME)
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/zlib.def" "LIBRARY ${zlib_name}\nEXPORTS\n uncompress2\n zlibVersion\n")
+set(zlib_import "${CMAKE_CURRENT_BINARY_DIR}/zlib-existing.lib")
+add_custom_command(OUTPUT "${zlib_import}"
+    COMMAND "${CMAKE_AR}" /nologo /machine:x64 "/def:${CMAKE_CURRENT_BINARY_DIR}/zlib.def" "/out:${zlib_import}"
+    DEPENDS "${CMAKE_CURRENT_BINARY_DIR}/zlib.def" VERBATIM)
+add_custom_target(uc_zlib_import DEPENDS "${zlib_import}")
+add_library(uc_native_archive STATIC archive_reader.c ../archive_lookup.c)
+add_dependencies(uc_native_archive uc_zlib_import)
+target_include_directories(uc_native_archive PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}" PRIVATE "${UC_ZLIB_INCLUDE}")
+target_link_libraries(uc_native_archive PUBLIC "${zlib_import}")
+target_compile_options(uc_native_archive PRIVATE /W4 /WX /O2)
+target_compile_definitions(uc_native_archive PRIVATE _CRT_SECURE_NO_WARNINGS)

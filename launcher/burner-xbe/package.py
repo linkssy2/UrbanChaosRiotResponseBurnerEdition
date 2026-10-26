@@ -11,20 +11,35 @@ import sys
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
-VERSION = '0.07'
+VERSION = '0.08'
 SDK = REPO / 'build/upstream-review-xboxxbe-20261014'
 RUNTIME_NAME = 'UrbanChaosXbeTrial.exe'
 RUNTIME_FILES = (RUNTIME_NAME, 'zlib1.dll', 'libusb-1.0.dll', 'msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll')
 VS = Path('C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools')
 CRT = VS / 'VC/Redist/MSVC/14.44.35112/x64/Microsoft.VC143.CRT'
 PYTHON_FILES = ('python.exe', 'python312.dll', 'python3.dll', 'python312.zip',
-                'vcruntime140.dll', 'vcruntime140_1.dll', '_hashlib.pyd', 'libcrypto-3.dll', 'LICENSE.txt')
+                'vcruntime140.dll', 'vcruntime140_1.dll', '_hashlib.pyd', 'libcrypto-3.dll',
+                '_ctypes.pyd', 'libffi-8.dll', 'LICENSE.txt')
 LAUNCHERS = {'Burner Edition Setup.exe', 'Play Burner Edition.exe'}
 ARTWORK = REPO / 'artwork/hd-ui'
 ARTWORK_LIMIT = 32 * 1024 * 1024
 SHADER_SEED = REPO / 'packaging/shader-seed'
 SPANISH = REPO / 'packaging/spanish'
 SPANISH_FILES = {'spanish/text.json', 'spanish/credits.txt'}
+VOICE_TOOLS = REPO / 'packaging/spanish-voice-tools.json'
+FFMPEG = REPO / '.tools/ffmpeg-8.1.2'
+# Resource-only derivative of the verified 40-01.ent. The archive itself is
+# generated locally from the user's disc and is never included in a download.
+COOP_ASSETS = {'version': 1, 'size': 1606745,
+               'sha256': '7df81831efc154165a1c6a05d340f24978216e3e6ba12b408bee2215b174781f'}
+COOP_TURRETS = {
+    'coop_turrets03': {'version': 1, 'size': 69886,
+                       'sha256': '6e7205c9422dbab63ee8b5b943f81123edbe958b62f4ef228f996942f7601e4c'},
+    'coop_turrets08': {'version': 1, 'size': 69534,
+                       'sha256': 'cc55adf4be706b55918a7558f4e6ed324a417d4d51743d588d384048ab9d2daa'},
+}
+COOP_INJECTION = {'version': 1, 'size': 5964,
+                  'sha256': '3ce047ad2184eca1b61ba6150cac439bcbc5aa935d1b71df0e777e297fd63f8b'}
 
 
 def shader_seed_validator():
@@ -172,10 +187,22 @@ def sha(path):
 def sources(runtime):
     result = {
         'tools/import_game.py': HERE / 'import_game.py',
+        'tools/setup_feedback.py': HERE / 'setup_feedback.py',
         'tools/disc.py': HERE / 'disc.py',
         'tools/world_textures.py': HERE / 'world_textures.py',
         'tools/shader_seed.py': HERE / 'shader_seed.py',
         'tools/spanish_text.py': HERE / 'spanish_text.py',
+        'tools/spanish_voice_iso.py': HERE / 'spanish_voice_iso.py',
+        'tools/spanish_voice_setup.py': HERE / 'spanish_voice_setup.py',
+        'tools/ps2_audio.py': HERE / 'ps2_audio.py',
+        'tools/spanish_voices.py': HERE / 'spanish_voices.py',
+        'tools/spanish_movies.py': HERE / 'spanish_movies.py',
+        'tools/xbox_adpcm.py': HERE / 'xbox_adpcm.py',
+        'tools/voice-tools.json': VOICE_TOOLS,
+        'tools/coop_assets.py': REPO / 'scripts/coop_assets.py',
+        'tools/coop_turret_assets.py': REPO / 'scripts/coop_turret_assets.py',
+        'tools/coop_injection_assets.py': REPO / 'scripts/coop_injection_assets.py',
+        'tools/analyze_frontend.py': REPO / 'scripts/analyze_frontend.py',
         'tools/disc-manifest.json': HERE.parent / 'burner/disc-manifest.json',
         'tools/xdvdfs.py': REPO / 'third_party/xboxrecomp/tools/xiso/xdvdfs.py',
         'runtime/' + RUNTIME_NAME: runtime,
@@ -200,6 +227,11 @@ def sources(runtime):
         result['tools/python/' + name] = REPO / '.tools/python' / name
     for path in (REPO / 'third_party/xboxrecomp/LICENSES').glob('*.txt'):
         result['licenses/' + path.name] = path
+    tool_files = json.loads(VOICE_TOOLS.read_text(encoding='utf-8'))['files']
+    for name in tool_files:
+        if not re.fullmatch(r'ffmpeg/[A-Za-z0-9_.-]+', name):
+            raise ValueError('Invalid voice conversion dependency path')
+        result['tools/' + name] = FFMPEG / name[7:]
     return result
 
 
@@ -214,6 +246,19 @@ def audit(package, allowlist, require_launchers=True):
     actual = {p.relative_to(package).as_posix() for p in paths if p.is_file()}
     if actual != expected:
         raise ValueError('Unexpected/missing package files: ' + repr(sorted(actual ^ expected)))
+    if 'tools/voice-tools.json' in actual:
+        # The embedded build interpreter does not put script directories on sys.path.
+        saved_path = sys.path[:]
+        try:
+            sys.path[:0] = [str(HERE), str(REPO / 'third_party/xboxrecomp/tools/xiso')]
+            spec = importlib.util.spec_from_file_location('burner_spanish_voice_iso', HERE / 'spanish_voice_iso.py')
+            converter = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(converter)
+            converter.validate_tools(package)
+        finally:
+            sys.path[:] = saved_path
+        if (package / 'tools/voice-tools.json').read_bytes() != VOICE_TOOLS.read_bytes():
+            raise ValueError('Voice conversion dependency identities changed')
     manifest = json.loads((package / 'tools/disc-manifest.json').read_text())
     forbidden_hashes = {row['sha256'] for row in manifest['files'].values()}
     forbidden_hashes.add('c6f0c99ad57eafa2fc9caedb5ab2a7b192ff5fdde7e5faddc5e62a1730f044d1')
@@ -263,6 +308,26 @@ def audit(package, allowlist, require_launchers=True):
         if (any(not valid_hash(value) for value in spanish.values()) or
                 spanish != expected_spanish):
             raise ValueError('Bundled Spanish identity changed')
+    if 'coop_assets' in info and (not isinstance(info['coop_assets'], dict) or
+            type(info['coop_assets'].get('version')) is not int or
+            type(info['coop_assets'].get('size')) is not int or info['coop_assets'] != COOP_ASSETS):
+        raise ValueError('Co-op character resource recipe identity changed')
+    if 'coop_assets' in info and not {'tools/coop_assets.py', 'tools/analyze_frontend.py'} <= actual:
+        raise ValueError('Missing co-op character resource setup helpers')
+    for key, recipe in COOP_TURRETS.items():
+        if key not in info:
+            continue
+        if (not isinstance(info[key], dict) or type(info[key].get('version')) is not int or
+                type(info[key].get('size')) is not int or info[key] != recipe):
+            raise ValueError('Co-op turret resource recipe identity changed')
+        if not {'tools/coop_turret_assets.py', 'tools/analyze_frontend.py'} <= actual:
+            raise ValueError('Missing co-op turret resource setup helpers')
+    if 'coop_injection' in info and (not isinstance(info['coop_injection'], dict) or
+            type(info['coop_injection'].get('version')) is not int or
+            type(info['coop_injection'].get('size')) is not int or info['coop_injection'] != COOP_INJECTION):
+        raise ValueError('Partner healing animation recipe identity changed')
+    if 'coop_injection' in info and not {'tools/coop_injection_assets.py', 'tools/analyze_frontend.py'} <= actual:
+        raise ValueError('Missing partner healing animation setup helpers')
     return {'version': VERSION, 'strict_allowlist': True, 'files': files,
             'disc_payload_hashes_checked': len(forbidden_hashes),
             'original_payload_files_in_package': 0,
@@ -299,7 +364,8 @@ def assemble(runtime, expected_sha256, output, shader_seed=None):
     (output / 'tools/python/python312._pth').write_text('python312.zip\n.\n..\n')
     info = {'version': VERSION, 'files': {
         name: sha(plan['runtime/' + name]) for name in RUNTIME_FILES}, 'artwork': artwork,
-        'shader_seed': seed, 'spanish': spanish}
+        'shader_seed': seed, 'spanish': spanish, 'coop_assets': COOP_ASSETS, **COOP_TURRETS,
+        'coop_injection': COOP_INJECTION}
     (output / 'tools/runtime-manifest.json').write_text(json.dumps(info, indent=2) + '\n')
     (output / 'licenses/DEPENDENCIES.txt').write_text(
         'XboxXBERecomp by TGP482: https://github.com/TGP482/XboxXBERecomp (MIT).\n'
@@ -310,7 +376,9 @@ def assemble(runtime, expected_sha256, output, shader_seed=None):
         'Microsoft Visual C++2015-2022 runtime: app-local DLLs from the official VS2022 Redist folder; Microsoft-Visual-Cpp-Redistribution.txt and accompanying Microsoft notices.\n'
         'Direct3D12, XAudio2 and other Windows components are supplied by Windows.\n'
         'The launcher cover/icon is custom Burner Edition artwork. Approved restored HD UI PNGs are included under runtime/hd-ui; original disc files are still supplied by the user.\n'
-        'Spanish game-text translations by ZARF with supplemental Burner Edition translations are bundled as strings under runtime/spanish; see runtime/spanish/credits.txt. The launcher rebuilds translated archives from the user-provided ISO. English voices are retained.\n')
+        'Co-op character, turret and partner healing animation resources are derived locally from the user-provided Xbox ISO; no original models or animation archives are distributed.\n'
+        'Spanish game-text translations by ZARF with supplemental Burner Edition translations are bundled as strings under runtime/spanish; see runtime/spanish/credits.txt. The launcher rebuilds translated archives from the user-provided Xbox ISO. Optional Spanish voices are extracted locally from the user-provided European PS2 ISO; no original audio or converted audio pack is distributed.\n'
+        'FFmpeg 8.1.2 full shared build by www.gyan.dev (GPLv3): tools/ffmpeg/LICENSE.txt and README.txt contain the license, build configuration and source information. Used as a separate program only during local PS2 movie-audio conversion.\n')
     allowlist = set(plan) | {'tools/python/python312._pth', 'tools/runtime-manifest.json',
                             'licenses/DEPENDENCIES.txt'}
     result = audit(output, allowlist, require_launchers=False)

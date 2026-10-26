@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "files": {
+    "ffmpeg/ffmpeg.exe": "9be30133edcc5786f16e632d57e2dab5b259fea9a5243ba99758ca3adc110bd9",
+    "ffmpeg/avcodec-62.dll": "34f5b1baac01c4be3edf464309c79db05ffbd4a9c905c94b4a4651cd15370296",
+    "ffmpeg/avdevice-62.dll": "d213d6cad9f3a526f7664ebb3f93d6882669540db7164daecd03f52e0f5288cc",
+    "ffmpeg/avfilter-11.dll": "e318cac83d648869180d0b57c45f21aad1e4db34a467000c157da2938ff7f63f",
+    "ffmpeg/avformat-62.dll": "c04e6ed2f9f36d42325d4f4df5babb5d6ce7c55dbffeb7ef1007e25e97bcb716",
+    "ffmpeg/avutil-60.dll": "6f172b5d10224fcc3f729c8baa6fd36a97bb58042bb3b1417078d77d2da59b87",
+    "ffmpeg/swresample-6.dll": "72e2721672c11fd37d983b05cc2370f612784e4e3218362a0cb4315d08c917fb",
+    "ffmpeg/swscale-9.dll": "3d07972cada6ba38c492e92b0f6c025a6835607fe00cdf83afc604c2fbdfe550",
+    "ffmpeg/LICENSE.txt": "0b383d5a63da644f628d99c33976ea6487ed89aaa59f0b3257992deac1171e6b",
+    "ffmpeg/README.txt": "01d404feae402f13b5b0309550910600b3aa87b12d65a7673fc4573a65b55e0f"
+  }
+}

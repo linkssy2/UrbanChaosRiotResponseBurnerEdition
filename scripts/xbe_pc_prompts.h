@@ -15,7 +15,8 @@ struct TrialPromptInput {
     bool controller=false;
     unsigned family=0;
 };
-bool TrialPromptSnapshot(unsigned id,TrialPromptInput& out,unsigned variant=0);
+// Player identity belongs to the queued HUD: 0 automatic, 1 keyboard, 2 controller.
+bool TrialPromptSnapshot(unsigned id,TrialPromptInput& out,unsigned variant=0,unsigned player=0);
 bool TrialPromptArtwork(unsigned id,const uint8_t* source,const TrialPromptInput& input,
                         std::vector<uint8_t>& pixels,unsigned& width,unsigned& height);
 int xbox_KeyboardMode();

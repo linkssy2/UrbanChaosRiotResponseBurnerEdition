@@ -25,10 +25,13 @@ public:
         cur_->cmds.push_back(Cmd{Op::Draw});
     }
     bool CopiesPrompt() const {
-        const size_t offset=At(sent_,&sent_.uc_prompt_variant);
-        for(const auto& range:ranges_)
-            if(offset>=range.off&&offset+sizeof(sent_.uc_prompt_variant)<=range.off+range.len)return true;
-        return false;
+        for(const auto* member:{&sent_.uc_prompt_variant,&sent_.uc_prompt_player}){
+            const size_t offset=At(sent_,member);bool copied=false;
+            for(const auto& range:ranges_)
+                copied|=offset>=range.off&&offset+sizeof(*member)<=range.off+range.len;
+            if(!copied)return false;
+        }
+        return true;
     }
     size_t States() const {
         return std::count_if(cur_->cmds.begin(),cur_->cmds.end(),[](const Cmd& c){return c.op==Op::State;});
@@ -84,28 +87,29 @@ template<class State> static void Unrelated(const State& s,const State& expected
 template<class Pipeline,class State> static void Sequence(bool retained) {
     Pipeline pipeline;assert(pipeline.CopiesPrompt()==retained);
     State source=Scene<State>(),expected=source;
-    const unsigned variants[]={1,0,2,2,0,0,1};
-    for(unsigned variant:variants){source.uc_prompt_variant=variant;pipeline.Queue(source);}
+    const unsigned variants[]={1,1,1,0,2,2,0},players[]={1,2,2,2,1,2,0};
+    for(unsigned i=0;i<7;++i){source.uc_prompt_variant=variants[i];source.uc_prompt_player=players[i];pipeline.Queue(source);}
     // Repeated variant with identical state creates no redundant state packet.
-    assert(pipeline.States()==(retained?5u:1u));
+    assert(pipeline.States()==(retained?6u:1u));
     // Rendering is deliberately delayed until after the guest scopes reset and
     // another draw has changed the source data. Queued snapshots must survive.
-    source.uc_prompt_variant=0;source.material[7]=0;source.vs.reset();source.ps.reset();
+    source.uc_prompt_variant=0;source.uc_prompt_player=0;source.material[7]=0;source.vs.reset();source.ps.reset();
     assert(pipeline.draws.empty());pipeline.Drain();assert(pipeline.draws.size()==7);
     for(unsigned i=0;i<7;++i){
         assert(pipeline.draws[i].uc_prompt_variant==(retained?variants[i]:0));
+        assert(pipeline.draws[i].uc_prompt_player==(retained?players[i]:0));
         Unrelated(pipeline.draws[i],expected);
     }
-    // The final sent variant was1; a new batch must transmit its later reset0,
-    // then permit interaction1 again without overwriting the previous draws.
+    // A new batch can reuse automatic mode, then return to P2 interaction.
     source=expected;source.uc_prompt_variant=0;pipeline.Queue(source);
-    source.uc_prompt_variant=1;pipeline.Queue(source);pipeline.Drain();
+    source.uc_prompt_variant=1;source.uc_prompt_player=2;pipeline.Queue(source);pipeline.Drain();
     assert(pipeline.draws.size()==9&&pipeline.draws[7].uc_prompt_variant==0);
     assert(pipeline.draws[8].uc_prompt_variant==unsigned(retained));
+    assert(pipeline.draws[7].uc_prompt_player==0&&pipeline.draws[8].uc_prompt_player==(retained?2u:0u));
     Unrelated(pipeline.draws[7],expected);Unrelated(pipeline.draws[8],expected);
 }
 int main() {
     Sequence<prior::Replay,prior::State>(false);
     Sequence<fixed::Replay,gpu::State>(true);
-    std::puts("prompt handoff: original leading field loses all F variants; actual range/delta/send/replay retains trailing metadata across delayed draws, resets and batches");
+    std::puts("prompt handoff: leading fields lose identity; actual range/delta/send/replay retains player and glyph identity across delayed draws, resets and batches");
 }

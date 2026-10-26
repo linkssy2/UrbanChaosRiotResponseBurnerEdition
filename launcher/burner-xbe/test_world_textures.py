@@ -3,10 +3,15 @@ from pathlib import Path
 import contextlib
 import hashlib
 import io
+import stat
 import struct
+import sys
 import tempfile
+from types import SimpleNamespace
 import unittest.mock as mock
 import zipfile
+HERE = Path(__file__).resolve().parent
+sys.path[:0] = [str(HERE), str(HERE.parents[1] / 'third_party/xboxrecomp/tools/xiso')]
 from world_textures import install
 
 
@@ -58,6 +63,20 @@ def main():
         else:raise AssertionError('cancel ignored')
         unchanged();cancel.unlink();apply(good);unchanged()
         assert not list((data/'xbe-runtime').glob('.textures-*'))
+        original_stat = Path.lstat
+        def redirected_stat(path, *args, **kwargs):
+            if path == redirected:
+                return SimpleNamespace(st_mode=stat.S_IFDIR,
+                                       st_file_attributes=stat.FILE_ATTRIBUTE_REPARSE_POINT)
+            return original_stat(path, *args, **kwargs)
+        redirected = root
+        with mock.patch.object(Path, 'lstat', redirected_stat):
+            apply(good)
+        unchanged()
+        for redirected in (data, data/'xbe-runtime', target):
+            with mock.patch.object(Path, 'lstat', redirected_stat):
+                reject(good)
+        unchanged()
     print('PASS optional texture install, traversal/checksum/duplicate/mipmap rejection, cancellation and rollback')
 
 if __name__=='__main__':main()

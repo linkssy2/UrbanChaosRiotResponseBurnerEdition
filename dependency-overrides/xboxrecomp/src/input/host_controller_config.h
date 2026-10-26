@@ -87,19 +87,25 @@ static void controller_strengths(const XBOX_GAMEPAD*p,int v[24]){
         else{v[base]=x<0?-x:0;v[base+1]=x>0?x:0;}
     }
 }
-static void controller_apply(XBOX_GAMEPAD*p){
-    /* Default profile is bit-identical and avoids all gathering/math. */
-    if(!controller_custom)return;
-    UCRRControllerConfig c;AcquireSRWLockShared(&controller_lock);c=controller_config;ReleaseSRWLockShared(&controller_lock);
+static void controller_apply_profile(XBOX_GAMEPAD*p,const UCRRControllerConfig*c){
+    /* The identity map must preserve even sub-threshold analog input exactly. */
+    UCRRControllerConfig defaults;controller_defaults(&defaults);
+    if(!memcmp(c,&defaults,sizeof(defaults)))return;
     int raw[24],v[24];controller_strengths(p,raw);
-    for(unsigned i=16;i<24;++i){int dz=(int)c.deadzone[(i-16)/4]*32768/100;
+    for(unsigned i=16;i<24;++i){int dz=(int)c->deadzone[(i-16)/4]*32768/100;
         if(dz)raw[i]=raw[i]<=dz?0:(raw[i]-dz)*32768/(32768-dz);}
-    for(unsigned i=0;i<24;++i){unsigned a=c.binding[i][0],b=c.binding[i][1];int x=a?raw[a-1]:0,y=b?raw[b-1]:0;v[i]=x>y?x:y;}
+    for(unsigned i=0;i<24;++i){unsigned a=c->binding[i][0],b=c->binding[i][1];int x=a?raw[a-1]:0,y=b?raw[b-1]:0;v[i]=x>y?x:y;}
     memset(p,0,sizeof(*p));for(unsigned i=0;i<8;++i)p->bAnalogButtons[i]=(BYTE)((v[i]*255+16384)/32768);
     for(unsigned i=0;i<8;++i)if(v[8+i]>4096)p->wButtons|=controller_digital[i];
     SHORT*axis[]={&p->sThumbLX,&p->sThumbLY,&p->sThumbRX,&p->sThumbRY};
     for(unsigned i=0;i<4;++i){unsigned base=16+i*2;int x=(i&1)?v[base]-v[base+1]:v[base+1]-v[base];
         *axis[i]=(SHORT)(x>32767?32767:x< -32768?-32768:x);}
+}
+static void controller_apply(XBOX_GAMEPAD*p){
+    /* Default profile is bit-identical and avoids all gathering/math. */
+    if(!controller_custom)return;
+    UCRRControllerConfig c;AcquireSRWLockShared(&controller_lock);c=controller_config;ReleaseSRWLockShared(&controller_lock);
+    controller_apply_profile(p,&c);
 }
 static LONG controller_consumed_confirm[4];
 void xbox_ControllerConsumeConfirm(unsigned port){if(port<4)InterlockedExchange(&controller_consumed_confirm[port],1);}

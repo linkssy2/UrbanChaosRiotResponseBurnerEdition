@@ -369,6 +369,7 @@ static void CheckManagerHandoff(){
     for(uint32_t selector:{0x51D29Cu,0x51CFA4u,0x51D310u,0x51D304u,0x51D30Cu,0x51D300u,0x51CFB8u}){
         MEM8(0x600014)=0;Frame(selector);const auto stable=published;
         assert(presentation.visible&&!presentation.transition);
+        if(selector==0x51CFB8u)assert(stable.list_kind==7&&(stable.source.source_kind&0x80000000u));
         MEM8(0x600014)=1;menu_pointer_begin(0x600000);GraphicsMenuBegin();
         assert(published.source.source_kind&UC_HF_TRANSITION);
         assert(!TrialFrontendSupported(published)&&presentation.visible&&presentation.transition);
@@ -615,10 +616,25 @@ static void CheckDifficultyDialog(){
         MEM32(owner+0xC)=count;MEM32(owner+8)=1;MEM32(owner+0x50)=0x284310;
         for(unsigned i=0;i<count;++i){MEM32(owner+0x10+4*i)=0x660080+128*i;MEM32(owner+0x30+4*i)=0x280000+16*i;}
         assert(FrontendDifficultyDialog(owner));
-        menu_pointer_begin(0x600000);g_ecx=owner;ucrr_menu_dialog_enter();
+        const uint32_t parent=0x647000,wrapper=0x648000,shade=0x649000;
+        MEM32(parent)=0x4885FC;MEM32(parent+0x10C)=wrapper;
+        MEM32(wrapper)=0x485C84;MEM32(wrapper+4)=shade;
+        MEM32(shade)=0x4846A4;MEM32(shade+4)=owner;
+        menu_pointer_begin(0x600000);
+        // First-frame parent suppression publishes its actual difficulty child early.
+        presentation={};hf_view={};dialog_owner=0;dialog_running=0;menu_owner=0;
+        assert(!TrialFrontendHideListSprites());
+        TrialFrontendLevelDrawHidden=TrialFrontendLevelDrawBegin(parent);
+        assert(TrialFrontendLevelDrawHidden&&TrialFrontendHideListSprites());
+        assert(dialog_owner==0&&dialog_running==0);
+        name_keyboard_mode=false;assert(!TrialFrontendHideListSprites());name_keyboard_mode=true;
+        g_ecx=owner;ucrr_menu_dialog_enter();
         assert(TrialFrontendDifficulty(published.source)&&TrialFrontendOwns(owner,UC_HF_DIALOG));
         assert(TrialFrontendHidePauseDialogText(owner));
+        assert(!TrialFrontendHideListSprites()); // Keep the modal's own backdrop.
         ucrr_menu_dialog_leave();
+        TrialFrontendLevelDrawHidden=false;
+        assert(!TrialFrontendHideListSprites()); // The movie and other parent scopes remain visible.
         // The level parent finishes after its child; it must not erase the modal.
         const auto modal_epoch=hf_view.epoch;
         hf_capture_levels(0x647000);
@@ -626,9 +642,19 @@ static void CheckDifficultyDialog(){
         assert(TrialFrontendDifficulty(published.source)&&published.source.owner==owner);
         assert(hf_view.epoch==modal_epoch&&TrialFrontendOwns(owner,UC_HF_DIALOG));
         name_keyboard_mode=false;menu_pointer_begin(0x600000);g_ecx=owner;ucrr_menu_dialog_enter();
+        assert(!TrialFrontendLevelDrawBegin(parent));
         assert(!TrialFrontendHidePauseDialogText(owner));
         ucrr_menu_dialog_leave();menu_pointer_end();name_keyboard_mode=true;
+        // A closed wrapper, a stale accepted dialog or an unrelated owner cannot hide the browser.
+        MEM32(wrapper+4)=0;assert(!TrialFrontendLevelDrawBegin(parent));MEM32(wrapper+4)=shade;
+        MEM32(wrapper)=0;assert(!TrialFrontendLevelDrawBegin(parent));MEM32(wrapper)=0x485C84;
+        MEM32(shade)=0;assert(!TrialFrontendLevelDrawBegin(parent));MEM32(shade)=0x4846A4;
+        MEM32(shade+4)=0;assert(!TrialFrontendLevelDrawBegin(parent));MEM32(shade+4)=owner;
+        MEM32(wrapper+4)=owner;assert(!TrialFrontendLevelDrawBegin(parent));MEM32(wrapper+4)=shade;
+        MEM32(parent)=0;assert(!TrialFrontendLevelDrawBegin(parent));MEM32(parent)=0x4885FC;
         MEM32(owner+0x30)=0;assert(!FrontendDifficultyDialog(owner));
+        assert(!TrialFrontendLevelDrawBegin(parent));
+        MEM32(parent+0x10C)=0;assert(!TrialFrontendLevelDrawBegin(parent));
     }
     Frame(0x51D29C);
 }

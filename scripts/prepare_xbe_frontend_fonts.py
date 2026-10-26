@@ -2,7 +2,6 @@
 from pathlib import Path
 import struct
 import zlib
-import hashlib
 
 ROOT=Path(__file__).resolve().parents[1]
 

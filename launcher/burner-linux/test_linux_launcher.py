@@ -80,6 +80,8 @@ esac
         result = self.run_script('--help')
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('not a native Linux port', result.stdout)
+        self.assertIn('voices "/path/to/Urban Chaos PS2 Europe.iso"', result.stdout)
+        self.assertIn('SLES-53991', result.stdout)
         self.assertFalse((self.root / '.proton').exists())
 
     def test_play_preserves_prefix_and_game_state(self):
@@ -102,10 +104,10 @@ esac
         self.assertEqual(marker.read_bytes(), b'preserve prefix')
         self.assertEqual(saved.read_bytes(), b'preserve save')
 
-    def test_import_and_textures_quote_relative_input(self):
+    def test_import_textures_and_voices_quote_relative_input(self):
         name = "source pack ' $not_a_command ;.iso"
         (self.folder / name).touch()
-        for action, option in [('import', '--iso'), ('textures', '--pack')]:
+        for action, option in [('import', '--iso'), ('textures', '--pack'), ('voices', '--iso')]:
             with self.subTest(action=action):
                 if self.log.exists():
                     self.log.unlink()
@@ -135,7 +137,8 @@ esac
 
     def test_validation_does_not_initialize_prefix(self):
         for args in [('unknown',), ('import',), ('import', 'missing.iso'),
-                     ('textures', 'one', 'two'), ('language', 'unknown'), ('play', 'extra')]:
+                     ('textures', 'one', 'two'), ('voices',), ('voices', 'missing.iso'),
+                     ('voices', 'one', 'two'), ('language', 'unknown'), ('play', 'extra')]:
             with self.subTest(args=args):
                 result = self.run_script(*args)
                 self.assertNotEqual(result.returncode, 0)

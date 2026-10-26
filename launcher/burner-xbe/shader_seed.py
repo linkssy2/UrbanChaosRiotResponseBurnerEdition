@@ -14,30 +14,49 @@ def filename(name):
     return isinstance(name, str) and re.fullmatch(r'v1-[0-9a-f]{16}\.bin', name)
 
 
-def unlinked(path):
-    for parent in (path, *path.parents):
+def unlinked(path, *, root=None):
+    """Reject links within an explicit managed root; keep strict developer defaults.
+
+    Host ancestors may be Proton drive mappings or Steam library links. Never
+    resolve descendants first: that would hide a link inside the managed tree.
+    """
+    path = Path(path).absolute()
+    if root is None:
+        parts = (path, *path.parents)
+    else:
+        root = Path(root).absolute()
+        if '..' in path.parts or '..' in root.parts:
+            raise ValueError('Managed paths must not contain parent traversal.')
+        try:
+            relative = path.relative_to(root)
+        except ValueError:
+            raise ValueError('Path must stay inside its managed root: ' + str(path)) from None
+        parts = [root]
+        for name in relative.parts:
+            parts.append(parts[-1] / name)
+    for parent in parts:
         try:
             info = parent.lstat()
         except FileNotFoundError:
             continue
         if (stat.S_ISLNK(info.st_mode) or
                 getattr(info, 'st_file_attributes', 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT):
-            raise ValueError('Shader seed paths must not contain links or junctions.')
+            raise ValueError('Managed paths must not contain links or junctions: ' + str(parent))
 
 
-def validate(directory, files):
+def validate(directory, files, *, root=None):
     """Only hashed flat cache records are copied; the runtime validates their DXBC."""
     if not isinstance(files, dict) or len(files) > ENTRY_LIMIT:
         raise ValueError('Invalid bundled shader seed list.')
     directory = Path(directory).absolute()
-    unlinked(directory)
+    unlinked(directory, root=root)
     total = 0
     for name, digest in files.items():
         if (not filename(name) or not isinstance(digest, str) or
                 not re.fullmatch(r'[0-9a-f]{64}', digest)):
             raise ValueError('Invalid bundled shader seed identity.')
         path = directory / name
-        unlinked(path)
+        unlinked(path, root=root)
         if not path.is_file() or not 48 < path.stat().st_size <= FILE_LIMIT:
             raise ValueError('The shader seed is incomplete or damaged. Extract the entire ZIP again.')
         total += path.stat().st_size

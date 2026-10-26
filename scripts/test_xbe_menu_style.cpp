@@ -16,16 +16,52 @@
 #include "xbe_controls.h"
 #include "xbe_language.h"
 #include "xbe_controls_capture.h"
+#include "xbe_health_packs.h"
+#include "xbe_coop_interactions.h"
+#include "xbe_coop_preview.h"
+#include "xbe_coop_pause.h"
 #define CHECK(x) do{if(!(x)){std::fprintf(stderr,"FAIL %d: %s\n",__LINE__,#x);std::exit(1);}}while(0)
 
 struct HitRecord {std::string name;ImGuiID id;ImVec2 a,b;};
 static std::vector<HitRecord> hits;
+struct ReviveRecord {unsigned slot,source;std::string binding,label;};
+static std::vector<ReviveRecord> revive_records;
+struct CountdownRecord {unsigned slot,seconds;ImVec2 center;std::string label;ImU32 number_color;};
+static std::vector<CountdownRecord> countdown_records;
+static unsigned revive_seconds[2]{};
+unsigned TrialCoopReviveSeconds(unsigned slot){return slot<2?revive_seconds[slot]:0;}
+static void RecordReviveCountdown(unsigned slot,unsigned seconds,ImVec2 center,const char* label){
+    // Observe the foreground glyphs actually emitted by Center, not its requested color.
+    const auto* draw=ImGui::GetWindowDrawList();CHECK(!draw->VtxBuffer.empty());
+    countdown_records.push_back({slot,seconds,center,label,draw->VtxBuffer.back().col});
+}
+struct PreviewRecord {unsigned character;ImVec2 minimum,maximum;double elapsed;};
+static std::vector<PreviewRecord> preview_records;
+static unsigned preview_initializations=0,preview_finalizations=0;
+namespace trial_coop_preview {
+bool Initialize(ImFontAtlas*,const std::filesystem::path&){++preview_initializations;return false;}
+bool Finalize(){++preview_finalizations;return false;}
+bool Draw(unsigned character,ImVec2 minimum,ImVec2 maximum,double elapsed){
+    preview_records.push_back({character,minimum,maximum,elapsed});return true;
+}
+void Reset(){}
+}
+static void RecordRevivePrompt(unsigned slot,unsigned source,const char* binding,const char* label){
+    revive_records.push_back({slot,source,binding,label});
+}
 static unsigned input_changes=0,applied=0,frames=0;
 static app::Mode output{640,480};
 static trial_graphics::Draft live;
+static unsigned second_fov=53,second_weapon_fov=100;
 static unsigned sample_support=2|(1u<<2)|(1u<<4);
 static bool fail_apply=false;
 static unsigned controls_applied=0;
+static unsigned coop_presentation=0;
+unsigned TrialCoopPresentation(){return coop_presentation;}
+static TrialHealthPackStatus health_status[2]{};
+TrialHealthPackStatus TrialHealthPackSnapshot(unsigned slot){return slot<2?health_status[slot]:TrialHealthPackStatus{};}
+static TrialCoopInteractionStatus conversation_status[2]{};
+TrialCoopInteractionStatus TrialCoopInteractionSnapshot(unsigned slot){return slot<2?conversation_status[slot]:TrialCoopInteractionStatus{};}
 static unsigned quit_posts=0;
 static bool fail_quit_post=false;
 static BOOL WINAPI RecordQuitRequest(HWND window,UINT message,WPARAM wp,LPARAM lp){
@@ -39,18 +75,28 @@ static void RecordMenuHit(const char* name,ImVec2 p,ImVec2 size){
 bool TrialShowFps=true;
 static float movie_progress=0;
 float TrialIntroProgress(){return movie_progress;}
+bool TrialIntroPlaying(){return movie_progress>0;}
 static int keyboard_mode=1;
-int xbox_KeyboardMode(){return keyboard_mode;}
+int xbox_KeyboardMode(){const int owner=trial_coop::PauseOwner();return owner<0?keyboard_mode:owner==0;}
 void TrialGraphicsInputChanged(){++input_changes;}
 namespace app {
 void* Window(){return nullptr;}
 Mode Output(){return output;}
 }
 namespace trial_graphics {
+static bool hud_widescreen=true;
+bool Widescreen(){return hud_widescreen;}
 Draft Snapshot(){return live;}
+Draft Snapshot(unsigned player){CHECK(player<2);auto result=live;if(player){result.fov=second_fov;result.weapon_fov=second_weapon_fov;}return result;}
 bool Apply(const Draft& next,std::string& status){
     if(fail_apply){status="Could not save settings.";return false;}
     live=next;++applied;status="Changes applied and saved.";return true;
+}
+bool Apply(const Draft& next,std::string& status,unsigned player){
+    CHECK(player<2);const auto first=live;
+    if(!Apply(next,status))return false;
+    if(player){second_fov=next.fov;second_weapon_fov=next.weapon_fov;live.fov=first.fov;live.weapon_fov=first.weapon_fov;}
+    return true;
 }
 bool ScalePending(){return false;}
 bool textures_available=true;
@@ -60,6 +106,7 @@ bool MsaaSupported(uint32_t samples){return samples<32&&(sample_support&(1u<<sam
 }
 namespace trial_language {
 bool SpanishAvailable(){return false;}
+bool SpanishVoicesAvailable(){return false;}
 static uint32_t selected=0,active=0;static unsigned saves=0;
 uint32_t Active(){return active;}
 uint32_t Snapshot(){return selected;}
@@ -71,24 +118,28 @@ bool Apply(uint32_t value,std::string& status){
 }
 namespace trial_controls {
 static Draft live_controls;
+static Draft second_controls;
 static CaptureGate capture;
+static CaptureGate second_capture;
 Draft Defaults(){
     Draft result;const unsigned first[25]={'R','X','C','V','T','E',VK_LCONTROL,VK_LBUTTON,VK_RETURN,VK_BACK,VK_SHIFT,VK_RBUTTON,
         VK_UP,VK_DOWN,VK_LEFT,VK_RIGHT,'A','D','W','S','J','L','I','K',VK_MBUTTON};
     for(unsigned i=0;i<25;++i)result.keyboard[i][0]=first[i];result.keyboard[0][1]='F';
     result.previous_firearm[0]=257;
+    result.health_pack[0][0]='H';
     for(unsigned i=0;i<24;++i)result.controller[i][0]=i+1;
     return result;
 }
-Draft Snapshot(){return live_controls;}
-bool Apply(const Draft& next,std::string& status){
+Draft Snapshot(unsigned player){CHECK(player<2);return player?second_controls:live_controls;}
+bool Apply(const Draft& next,std::string& status,unsigned player){
+    CHECK(player<2);
     if(fail_apply){status="Could not save controls.";return false;}
-    live_controls=next;++controls_applied;status="Controls applied and saved.";return true;
+    (player?second_controls:live_controls)=next;++controls_applied;status="Controls applied and saved.";return true;
 }
-void BeginCapture(unsigned device){capture.Begin(device);}
-void CancelCapture(){capture.Cancel();}
-unsigned TakeCapture(){return capture.Take();}
-bool CaptureWaiting(){return capture.active;}
+void BeginCapture(unsigned device,unsigned player){CHECK(player<2);(player?second_capture:capture).Begin(device);}
+void CancelCapture(unsigned player){CHECK(player<2);(player?second_capture:capture).Cancel();}
+unsigned TakeCapture(unsigned player){CHECK(player<2);return (player?second_capture:capture).Take();}
+bool CaptureWaiting(unsigned player){CHECK(player<2);return (player?second_capture:capture).active;}
 }
 const char* xbox_KeyboardSourceName(unsigned source){
     static char text[64];if(!source)return "Unbound";
@@ -111,7 +162,7 @@ bool Disc::Load(std::string_view,std::vector<uint8_t>&)const{return false;}
 static void DrawFrame(){
     unsigned profile_values[7];std::memcpy(profile_values,profile_live,sizeof(profile_values));
     TrialControlsProfile(profile_values,context.kind==3);
-    hits.clear();auto& io=ImGui::GetIO();io.DisplaySize={float(output.width),float(output.height)};io.DeltaTime=1.f/60;
+    hits.clear();revive_records.clear();countdown_records.clear();preview_records.clear();auto& io=ImGui::GetIO();io.DisplaySize={float(output.width),float(output.height)};io.DeltaTime=1.f/60;
     ImGui::NewFrame();TrialGraphicsUi();ImGui::Render();++frames;
     for(size_t i=0;i<hits.size();++i){
         const auto& h=hits[i];CHECK(h.a.x>=0&&h.a.y>=0&&h.b.x<=output.width+.1f&&h.b.y<=output.height+.1f);
@@ -161,7 +212,7 @@ static TrialFrontendFrame MakeList(unsigned kind){
     static uint64_t next=0;TrialFrontendFrame f{};f.list_kind=kind;f.row_top=390;
     auto& s=f.source;s.epoch=++next;s.owner=0x2000+kind*0x100;s.screen=0x1000+kind*0x100;
     s.kind=UC_HF_LIST;s.count=kind==2?5:kind==3||kind==7?3:4;s.selected=0;
-    if(kind==2)s.source_kind=0x80000010u;
+    if(kind==2||kind==7)s.source_kind=0x80000010u;
     const char* main[] ={"Single player","Multiplayer","Options","Credits"};
     const char* pause[]={"Return to game","Restart mission","Options","Objectives","Quit"};
     const char* options[]={"Controls","Audio","Back"};
@@ -233,15 +284,15 @@ static void OpenGraphics(const TrialFrontendFrame& f){
         CHECK(hits[i].b.x==432.f*output.width/640.f);
         if(i)CHECK(hits[i].a.y>=hits[i-1].b.y-.1f);
     }
-    Click(f.source.count);CHECK(PanelOpen());CHECK(hits.size()==22);
-    for(unsigned i=0;i<18;++i){
+    Click(f.source.count);CHECK(PanelOpen());CHECK(hits.size()==23);
+    for(unsigned i=0;i<20;++i){
         CHECK(hits[i].name=="setting");
         CHECK(hits[i].b.y<=364*output.height/480.f+.1f);
         if(i)CHECK(hits[i-1].b.y<=hits[i].a.y+.1f);
     }
 }
 static void ChangeSetting(unsigned index){
-    CHECK(index<19&&hits.size()==22);auto r=hits[index];
+    CHECK(index<20&&hits.size()==23);auto r=hits[index];
     // Click the actual row's right-arrow side, using recorded production bounds.
     ClickPoint(r.b.x-15*float(output.width)/640,(r.a.y+r.b.y)*.5f);
 }
@@ -258,6 +309,343 @@ static void CheckStrip(unsigned count){
     CHECK(hits.front().a.x>=17*output.width/640.f);
     CHECK(hits.back().b.x<=623*output.width/640.f);
 }
+static void CheckPanelShade(unsigned alpha){
+    const float sx=output.width/640.f,sy=output.height/480.f;
+    bool found=false;
+    for(const auto* list:ImGui::GetDrawData()->CmdLists)for(int i=0;i+3<list->VtxBuffer.Size;++i){
+        const auto* v=&list->VtxBuffer[i];
+        if(std::abs(v[0].pos.x-3*sx)<.01f&&std::abs(v[0].pos.y-73*sy)<.01f&&
+           std::abs(v[2].pos.x-637*sx)<.01f&&std::abs(v[2].pos.y-379*sy)<.01f){
+            for(unsigned j=0;j<4;++j)CHECK(v[j].col==IM_COL32(0,0,0,alpha));
+            found=true;
+        }
+    }
+    CHECK(found==(alpha!=0));
+}
+static void CheckHealthPackIcons(const ImGuiWindow* hud,bool split){
+    unsigned icons=0;
+    const float sx=output.width/640.f,sy=output.height/480.f;
+    for(int i=0;i+3<hud->DrawList->VtxBuffer.Size;++i){
+        const auto* v=&hud->DrawList->VtxBuffer[i];
+        if(v[0].col!=IM_COL32(38,102,49,255))continue;
+        CHECK(icons<(split?2u:1u));
+        const float raw_end=(split?74.f:106.f)+health_status[icons].bar_extent;
+        const float bar_right=raw_end*(trial_graphics::hud_widescreen?.75f:1.f)-.5f;
+        CHECK(std::abs(v[0].pos.x-bar_right*sx-6*sy)<.01f);
+        CHECK(std::abs(v[0].pos.y-(split?14.f+icons*240.f:38.f)*sy)<.01f);
+        CHECK(std::abs(v[2].pos.x-v[0].pos.x-16*sy)<.01f);
+        CHECK(std::abs(v[2].pos.y-v[0].pos.y-16*sy)<.01f);
+        CHECK(i+11<hud->DrawList->VtxBuffer.Size);
+        // Both cross strokes stay centered, square-pixel scaled and opaque white.
+        for(unsigned stroke=1;stroke<=2;++stroke){
+            const auto* p=v+stroke*4;
+            for(unsigned j=0;j<4;++j)CHECK(p[j].col==IM_COL32_WHITE);
+            CHECK(std::abs((p[0].pos.x+p[2].pos.x)-(v[0].pos.x+v[2].pos.x))<.01f);
+            CHECK(std::abs((p[0].pos.y+p[2].pos.y)-(v[0].pos.y+v[2].pos.y))<.01f);
+            CHECK(std::abs(p[2].pos.x-p[0].pos.x-16*sy*(stroke==1?.2f:.6f))<.01f);
+            CHECK(std::abs(p[2].pos.y-p[0].pos.y-16*sy*(stroke==1?.6f:.2f))<.01f);
+        }
+        i+=11;
+        ++icons;
+    }
+    CHECK(icons==(split?2u:1u));
+}
+static void CheckHealthPackHud(){
+    const bool previous_hd=live.hd_ui;
+    const bool previous_wide=trial_graphics::hud_widescreen;
+    TrialFrontendPublish({});TrialGraphicsMenuContext(0,0,0,0);
+    for(const auto size:{app::Mode{640,480},app::Mode{1920,1080},app::Mode{2560,1440}})for(bool wide:{false,true}){
+        trial_graphics::hud_widescreen=wide;
+        output=size;trial_coop::SetActive(true);coop_presentation=1;
+        health_status[0]={1,3,true,false};health_status[1]={2,3,true,true};
+        DrawFrame();const auto* hud=ImGui::FindWindowByName("Stored health packs");
+        CHECK(hud&&hud->Active&&(hud->Flags&ImGuiWindowFlags_NoInputs)==ImGuiWindowFlags_NoInputs&&hits.empty());
+        const float sx=size.width/640.f,sy=size.height/480.f;
+        CheckHealthPackIcons(hud,true);
+        health_status[0].count=0;DrawFrame();CheckHealthPackIcons(hud,true);
+        health_status[0].count=1;
+        for(bool hd:{false,true}){live.hd_ui=hd;DrawFrame();CheckHealthPackIcons(hud,true);}
+        for(unsigned extent:{120u,140u,160u,180u}){
+            health_status[0].bar_extent=extent;health_status[1].bar_extent=300-extent;
+            DrawFrame();CheckHealthPackIcons(hud,true);
+        }
+        for(unsigned speaker=0;speaker<2;++speaker)for(bool waiting:{false,true}){
+            conversation_status[speaker]={!waiting,waiting};
+            DrawFrame();unsigned prompts=0;
+            for(int i=0;i+3<hud->DrawList->VtxBuffer.Size;++i){
+                const auto* v=&hud->DrawList->VtxBuffer[i];
+                if(v[0].col==IM_COL32(0,0,0,115)&&std::abs(v[0].pos.x-400*sx)<.01f&&std::abs(v[2].pos.x-616*sx)<.01f){
+                    CHECK(std::abs(v[0].pos.y-(215+240*speaker)*sy)<.01f);
+                    CHECK(std::abs(v[2].pos.y-(234+240*speaker)*sy)<.01f);++prompts;
+                }
+            }
+            CHECK(prompts==1&&hits.empty());conversation_status[speaker]={};
+        }
+        conversation_status[1]={true,false};
+        coop_presentation=2;DrawFrame();CHECK(!hud->Active); // shared cutscene has neither HUD nor divider
+        coop_presentation=1;movie_progress=.5f;DrawFrame();CHECK(!hud->Active);movie_progress=0;
+        Publish(MakeList(2));CHECK(!hud->Active); // global pause owns the screen
+        TrialFrontendPublish({});TrialGraphicsMenuContext(0,0,0,0);
+        conversation_status[0]=conversation_status[1]={};
+        coop_presentation=0;trial_coop::SetActive(false);DrawFrame();CheckHealthPackIcons(hud,false);
+        for(unsigned extent:{120u,140u,160u,180u}){
+            health_status[0].bar_extent=extent;DrawFrame();CheckHealthPackIcons(hud,false);
+        }
+    }
+    health_status[0]=health_status[1]={};coop_presentation=0;trial_coop::Reset();live.hd_ui=previous_hd;trial_graphics::hud_widescreen=previous_wide;DrawFrame();
+}
+static bool IsReviveAura(ImU32 color){
+    return (color&IM_COL32(255,255,255,0))==IM_COL32(150,12,8,0);
+}
+static void CheckNoReviveCountdown(){
+    CHECK(countdown_records.empty());
+    // Inspect only the current frame, not a stale buffer retained by a hidden window.
+    for(const auto* list:ImGui::GetDrawData()->CmdLists)for(const auto& v:list->VtxBuffer)CHECK(!IsReviveAura(v.col));
+}
+static unsigned CheckReviveDraw(unsigned slot,unsigned seconds){
+    CHECK(countdown_records.size()==1&&hits.empty());
+    const auto& r=countdown_records[0];
+    CHECK(r.slot==slot&&r.seconds==seconds&&r.label=="Revive time remaining");
+    CHECK(std::abs(r.center.x-output.width*.5f)<.01f);
+    CHECK(std::abs(r.center.y-output.height*(slot?.75f:.25f))<.01f);
+    const auto* hud=ImGui::FindWindowByName("Stored health packs");CHECK(hud&&hud->Active);
+    const float sx=output.width/640.f,sy=output.height/480.f,top=slot*240.f;
+    unsigned panels=0,edges=0,edge_alpha=0;
+    const ImVec4 bounds[]={{0,top,48,top+240},{592,top,640,top+240},
+        {0,top,640,top+32},{0,top+208,640,top+240}};
+    const bool outer[4][4]={{true,false,false,true},{false,true,true,false},
+        {true,true,false,false},{false,false,true,true}};
+    for(int i=0;i+3<hud->DrawList->VtxBuffer.Size;++i){
+        const auto* v=&hud->DrawList->VtxBuffer[i];
+        if(IsReviveAura(v[0].col)){
+            CHECK(edges<4);const auto& b=bounds[edges];
+            CHECK(std::abs(v[0].pos.x-b.x*sx)<.01f&&std::abs(v[0].pos.y-b.y*sy)<.01f);
+            CHECK(std::abs(v[2].pos.x-b.z*sx)<.01f&&std::abs(v[2].pos.y-b.w*sy)<.01f);
+            for(unsigned j=0;j<4;++j){
+                CHECK(IsReviveAura(v[j].col));const unsigned alpha=v[j].col>>IM_COL32_A_SHIFT;
+                if(outer[edges][j]){
+                    CHECK(alpha>0&&alpha<=104);if(!edge_alpha)edge_alpha=alpha;CHECK(alpha==edge_alpha);
+                }else CHECK(!alpha);
+            }
+            // No aura geometry covers the central scene, including the countdown panel.
+            CHECK(b.z<=48||b.x>=592||b.w<=top+32||b.y>=top+208);
+            ++edges;i+=3;
+        }else if(v[0].col==IM_COL32(0,0,0,145)){
+            CHECK(v[0].pos.y>=output.height*slot*.5f&&v[2].pos.y<=output.height*(slot+1)*.5f);
+            CHECK(std::abs((v[0].pos.x+v[2].pos.x)*.5f-output.width*.5f)<.01f);
+            ++panels;i+=3;
+        }
+    }
+    CHECK(edges==4&&panels==1);
+    unsigned aura_indices=0;
+    for(const auto& cmd:hud->DrawList->CmdBuffer)for(unsigned i=0;i<cmd.ElemCount;++i){
+        const auto& v=hud->DrawList->VtxBuffer[cmd.VtxOffset+hud->DrawList->IdxBuffer[cmd.IdxOffset+i]];
+        if(!IsReviveAura(v.col))continue;
+        CHECK(std::abs(cmd.ClipRect.x)<.01f&&std::abs(cmd.ClipRect.z-output.width)<.01f);
+        CHECK(std::abs(cmd.ClipRect.y-top*sy)<.01f&&std::abs(cmd.ClipRect.w-(top+240)*sy)<.01f);
+        CHECK(v.pos.y>=cmd.ClipRect.y&&v.pos.y<=cmd.ClipRect.w);++aura_indices;
+    }
+    CHECK(aura_indices==24); // Four gradient quads, no full-screen tint or partner overlay.
+    if(seconds>3)CHECK(r.number_color==white);
+    else{
+        const ImVec4 color=ImGui::ColorConvertU32ToFloat4(r.number_color);
+        CHECK(color.x>=215.f/255&&color.x>color.y*2&&color.y>color.z&&color.w>=225.f/255);
+    }
+    return edge_alpha;
+}
+static void CheckReviveCountdown(){
+    const auto previous_output=output;const bool previous_hd=live.hd_ui;
+    TrialFrontendPublish({});TrialGraphicsMenuContext(0,0,0,0);
+    trial_coop::SetActive(true);coop_presentation=1;
+    // The dead player's native health HUD may be absent; the timer is independent.
+    health_status[0]=health_status[1]={};
+    for(const auto size:{app::Mode{640,480},app::Mode{1920,1080},app::Mode{2560,1440}})for(bool hd:{false,true}){
+        output=size;live.hd_ui=hd;
+        for(unsigned slot=0;slot<2;++slot)for(unsigned seconds:{10u,9u,3u,1u}){
+            revive_seconds[slot]=seconds;
+            unsigned min_edge=255,max_edge=0,min_number=255,max_number=0,min_red=255,max_red=0;
+            // Observe a full real ImGui-time pulse without changing the remaining seconds.
+            for(unsigned tick=0;tick<61;++tick){
+                DrawFrame();const unsigned edge=CheckReviveDraw(slot,seconds);
+                min_edge=std::min(min_edge,edge);max_edge=std::max(max_edge,edge);
+                const unsigned number_alpha=countdown_records[0].number_color>>IM_COL32_A_SHIFT;
+                min_number=std::min(min_number,number_alpha);max_number=std::max(max_number,number_alpha);
+                const unsigned red=(countdown_records[0].number_color>>IM_COL32_R_SHIFT)&255;
+                min_red=std::min(min_red,red);max_red=std::max(max_red,red);
+            }
+            CHECK(max_edge-min_edge>=38);
+            if(seconds<=3)CHECK(max_number-min_number>=28&&max_red-min_red>=38);
+            else CHECK(min_number==255&&max_number==255);
+            revive_seconds[slot]=0;DrawFrame();CheckNoReviveCountdown(); // Revive/expiry clears in this frame.
+        }
+        revive_seconds[1]=10;coop_presentation=2;DrawFrame();CheckNoReviveCountdown();
+        coop_presentation=1;movie_progress=.5f;DrawFrame();CheckNoReviveCountdown();movie_progress=0;
+        Publish(MakeList(2));CheckNoReviveCountdown();
+        TrialFrontendPublish({});TrialGraphicsMenuContext(0,0,0,0);
+        coop_presentation=0;DrawFrame();CheckNoReviveCountdown();coop_presentation=1;
+        revive_seconds[1]=0;
+    }
+    trial_language::active=4;revive_seconds[0]=10;DrawFrame();
+    CHECK(countdown_records.size()==1&&countdown_records[0].label=="Tiempo restante para reanimar");
+    revive_seconds[0]=11;DrawFrame();CheckNoReviveCountdown();
+    revive_seconds[0]=0;trial_language::active=0;coop_presentation=0;trial_coop::Reset();
+    output=previous_output;live.hd_ui=previous_hd;DrawFrame();
+}
+static void CheckRevivePrompts(){
+    const auto previous_output=output;
+    const auto p0=trial_controls::live_controls,p1=trial_controls::second_controls;
+    TrialFrontendPublish({});TrialGraphicsMenuContext(0,0,0,0);
+    trial_coop::SetActive(true);coop_presentation=1;
+    trial_controls::live_controls.health_pack[0][0]='H';
+    trial_controls::live_controls.health_pack[0][1]=0;
+    trial_controls::second_controls.health_pack[1][0]=0;
+    trial_controls::second_controls.health_pack[1][1]=4;
+    for(const auto size:{app::Mode{640,480},app::Mode{1920,1080},app::Mode{2560,1440}}){
+        output=size;health_status[0]=health_status[1]={1,3,true,false};DrawFrame();
+        CHECK(revive_records.empty()&&!revive_slide[0]&&!revive_slide[1]);
+        for(unsigned slot=0;slot<2;++slot){
+            health_status[slot].can_revive=true;DrawFrame();
+            CHECK(revive_records.size()==1&&revive_records[0].slot==slot);
+            CHECK(revive_records[0].source==(slot?4u:unsigned('H')));
+            CHECK(revive_records[0].binding==(slot?trial_controller::Label(4):xbox_KeyboardSourceName('H')));
+            CHECK(revive_records[0].label=="Revive Partner");
+            CHECK(revive_slide[slot]>0&&revive_slide[slot]<1&&!revive_slide[1-slot]);
+            const auto* hud=ImGui::FindWindowByName("Stored health packs");
+            float initial_x=-1,final_x=-1;
+            for(unsigned step=0;step<14;++step){
+                DrawFrame();unsigned strips=0;
+                for(int i=0;i+3<hud->DrawList->VtxBuffer.Size;++i){
+                    const auto* v=&hud->DrawList->VtxBuffer[i];
+                    if(v[0].col!=IM_COL32(0,0,0,145))continue;
+                    const float x=v[0].pos.x*640/size.width,y=v[0].pos.y*480/size.height;
+                    CHECK(std::abs(y-(178+240*slot))<.01f);
+                    CHECK(std::abs(v[2].pos.y*480/size.height-(206+240*slot))<.01f);
+                    if(!step)initial_x=x;final_x=x;++strips;i+=3;
+                }
+                CHECK(strips==1&&hits.empty());
+            }
+            CHECK(initial_x>final_x&&std::abs(final_x-20)<.01f&&revive_slide[slot]==1);
+            health_status[slot].can_revive=false;DrawFrame();CHECK(revive_records.empty()&&!revive_slide[slot]);
+        }
+        health_status[0].can_revive=health_status[1].can_revive=true;DrawFrame();CHECK(revive_records.size()==2);
+        health_status[1].visible=false;DrawFrame();CHECK(revive_records.size()==1&&!revive_slide[1]);
+        trial_controls::live_controls.health_pack[0][0]=0;DrawFrame();
+        CHECK(revive_records.size()==1&&revive_records[0].source==0&&revive_records[0].label=="Revive Partner");
+        trial_controls::live_controls.health_pack[0][0]='T';DrawFrame();
+        CHECK(revive_records.size()==1&&revive_records[0].source=='T'&&revive_records[0].binding==xbox_KeyboardSourceName('T'));
+        trial_controls::live_controls.health_pack[0][0]='H';
+        health_status[0].visible=false;health_status[1].visible=true;
+        trial_controls::second_controls.health_pack[1][1]=0;DrawFrame();CHECK(revive_records.size()==1&&revive_records[0].slot==1&&!revive_records[0].source);
+        trial_controls::second_controls.health_pack[1][1]=5;DrawFrame();CHECK(revive_records.size()==1&&revive_records[0].source==5&&revive_records[0].binding==trial_controller::Label(5));
+        trial_controls::second_controls.health_pack[1][1]=4;
+        coop_presentation=2;DrawFrame();CHECK(revive_records.empty()&&!revive_slide[0]&&!revive_slide[1]);coop_presentation=1;
+        movie_progress=.5f;DrawFrame();CHECK(revive_records.empty()&&!revive_slide[0]);movie_progress=0;
+        Publish(MakeList(2));CHECK(revive_records.empty()&&!revive_slide[0]);
+        TrialFrontendPublish({});TrialGraphicsMenuContext(0,0,0,0);
+    }
+    health_status[0]={1,3,true,true};health_status[1]={};trial_language::active=4;DrawFrame();
+    CHECK(revive_records.size()==1&&revive_records[0].label=="Reanimar compa\xc3\xb1" "ero");
+    trial_language::active=0;health_status[0]=health_status[1]={};coop_presentation=0;trial_coop::Reset();
+    trial_controls::live_controls=p0;trial_controls::second_controls=p1;output=previous_output;DrawFrame();
+}
+static void CheckCoopDivider(){
+    const auto old_output=output;
+    const app::Mode sizes[]={{640,480},{1920,1080},{2560,1440},{1281,721}};
+    const float expected_top[]={240,539,719,360};
+    const float expected_bottom[]={243,546,728,365};
+    for(unsigned index=0;index<4;++index){
+        const auto size=sizes[index];
+        output=size;auto& io=ImGui::GetIO();io.DisplaySize={float(size.width),float(size.height)};io.DeltaTime=1.f/60;
+        ImGui::NewFrame();auto* view=ImGui::GetMainViewport();const auto old_pos=view->Pos;
+        view->Pos={17,23};auto* foreground=ImGui::GetForegroundDrawList();
+        // A prior narrow clip must not clip either end of the separator.
+        foreground->PushClipRect({117,123},{217,223},false);
+        DrawCoopDivider(view);foreground->PopClipRect();
+        CHECK(foreground->VtxBuffer.Size==4);
+        const auto* v=foreground->VtxBuffer.Data;
+        CHECK(v[0].pos.x==17&&v[0].pos.y==23+expected_top[index]);
+        CHECK(v[2].pos.x==17+size.width&&v[2].pos.y==23+expected_bottom[index]);
+        for(unsigned i=0;i<4;++i)CHECK(v[i].col==IM_COL32(0,0,0,255));
+        bool full_clip=false;
+        for(const auto& cmd:foreground->CmdBuffer)if(cmd.ElemCount){
+            CHECK(cmd.ClipRect.x==17&&cmd.ClipRect.y==23);
+            CHECK(cmd.ClipRect.z==17+size.width&&cmd.ClipRect.w==23+size.height);full_clip=true;
+        }
+        CHECK(full_clip);view->Pos=old_pos;ImGui::Render();
+    }
+    output=old_output;
+}
+static void CheckCoopSelector(){
+    const auto old_output=output;
+    trial_coop::Reset();CHECK(trial_coop::Available());
+    for(const auto size:{app::Mode{640,480},app::Mode{1920,1080},app::Mode{2560,1440}}){
+        output=size;auto main=MakeList(1);
+        main.source.rows[0].callback=0x271730;
+        std::strcpy(main.source.rows[0].label,"NewFrontend-Singleplayer-1");
+        Publish(main);CHECK(hits.size()==main.source.count+2);
+        Click(0);auto single=Take();
+        CHECK(single.kind==UC_HF_ACTIVATE&&single.index==0&&single.row==main.source.rows[0].row);
+        CHECK(!trial_coop::Requested()&&!trial_coop::Active()&&trial_coop::Available());
+        Publish(main);Click(main.source.count);Settle();
+        CHECK(!trial_coop::Requested()&&!trial_coop::Active());
+        CHECK(coop_open&&hits.size()==8&&preview_records.size()==2);
+        CHECK(preview_records[0].character==0&&preview_records[1].character==0);
+        CHECK(preview_records[0].maximum.x<preview_records[1].minimum.x);
+        for(const auto& r:preview_records){
+            CHECK(r.minimum.x>=0&&r.maximum.x<=size.width&&r.minimum.y>0&&r.maximum.y<size.height);
+            CHECK(r.maximum.y<340*size.height/480.f);
+        }
+        // Mouse can choose either preview; keyboard and controller retain their own player.
+        Click(1);CHECK(coop_menu.choice[0]==1&&coop_menu.choice[1]==0);
+        const auto second_clock=coop_preview_started[1];
+        Key(ImGuiKey_LeftArrow);CHECK(coop_menu.choice[0]==0&&coop_preview_started[1]==second_clock);
+        Click(4);CHECK(coop_menu.choice[1]==1&&coop_menu.choice[0]==0);
+        Click(5);CHECK(!coop_menu.ready[1]); // no controller, no accidental deployment
+        TrialCoopMenuPad(true,0,0,0,0,0);Settle();
+        TrialCoopMenuPad(true,8,0,0,0,0);DrawFrame();
+        TrialCoopMenuPad(true,0,0,0,0,0);Settle();
+        CHECK(coop_menu.choice[1]==2&&coop_menu.choice[0]==0);
+        TrialCoopMenuPad(true,0,255,0,0,0);DrawFrame();
+        TrialCoopMenuPad(true,0,0,0,0,0);Settle();CHECK(coop_menu.ready[1]);
+        Click(2);CHECK(coop_menu.ready[0]&&coop_menu.CanContinue(true));
+        TrialCoopMenuPad(false,0,0,0,0,0);Settle();CHECK(!coop_menu.CanContinue(false)&&!coop_menu.ready[1]);
+        TrialCoopMenuPad(true,0,0,0,0,0);Settle();Click(5);CHECK(coop_menu.ready[1]);
+        Click(7);const auto action=Take();CHECK(action.kind==UC_HF_ACTIVATE&&action.index==0&&!coop_open);
+        CHECK(trial_coop::Selected(0)==trial_coop::Character::TZero&&trial_coop::Selected(1)==trial_coop::Character::Banger);
+        DrawFrame();CHECK(preview_records.empty());
+        // A pending co-op deployment does not carry into Single Player.
+        Publish(main);Click(0);single=Take();
+        CHECK(single.kind==UC_HF_ACTIVATE&&single.index==0&&!trial_coop::Requested()&&!trial_coop::Active());
+        CHECK(trial_coop::Available());
+        Publish(main);Click(main.source.count);Settle();
+        CHECK(coop_menu.choice[0]==0&&coop_menu.choice[1]==0&&preview_records[0].elapsed<.1);
+        RightClick();CHECK(!coop_open&&preview_records.empty());EmptyAction();
+    }
+    trial_coop::Reset();trial_coop::SetAvailable(false);output=old_output;
+}
+static void CheckCoopCampaignHeader(){
+    const auto old_output=output;
+    trial_coop::Reset();trial_coop::SetAvailable(true);
+    auto header_covered=[](){
+        for(const auto* list:ImGui::GetDrawData()->CmdLists)for(int i=0;i+3<list->VtxBuffer.Size;++i){
+            const auto* v=&list->VtxBuffer[i];
+            if(v[0].pos.x==0&&v[0].pos.y==0&&v[2].pos.x==float(output.width)&&
+               std::abs(v[2].pos.y-62*output.height/480.f)<.01f&&
+               v[0].col==IM_COL32(0,0,0,255)&&v[2].col==IM_COL32(0,0,0,255))return true;
+        }
+        return false;
+    };
+    for(const auto size:{app::Mode{640,480},app::Mode{1920,1080},app::Mode{2560,1440}}){
+        output=size;auto levels=MakeList(1);levels.list_kind=0;levels.source.kind=UC_HF_LEVELS;
+        Publish(levels);CHECK(!header_covered());const auto count=hits.size();
+        CHECK(trial_coop::Request(trial_coop::Character::TZero,trial_coop::Character::Banger));
+        DrawFrame();CHECK(header_covered()&&hits.size()==count);
+        // Device-mode changes take effect at the guest's next frame publication.
+        keyboard_mode=0;Publish(levels);CHECK(!header_covered());keyboard_mode=1;Publish(levels);
+        trial_coop::Reset();DrawFrame();CHECK(!header_covered());
+    }
+    trial_coop::SetAvailable(false);output=old_output;
+}
 static void CheckVisualHandoff(const TrialFrontendFrame& f){
     Publish(f);const auto count=hits.size();CHECK(count&&ImGui::GetDrawData()->TotalVtxCount>100);
     FrontendAction(f,UC_HF_ACTIVATE,0); // Must be discarded by the real publisher.
@@ -265,6 +653,7 @@ static void CheckVisualHandoff(const TrialFrontendFrame& f){
     transition.source.source_kind=UC_HF_TRANSITION;
     TrialGraphicsMenuContext(0,0,0,0);TrialFrontendPublish(transition);DrawFrame();
     CHECK(hits.size()==count&&ImGui::GetDrawData()->TotalVtxCount>100);
+    if(f.list_kind==7)CheckPanelShade(0);
     if(f.source.kind==TRIAL_HF_NAME){
         // The transition retains the entire original-keyboard cover, not just
         // its footer. Inspect the actual production draw-list quad at all
@@ -433,17 +822,19 @@ static void CheckControls(const TrialFrontendFrame& options){
         if(TrialFrontendTakeAction(selected))CHECK(selected.kind==UC_HF_SELECT&&selected.index==0&&selected.row==options.source.rows[0].row);
         EmptyAction();
     };
-    trial_controls::live_controls=trial_controls::Defaults();controls_device=0;
+    trial_controls::live_controls=trial_controls::second_controls=trial_controls::Defaults();controls_device=controls_player=0;
     open();CHECK(hits.size()==20);
     CHECK(std::strcmp(ControlsName(0),"Reload")==0);
     CHECK(std::strcmp(ControlsName(28),"Interact / dialogue skip")==0);
     CHECK(&ControlsBinding(0,0)!=&ControlsBinding(28,0));
     CHECK(std::strcmp(ControlsName(2),"Next Firearm")==0&&std::strcmp(ControlsName(29),"Previous Firearm")==0);
-    CHECK(ControlsAction(6)==2&&ControlsAction(7)==29&&ControlsSlots(2)==2&&ControlsSlots(29)==2);
+    CHECK(ControlsAction(7)==2&&ControlsAction(8)==29&&ControlsSlots(2)==2&&ControlsSlots(29)==2);
     CHECK(&ControlsBinding(2,0)!=&ControlsBinding(29,0));
     CHECK(&ControlsBinding(29,1)==&controls_draft.previous_firearm[1]);
-    CHECK(std::strcmp(ControlsGroup(12),"COMBAT / INTERACTION")==0&&std::strcmp(ControlsGroup(13),"MOVEMENT / AIMING")==0);
-    CHECK(std::strcmp(ControlsGroup(23),"TEAMMATE ORDERS")==0&&std::strcmp(ControlsGroup(28),"MENU CONTROLS")==0);
+    CHECK(std::strcmp(ControlsGroup(13),"COMBAT / INTERACTION")==0&&std::strcmp(ControlsGroup(14),"MOVEMENT / AIMING")==0);
+    CHECK(std::strcmp(ControlsGroup(24),"TEAMMATE ORDERS")==0&&std::strcmp(ControlsGroup(29),"MENU CONTROLS")==0);
+    CHECK(ControlsAction(5)==30&&ControlsHealthPack(30));
+    CHECK(&ControlsBinding(30,0)==&controls_draft.health_pack[0][0]);
     for(unsigned device=0;device<2;++device){
         controls_device=device;std::vector<bool> seen(ControlsCount());
         for(unsigned row=0;row<ControlsCount();++row){const auto action=ControlsAction(row);CHECK(action<ControlsCount()&&!seen[action]);seen[action]=true;}
@@ -487,7 +878,7 @@ static void CheckControls(const TrialFrontendFrame& options){
     // actions but not the hold-and-drag orders action.
     Click(1);trial_controls::capture.Sample(0,0,true);trial_controls::capture.Wheel(256);DrawFrame();Settle();
     CHECK(controls_draft.keyboard[0][0]==256&&ControlsDirty());footer(1);CHECK(!ControlsDirty());
-    controls_scroll=23;Settle();
+    controls_scroll=24;Settle();
     CHECK(ControlsAction(controls_scroll)==24);Click(1);CHECK(controls_capture_action==24);
     trial_controls::capture.Sample(0,0,true);trial_controls::capture.Wheel(257);DrawFrame();Settle();
     CHECK(controls_capture_action==24&&trial_controls::CaptureWaiting()&&!ControlsDirty());
@@ -498,11 +889,11 @@ static void CheckControls(const TrialFrontendFrame& options){
     ImGui::GetIO().AddMouseButtonEvent(0,true);DrawFrame();
     CHECK(controls_capture_action<0&&!ControlsDirty());
     ImGui::GetIO().AddMouseButtonEvent(0,false);Settle();
-    controls_scroll=11;Settle();Click(1);CHECK(controls_draft.spin_mode==1&&ControlsDirty());
+    controls_scroll=12;Settle();Click(1);CHECK(controls_draft.spin_mode==1&&ControlsDirty());
     Click(3);CHECK(controls_capture_action==26);source('P');
     CHECK(controls_draft.spin_binding[0][0]=='P');
     footer(1);CHECK(!ControlsDirty()); // Discard restores mode and button together.
-    controls_scroll=18;Settle();
+    controls_scroll=19;Settle();
     CHECK(controls_draft.sensitivity==400);
     const auto slider=hits[1];const float slider_y=(slider.a.y+slider.b.y)*.5f;
     Move(418*output.width/640.f,slider_y);ImGui::GetIO().AddMouseButtonEvent(0,true);DrawFrame();
@@ -553,9 +944,86 @@ static void CheckControls(const TrialFrontendFrame& options){
     unsigned stale[7];std::memcpy(stale,snapshot,sizeof(stale));stale[6]=40;
     CHECK(!TrialControlsProfile(stale,true)&&stale[5]==75); // A changed profile rejects a queued write.
     TrialControlsProfile(snapshot,true);ControlsReadDraft();Close();Settle();
+    open();controls_device=1;controls_player=1;ControlsReadDraft();Settle();
+    CHECK(ControlsCount()==34&&ControlsProfileStart()==27&&ControlsHealthPack(26));
+    const auto first_profile=trial_controls::live_controls;
+    ControlsBegin(26,0);DrawFrame();Settle();
+    trial_controls::second_capture.Sample(0,0,true);trial_controls::second_capture.Sample(0,8,true);
+    DrawFrame();Settle();CHECK(controls_conflict_action==7);Click(0);
+    CHECK(controls_draft.health_pack[1][0]==8&&!controls_draft.controller[7][0]);
+    footer(0);CHECK(trial_controls::second_controls.health_pack[1][0]==8);
+    CHECK(!std::memcmp(&first_profile,&trial_controls::live_controls,sizeof(first_profile)));
+    Close();controls_player=controls_device=0;Settle();
     // Original Options Controls is intercepted only within the qualified hub.
     auto unrelated=options;unrelated.list_kind=1;++unrelated.source.epoch;
     Publish(unrelated);Click(0);auto action=Take();CHECK(action.kind==UC_HF_ACTIVATE&&!PanelOpen());
+}
+static void CheckPerPlayerSettings(){
+    const auto saved_live=live;const auto first_controls=trial_controls::live_controls;
+    const auto second_controls=trial_controls::second_controls;
+    auto own=[](unsigned player){
+        trial_coop::SetActive(true);trial_coop::ResetPauseOwner();
+        trial_coop::pause_state.Sample(false,false);trial_coop::pause_state.Sample(player==0,player==1);
+        trial_coop::pause_state.Consume(true);trial_coop::pause_state.Enter();
+        CHECK(trial_coop::PauseOwner()==int(player));keyboard_mode=1;
+        CHECK(xbox_KeyboardMode()==int(player==0));Move(0,0);
+    };
+    auto pad=[](unsigned buttons,unsigned confirm=0){
+        TrialFrontendPad(0,0,0,0,0);DrawFrame();TrialFrontendPad(buttons,confirm,0,0,0);DrawFrame();
+        TrialFrontendPad(0,0,0,0,0);Settle();Drain();
+    };
+    auto options=[](){auto f=MakeList(3);f.source.source_kind|=0x80000000u;return f;};
+    for(const auto size:{app::Mode{640,480},app::Mode{1920,1080},app::Mode{2560,1440}}){
+        output=size;trial_language::active=size.width==1920?4:0;
+        for(unsigned player:{0u,1u}){
+            own(player);auto f=options();Publish(f);CHECK(frontend_active&&hits.size()==f.source.count+2);
+            controls_player=1-player;controls_device=controls_player?1:0;
+            // The ordinary controller Controls row opens the owned editor, not the original shared profile page.
+            if(player)pad(0,255);else Click(0);
+            CHECK(PanelOpen()&&settings_page==1&&settings_pause_player==int(player));
+            CHECK(controls_player==player&&controls_device==player);
+            const auto device=hits[0];ClickPoint(device.b.x-15*output.width/640.f,(device.a.y+device.b.y)/2);
+            CHECK(controls_player==player&&controls_device==player);
+            const auto partner=trial_controls::Snapshot(1-player);
+            unsigned native_before[7],pending_before[7];
+            std::memcpy(native_before,profile_live,sizeof(native_before));std::memcpy(pending_before,profile_pending,sizeof(pending_before));
+            const bool apply_before=profile_apply;
+            const unsigned binding=controls_draft.controller[0][0]==22?23:22;
+            controls_draft.controller[0][0]=binding;
+            if(player){CHECK(ControlsCount()==34);profile_draft[1]^=1;profile_draft[5]=23;}
+            CHECK(ControlsDirty());fail_apply=true;CHECK(!ControlsApply());fail_apply=false;CHECK(ControlsDirty());
+            CHECK(ControlsApply());
+            if(player)CHECK(profile_apply==apply_before&&!std::memcmp(native_before,profile_live,sizeof(native_before))&&!std::memcmp(pending_before,profile_pending,sizeof(pending_before)));
+            Settle();CHECK(!ControlsDirty());
+            const auto current=trial_controls::Snapshot(player),unchanged=trial_controls::Snapshot(1-player);
+            CHECK(current.controller[0][0]==binding);
+            CHECK(!std::memcmp(&partner,&unchanged,sizeof(partner)));
+            if(player)CHECK(current.native_profile[5]==23&&current.native_profile[1]==profile_draft[1]);
+            profile_draft[5]=99;CHECK(ControlsDirty());ControlsReadDraft();CHECK(!ControlsDirty());
+            Close();Settle();
+            f=options();Publish(f);
+            if(player){for(unsigned i=0;i<f.source.count;++i)pad(2);pad(0,255);}else Click(f.source.count);
+            CHECK(PanelOpen()&&settings_page==0&&settings_player==player&&settings_pause_player==int(player));
+            const auto other=trial_graphics::Snapshot(1-player),before=trial_graphics::Snapshot(player);
+            draft.fov=player?85:65;draft.weapon_fov=player?135:110;
+            const auto target=draft;CHECK(Dirty()||before.fov==target.fov);
+            fail_apply=true;CHECK(!Apply());fail_apply=false;
+            CHECK(trial_graphics::Snapshot(player).fov==before.fov&&trial_graphics::Snapshot(player).weapon_fov==before.weapon_fov);
+            CHECK(Apply()&&!Dirty());CHECK(trial_graphics::Snapshot(player).fov==target.fov);
+            CHECK(trial_graphics::Snapshot(1-player).fov==other.fov&&trial_graphics::Snapshot(1-player).weapon_fov==other.weapon_fov);
+            draft.fov=40;ReadDraft();CHECK(!Dirty()&&draft.fov==target.fov);
+            // Resume revokes an unsaved panel before it can affect the next player's settings.
+            draft.fov=90;trial_coop::ResetPauseOwner();DrawFrame();CHECK(!PanelOpen());
+            CHECK(trial_graphics::Snapshot(player).fov==target.fov);Drain();
+        }
+    }
+    trial_coop::Reset();trial_coop::ResetPauseOwner();keyboard_mode=1;trial_language::active=0;
+    // A remembered P2 selection in the main menu must not leak into single-player pause.
+    controls_player=controls_device=1;Publish(options());Click(0);CHECK(controls_player==0&&controls_device==0);Close();
+    controls_player=controls_device=0;settings_player=0;settings_pause_player=-1;
+    trial_controls::live_controls=first_controls;trial_controls::second_controls=second_controls;live=saved_live;
+    TrialFrontendPublish({});TrialGraphicsMenuContext(0,0,0,0);Settle();Drain();
+    std::puts("PASS owned pause Controls/Graphics: normal controller entry, independent apply/discard/failed save, locked player and stale-panel revocation");
 }
 static void CheckLanguage(const TrialFrontendFrame& options){
     trial_language::selected=trial_language::active=0;
@@ -654,16 +1122,7 @@ static void CheckPauseConfirmation(uint32_t callback=0x267400){
     ++f.source.epoch;Publish(f);Move(0,0);Key(ImGuiKey_UpArrow);Key(ImGuiKey_Space);
     a=Take();CHECK(a.kind==UC_HF_ACTIVATE&&a.index==0);
     // Retain the paused scene: no opaque cover is allowed over its content.
-    const float sx=output.width/640.f,sy=output.height/480.f;
-    bool shade=false;
-    for(const auto* list:ImGui::GetDrawData()->CmdLists)for(int i=0;i+3<list->VtxBuffer.Size;++i){
-        const auto* v=&list->VtxBuffer[i];
-        if(std::abs(v[0].pos.x-3*sx)<.01f&&std::abs(v[0].pos.y-73*sy)<.01f&&
-           std::abs(v[2].pos.x-637*sx)<.01f&&std::abs(v[2].pos.y-379*sy)<.01f){
-            CHECK((v[0].col>>IM_COL32_A_SHIFT)==112);shade=true;
-        }
-    }
-    CHECK(shade&&quit_posts==before);
+    CheckPanelShade(112);CHECK(quit_posts==before);
     // Switching devices relinquishes the native modal, including queued Yes.
     FrontendAction(f,UC_HF_ACTIVATE,0);keyboard_mode=0;Publish(f);
     CHECK(hits.empty()&&!frontend_presentation.visible&&!TrialFrontendOwns(f.source.owner,UC_HF_DIALOG));EmptyAction();
@@ -678,15 +1137,18 @@ static void CheckSize(unsigned width,unsigned height){
     std::memset(profile_live,0,sizeof(profile_live));profile_apply=false;
     output={width,height};live={};Close();TrialFrontendPublish({});TrialGraphicsMenuContext(0,0,0,0);Settle();
     auto failed=MakeList(7);Publish(failed);CheckStrip(3);
+    CheckPanelShade(0);
     for(unsigned i=0;i<3;++i){Click(i);auto selected=Take();CHECK(selected.kind==UC_HF_ACTIVATE&&selected.index==i&&selected.row==failed.source.rows[i].row);}
     keyboard_mode=0;Publish(failed);CHECK(hits.empty());keyboard_mode=1;
+    CheckVisualHandoff(failed);
     auto main=MakeList(1);Publish(main);CheckStrip(5);CHECK(ImGui::GetDrawData()->TotalVtxCount>100);
+    CheckPanelShade(168);
     Click(2);auto action=Take();CHECK(action.kind==UC_HF_ACTIVATE&&action.index==2&&action.row==main.source.rows[2].row);
     main.source.rows[1].enabled=0;++main.source.epoch;Publish(main);Click(1);EmptyAction();
 
     // Escape still held from gameplay must not immediately choose a pause item.
     ImGui::GetIO().AddKeyEvent(ImGuiKey_Escape,true);auto pause=MakeList(2);Publish(pause);
-    CheckStrip(5);DrawFrame();EmptyAction();
+    CheckStrip(5);DrawFrame();EmptyAction();CheckPanelShade(112);
     ImGui::GetIO().AddKeyEvent(ImGuiKey_Escape,false);Settle();EmptyAction();Key(ImGuiKey_Escape);
     action=Take();CHECK(action.kind==UC_HF_BACK);
     Publish(pause);Click(0);action=Take();CHECK(action.kind==UC_HF_ACTIVATE&&action.index==0);
@@ -696,13 +1158,13 @@ static void CheckSize(unsigned width,unsigned height){
     auto options=MakeList(3);OpenGraphics(options);unsigned before=applied;ChangeSetting(3);CHECK(Dirty());CHECK(live.settings.render_percent==100);
     sample_support=2|(1u<<4);ChangeSetting(9);CHECK(draft.msaa==4&&live.msaa==1);
     sample_support=2|(1u<<2)|(1u<<4);
-    Click(19);CHECK(applied==before+1&&live.settings.render_percent==125&&live.msaa==4&&!Dirty());
+    Click(20);CHECK(applied==before+1&&live.settings.render_percent==125&&live.msaa==4&&!Dirty());
     ChangeSetting(10);ChangeSetting(11);ChangeSetting(12);ChangeSetting(13);ChangeSetting(13);
     CHECK(!draft.scenery&&!draft.characters&&draft.character_quality==1&&draft.ragdolls==2&&Dirty());
     CHECK(live.scenery&&live.characters&&live.character_quality==0&&live.ragdolls==0);
-    CHECK(hits.size()==22&&draft.ragdolls==2);Click(19);
+    CHECK(hits.size()==23&&draft.ragdolls==2);Click(20);
     CHECK(applied==before+2&&!live.scenery&&!live.characters&&live.character_quality==1&&live.ragdolls==2&&!Dirty());
-    ChangeSetting(13);CHECK(Dirty());Click(20);CHECK(!Dirty()&&draft.ragdolls==2);
+    ChangeSetting(13);CHECK(Dirty());Click(21);CHECK(!Dirty()&&draft.ragdolls==2);
     ChangeSetting(14);CHECK(draft.fov!=53&&live.fov==53&&Dirty());
     // Both real tracks drag/clamp without touching committed settings before Apply.
     auto drag=[&](unsigned row,float start,float end){
@@ -727,47 +1189,57 @@ static void CheckSize(unsigned width,unsigned height){
     ImGui::GetIO().AddMouseButtonEvent(0,false);KeyEvent(ImGuiKey_LeftArrow,true);DrawFrame();
     KeyEvent(ImGuiKey_LeftArrow,false);Settle();CHECK(draft.reticle_scale==145);
     Key(ImGuiKey_RightArrow);CHECK(draft.reticle_scale==150);
-    Click(19);CHECK(live.fov==70&&live.reticle_scale==150&&!Dirty());
+    Click(20);CHECK(live.fov==70&&live.reticle_scale==150&&!Dirty());
     ChangeSetting(16);CHECK(draft.reticle_scale==155&&live.reticle_scale==150&&Dirty());
-    Click(21);CHECK(confirm_back);Click(2);CHECK(PanelOpen()&&Dirty());
-    Click(20);CHECK(draft.reticle_scale==150&&live.reticle_scale==150&&!Dirty());
+    Click(22);CHECK(confirm_back);Click(2);CHECK(PanelOpen()&&Dirty());
+    Click(21);CHECK(draft.reticle_scale==150&&live.reticle_scale==150&&!Dirty());
     // Weapon FOV is independent of the world camera, with the same Apply policy.
     CHECK(draft.weapon_fov==100&&live.weapon_fov==100);
     drag(17,470,600);CHECK(draft.weapon_fov==150&&live.weapon_fov==100&&draft.fov==70);
     drag(17,470,300);CHECK(draft.weapon_fov==50&&live.weapon_fov==100&&draft.fov==70);
     drag(17,470,511);CHECK(draft.weapon_fov==125&&live.weapon_fov==100);
-    fail_apply=true;Click(19);fail_apply=false;CHECK(Dirty()&&live.weapon_fov==100);
-    Click(20);CHECK(!Dirty()&&draft.weapon_fov==100);
-    ChangeSetting(17);CHECK(draft.weapon_fov==105&&Dirty());Click(21);CHECK(confirm_back);
-    Click(2);CHECK(PanelOpen()&&Dirty());Click(19);
+    fail_apply=true;Click(20);fail_apply=false;CHECK(Dirty()&&live.weapon_fov==100);
+    Click(21);CHECK(!Dirty()&&draft.weapon_fov==100);
+    ChangeSetting(17);CHECK(draft.weapon_fov==105&&Dirty());Click(22);CHECK(confirm_back);
+    Click(2);CHECK(PanelOpen()&&Dirty());Click(20);
     CHECK(live.weapon_fov==105&&live.fov==70&&!Dirty());
+    // Movie scaling follows the same staged Apply, failure and Discard policy.
+    CHECK(draft.fmv_scale==0&&live.fmv_scale==0);
+    ChangeSetting(19);CHECK(draft.fmv_scale==1&&live.fmv_scale==0&&Dirty());
+    Key(ImGuiKey_LeftArrow);CHECK(draft.fmv_scale==0&&!Dirty());
+    Key(ImGuiKey_RightArrow);CHECK(draft.fmv_scale==1&&live.fmv_scale==0&&Dirty());
+    fail_apply=true;Click(20);fail_apply=false;CHECK(Dirty()&&live.fmv_scale==0);
+    Click(21);CHECK(!Dirty()&&draft.fmv_scale==0);
+    ChangeSetting(19);Click(22);CHECK(confirm_back);Click(2);CHECK(PanelOpen()&&Dirty());
+    Click(20);CHECK(live.fmv_scale==1&&!Dirty());
+    ChangeSetting(19);Click(21);CHECK(draft.fmv_scale==1&&live.fmv_scale==1&&!Dirty());
     // HD changes use the same staged save/discard/back policy, including failures.
     CHECK(!live.hd_ui);ChangeSetting(15);CHECK(draft.hd_ui&&Dirty()&&!live.hd_ui);
-    fail_apply=true;Click(19);fail_apply=false;CHECK(draft.hd_ui&&Dirty()&&!live.hd_ui);
-    Click(20);CHECK(!draft.hd_ui&&!Dirty());
-    ChangeSetting(15);Click(21);CHECK(confirm_back&&hits.size()==3);
+    fail_apply=true;Click(20);fail_apply=false;CHECK(draft.hd_ui&&Dirty()&&!live.hd_ui);
+    Click(21);CHECK(!draft.hd_ui&&!Dirty());
+    ChangeSetting(15);Click(22);CHECK(confirm_back&&hits.size()==3);
     Click(2);CHECK(PanelOpen()&&draft.hd_ui&&Dirty());
-    Click(21);Click(1);CHECK(!PanelOpen()&&!live.hd_ui);
+    Click(22);Click(1);CHECK(!PanelOpen()&&!live.hd_ui);
     OpenGraphics(options);CHECK(!draft.hd_ui&&!Dirty());
-    ChangeSetting(15);Click(19);CHECK(live.hd_ui&&!Dirty());
-    ChangeSetting(15);Click(20);CHECK(live.hd_ui&&draft.hd_ui&&!Dirty());
+    ChangeSetting(15);Click(20);CHECK(live.hd_ui&&!Dirty());
+    ChangeSetting(15);Click(21);CHECK(live.hd_ui&&draft.hd_ui&&!Dirty());
     // One Fog control covers all four effective modes. Mouse edits stay in the
     // draft, and failed Apply rolls back the three compatible config keys.
     CHECK(TrialDistanceFog&&!TrialSmoothFog&&TrialFogDistanceMode==0);
     ChangeSetting(8);CHECK(draft_fog_mode==2&&!TrialSmoothFog&&Dirty());
-    Click(20);CHECK(draft_fog_mode==1&&TrialDistanceFog&&!Dirty());
-    ChangeSetting(8);Click(19);CHECK(TrialDistanceFog&&TrialFogDistanceMode==0&&TrialSmoothFog&&!Dirty());
-    ChangeSetting(8);Click(19);CHECK(TrialDistanceFog&&TrialFogDistanceMode==1&&!TrialSmoothFog&&!Dirty());
-    ChangeSetting(8);fail_apply=true;Click(19);fail_apply=false;
+    Click(21);CHECK(draft_fog_mode==1&&TrialDistanceFog&&!Dirty());
+    ChangeSetting(8);Click(20);CHECK(TrialDistanceFog&&TrialFogDistanceMode==0&&TrialSmoothFog&&!Dirty());
+    ChangeSetting(8);Click(20);CHECK(TrialDistanceFog&&TrialFogDistanceMode==1&&!TrialSmoothFog&&!Dirty());
+    ChangeSetting(8);fail_apply=true;Click(20);fail_apply=false;
     CHECK(TrialDistanceFog&&TrialFogDistanceMode==1&&!TrialSmoothFog&&draft_fog_mode==0&&Dirty());
-    Click(19);CHECK(!TrialDistanceFog&&TrialFogDistanceMode==0&&!TrialSmoothFog&&!Dirty());
-    ChangeSetting(8);Click(19);CHECK(TrialDistanceFog&&TrialFogDistanceMode==0&&!TrialSmoothFog&&!Dirty());
-    ChangeSetting(8);Click(21);CHECK(confirm_back&&hits.size()==3);
-    Key(ImGuiKey_Escape);Settle();CHECK(!confirm_back&&PanelOpen()&&Dirty()&&hits.size()==22);
-    CHECK(draft_fog_mode==2&&!TrialSmoothFog);Click(20);CHECK(!Dirty());
-    ChangeSetting(6);CHECK(Dirty()&&message.empty());Click(21);CHECK(confirm_back&&hits.size()==3);
-    Key(ImGuiKey_Escape);Settle();CHECK(!confirm_back&&PanelOpen()&&Dirty()&&hits.size()==22);
-    Click(21);CHECK(confirm_back&&hits.size()==3);Click(1);CHECK(!PanelOpen());
+    Click(20);CHECK(!TrialDistanceFog&&TrialFogDistanceMode==0&&!TrialSmoothFog&&!Dirty());
+    ChangeSetting(8);Click(20);CHECK(TrialDistanceFog&&TrialFogDistanceMode==0&&!TrialSmoothFog&&!Dirty());
+    ChangeSetting(8);Click(22);CHECK(confirm_back&&hits.size()==3);
+    Key(ImGuiKey_Escape);Settle();CHECK(!confirm_back&&PanelOpen()&&Dirty()&&hits.size()==23);
+    CHECK(draft_fog_mode==2&&!TrialSmoothFog);Click(21);CHECK(!Dirty());
+    ChangeSetting(6);CHECK(Dirty()&&message.empty());Click(22);CHECK(confirm_back&&hits.size()==3);
+    Key(ImGuiKey_Escape);Settle();CHECK(!confirm_back&&PanelOpen()&&Dirty()&&hits.size()==23);
+    Click(22);CHECK(confirm_back&&hits.size()==3);Click(1);CHECK(!PanelOpen());
     CHECK(live.settings.render_percent==125&&live.settings.fps_cap==60);CheckStrip(options.source.count+2);
 
     // A fresh controller Back reaches the open page; its held repeat cannot
@@ -782,7 +1254,7 @@ static void CheckSize(unsigned width,unsigned height){
     // RMB has the same Back policy as Q/Escape, including dirty confirmation.
     OpenGraphics(options);ChangeSetting(3);RightClick();CHECK(confirm_back&&PanelOpen()&&Dirty());
     RightClick();CHECK(!confirm_back&&PanelOpen()&&Dirty());
-    Click(19);CHECK(!Dirty());
+    Click(20);CHECK(!Dirty());
     ImGui::GetIO().AddMouseButtonEvent(1,true);DrawFrame();CHECK(!PanelOpen());
     Settle();EmptyAction(); // held closing click cannot back out of Options too
     ImGui::GetIO().AddMouseButtonEvent(1,false);Settle();EmptyAction();
@@ -792,7 +1264,7 @@ static void CheckSize(unsigned width,unsigned height){
     }
 
     OpenGraphics(options);CHECK(!live.world_textures);trial_graphics::textures_available=false;ChangeSetting(18);CHECK(!draft.world_textures&&!Dirty());trial_graphics::textures_available=true;ChangeSetting(18);CHECK(draft.world_textures&&Dirty()&&!live.world_textures);
-    Click(20);CHECK(!draft.world_textures&&!Dirty());ChangeSetting(18);Click(19);CHECK(live.world_textures&&!Dirty());Close();
+    Click(21);CHECK(!draft.world_textures&&!Dirty());ChangeSetting(18);Click(20);CHECK(live.world_textures&&!Dirty());Close();
     // Show all 17 unlocked slots in the recorded original order. The fixture
     // validates host hit regions/actions; original badge pixels are guest-owned.
     auto levels=MakeList(1);levels.list_kind=0;levels.source.kind=UC_HF_LEVELS;levels.source.count=17;levels.source.level_actions=3;
@@ -835,6 +1307,8 @@ static void CheckSize(unsigned width,unsigned height){
     const auto old_weapon=live.weapon_fov;pad(8);
     CHECK(draft.weapon_fov==old_weapon+5&&live.weapon_fov==old_weapon&&Dirty());
     pad(2);pad(8);CHECK(draft.world_textures!=live.world_textures);
+    pad(2);const auto old_fmv=live.fmv_scale;pad(8);
+    CHECK(draft.fmv_scale!=old_fmv&&live.fmv_scale==old_fmv&&Dirty());
     pad(2); // Apply
     const auto saved=applied;pad(0,255);CHECK(applied==saved+1&&live.hd_ui!=old_hd&&!Dirty());
     pad(0,0,255);CHECK(!PanelOpen());EmptyAction();keyboard_mode=1;
@@ -867,13 +1341,17 @@ static void CheckSize(unsigned width,unsigned height){
     OpenGraphics(options);auto moving_options=options;moving_options.source.source_kind|=UC_HF_TRANSITION;
     TrialFrontendPublish(moving_options);DrawFrame();CHECK(!PanelOpen()&&hits.size()==options.source.count+2);
     TrialFrontendPublish({});DrawFrame();CHECK(hits.empty()&&!TrialGraphicsOpen());
-    // Render, effects, world/weapon FOV, HD, four fog modes, RMB flow, controller Apply.
-    CHECK(applied==before+12);
+    // Render, effects, world/weapon FOV, FMV scaling, HD, four fog modes, RMB flow, controller Apply.
+    CHECK(applied==before+13);
     std::printf("PASS %ux%u: menu strips, profile targets, typed names, 17 level hits, draft/apply/discard, release gates and stale screen revocation\n",width,height);
 }
 int main(){
     ImGui::CreateContext();auto& io=ImGui::GetIO();io.IniFilename=nullptr;io.LogFilename=nullptr;
+    trial_coop::Reset();trial_coop::SetAvailable(false);
+    CHECK(SetEnvironmentVariableW(L"UCRR_COOP_TEST",nullptr));
     TrialGraphicsFonts(/* GAME_PATH */);
+    CHECK(trial_coop::Available()&&!trial_coop::Requested()&&!trial_coop::Active());
+    CHECK(preview_initializations==1&&preview_finalizations==1);
     CHECK(body_font&&title_font&&std::strstr(body_font->GetDebugName(),"Urban Chaos"));
     float back_uv[4]{};CHECK(TrialMenuIconUV(VK_RBUTTON,back_uv));
     io.Fonts->SetTexID(ImTextureID(1));
@@ -921,22 +1399,31 @@ int main(){
         keyboard_mode=1;
     }
     std::printf("UI totals: input changes=%u, applies=%u, frames=%u\n",input_changes,applied-before_ui,frames);
-    CHECK(input_changes>10&&applied==before_ui+36&&frames>100);
+    CHECK(input_changes>10&&applied==before_ui+39&&frames>100);
+    CheckPerPlayerSettings();
     TrialFrontendPublish({});TrialGraphicsMenuContext(0,0,0,0);DrawFrame();
     movie_progress=.5f;DrawFrame();
     CHECK(ImGui::FindWindowByName("Hold to skip movie")->Active);
     movie_progress=0;DrawFrame();CHECK(!ImGui::FindWindowByName("Hold to skip movie")->Active);
+    CheckHealthPackHud();
+    CheckReviveCountdown();
+    CheckRevivePrompts();
+    CheckCoopDivider();
+    CheckCoopSelector();
+    CheckCoopCampaignHeader();
     trial_language::active=4;
     CHECK(std::strcmp(trial_language::Ui("Controls"),"Controles")==0);
     CHECK(std::strcmp(trial_language::Ui("Next Firearm"),"Siguiente arma de fuego")==0);
     CHECK(std::strcmp(trial_language::Ui("Previous Firearm"),"Arma de fuego anterior")==0);
     CHECK(std::strcmp(trial_language::Ui("Equip or select the next available firearm."),"Equipa o selecciona la siguiente arma de fuego disponible.")==0);
     CHECK(std::strcmp(trial_language::Ui("Equip or select the previous available firearm."),"Equipa o selecciona el arma de fuego anterior disponible.")==0);
+    CHECK(std::strcmp(trial_language::Ui("FMV scaling"),"Escala de v\xc3\xad" "deos")==0);
+    CHECK(std::strcmp(trial_language::Ui("Fill"),"Llenar")==0);
     CHECK(std::strcmp(trial_language::Ui("Nick Mason"),"Nick Mason")==0);
     for(const auto size:{app::Mode{640,480},app::Mode{1920,1080},app::Mode{2560,1440}}){
         output=size;auto page=MakeList(3);Publish(page);
         Click(page.source.count);CHECK(PanelOpen());
-        CHECK(hits.size()==22);
+        CHECK(hits.size()==23);
         for(const auto& hit:hits)CHECK(hit.a.x>=0&&hit.b.x<=float(output.width)+1);
         RightClick();CHECK(!PanelOpen());EmptyAction();
     }

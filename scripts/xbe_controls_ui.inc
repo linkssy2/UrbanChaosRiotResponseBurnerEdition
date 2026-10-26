@@ -1,7 +1,7 @@
 // Same original frame/fonts/selection strips as Graphics. Only drafts live
 // here: the input backend publishes a complete profile after a successful save.
 trial_controls::Draft controls_draft{};
-unsigned controls_device=0,controls_scroll=0,controls_slot=0;
+unsigned controls_device=0,controls_player=0,controls_scroll=0,controls_slot=0;
 int controls_capture_action=-1,controls_conflict_action=-1;
 unsigned controls_candidate=0;
 const char* const control_names[]={
@@ -37,53 +37,61 @@ const char* const control_help[]={
     "Hold and drag toward a teammate order or help option, then release. Mouse wheel cannot be held."};
 
 unsigned ControlsBase(){return controls_device?24:25;}
-unsigned ControlsProfileStart(){return ControlsBase()+(controls_device?2:5);}
+unsigned ControlsProfileStart(){return ControlsBase()+(controls_device?3:6);}
 unsigned ControlsCount(){return ControlsProfileStart()+7;}
 bool ControlsProfile(unsigned action){return action>=ControlsProfileStart();}
 const char* profile_names[]={"Vibration","Invert stick look","Auto-centre","Crouch mode","Thumbstick layout","Horizontal stick sensitivity","Vertical stick sensitivity"};
 const char* profile_help[]={"Controller vibration.","Reverse vertical stick aiming; raw mouse aiming is unchanged.","Use the original automatic camera centring.","Choose hold or toggle for crouching.","Standard or Legacy movement and aiming sticks.","Original horizontal stick sensitivity; mouse sensitivity is separate.","Original vertical stick sensitivity; mouse sensitivity is separate."};
 unsigned ControlsAction(unsigned row){
-    static constexpr unsigned keyboard[]={0,28,7,11,6,1,2,29,3,4,5,25,26,18,19,16,17,10,27,22,23,20,21,24,12,13,14,15,8,9};
-    static constexpr unsigned controller[]={0,7,11,6,1,2,3,4,5,24,25,18,19,16,17,10,22,23,20,21,12,13,14,15,8,9};
+    static constexpr unsigned keyboard[]={0,28,7,11,6,30,1,2,29,3,4,5,25,26,18,19,16,17,10,27,22,23,20,21,24,12,13,14,15,8,9};
+    static constexpr unsigned controller[]={0,7,11,6,26,1,2,3,4,5,24,25,18,19,16,17,10,22,23,20,21,12,13,14,15,8,9};
     return row<ControlsProfileStart()?(controls_device?controller[row]:keyboard[row]):row;
 }
 const char* ControlsGroup(unsigned row){
     if(row>=ControlsProfileStart())return "CONTROLLER SETTINGS";
-    if(row>=(controls_device?24u:28u))return "MENU CONTROLS";
-    if(row>=(controls_device?20u:23u))return "TEAMMATE ORDERS";
-    if(row>=(controls_device?11u:13u))return "MOVEMENT / AIMING";
+    if(row>=(controls_device?25u:29u))return "MENU CONTROLS";
+    if(row>=(controls_device?21u:24u))return "TEAMMATE ORDERS";
+    if(row>=(controls_device?12u:14u))return "MOVEMENT / AIMING";
     return "COMBAT / INTERACTION";
 }
 bool ControlsInteract(unsigned action){return !controls_device&&action==ControlsBase()+3;}
 bool ControlsPreviousFirearm(unsigned action){return !controls_device&&action==ControlsBase()+4;}
+bool ControlsHealthPack(unsigned action){return action==ControlsBase()+(controls_device?2:5);}
 unsigned ControlsSlots(unsigned action){if(ControlsProfile(action))return 1;return !controls_device&&(action==0||ControlsInteract(action))?1:2;}
 bool ControlsMouseSensitivity(unsigned action);
-const char* ControlsName(unsigned action){if(ControlsProfile(action))return profile_names[action-ControlsProfileStart()];if(ControlsInteract(action))return "Interact / dialogue skip";if(ControlsPreviousFirearm(action))return "Previous Firearm";if(!controls_device&&action==2)return "Next Firearm";if(!controls_device&&action==0)return "Reload";if(ControlsMouseSensitivity(action))return "Mouse sensitivity";return action<ControlsBase()?control_names[action]:action==ControlsBase()?"Pistol spin mode":"Pistol spin button";}
-const char* ControlsHelp(unsigned action){if(ControlsProfile(action))return profile_help[action-ControlsProfileStart()];if(ControlsInteract(action))return "Use nearby objects and skip dialogue. This key is displayed in interaction prompts.";if(ControlsPreviousFirearm(action))return "Equip or select the previous available firearm.";if(!controls_device&&action==2)return "Equip or select the next available firearm.";if(!controls_device&&action==0)return "Reload your weapon without activating nearby objects.";if(ControlsMouseSensitivity(action))return "Raw mouse sensitivity: 1 to 1600%. Lower is slower; independent of Windows pointer speed and stick sensitivity.";return action<ControlsBase()?control_help[action]:action==ControlsBase()?"Original gesture: rotate the stick or move the mouse in two full circles. Button press: use your assigned input.":"Used in Button press mode. Runs the original pistol spin and next-kill slow-motion reward.";}
+const char* ControlsName(unsigned action){if(ControlsHealthPack(action))return "Use health pack";if(ControlsProfile(action))return profile_names[action-ControlsProfileStart()];if(ControlsInteract(action))return "Interact / dialogue skip";if(ControlsPreviousFirearm(action))return "Previous Firearm";if(!controls_device&&action==2)return "Next Firearm";if(!controls_device&&action==0)return "Reload";if(ControlsMouseSensitivity(action))return "Mouse sensitivity";return action<ControlsBase()?control_names[action]:action==ControlsBase()?"Pistol spin mode":"Pistol spin button";}
+const char* ControlsHelp(unsigned action){if(ControlsHealthPack(action))return "Use a stored health pack, or revive a nearby downed partner. Collect more from a medic while supplies last.";if(ControlsProfile(action))return profile_help[action-ControlsProfileStart()];if(ControlsInteract(action))return "Use nearby objects and skip dialogue. This key is displayed in interaction prompts.";if(ControlsPreviousFirearm(action))return "Equip or select the previous available firearm.";if(!controls_device&&action==2)return "Equip or select the next available firearm.";if(!controls_device&&action==0)return "Reload your weapon without activating nearby objects.";if(ControlsMouseSensitivity(action))return "Raw mouse sensitivity: 1 to 1600%. Lower is slower; independent of Windows pointer speed and stick sensitivity.";return action<ControlsBase()?control_help[action]:action==ControlsBase()?"Original gesture: rotate the stick or move the mouse in two full circles. Button press: use your assigned input.":"Used in Button press mode. Runs the original pistol spin and next-kill slow-motion reward.";}
 bool ControlsMouseSensitivity(unsigned action){return !controls_device&&action==ControlsBase()+2;}
 unsigned& ControlsBinding(unsigned action,unsigned slot){
     // Keep existing profiles and prompt consumers compatible with the two retail-action slots.
     if(ControlsInteract(action))return controls_draft.keyboard[0][1];
     if(ControlsPreviousFirearm(action))return controls_draft.previous_firearm[slot];
+    if(ControlsHealthPack(action))return controls_draft.health_pack[controls_device][slot];
     if(action>=ControlsBase())return controls_draft.spin_binding[controls_device][slot];
     return controls_device?controls_draft.controller[action][slot]:controls_draft.keyboard[action][slot];
 }
 void ControlsCancelCapture(){
-    trial_controls::CancelCapture();controls_capture_action=controls_conflict_action=-1;controls_candidate=0;
+    trial_controls::CancelCapture(controls_player);controls_capture_action=controls_conflict_action=-1;controls_candidate=0;
 }
 void ControlsReadDraft(){
-    ControlsCancelCapture();controls_draft=trial_controls::Snapshot();controls_scroll=0;
-    std::lock_guard lock(context_lock);std::memcpy(profile_draft,profile_live,sizeof(profile_draft));
+    ControlsCancelCapture();controls_draft=trial_controls::Snapshot(controls_player);controls_scroll=0;
+    std::lock_guard lock(context_lock);std::memcpy(profile_draft,controls_player?controls_draft.native_profile:profile_live,sizeof(profile_draft));
 }
-bool ControlsDirty(){const auto live=trial_controls::Snapshot();std::lock_guard lock(context_lock);return std::memcmp(&controls_draft,&live,sizeof(live))!=0||std::memcmp(profile_draft,profile_live,sizeof(profile_draft))!=0;}
+void ControlsOpen(int player){
+    ControlsCancelCapture();
+    if(player>=0){controls_player=unsigned(player);controls_device=player?1u:0u;}
+    ControlsReadDraft();
+}
+bool ControlsDirty(){const auto live=trial_controls::Snapshot(controls_player);std::lock_guard lock(context_lock);return std::memcmp(&controls_draft,&live,sizeof(live))!=0||std::memcmp(profile_draft,controls_player?live.native_profile:profile_live,sizeof(profile_draft))!=0;}
 bool ControlsApply(){
-    {std::lock_guard lock(context_lock);if(!profile_valid||!SameMenu(context,opened)){message="Controls context changed. Reopen Controls.";return false;}}
-    if(!trial_controls::Apply(controls_draft,message))return false;
-    {std::lock_guard lock(context_lock);
+    {std::lock_guard lock(context_lock);if((!controls_player&&!profile_valid)||!SameMenu(context,opened)){message="Controls context changed. Reopen Controls.";return false;}}
+    if(controls_player)std::memcpy(controls_draft.native_profile,profile_draft,sizeof(profile_draft));
+    if(!trial_controls::Apply(controls_draft,message,controls_player))return false;
+    if(!controls_player){std::lock_guard lock(context_lock);
         if(!profile_valid||!SameMenu(context,opened)){message="Bindings saved; profile changed. Reopen Controls.";return false;}
         std::memcpy(profile_expected,profile_live,sizeof(profile_expected));
         std::memcpy(profile_pending,profile_draft,sizeof(profile_pending));profile_origin=context;profile_apply=true;}
-    controls_draft=trial_controls::Snapshot();message="Controls applied and saved.";TrialGraphicsInputChanged();return true;
+    controls_draft=trial_controls::Snapshot(controls_player);message="Controls applied and saved.";TrialGraphicsInputChanged();return true;
 }
 void ControlsFinish(){Close();}
 void ControlsBack(){
@@ -112,7 +120,7 @@ void ControlsCandidate(unsigned source){
     if(!controls_device&&(source>257||source==VK_ESCAPE||source==VK_LWIN||source==VK_RWIN||
        ((controls_capture_action==24||unsigned(controls_capture_action)==ControlsBase()+1)&&source>=256))){
         message=controls_capture_action==24&&source>=256?"Mouse orders needs a button or key that can be held.":"That key is reserved. Choose another input.";
-        trial_controls::BeginCapture(controls_device);return;
+        trial_controls::BeginCapture(controls_device,controls_player);return;
     }
     controls_candidate=source;controls_conflict_action=-1;
     if(source)for(unsigned action=0;action<ControlsCount();++action)if(action!=ControlsBase()&&!ControlsMouseSensitivity(action)&&!ControlsProfile(action)&&action!=unsigned(controls_capture_action))
@@ -129,7 +137,7 @@ void ControlsBegin(unsigned action,unsigned slot){
     }
     if(action==ControlsBase()){controls_draft.spin_mode^=1;message="Pistol spin mode changed. Apply to save.";return;}
     controls_capture_action=int(action);controls_slot=slot;controls_conflict_action=-1;controls_candidate=0;message.clear();
-    trial_controls::BeginCapture(controls_device);++navigation_generation;frontend_events=0;
+    trial_controls::BeginCapture(controls_device,controls_player);++navigation_generation;frontend_events=0;
 }
 void ControlsDescription(MenuCanvas& canvas,const char* text){
     text=trial_language::Ui(text);
@@ -143,7 +151,8 @@ void ControlsDescription(MenuCanvas& canvas,const char* text){
     canvas.Text(first.c_str(),61,337,12,muted,518);canvas.Text(second.c_str(),61,354,12,muted,518);
 }
 void ControlsUi(const ImGuiViewport* view,bool paused){
-    BeginMenu("Burner controls",view);MenuCanvas canvas(view);canvas.SettingsFrame(paused,"CONTROLS");
+    BeginMenu("Burner controls",view);MenuCanvas canvas(view);
+    canvas.SettingsFrame(paused,settings_pause_player<0?"CONTROLS":controls_player?"CONTROLS - PLAYER 2":"CONTROLS - PLAYER 1");
     static unsigned focus=0,confirmation=0;static TrialFrontendReleaseGate gate;
     const bool ready=gate.Accept(navigation_generation.load(),UiHeld());
     const unsigned events=frontend_events.exchange(0);
@@ -184,18 +193,18 @@ void ControlsUi(const ImGuiViewport* view,bool paused){
             if(ImGui::IsItemHovered())canvas.Selection(x,272,160,23);
             canvas.Center(i?"Cancel":"Clear binding",x,275,160,16);
             if(clicked||ImGui::IsItemActivated()){
-                if(i)ControlsBack();else{trial_controls::CancelCapture();ControlsCandidate(0);}
+                if(i)ControlsBack();else{trial_controls::CancelCapture(controls_player);ControlsCandidate(0);}
             }
             ImGui::PopID();
         }
         if(ImGui::IsKeyPressed(ImGuiKey_Escape,false))ControlsBack();
         if(controls_capture_action>=0){
-            if(const unsigned source=trial_controls::TakeCapture())ControlsCandidate(source);
-            else if(!trial_controls::CaptureWaiting()){ControlsCancelCapture();++navigation_generation;}
+            if(const unsigned source=trial_controls::TakeCapture(controls_player))ControlsCandidate(source);
+            else if(!trial_controls::CaptureWaiting(controls_player)){ControlsCancelCapture();++navigation_generation;}
         }
         ImGui::BeginDisabled(!ready);
     }else{
-        const unsigned devices[]={0,1};const char* names[]={"Keyboard and mouse","Controller"};
+        const unsigned devices[]={0,1,2};const char* names[]={"Keyboard and mouse","Controller - Player 1","Controller - Player 2"};
         const bool left=ready&&((events&16)||ImGui::IsKeyPressed(ImGuiKey_LeftArrow));
         const bool right=ready&&((events&32)||ImGui::IsKeyPressed(ImGuiKey_RightArrow));
         const unsigned max_scroll=ControlsCount()>8?ControlsCount()-8:0;
@@ -227,12 +236,26 @@ void ControlsUi(const ImGuiViewport* view,bool paused){
             else if(focus>=1&&focus<=16&&(left||right))focus=1+((focus-1)/2)*2+(right?1:0);
             else if(focus>=19&&(left||right))focus=19+(focus-19+(left?3:1))%4;
         }
-        const unsigned device_before_row=controls_device;
-        SettingChoice(canvas,"Input device",controls_device,devices,names,0,focus,focus==0?(left?-1:right||accept?1:0):0);
-        if(controls_device!=device_before_row){controls_scroll=0;focus=0;message.clear();}
+        const unsigned device_before_row=controls_player?2:controls_device;
+        unsigned selected_device=device_before_row;
+        ImGui::BeginDisabled(settings_pause_player>=0);
+        SettingChoice(canvas,"Input device",selected_device,devices,names,0,focus,
+            settings_pause_player<0&&focus==0?(left?-1:right||accept?1:0):0);
+        ImGui::EndDisabled();
+        if(selected_device!=device_before_row){
+            const unsigned player=selected_device==2?1:0;
+            if(player!=controls_player&&ControlsDirty())message="Apply or discard changes before changing player.";
+            else{
+                controls_device=selected_device?1:0;
+                if(player!=controls_player){controls_player=player;ControlsReadDraft();}
+                controls_scroll=0;focus=0;message.clear();
+            }
+        }
 
-        canvas.Text(ControlsGroup(controls_scroll),61,118,11,muted);canvas.Center("PRIMARY",337,118,115,11,muted);canvas.Center("SECONDARY",465,118,115,11,muted);
         const unsigned start=controls_scroll,count=std::min(8u,ControlsCount()-start);
+        const char* group=ControlsGroup(start);
+        if(std::strcmp(group,ControlsGroup(start+count-1))!=0)group="Action";
+        canvas.Text(group,61,118,11,muted);canvas.Center("PRIMARY",337,118,115,11,muted);canvas.Center("SECONDARY",465,118,115,11,muted);
         if(ready&&(events&64)&&focus>=1&&focus<=count*2){
             const auto action=ControlsAction(start+(focus-1)/2);
             if(action!=ControlsBase()&&!ControlsMouseSensitivity(action)&&!ControlsProfile(action)){
@@ -293,6 +316,8 @@ void ControlsUi(const ImGuiViewport* view,bool paused){
                 if(controls_device){std::memcpy(controls_draft.controller,defaults.controller,sizeof(defaults.controller));std::memcpy(controls_draft.deadzone,defaults.deadzone,sizeof(defaults.deadzone));}
                 else{std::memcpy(controls_draft.keyboard,defaults.keyboard,sizeof(defaults.keyboard));std::memcpy(controls_draft.previous_firearm,defaults.previous_firearm,sizeof(defaults.previous_firearm));controls_draft.sensitivity=defaults.sensitivity;}
                 controls_draft.spin_mode=0;std::fill(std::begin(controls_draft.spin_binding[controls_device]),std::end(controls_draft.spin_binding[controls_device]),0u);
+                std::memcpy(controls_draft.health_pack[controls_device],defaults.health_pack[controls_device],sizeof(defaults.health_pack[controls_device]));
+                if(controls_player)std::memcpy(profile_draft,defaults.native_profile,sizeof(profile_draft));
                 message="Defaults selected. Apply to save.";
             }else ControlsBack();
         };

@@ -14,6 +14,8 @@
 #include "core/input.h"
 #include "xbe_controls.h"
 #include "xbe_controls_capture.h"
+#include "xbe_coop.h"
+#include "xbe_coop_pause.h"
 #include "scripts/xbe_pc_prompts.h"
 #include "scripts/xbe_intro_skip.h"
 #include "scripts/xbe_menu_key_taps.h"
@@ -21,16 +23,26 @@
 namespace {
 // GENERATED_STATE
 bool test_focused=true,test_open=false;
+unsigned test_presentation=0;
+unsigned TrialCoopPresentation(){return test_presentation;}
 bool physical_keys[256]={};
 unsigned key_queries[256]={};
 unsigned capture_posts=0;
 bool conversation_down=false,conversation_enabled=false;
 bool reload_down=false,reload_enabled=false;
+bool health_down[2]{},health_allowed[2]{};
+void TrialHealthPackInput(unsigned slot,bool down,bool allowed){assert(slot<2);health_down[slot]=down;health_allowed[slot]=allowed;}
 void TrialReloadPublish(bool down,bool enabled){reload_down=down;reload_enabled=enabled;}
 void TrialConversationPublish(bool down,bool enabled){conversation_down=down;conversation_enabled=enabled;}
 bool focused(){return test_focused;}
 bool TrialGraphicsOpen(){return test_open;}
 void TrialFrontendPad(uint32_t,uint8_t,uint8_t,int16_t,int16_t){}
+bool menu_pad_connected=false;unsigned menu_pad_buttons=0,menu_pad_calls=0;
+bool coop_menu_open=false;
+bool TrialCoopMenuOpen(){return coop_menu_open;}
+void TrialCoopMenuPad(bool connected,uint32_t buttons,uint8_t,uint8_t,int16_t,int16_t){
+    menu_pad_connected=connected;menu_pad_buttons=buttons;++menu_pad_calls;
+}
 SHORT TestAsyncKeyState(int key){if(key>0&&key<256){++key_queries[key];return physical_keys[key]?SHORT(0x8000):0;}return 0;}
 // GENERATED_KEY_DOWN
 int controller_path(wchar_t*){return 0;}
@@ -39,7 +51,10 @@ BOOL TestPostMessage(HWND,UINT,WPARAM,LPARAM){++capture_posts;return TRUE;}
 #define GetAsyncKeyState TestAsyncKeyState
 #undef PostMessage
 #define PostMessage TestPostMessage
+#define xbox_KeyboardMode TrialGameplayKeyboardMode
 #include "third_party/xboxrecomp/src/input/host_keyboard_config.h"
+#undef xbox_KeyboardMode
+// GENERATED_KEYBOARD_MODE
 #include "xbe_controls_backend.inc"
 
 // GENERATED_CONTROLS
@@ -90,6 +105,14 @@ static input::Pad Controller(unsigned control){
 int main(){
     keyboard_init();keyboard_defaults(&keyboard_config);
     controller_init();controller_defaults(&controller_config);controller_publish();
+    // Character selection receives the first physical device before the keyboard
+    // adapter marks logical port zero connected. Its input cannot hide the page.
+    test_open=true;coop_menu_open=true;xbox_KeyboardNoteInput();
+    Poll(0);assert(!menu_pad_connected&&xbox_KeyboardMode());
+    Poll(0,Controller(0));assert(menu_pad_connected&&menu_pad_buttons==1&&xbox_KeyboardMode());
+    const auto menu_calls=menu_pad_calls;Poll(1,Controller(2));assert(menu_pad_calls==menu_calls);
+    assert(Neutral(Poll(0,Controller(8)))&&xbox_KeyboardMode());
+    coop_menu_open=false;
     // Unbound, unflagged keys require no physical polling in the release guard.
     // Held transition keys remain blocked until a real release, even without focus.
     ReleaseAll();test_open=true;
@@ -164,14 +187,63 @@ int main(){
     physical_keys[VK_LBUTTON]=false;Poll(0);physical_keys[VK_MBUTTON]=true;Poll(0);
     assert(trial_controls::TakeCapture()==VK_MBUTTON&&!trial_controls::CaptureWaiting());
     ReleaseAll();test_open=true;trial_controls::BeginCapture(1);
-    Poll(0,Controller(2));assert(!trial_controls::TakeCapture());Poll(0);
+    input::Pad idle;idle.connected=true;
+    Poll(0,Controller(2));assert(!trial_controls::TakeCapture());Poll(0,idle);
     Poll(0,Controller(3));assert(trial_controls::TakeCapture()==8);
     trial_controls::BeginCapture(0);Poll(0);
     ControlsCaptureMessage(WM_MOUSEWHEEL,MAKEWPARAM(0,0));assert(!trial_controls::TakeCapture());
     ControlsCaptureMessage(WM_MOUSEWHEEL,MAKEWPARAM(0,-WHEEL_DELTA));assert(trial_controls::TakeCapture()==257);
     trial_controls::BeginCapture(0);Poll(0);ControlsCaptureMessage(WM_KILLFOCUS,0);
     assert(!trial_controls::CaptureWaiting()&&!trial_controls::TakeCapture());
+    // Each capture listens only to its player's physical sources. One player
+    // can bind a key while the other binds a controller without sharing events.
+    ReleaseAll();test_open=true;trial_coop::SetActive(true);
+    trial_controls::BeginCapture(0,0);trial_controls::BeginCapture(1,1);
+    physical_keys['W']=true;Poll(1,idle);
+    Poll(0,Controller(3));assert(!trial_controls::TakeCapture(1));
+    Poll(1,Controller(2));assert(trial_controls::TakeCapture(1)==1);
+    assert(trial_controls::CaptureWaiting(0));
+    physical_keys['W']=false;Poll(0);physical_keys['G']=true;Poll(0);
+    assert(trial_controls::TakeCapture(0)=='G');
+    trial_controls::BeginCapture(1,1);Poll(1,idle);
+    ControlsCaptureMessage(WM_MOUSEWHEEL,MAKEWPARAM(0,WHEEL_DELTA));
+    Poll(0,Controller(2));assert(!trial_controls::TakeCapture(1));
+    Poll(1);assert(!trial_controls::CaptureWaiting(1)); // Unplug cancels capture.
+    trial_controls::BeginCapture(0,1);assert(!trial_controls::CaptureWaiting(1));
+    trial_controls::BeginCapture(1,1);Poll(1,idle);
+    trial_controls::BeginCapture(0,0);ControlsCaptureMessage(WM_KILLFOCUS,0);
+    assert(!trial_controls::CaptureWaiting(0)&&!trial_controls::CaptureWaiting(1));
+    trial_controls::BeginCapture(1,2);assert(!trial_controls::CaptureWaiting(2)&&!trial_controls::TakeCapture(2));
+    trial_coop::Reset();ReleaseAll();test_open=true;
+    // Pre-game P2 configuration uses the one controller on logical zero.
+    // Logical one's normal disconnected poll cannot cancel that capture, and
+    // the opening press must still be released before a new binding is read.
+    trial_controls::BeginCapture(1,1);
+    Poll(0,Controller(2));Poll(1);
+    assert(trial_controls::CaptureWaiting(1)&&!trial_controls::TakeCapture(1));
+    Poll(0,idle);Poll(1);Poll(0,Controller(3));
+    assert(trial_controls::TakeCapture(1)==8&&!trial_controls::CaptureWaiting(1));
+    trial_controls::BeginCapture(1,1);Poll(0,idle);Poll(1,Controller(2));
+    assert(trial_controls::CaptureWaiting(1)&&!trial_controls::TakeCapture(1));
+    Poll(0);assert(!trial_controls::CaptureWaiting(1)); // Physical controller disconnected.
+    trial_controls::CancelCapture(2);
     ReleaseAll();
+    // Shared in-game cinematics retain P1's original camera controls, block P2
+    // gameplay and health use, and preserve the configured P2 Pause binding.
+    trial_coop::SetActive(true);test_presentation=2;gameplay=true;menu_mode=false;
+    trial_controls::LoadSecond();const auto second_before=trial_controls::second_controller;
+    trial_controls::second_controller.binding[8][0]=1; // A -> Pause
+    trial_controls::second_controller.binding[8][1]=0;
+    input::Pad cinematic_input=Controller(3);cinematic_input.analog[0]=255;cinematic_input.lx=22000;
+    auto shared=Poll(1,cinematic_input);assert(shared.buttons==16);
+    shared.buttons=0;assert(Neutral(shared)&&!health_down[1]&&!health_allowed[1]);
+    assert(Neutral(Poll(1,cinematic_input))); // Held Pause is also release-gated.
+    physical_keys['W']=true;assert(Poll(0).ly==32767);physical_keys['W']=false;
+    test_presentation=1;
+    assert(Neutral(Poll(1,cinematic_input))); // Held fire/movement cannot leak into the split view.
+    Poll(1,idle);auto resumed=Poll(1,cinematic_input);
+    assert((resumed.buttons&16)&&resumed.analog[7]==255&&resumed.lx==22000);
+    trial_controls::second_controller=second_before;test_presentation=0;trial_coop::Reset();ReleaseAll();
     Open();physical_keys['W']=physical_keys[VK_LBUTTON]=true;
     for(int port=0;port<4;++port){
         auto p=Controller(0);p.analog[0]=255;p.lx=20000;p.ry=-25000;
@@ -403,5 +475,62 @@ int main(){
         TrialMenuKeysBegin();assert(Neutral(Poll(0)));TrialMenuKeysEnd();
     }
     ReleaseAll();
+    // Simultaneous co-op devices: the second logical port keeps its original
+    // analog controls and cannot steal keyboard presentation or acquire player
+    // one's movement, interaction, reload, firearm or orders input.
+    intro_gate={};gameplay=true;menu_mode=false;captured=true;
+    keyboard_defaults(&keyboard_config);
+    trial_coop::SetActive(true);
+    trial_controls::LoadSecond();controller_defaults(&trial_controls::second_controller);
+    for(int key:{int('W'),int('F'),int('R'),int('C'),VK_LBUTTON})physical_keys[key]=true;
+    order_buttons=4;xbox_KeyboardNoteInput();TrialInputPublish();order_buttons=4;
+    auto first=Poll(0);
+    assert(first.ly==32767&&first.analog[0]==255&&first.analog[2]==255);
+    assert(first.buttons&4);assert(conversation_down&&reload_down);
+    const int first_direction=TrialFirearmDirection();
+    input::Pad second;second.connected=true;second.buttons=2;
+    second.analog[0]=173;second.analog[2]=191;second.analog[7]=123;
+    second.lx=-21000;second.ly=-23000;second.rx=26000;second.ry=-29000;
+    for(unsigned pass=0;pass<3;++pass){
+        const auto actual=Poll(1,second);
+        assert(actual.connected&&actual.buttons==second.buttons);
+        assert(!std::memcmp(actual.analog,second.analog,sizeof second.analog));
+        assert(actual.lx==second.lx&&actual.ly==second.ly&&actual.rx==second.rx&&actual.ry==second.ry);
+        assert(xbox_KeyboardMode()&&TrialFirearmDirection()==first_direction);
+    }
+    assert(Neutral(Poll(1))); // A disconnected second controller gains no keys.
+    ReleaseAll();captured=true;physical_keys['H']=true;Poll(0);
+    assert(health_down[0]&&health_allowed[0]&&!health_down[1]);
+    trial_controls::health_loaded[1]=true;trial_controls::health_binding[1][1][0]=12;
+    second={};second.connected=true;second.buttons=128;Poll(1,second);
+    assert(health_down[1]&&health_allowed[1]);
+    test_open=true;Poll(0);Poll(1,second);
+    assert(!health_down[0]&&!health_down[1]&&!health_allowed[0]&&!health_allowed[1]);
+    test_open=false;test_focused=false;Poll(0);Poll(1,second);
+    assert(!health_allowed[0]&&!health_allowed[1]);test_focused=true;
+    trial_coop::Reset();order_buttons=0;ReleaseAll();
+    for(unsigned player=0;player<2;++player){
+        ReleaseAll();trial_coop::SetActive(true);trial_coop::ResetPauseOwner();
+        trial_coop::pause_state.Sample(false,false);trial_coop::pause_state.Sample(player==0,player==1);
+        trial_coop::pause_state.Consume(true);trial_coop::pause_state.Enter();
+        xbox_KeyboardNoteInput();assert(TrialGameplayKeyboardMode()&&xbox_KeyboardMode()==int(player==0));
+        menu_mode=true;gameplay=true;captured=false;Poll(0);Poll(1); // ownership handoff
+        const unsigned calls=menu_pad_calls;
+        input::Pad controller;controller.connected=true;controller.analog[0]=255;controller.ly=25000;
+        physical_keys[VK_RETURN]=true;physical_keys['W']=true;
+        const auto key=Poll(0),pad=Poll(1,controller);
+        if(player==1){
+            assert(Neutral(key)&&!Neutral(pad));assert(!keyboard_key_down(VK_RETURN));
+            assert(menu_pad_calls==calls+1&&menu_pad_connected);
+            menu_right_pending=true;assert(!TrialMenuRightBack());
+        }else{
+            assert(key.analog[0]==255&&Neutral(pad));assert(keyboard_key_down(VK_RETURN));
+            assert(menu_pad_calls==calls+1&&!menu_pad_connected);
+        }
+        assert(trial_coop::PauseOwner()==int(player));
+        test_open=true;assert(Neutral(Poll(0))&&Neutral(Poll(1,controller)));
+        trial_coop::ResetPauseOwner();ReleaseAll();assert(!trial_coop::PauseBlocksKeyboard()&&xbox_KeyboardMode());
+        trial_coop::Reset();
+    }
     std::puts("graphics input: actual pad/keyboard ownership, focus, all ports, held keys/clicks/sticks and release handoff passed");
 }

@@ -12,9 +12,11 @@ def prepare(sdk,area):
     source=(sdk/'runtime/gpu/render_thread.cpp').read_text()
     state=(area/'src/gpu/state.h').read_text()
     field='    unsigned uc_prompt_variant = 0; // original queued text identity\n'
-    assert state.count(field)==1 and state.index(field)>state.index('    std::array<float, 17> material')
+    player_field='    unsigned uc_prompt_player = 0; // queued HUD owner, independent of global input mode\n'
+    for entry in (field,player_field):
+        assert state.count(entry)==1 and state.index(entry)>state.index('    std::array<float, 17> material')
     layout=between(state,'struct State {','\n};')+'\n};\n'
-    old_layout=layout.replace(field,'').replace('struct State {\n','struct State {\n'+field,1)
+    old_layout=layout.replace(field,'').replace(player_field,'').replace('struct State {\n','struct State {\n'+field+player_field,1)
     # Both layouts run exactly the same source-selected transport methods. The
     # only negative-witness change is the old, excluded first-field placement.
     types=between(source,'enum class Op :','// the plain data in State')

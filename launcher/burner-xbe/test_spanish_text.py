@@ -3,10 +3,13 @@ from pathlib import Path
 import copy
 import hashlib
 import json
+import stat
 import struct
 import sys
 import tempfile
 import zlib
+from types import SimpleNamespace
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import spanish_text as spanish
@@ -99,6 +102,20 @@ with tempfile.TemporaryDirectory(prefix='spanish-text-test-') as directory:
         f"{r['file']} {r['size']}\n" for r in records)
     fails(lambda: spanish.build(source, path, output))
     assert (output / records[0]['file']).read_bytes() == targets[records[0]['file']]
+
+    original_stat = Path.lstat
+    def mapped_ancestor(value, *args, **kwargs):
+        if value == root.parent:
+            return SimpleNamespace(st_mode=stat.S_IFDIR,
+                                   st_file_attributes=stat.FILE_ATTRIBUTE_REPARSE_POINT)
+        return original_stat(value, *args, **kwargs)
+    with patch.object(Path, 'lstat', mapped_ancestor):
+        # Developer tools keep their strict default; runtime scopes trust explicitly.
+        fails(lambda: spanish.load_bundle(path))
+        mapped_output = root / 'mapped-translated'
+        spanish.build(source, path, mapped_output, source_root=root,
+                      bundle_root=root, output_root=root)
+        assert all((mapped_output / name).read_bytes() == target for name, target in targets.items())
 
     mutations = [
         lambda b: b.update(format=True),

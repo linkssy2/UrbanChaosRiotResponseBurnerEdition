@@ -99,6 +99,9 @@ int main(){
     reset();G<uint8_t>(player+0x2ac)=1;assert(cycle(-1)==ids[0]);++cases;
     // Controller/nonlocal player, other categories and unrelated callers retain forward order.
     reset();W32(player+0x368,1);assert(cycle(-1,false)==ids[1]);++cases;
+    // The second local player's real gameplay consumer still cycles forward
+    // while player one's Previous Firearm key remains published.
+    reset();W32(player+0x368,1);assert(cycle(-1)==ids[1]);++cases;
     for(unsigned category:{1u,2u}){reset(0,4,category);assert(cycle(-1,false,0xC4E03,category)==ids[1]);++cases;}
     reset();assert(cycle(-1,false,0x12345678)==ids[1]);++cases;
     // Whole automatic selection is bit-identical with Previous latched but no explicit wrapper.

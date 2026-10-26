@@ -8,22 +8,28 @@
 #include <string>
 #include "app/app.h"
 #include "core/input.h"
+#include "imgui.h"
 #include "xbe_trial_graphics_ui.h"
 #include "xbe_intro_skip.h"
 #include "xbe_audio_loop.h"
 #include "xbe_conversation_skip.h"
 #include "xbe_controls.h"
 #include "xbe_controls_capture.h"
+#include "xbe_coop.h"
+#include "xbe_coop_pause.h"
+#include "xbe_coop_cinematics.h"
+#include "xbe_health_packs.h"
 #include "xbe_menu_key_taps.h"
 
 namespace {
 std::recursive_mutex input_lock;
 HWND game_window;
 bool menu_mode=true, gameplay=false, captured=false, click_pending=false;
+int input_pause_owner=-1;
 float click_x,click_y;
 long dx=0,dy=0,order_x=0,order_y=0;
 long spin_dx=0,spin_dy=0;
-bool spin_button_held=true;
+bool spin_button_held[2]={true,true};
 int firearm_direction=0;
 float spin_x=0,spin_y=0;
 uint64_t spin_tick=0;
@@ -39,17 +45,21 @@ trial_intro::TitleGate title_gate;
 trial_input::MenuKeyTaps menu_key_taps;
 thread_local bool menu_key_update=false;
 constexpr UINT kCapture=WM_APP+71;
+constexpr UINT kPauseRelease=WM_APP+72;
 struct XBOX_GAMEPAD { WORD wButtons=0; BYTE bAnalogButtons[8]={}; SHORT sThumbLX=0,sThumbLY=0,sThumbRX=0,sThumbRY=0; };
 const WORD controller_digital[]={16,32,64,128,1,2,4,8};
 bool focused(){return game_window&&GetForegroundWindow()==game_window;}
-BOOL keyboard_key_down(int key){return focused()&&!release_keys[key]&&!(key==VK_RBUTTON&&menu_right_consumed)&&((GetAsyncKeyState(key)&0x8000)||(menu_key_update&&menu_key_taps.Retained(key)));}
+BOOL keyboard_key_down(int key){return !trial_coop::PauseBlocksKeyboard()&&focused()&&!release_keys[key]&&!(key==VK_RBUTTON&&menu_right_consumed)&&((GetAsyncKeyState(key)&0x8000)||(menu_key_update&&menu_key_taps.Retained(key)));}
 int controller_path(wchar_t* path){auto p=app::ExeDir()/L"xboxrecomp.ini";if(p.native().size()>=MAX_PATH)return 0;wcscpy_s(path,MAX_PATH,p.c_str());return 1;}
 }
+#define xbox_KeyboardMode TrialGameplayKeyboardMode
 #include "third_party/xboxrecomp/src/input/host_keyboard_config.h"
+#undef xbox_KeyboardMode
+int xbox_KeyboardMode(){const int owner=trial_coop::PauseOwner();return owner<0?TrialGameplayKeyboardMode():owner==0;}
 #include "xbe_controls_backend.inc"
 
 namespace {
-trial_controls::CaptureGate controls_capture;
+trial_controls::CaptureGate controls_capture[2];
 unsigned RawKeyboardSource(){
     for(unsigned key=1;key<256;++key){
         if(key==VK_SHIFT||key==VK_CONTROL||key==VK_MENU)continue;
@@ -67,19 +77,26 @@ bool ActionSourceDown(unsigned slot,bool gated=false){
 }
 void ControlsCaptureMessage(UINT msg,WPARAM wp){
     const int wheel=GET_WHEEL_DELTA_WPARAM(wp);
-    if(msg==WM_MOUSEWHEEL&&focused()&&wheel)controls_capture.Wheel(wheel>0?256:257);
-    if(msg==WM_KILLFOCUS||(msg==WM_ACTIVATEAPP&&!wp))controls_capture.Cancel();
+    if(msg==WM_MOUSEWHEEL&&focused()&&wheel)controls_capture[0].Wheel(wheel>0?256:257);
+    if(msg==WM_KILLFOCUS||(msg==WM_ACTIVATEAPP&&!wp))
+        for(auto& capture:controls_capture)capture.Cancel();
 }
 }
 namespace trial_controls {
-void BeginCapture(unsigned device){std::lock_guard guard(input_lock);controls_capture.Begin(device);}
-void CancelCapture(){std::lock_guard guard(input_lock);controls_capture.Cancel();}
-unsigned TakeCapture(){std::lock_guard guard(input_lock);return controls_capture.Take();}
-bool CaptureWaiting(){std::lock_guard guard(input_lock);return controls_capture.active;}
+void BeginCapture(unsigned device,unsigned player){
+    std::lock_guard guard(input_lock);
+    if(player>=2)return;
+    controls_capture[player].Cancel();
+    if(device<=1&&(!player||device==1))controls_capture[player].Begin(device);
+}
+void CancelCapture(unsigned player){std::lock_guard guard(input_lock);if(player<2)controls_capture[player].Cancel();}
+unsigned TakeCapture(unsigned player){std::lock_guard guard(input_lock);return player<2?controls_capture[player].Take():0;}
+bool CaptureWaiting(unsigned player){std::lock_guard guard(input_lock);return player<2&&controls_capture[player].active;}
 }
 
 void TrialMenuRightButton(bool down){
     std::lock_guard guard(input_lock);
+    if(trial_coop::PauseBlocksKeyboard()){menu_right_down=menu_right_pending=false;return;}
     if(!down){menu_right_down=false;return;}
     if(menu_right_down)return;
     menu_right_down=true;
@@ -89,7 +106,7 @@ void TrialMenuRightButton(bool down){
 }
 bool TrialMenuRightBack(){
     std::lock_guard guard(input_lock);
-    const bool back=menu_right_pending&&focused()&&menu_mode&&!TrialGraphicsOpen()&&!intro_gate.owner;
+    const bool back=!trial_coop::PauseBlocksKeyboard()&&menu_right_pending&&focused()&&menu_mode&&!TrialGraphicsOpen()&&!intro_gate.owner;
     menu_right_pending=false;
     if(!(GetAsyncKeyState(VK_RBUTTON)&0x8000)){menu_right_down=false;menu_right_consumed=false;}
     return back;
@@ -113,6 +130,7 @@ float TrialIntroProgress(){
     std::lock_guard guard(input_lock);
     return focused()&&!TrialGraphicsOpen()?intro_gate.Progress():0;
 }
+bool TrialIntroPlaying(){std::lock_guard guard(input_lock);return intro_gate.owner!=0;}
 void TrialIntroClose(uint32_t owner){
     std::lock_guard guard(input_lock);
     intro_gate.Close(owner);click_pending=false;
@@ -144,11 +162,33 @@ void TrialGraphicsInputChanged(){
     for(unsigned key=1;key<256;++key)release_keys[key]=(GetAsyncKeyState(key)&0x8000)!=0;
     for(unsigned port=0;port<4;++port)release_pad[port]=last_pad[port];
     click_pending=false;dx=dy=0;
-    spin_dx=spin_dy=0;spin_tick=0;spin_button_held=true;
+    spin_dx=spin_dy=0;spin_tick=0;spin_button_held[0]=spin_button_held[1]=true;
+    for(unsigned slot=0;slot<2;++slot)TrialHealthPackInput(slot,false,false);
     firearm_direction=0;
     order_phase=order_buttons=0;order_held=false;keyboard_wheel_clear();
     xbox_KeyboardConsumeMouseClick(1);
     PostMessage(game_window,kCapture,0,0);
+}
+void TrialCoopPauseImGuiInput(){
+    // Both the window handler and renderer call this before consuming ImGui
+    // input. UiLock also protects the owner snapshot shared by those threads.
+    std::lock_guard guard(app::UiLock());
+    static int previous=-1;
+    static bool mouse_was_disabled=false;
+    const int owner=trial_coop::PauseOwner();
+    if(ImGui::GetCurrentContext()){
+        auto& io=ImGui::GetIO();
+        if(owner==1){
+            if(previous!=1)mouse_was_disabled=(io.ConfigFlags&ImGuiConfigFlags_NoMouse)!=0;
+            io.ConfigFlags|=ImGuiConfigFlags_NoMouse;
+        }else if(previous==1&&!mouse_was_disabled)io.ConfigFlags&=~ImGuiConfigFlags_NoMouse;
+    }
+    if(owner==previous)return;
+    previous=owner;
+    if(ImGui::GetCurrentContext()){
+        auto& io=ImGui::GetIO();io.ClearEventsQueue();io.ClearInputKeys();io.ClearInputMouse();
+    }
+    PostMessage(game_window,kPauseRelease,0,0);
 }
 void TrialInputWindow(void* window){
     std::lock_guard guard(input_lock);game_window=(HWND)window;
@@ -166,16 +206,19 @@ void TrialMouseTake(long* x,long* y,unsigned* sensitivity){
     std::lock_guard guard(input_lock);*x=dx;*y=dy;dx=dy=0;
     *sensitivity=mouse_sensitivity;
 }
-int TrialSpinSample(float* x,float* y){
+int TrialSpinSample(float* x,float* y,unsigned player){
     std::lock_guard guard(input_lock);
-    const bool keyboard=xbox_KeyboardMode()!=0;
-    const bool down=trial_controls::SpinButtonDown(keyboard,last_pad[0]);
-    const bool pressed=down&&!spin_button_held;spin_button_held=down;
-    if(!focused()||!gameplay||menu_mode||TrialGraphicsOpen()){
-        spin_dx=spin_dy=0;spin_tick=0;*x=*y=0;return 1;
+    if(player>1||(player&&!trial_coop::Active()))return 0;
+    const bool keyboard=!player&&(trial_coop::Active()||xbox_KeyboardMode()!=0);
+    const bool down=trial_controls::SpinButtonDown(keyboard,last_pad[player],player);
+    const bool pressed=down&&!spin_button_held[player];spin_button_held[player]=down;
+    if(!focused()||!gameplay||menu_mode||TrialGraphicsOpen()||(player&&TrialCoopPresentation()==2)){
+        if(!player){spin_dx=spin_dy=0;spin_tick=0;}
+        *x=*y=0;return 1;
     }
-    if(trial_controls::SpinMode()){
-        spin_dx=spin_dy=0;spin_tick=0;*x=pressed?1.f:0.f;*y=0;return pressed?2:1;
+    if(trial_controls::SpinMode(player)){
+        if(!player){spin_dx=spin_dy=0;spin_tick=0;}
+        *x=pressed?1.f:0.f;*y=0;return pressed?2:1;
     }
     if(!keyboard)return 0;
     const uint64_t now=GetTickCount64();
@@ -206,7 +249,7 @@ void TrialMenuKeysEnd(){
 uint64_t ucrr_host_menu_milliseconds(){return GetTickCount64();}
 int ucrr_host_menu_pointer(float* x,float* y,int* click){
     std::lock_guard guard(input_lock);*click=0;
-    if(!menu_mode||!focused()||TrialGraphicsOpen()){click_pending=false;return 0;}
+    if(trial_coop::PauseBlocksKeyboard()||!menu_mode||!focused()||TrialGraphicsOpen()){click_pending=false;return 0;}
     if(!(GetAsyncKeyState(VK_LBUTTON)&0x8000))release_keys[VK_LBUTTON]=false;
     if(release_keys[VK_LBUTTON])click_pending=false;
     RECT r;POINT p;
@@ -217,6 +260,7 @@ int ucrr_host_menu_pointer(float* x,float* y,int* click){
 }
 static unsigned OrderDirection(){return std::max(std::abs(order_x),std::abs(order_y))<24?0:std::abs(order_x)>std::abs(order_y)?(order_x<0?4:8):(order_y<0?1:2);}
 void xbox_KeyboardSourceEvent(unsigned source,int down){
+    if(trial_coop::PauseBlocksKeyboard())return;
     if(down)xbox_KeyboardNoteInput();
     int claimed=0;unsigned mask=keyboard_orders_source_mask(source,&claimed);
     if(!mask||claimed||trial_controls::PreviousFirearmClaims(source)||!captured)return;
@@ -237,6 +281,7 @@ void TrialInputPublish(){
 }
 bool TrialInputMessage(void*,uint32_t msg,uintptr_t wp,intptr_t lp,intptr_t* result){
     std::lock_guard guard(input_lock);
+    if(trial_coop::PauseBlocksMessage(msg)){click_pending=false;dx=dy=0;*result=0;return true;}
     ControlsCaptureMessage(msg,wp);
     if(TrialAudioTraceHotkey(msg,uint32_t(wp),uint64_t(lp),focused(),gameplay&&!menu_mode&&!TrialGraphicsOpen())){
         auto path=(app::ExeDir()/("audio-trace-"+std::to_string(GetTickCount64())+".csv")).string();
@@ -248,11 +293,13 @@ bool TrialInputMessage(void*,uint32_t msg,uintptr_t wp,intptr_t lp,intptr_t* res
         menu_key_taps.Clear();
         intro_gate.FocusLost();
         title_gate.Context(false);
-        spin_dx=spin_dy=0;spin_tick=0;spin_button_held=true;
+        spin_dx=spin_dy=0;spin_tick=0;spin_button_held[0]=spin_button_held[1]=true;
+        for(unsigned slot=0;slot<2;++slot)TrialHealthPackInput(slot,false,false);
         menu_right_pending=menu_right_down=false;menu_right_consumed=(GetAsyncKeyState(VK_RBUTTON)&0x8000)!=0;
         captured=false;dx=dy=0;order_phase=order_buttons=0;order_held=false;click_pending=false;keyboard_wheel_clear();ClipCursor(nullptr);
     }
     if(msg==kCapture||msg==WM_SETFOCUS||msg==WM_SIZE)ReconcileCapture();
+    if(msg==kPauseRelease){if(GetCapture()==game_window)ReleaseCapture();ReconcileCapture();*result=0;return true;}
     if(msg==WM_SETCURSOR&&LOWORD(lp)==HTCLIENT){ReconcileCapture();*result=TRUE;return true;}
     // Record short taps as well as polled holds. Repeated WM_KEYDOWN cannot
     // produce another edge, and consumed intro clicks never reach a menu row.
@@ -304,14 +351,27 @@ bool TrialInputMessage(void*,uint32_t msg,uintptr_t wp,intptr_t lp,intptr_t* res
 void TrialInputPad(int port,input::Pad& pad){
     std::lock_guard guard(input_lock);
     if(port<0||port>=4)return;
+    const bool controller_connected=pad.connected;
     if(port==0)firearm_direction=0;
     last_pad[port]=pad;
+    const int pause_owner=trial_coop::PauseOwner();
+    if(input_pause_owner!=pause_owner){input_pause_owner=pause_owner;TrialGraphicsInputChanged();}
+    if(!trial_coop::PauseAllowsPlayer(unsigned(port))){
+        if(port<2)TrialHealthPackInput(port,false,false);
+        const bool connected=pad.connected||port==0;pad={};pad.connected=connected;return;
+    }
     if(port==0)for(unsigned key=1;key<256;++key)
         if(release_keys[key]&&!(GetAsyncKeyState(key)&0x8000))release_keys[key]=false;
-    if(port==0&&controls_capture.active){
+    for(unsigned player=0;player<2;++player){
+        // Before co-op starts, the first physical controller still belongs to
+        // logical port zero. Let it configure P2's profile without changing
+        // gameplay routing; an unplugged logical port one must not cancel it.
+        const unsigned capture_port=player&&!trial_coop::Active()?0:player;
+        auto& capture=controls_capture[player];
+        if(unsigned(port)!=capture_port||!capture.active)continue;
         // A chord cancels capture without reserving any single bindable button.
-        if(focused()&&(pad.buttons&48)==48)controls_capture.Cancel();
-        else controls_capture.Sample(RawKeyboardSource(),trial_controls::ControllerSource(pad),focused());
+        if((capture.device&&!pad.connected)||(focused()&&(pad.buttons&48)==48))capture.Cancel();
+        else capture.Sample(player?0:RawKeyboardSource(),trial_controls::ControllerSource(pad),focused());
     }
     const bool menu_right_back=port==0&&TrialMenuRightBack();
     if(port==0)pad.connected=true;
@@ -327,8 +387,12 @@ void TrialInputPad(int port,input::Pad& pad){
         }
         intro_gate.Keyboard(intro_keys,focused());
     }
-    if(port==0&&focused())TrialFrontendPad(pad.buttons|(pad.analog[2]>30?0x100u:0u)|(pad.analog[3]>30?0x200u:0u),pad.analog[0],pad.analog[1],pad.lx,pad.ly);
-    if(TrialGraphicsOpen()){bool connected=pad.connected;pad={};pad.connected=connected;return;}
+    const int menu_port=trial_coop::PauseOwner()==1?1:0;
+    if(port==menu_port&&focused())TrialCoopMenuPad(controller_connected,pad.buttons|(pad.analog[2]>30?0x100u:0u)|(pad.analog[3]>30?0x200u:0u),pad.analog[0],pad.analog[1],pad.lx,pad.ly);
+    if(TrialGraphicsOpen()){
+        if(port<2)TrialHealthPackInput(port,false,false);
+        bool connected=pad.connected;pad={};pad.connected=connected;return;
+    }
     // Consume only controls held across the handoff; drift must not lock other inputs.
     auto& held=release_pad[port];
     held.buttons&=pad.buttons;pad.buttons&=~held.buttons;
@@ -342,10 +406,29 @@ void TrialInputPad(int port,input::Pad& pad){
     };
     axis(pad.lx,held.lx,7849);axis(pad.ly,held.ly,7849);
     axis(pad.rx,held.rx,8689);axis(pad.ry,held.ry,8689);
-    if(intro_gate.OwnsPad(port)){bool connected=pad.connected;pad={};pad.connected=connected;return;}
+    if(intro_gate.OwnsPad(port)){
+        if(port<2)TrialHealthPackInput(port,false,false);
+        bool connected=pad.connected;pad={};pad.connected=connected;return;
+    }
+    if(port==1&&trial_coop::Active()&&gameplay&&!menu_mode&&TrialCoopPresentation()==2){
+        // The original cinematic controls P1. P2 shares that camera and must
+        // not move or fire unseen, but its configured Pause still works.
+        TrialHealthPackInput(1,false,false);
+        auto pause=pad;trial_controls::Remap(pause,1);
+        release_pad[1]=last_pad[1];
+        spin_button_held[1]=trial_controls::SpinButtonDown(false,last_pad[1],1);
+        const bool connected=pad.connected;pad={};pad.connected=connected;
+        pad.buttons=pause.buttons&16u;return;
+    }
+    if(port<2){
+        const bool allowed=focused()&&gameplay&&!menu_mode&&!controls_capture[port].active&&(!port||trial_coop::Active());
+        const bool down=trial_controls::HealthPackDown(false,pad,port)||
+            (!port&&trial_controls::HealthPackDown(true,pad,0,captured));
+        TrialHealthPackInput(port,down,allowed);
+    }
     // Keep menu navigation on the physical controller; remaps apply to the
     // original gameplay slots before keyboard/mouse contributions are merged.
-    if(gameplay&&!menu_mode)trial_controls::Remap(pad);
+    if(gameplay&&!menu_mode)trial_controls::Remap(pad,trial_coop::Active()&&port==1?1:0);
     if(port!=0||!focused())return;
     if(pad.buttons||std::abs(int(pad.rx))>8689||std::abs(int(pad.ry))>8689)InterlockedExchange(&keyboard_mode,0);
     if(menu_key_update)menu_key_taps.GuestPortPolled(port);

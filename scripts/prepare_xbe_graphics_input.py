@@ -19,15 +19,18 @@ def prepare(source, area):
     assert pad_type and digital
     key_down = re.search(r'BOOL keyboard_key_down\(int key\)\{[^\n]+\}', source)
     assert key_down
+    keyboard_mode=re.search(r'int xbox_KeyboardMode\(\)\{[^\n]+\}',source)
+    assert keyboard_mode
     fixture = Path(__file__).with_name('test_xbe_graphics_input.cpp').read_text()
     control = (Path(__file__).resolve().parents[1] / 'src/recomp_manual.c').read_text()
     control_stick = '\n'.join(function(control, name, 'static float ') for name in
                               ('ucrr_host_stick_value', 'ucrr_host_stick_axis'))
-    helpers_start = source.index('namespace {\ntrial_controls::CaptureGate controls_capture;')
+    helpers_start = source.index('namespace {\ntrial_controls::CaptureGate controls_capture[2];')
     helpers_end = source.index('\nvoid TrialMenuRightButton', helpers_start)
     for marker, code in (
         ('// GENERATED_STATE', state + '\n' + pad_type[0] + '\n' + digital[0]),
         ('// GENERATED_KEY_DOWN', key_down[0].replace('GetAsyncKeyState', 'TestAsyncKeyState')),
+        ('// GENERATED_KEYBOARD_MODE',keyboard_mode[0]),
         ('// GENERATED_RIGHT_BACK', function(source, 'TrialMenuRightButton') + '\n' +
          function(source, 'TrialMenuRightBack', 'bool ')),
         ('// GENERATED_CHANGED', function(source, 'TrialGraphicsInputChanged')),

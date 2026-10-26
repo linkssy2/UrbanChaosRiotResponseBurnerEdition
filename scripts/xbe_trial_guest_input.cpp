@@ -23,6 +23,7 @@ size_t g_xbox_total_ram=0x08000000;
 #define MEMF(a) (*(x86_f32u*)(ram+uint32_t(a)))
 #include "hybrid_frontend_guest.h"
 #include "xbe_frontend.h"
+#include "xbe_coop_guest.h"
 static bool FrontendGuestOwns(uint32_t owner,uint32_t kind);
 #include "xbe_input_memory.h"
 #include "menu_pointer_guest.h"
@@ -30,7 +31,7 @@ static bool FrontendGuestOwns(uint32_t owner,uint32_t kind);
 extern int TrialMouseActive();
 extern void TrialGameplay();
 extern void TrialMouseTake(long*,long*,unsigned*);
-extern int TrialSpinSample(float*,float*);
+extern int TrialSpinSample(float*,float*,unsigned);
 static thread_local bool spin_button=false;
 extern void TrialInputPublish();
 extern void TrialMenuKeysBegin();
@@ -47,8 +48,9 @@ int TrialGuestHook(X86Context& ctx,uint8_t* base,unsigned op){
     case 40:FrontendObjectivesInput();break;
     case 36:{
         spin_button=false;
-        if(MouseObject(g_esi)&&menu_pointer_readable(g_esi,0x80c)&&menu_pointer_readable(g_esp+8,8)){
-            float x=0,y=0;const int sample=TrialSpinSample(&x,&y);
+        if(menu_pointer_readable(g_esi,0x80c)&&menu_pointer_readable(g_esp+8,8)&&
+           (MouseObject(g_esi)||g_esi==TrialCoopPlayer(1))){
+            float x=0,y=0;const int sample=TrialSpinSample(&x,&y,MEM32(g_esi+0x368));
             if(sample){MEMF(g_esp+8)=x;MEMF(g_esp+12)=y;spin_button=sample==2;}
         }break;}
     case 37:result=spin_button;spin_button=false;break;

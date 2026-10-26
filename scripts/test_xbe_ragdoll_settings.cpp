@@ -366,6 +366,48 @@ static void RendererAdmissionRegression(){
         ObjectCall(sub_002384F0,kObjectPool);assert(object_allocations.empty()&&object_pools.empty());
     }
 }
+static void WorldPositionRegression(){
+    Setup(2);for(unsigned i=0;i<6;++i)assert(Acquire()==i);
+    W32(0x44c178,0x42c80000);W32(0x44bf94,0x3f800000);
+    X86Context basis{};basis.esp=kStack;OriginalRagdollAxisBasis(basis,g_base);
+    constexpr uint32_t list=0x680000,physical=0x681000,motion=0x682000;
+    for(uint32_t id:{0u,5u}){
+        const uint32_t object=Lookup(id);
+        const std::array<uint32_t,5> offsets{0,0x1c,0x20,0x70,0x74};
+        std::array<uint32_t,5> previous{};
+        for(unsigned i=0;i<offsets.size();++i)previous[i]=R32(object+offsets[i]);
+        W32(object,0x48dd60);W32(object+0x1c,0x683000);W32(object+0x20,0x684000);
+        W32(object+0x70,list);W32(object+0x74,3);W32(list+8,physical);W32(physical+0x50,motion);
+        G<float>(motion+0x40)=13.25f;G<float>(motion+0x44)=-0.5f;G<float>(motion+0x48)=42.125f;
+        X86Context c{};c.esp=kStack;c.ecx=object;OriginalRepresentativeBody(c,g_base);assert(c.eax==physical);
+        c.esp=kStack;std::memcpy(g_base+kStack+0x90,g_base+motion+0x40,12);OriginalRagdollWorldScale(c,g_base);
+        G<float>(kStack+0x5c)=1.f;
+        std::memcpy(&c.xmm[4],g_base+0x51da80,16);std::memcpy(&c.xmm[5],g_base+0x51daa0,16);
+        std::memcpy(g_base+kStack+0xf0,g_base+0x51da90,16);std::memcpy(g_base+kStack+0x110,g_base+0x51dab0,16);
+        OriginalRagdollAxisConversion(c,g_base);
+        float actual[3]{9,8,7};const auto csr=_mm_getcsr();
+        assert(TrialRagdollWorldPosition(g_base,id,actual)&&_mm_getcsr()==csr);
+        assert(!std::memcmp(actual,c.xmm[0].f,12));
+        assert(actual[0]==1325.f&&actual[1]==4212.5f&&actual[2]==-50.f);
+        // Native physics can move far from the unchanged parent transform.
+        G<float>(object+0x60)=-1000;G<float>(motion+0x40)=3.5f;
+        assert(TrialRagdollWorldPosition(g_base,id,actual)&&actual[0]==350.f);
+        const std::array<float,3> before{actual[0],actual[1],actual[2]};
+        for(unsigned invalid=0;invalid<5;++invalid){
+            if(invalid==0)W32(object,0x48dd70);
+            if(invalid==1)W32(object+0x74,2);
+            if(invalid==2)W32(physical+0x50,0xfffffff0);
+            if(invalid==3)G<float>(motion+0x40)=INFINITY;
+            if(invalid==4)G<uint8_t>(initialized)=0;
+            assert(!TrialRagdollWorldPosition(g_base,id,actual)&&!std::memcmp(actual,before.data(),12));
+            W32(object,0x48dd60);W32(object+0x74,3);W32(physical+0x50,motion);G<float>(motion+0x40)=3.5f;G<uint8_t>(initialized)=1;
+        }
+        assert(!TrialRagdollWorldPosition(g_base,UINT32_MAX,actual)&&!TrialRagdollWorldPosition(g_base,9999,actual));
+        for(unsigned i=0;i<offsets.size();++i)W32(object+offsets[i],previous[i]);
+    }
+    Run(sub_002A6850,{5});float position[3]{};assert(!TrialRagdollWorldPosition(g_base,5,position));
+    Run(sub_002A5030);assert(extra.empty());
+}
 int main(){
     // Unlike the runtime CallGuest convenience API, this bridge also restores
     // flags, XMM and host rounding state after a gameplay-time clone callback.
@@ -405,6 +447,7 @@ int main(){
     // Default still follows the original unsigned oldest-ID behaviour at wrap.
     Setup(0);W32(0x51da70,UINT32_MAX-1);assert(Acquire()==UINT32_MAX-1);assert(Acquire()==UINT32_MAX);
     assert(!Lookup(UINT32_MAX));assert(Acquire()==0&&Lookup(0));Run(sub_002A5030);
+    WorldPositionRegression();
     ObjectPoolRegression();
     LayerRegression();OtherPoolProfiles();RendererAdmissionRegression();
     std::puts("Ragdoll retention passed: original shadow/Layer underflow witnesses, renderer admission beyond256 through all four original factories, original unlink/destructor reuse, other capacity queries, all modes, cleanup and OOM passed");

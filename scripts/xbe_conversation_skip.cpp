@@ -3,6 +3,7 @@
 #include "kernel/kernel.h"
 #include "xbe_input_memory.h"
 #include "xbe_conversation_skip.h"
+#include "xbe_coop_interactions.h"
 
 extern int xbox_KeyboardMode();
 namespace {
@@ -25,7 +26,8 @@ void TrialConversationPublish(bool down,bool enabled){
 }
 
 bool TrialConversationQuery(X86Context& ctx,uint8_t* base){
-    if(!xbox_KeyboardMode()||!ConversationOwner(base,ctx.esi)||
+    const unsigned player=TrialCoopInteractionPlayer(base,ctx.esi);
+    if(player==2||(player!=1&&!xbox_KeyboardMode())||!ConversationOwner(base,ctx.esi)||
        !TrialGuestReadable(ctx.esp,4))return false;
     const uint32_t caller=ConversationWord(base,ctx.esp);
     if((caller!=0x17c0d4&&caller!=0x17c26e&&caller!=0x17c315)||

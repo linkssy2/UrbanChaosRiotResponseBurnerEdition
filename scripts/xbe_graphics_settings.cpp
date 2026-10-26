@@ -19,6 +19,8 @@ bool TrialHdUi = false;
 bool TrialWorldTextures = false;
 uint32_t TrialReticleScale = 100;
 uint32_t TrialWeaponFovScale = 100;
+uint32_t TrialPlayer2FieldOfView = 0, TrialPlayer2WeaponFovScale = 0;
+uint32_t TrialFmvScale = 0;
 uint32_t TrialCharacterQuality = 0, TrialRagdollMode = 0;
 namespace trial_graphics {
 static std::atomic<bool> boot_wide{true};
@@ -27,12 +29,17 @@ static std::atomic<bool> hd_ui{false};
 static std::atomic<bool> world_textures{false};
 static std::atomic<uint32_t> reticle_scale{100};
 static std::atomic<uint32_t> weapon_fov_scale{100};
+static std::atomic<uint32_t> player2_field_of_view{53},player2_weapon_fov_scale{100};
+static std::atomic<uint32_t> fmv_scale{0};
 uint32_t FieldOfView(){return field_of_view.load();}
+uint32_t FieldOfView(unsigned player){return player==1?player2_field_of_view.load():FieldOfView();}
 bool WorldTexturesAvailable(){return uc_world_textures::Available();}
 bool WorldTextures(){return world_textures.load();}
 bool HdUi(){return hd_ui.load();}
 uint32_t ReticleScale(){return reticle_scale.load();}
 uint32_t WeaponFovScale(){return weapon_fov_scale.load();}
+uint32_t WeaponFovScale(unsigned player){return player==1?player2_weapon_fov_scale.load():WeaponFovScale();}
+uint32_t FmvScale(){return fmv_scale.load();}
 static std::atomic<bool> scale_pending{false};
 static std::atomic<uint32_t> msaa_samples{1},msaa_supported{2};
 static std::atomic<uint32_t> effects{3};
@@ -46,10 +53,19 @@ static void PublishEffects(const Draft& d){
     world_textures=d.world_textures;
     reticle_scale=d.reticle_scale;
     weapon_fov_scale=d.weapon_fov;
+    player2_field_of_view=TrialPlayer2FieldOfView?TrialPlayer2FieldOfView:d.fov;
+    player2_weapon_fov_scale=TrialPlayer2WeaponFovScale?TrialPlayer2WeaponFovScale:d.weapon_fov;
+    fmv_scale=d.fmv_scale;
     effects=uint32_t(d.scenery)|(uint32_t(d.characters)<<1)|(d.character_quality<<2)|(d.ragdolls<<3);
 }
 static Draft Current(){return {app::Get(),TrialAspectRatio,TrialMsaaSamples,
-    TrialSceneryLighting,TrialCharacterLighting,TrialCharacterQuality,TrialRagdollMode,TrialFieldOfView,TrialHdUi,TrialReticleScale,TrialWorldTextures,TrialWeaponFovScale};}
+    TrialSceneryLighting,TrialCharacterLighting,TrialCharacterQuality,TrialRagdollMode,TrialFieldOfView,TrialHdUi,TrialReticleScale,TrialWorldTextures,TrialWeaponFovScale,TrialFmvScale};}
+static Draft Current(unsigned player){
+    Draft d=Current();
+    if(player==1){d.fov=TrialPlayer2FieldOfView?TrialPlayer2FieldOfView:d.fov;
+        d.weapon_fov=TrialPlayer2WeaponFovScale?TrialPlayer2WeaponFovScale:d.weapon_fov;}
+    return d;
+}
 static void Store(const Draft& d){
     app::Get()=d.settings;TrialAspectRatio=d.aspect;TrialMsaaSamples=d.msaa;
     TrialSceneryLighting=d.scenery;TrialCharacterLighting=d.characters;
@@ -58,6 +74,7 @@ static void Store(const Draft& d){
     TrialWorldTextures=d.world_textures;
     TrialReticleScale=d.reticle_scale;
     TrialWeaponFovScale=d.weapon_fov;
+    TrialFmvScale=d.fmv_scale;
 }
 uint32_t MsaaSamples(){return msaa_samples.load();}
 bool MsaaSupported(uint32_t samples){return samples<32&&(msaa_supported.load()&(1u<<samples));}
@@ -89,6 +106,8 @@ bool Validate(const Draft& d, app::Mode desktop, std::string& message) {
         message="Reticle size must be between 50% and 200%.";
     else if(d.weapon_fov<50||d.weapon_fov>150)
         message="Weapon field of view must be between 50% and 150%.";
+    else if(d.fmv_scale>1)
+        message="Choose Fill or 4:3 for FMV scaling.";
     else if(d.msaa!=1&&d.msaa!=2&&d.msaa!=4)
         message="Choose Off, 2x or 4x MSAA.";
     else if(d.character_quality>1||d.ragdolls>2)
@@ -109,8 +128,11 @@ bool Validate(const Draft& d, app::Mode desktop, std::string& message) {
 }
 
 Draft Snapshot() {
+    return Snapshot(0);
+}
+Draft Snapshot(unsigned player) {
     std::lock_guard lock(app::UiLock());
-    return Current();
+    return Current(player);
 }
 
 void Initialize() {
@@ -122,6 +144,10 @@ void Initialize() {
         auto join=app::Get().join_ip;
         d={};d.settings.join_ip=std::move(join);Store(d);
     }
+    // A malformed or missing optional P2 value must not reset the shared
+    // renderer or the existing single-player camera configuration.
+    if(TrialPlayer2FieldOfView<40||TrialPlayer2FieldOfView>90)TrialPlayer2FieldOfView=d.fov;
+    if(TrialPlayer2WeaponFovScale<50||TrialPlayer2WeaponFovScale>150)TrialPlayer2WeaponFovScale=d.weapon_fov;
     boot_wide.store(RequestedWide(d,app::Desktop()));
     msaa_samples=d.msaa;
     PublishEffects(d);
@@ -151,24 +177,39 @@ static bool DisplaySupported(const app::Settings& s,std::string& message) {
 }
 
 bool Apply(const Draft& draft,std::string& message) {
+    return Apply(draft,message,0);
+}
+bool Apply(const Draft& draft,std::string& message,unsigned player) {
     // Called by the renderer's UI callback, under its existing recursive lock.
     // The window receives only an asynchronous display request after saving.
     std::lock_guard lock(app::UiLock());
+    if(player>1){message="Invalid player.";return false;}
     auto desktop=app::Desktop();
     if(!Validate(draft,desktop,message) || !DisplaySupported(draft.settings,message)) return false;
     if(!MsaaSupported(draft.msaa)){message="That MSAA mode is not supported by this graphics device.";return false;}
     const Draft old=Current();
+    const uint32_t old_player2_fov=TrialPlayer2FieldOfView,old_player2_weapon=TrialPlayer2WeaponFovScale;
     bool display=old.settings.display_mode!=draft.settings.display_mode ||
                  old.settings.width!=draft.settings.width || old.settings.height!=draft.settings.height;
-    Store(draft);
+    Draft committed=draft;
+    // Materialize migration before changing P1, including callers that save
+    // settings before Initialize. Each player is independent from that point.
+    if(TrialPlayer2FieldOfView<40||TrialPlayer2FieldOfView>90)TrialPlayer2FieldOfView=old.fov;
+    if(TrialPlayer2WeaponFovScale<50||TrialPlayer2WeaponFovScale>150)TrialPlayer2WeaponFovScale=old.weapon_fov;
+    if(player==1){
+        TrialPlayer2FieldOfView=draft.fov;TrialPlayer2WeaponFovScale=draft.weapon_fov;
+        committed.fov=old.fov;committed.weapon_fov=old.weapon_fov;
+    }
+    Store(committed);
     app::Get().join_ip=old.settings.join_ip;
     try { app::Save(); }
     catch(const std::exception& e) {
         Store(old);
+        TrialPlayer2FieldOfView=old_player2_fov;TrialPlayer2WeaponFovScale=old_player2_weapon;
         message=std::string("Could not save graphics settings: ")+e.what();return false;
     }
     msaa_samples=draft.msaa;
-    PublishEffects(draft);
+    PublishEffects(committed);
     if(display) app::ApplyDisplay();
     if(RequestedWide(draft,desktop)!=boot_wide.load())
         message="Changes applied and saved. Restart to update the game camera aspect.";

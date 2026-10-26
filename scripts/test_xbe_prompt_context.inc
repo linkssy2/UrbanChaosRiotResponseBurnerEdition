@@ -2,7 +2,7 @@
 // emitter. Font layout is a completing one-glyph service; final GPU submission
 // copies the production state just as the queued backend does.
 namespace d3d {
-struct PromptFixtureState {unsigned uc_prompt_variant=0;};
+struct PromptFixtureState {unsigned uc_prompt_variant=0,uc_prompt_player=0;};
 static PromptFixtureState prompt_state;
 static std::recursive_mutex prompt_d3d_lock;
 static PromptFixtureState& State(){return prompt_state;}
@@ -10,11 +10,28 @@ static std::recursive_mutex& Lock(){return prompt_d3d_lock;}
 }
 static constexpr uint32_t kPromptRam=0x600000,kPromptOwner=0x60000,kPromptBuffer=0x61000;
 static bool TrialGuestReadable(uint32_t p,uint32_t n){return p>=0x10000&&uint64_t(p)+n<=kPromptRam;}
+namespace trial_coop {static bool prompt_active=false;static bool Active(){return prompt_active;}}
+static uint32_t prompt_players[2]={0x70000,0x71000};
+static uint32_t TrialCoopPlayer(unsigned slot){return slot<2?prompt_players[slot]:0;}
 /* PROMPT_CONTEXT_DECLARATIONS */
 /* PROMPT_CONTEXT_IMPLEMENTATION */
 static std::vector<unsigned> prompt_submissions;
+static std::vector<unsigned> prompt_player_submissions;
 static float prompt_input_value=0;
+static void PromptEnqueue(X86Context&,uint8_t*);
+static bool prompt_throw=false;
 void x86_icall(X86Context& ctx,uint8_t* base,uint32_t target){
+    if(target>=0xf0010&&target<=0xf0012){
+        if(prompt_throw)throw 1;
+        if(target==0xf0010){CHECK(X86_MEM32(ctx.esp+4)==0);PromptEnqueue(ctx,base);ctx.esp+=8;}
+        else{
+            const char* key=target==0xf0011?"HUD-Operate-1":"HUD-Help-40";
+            std::strcpy(reinterpret_cast<char*>(base+0x64000),key);
+            TrialPromptTextScope text(base,0x64000,0);PromptEnqueue(ctx,base);
+            ctx.esp+=target==0xf0011?12:4;
+        }
+        return;
+    }
     CHECK(target==0xf0001&&X86_MEM32(ctx.esp+4)==0&&
           X86_MEM32(ctx.esp+8)==22&&X86_MEM32(ctx.esp+12)==2);
     x87_push(ctx,prompt_input_value);ctx.esp+=16;
@@ -22,7 +39,8 @@ void x86_icall(X86Context& ctx,uint8_t* base,uint32_t target){
 X86_FUNC(sub_003EF700){ctx.esp+=8;}
 X86_FUNC(sub_003EF600){ctx.esp+=24;}
 X86_FUNC(sub_003EF5C0){ctx.esp+=12;}
-X86_FUNC(sub_003EF740){prompt_submissions.push_back(d3d::State().uc_prompt_variant);ctx.esp+=4;}
+X86_FUNC(sub_003EF740){prompt_submissions.push_back(d3d::State().uc_prompt_variant);prompt_player_submissions.push_back(d3d::State().uc_prompt_player);ctx.esp+=4;}
+X86_FUNC(sub_0008BD60){CHECK(false);}
 X86_EXTERN_FUNC(sub_0009D9B0);
 X86_FUNC(sub_00017B30){ctx.eax=0x65000;ctx.esp+=8;}
 extern "C" uint32_t TrialFrontendWarningText(uint8_t*,uint32_t,uint32_t text,uint32_t,uint32_t){return text;}
@@ -75,7 +93,7 @@ static void PromptContextChecks(){
         CHECK(X86_MEM32(kPromptOwner+0x14)==kPromptBuffer+index*28);
         ctx.ecx=X86_MEM32(ctx.esp);ctx.esp=0x50000;
         sub_0009DB90(ctx,base);CHECK(ctx.esp==0x50004);
-        CHECK(d3d::State().uc_prompt_variant==0);
+        CHECK(d3d::State().uc_prompt_variant==0&&d3d::State().uc_prompt_player==0);
     };
     conversation_prompt=false;text("HUD-Operate-1");text("HUD-Help-50");text("HUD-Operate-2");
     CHECK(X86_MEM32(kPromptOwner+0x1c)==3);
@@ -173,4 +191,59 @@ static void PromptContextChecks(){
         CHECK(ctx.esp==0x50000&&ctx.eax==unsigned(value!=0));
     }
     TrialPromptQueueReset(kPromptOwner);
+    // Execute the actual original per-layer HUD caller. Its own literal glyph,
+    // owner-ID help callback and Orders text all enter the same delayed queue.
+    // Drain in a different order, after both view scopes have ended.
+    constexpr uint32_t world=0x72000,state=0x72100,layers=0x72200,manager=0x72800;
+    auto setup_players=[&]{
+        X86_MEM32(0x51c4dc)=world;X86_MEM32(world+4)=state;
+        X86_MEM32(state+4)=layers;X86_MEM32(state+8)=layers+8;X86_MEM32(state+0x10)=manager;
+        X86_MEM32(manager)=0x72900;X86_MEM32(0x72910)=0xf0011;
+        for(unsigned slot=0;slot<2;++slot){
+            const uint32_t p=prompt_players[slot],layer=0x72300+slot*0x100,hud=0x72500+slot*0x100;
+            X86_MEM32(layers+slot*4)=layer;X86_MEM32(layer)=hud;X86_MEM32(layer+4)=p;
+            X86_MEM32(layer+8)=0x72700;X86_MEM32(layer+0x24)=slot;X86_MEM32(0x72708)=0;
+            X86_MEM32(p)=0x46fbe8;X86_MEM32(p+0x54)=100+slot;X86_MEM32(p+0x5c)=0;X86_MEM32(p+0x368)=slot;
+            X86_MEM32(hud)=0x72a00;X86_MEM32(0x72a08)=0xf0010;X86_MEM32(0x72a0c)=0xf0012;
+        }
+        TrialPromptQueueReset(kPromptOwner);X86_MEM32(kPromptOwner+0x1c)=0;
+        trial_coop::prompt_active=true;
+    };
+    auto hud_context=[&](unsigned slot){X86Context c{};c.esp=0x50000;c.edi=world;X86_MEM32(c.esp+0x10)=slot;return c;};
+    setup_players();auto original=hud_context(1);PromptOriginalHudLayer(original,base);
+    draw(7);draw(6);draw(5);
+    CHECK(prompt_player_submissions[prompt_player_submissions.size()-3]==0&&prompt_player_submissions.back()==0);
+    setup_players();
+    for(unsigned slot=0;slot<2;++slot){auto c=hud_context(slot);PromptOwnedHudLayer(c,base);CHECK(!prompt_player);}
+    text("HUD-Help-50");
+    const unsigned first_submission=unsigned(prompt_submissions.size());
+    for(unsigned record:{2u,7u,3u,6u,1u,4u,5u})draw(record);
+    const unsigned expected_players[]={2,1,2,1,0,2,1},expected_variants[]={2,0,1,1,0,0,2};
+    for(unsigned i=0;i<7;++i){
+        CHECK(prompt_player_submissions[first_submission+i]==expected_players[i]);
+        CHECK(prompt_submissions[first_submission+i]==expected_variants[i]);
+    }
+    // Wrong owner, stale world, missing layer or disconnected co-op cannot tag
+    // another player's glyph. A nested invalid scope and exceptions restore TLS.
+    for(unsigned invalid=0;invalid<7;++invalid){
+        setup_players();auto c=hud_context(1);c.ebp=prompt_players[1];
+        if(invalid==0)trial_coop::prompt_active=false;
+        if(invalid==1)c.ebp=prompt_players[0];
+        if(invalid==2)X86_MEM32(prompt_players[1]+0x54)=0xffffffff;
+        if(invalid==3)X86_MEM32(prompt_players[1]+0x5c)=1;
+        if(invalid==4)X86_MEM32(prompt_players[1]+0x368)=0;
+        if(invalid==5)X86_MEM32(0x72404)=prompt_players[0];
+        if(invalid==6)X86_MEM32(0x51c4dc)=world+0x1000;
+        const auto before=c;const unsigned csr=_mm_getcsr();
+        TrialPromptPlayerScope scope;scope.Select(c,base);CHECK(!prompt_player);
+        CHECK(!std::memcmp(&before,&c,sizeof c)&&_mm_getcsr()==csr);
+    }
+    setup_players();
+    {auto c=hud_context(0);c.ebp=prompt_players[0];TrialPromptPlayerScope outer;outer.Select(c,base);CHECK(prompt_player==1);
+     {TrialPromptPlayerScope nested;CHECK(!prompt_player);}CHECK(prompt_player==1);
+     prompt_throw=true;try{auto p2=hud_context(1);PromptOwnedHudLayer(p2,base);CHECK(false);}catch(int){}
+     prompt_throw=false;CHECK(prompt_player==1);}
+    CHECK(!prompt_player);
+    trial_coop::prompt_active=false;TrialPromptQueueReset(kPromptOwner);
+    X86_MEM32(kPromptOwner+0x1c)=0;text("HUD-Help-50");draw(7);CHECK(!prompt_player_submissions.back());
 }

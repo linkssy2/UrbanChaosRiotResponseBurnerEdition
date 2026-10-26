@@ -49,12 +49,12 @@ def dimensions(payload):
 
 def install(archive, data, cancel):
     from import_game import unlinked_path
-    unlinked_path(data)
+    unlinked_path(data, root=data)
     runtime = data / 'xbe-runtime'
-    unlinked_path(runtime)
+    unlinked_path(runtime, root=data)
     runtime.mkdir(parents=True, exist_ok=True)
     target = runtime / 'world-textures'
-    unlinked_path(target)
+    unlinked_path(target, root=data)
     stage = runtime / ('.textures-' + uuid.uuid4().hex)
     backup = runtime / ('.textures-old-' + uuid.uuid4().hex)
     stage.mkdir()
