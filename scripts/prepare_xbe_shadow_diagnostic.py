@@ -75,7 +75,7 @@ def transform(main, renderer):
     wall_saved_.clear();
     if (wall_trace_) fprintf(wall_trace_.get(), "begin frame=%llu tick=%llu\\n",
         (unsigned long long)frame_, (unsigned long long)GetTickCount64());''')
-    renderer = once(renderer, '    UploadConstants(s, sh, k, stages, size, c, analytic_fog);', '''    UploadConstants(s, sh, k, stages, size, c, analytic_fog);
+    renderer = once(renderer, '    UploadConstants(s, sh, k, stages, size, c, analytic_fog, vsc_revision);', '''    UploadConstants(s, sh, k, stages, size, c, analytic_fog, vsc_revision);
     if (wall_trace_ && wall_draws_++ < 4096) {
         TextureDesc td{};
         if (s.textures[1]) Describe(s.textures[1], td);

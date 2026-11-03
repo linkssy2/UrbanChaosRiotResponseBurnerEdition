@@ -1,10 +1,5 @@
-// Reuse the original remapping arithmetic and profile format for controller parity.
-#include <xinput.h>
-#define controller_path controls_legacy_path
-#define controller_digital controls_legacy_digital
-#include "third_party/xboxrecomp/src/input/host_controller_config.h"
-#undef controller_digital
-#undef controller_path
+// The project's saved controls sit above the maintained runtime's input::Pad.
+#include "xbe_controller_bindings.inc"
 #include "xbe_controls.h"
 
 namespace trial_controls {
@@ -14,6 +9,10 @@ static bool firearm_loaded=false;
 static unsigned previous_firearm[2]{};
 static bool health_loaded[2]{};
 static unsigned health_binding[2][2][2]{};
+static bool partner_loaded=false;
+static unsigned partner_binding[2]{};
+static bool aim_loaded[2]{};
+static unsigned aim_mode[2]{},scope_zoom[2][2][2]{};
 static bool second_loaded=false;
 static UCRRControllerConfig second_controller{};
 static unsigned second_spin_mode=0,second_spin_binding[2]{};
@@ -108,6 +107,38 @@ unsigned SpinMode(unsigned player){
     if(player){LoadSecond();return second_spin_mode;}
     LoadSpin();return spin_mode;
 }
+static void LoadAim(unsigned player){
+    if(aim_loaded[player])return;aim_loaded[player]=true;
+    aim_mode[player]=0;std::memset(scope_zoom[player],0,sizeof(scope_zoom[player]));
+    wchar_t path[MAX_PATH];if(!controller_path(path))return;
+    const wchar_t* section=player?L"AimPlayer2":L"Aim";
+    aim_mode[player]=trial_input_profile::Read(path,section,L"Mode",0,1);
+    for(unsigned device=player;device<2;++device)for(unsigned slot=0;slot<2;++slot){
+        wchar_t key[32];swprintf(key,32,L"ScopeZoom%u_%u",device,slot);
+        const unsigned source=trial_input_profile::Read(path,section,key,0,device?24:UCRR_KEYBOARD_WHEEL_DOWN);
+        scope_zoom[player][device][slot]=(device?source<=24:keyboard_valid(source))?source:0;
+    }
+}
+unsigned AimMode(unsigned player){
+    if(player>1)return 0;
+    std::lock_guard guard(input_lock);LoadAim(player);return aim_mode[player];
+}
+static void LoadPartner(){
+    if(partner_loaded)return;partner_loaded=true;
+    LoadHealth(0);LoadAim(0);unsigned fallback='U';
+    AcquireSRWLockShared(&keyboard_lock);
+    for(const auto& row:keyboard_config.binding)for(unsigned key:row)if(key==fallback)fallback=0;
+    ReleaseSRWLockShared(&keyboard_lock);
+    for(const auto* bindings:{spin_binding[0],previous_firearm,health_binding[0][0],scope_zoom[0][0]})
+        for(unsigned slot=0;slot<2;++slot)if(bindings[slot]==fallback)fallback=0;
+    partner_binding[0]=fallback;
+    wchar_t path[MAX_PATH];if(!controller_path(path))return;
+    for(unsigned slot=0;slot<2;++slot){
+        wchar_t key[32];swprintf(key,32,L"Partner%u",slot);
+        const unsigned value=trial_input_profile::Read(path,L"HealthPacks",key,slot?0:fallback,UCRR_KEYBOARD_WHEEL_DOWN);
+        partner_binding[slot]=keyboard_valid(value)?value:0;
+    }
+}
 unsigned SecondProfileValue(unsigned setting,unsigned fallback){
     if(setting>=7)return fallback;
     std::lock_guard guard(input_lock);LoadSecond();return second_profile[setting];
@@ -119,27 +150,31 @@ Draft Defaults(){
     std::memcpy(d.controller,pad.binding,sizeof(d.controller));
     d.previous_firearm[0]=UCRR_KEYBOARD_WHEEL_DOWN;
     d.health_pack[0][0]='H';
+    d.heal_partner[0]='U';
     return d;
 }
 Draft Snapshot(unsigned player){
     if(player>1)return {};
     std::lock_guard guard(input_lock);
     if(player){
-        LoadSecond();LoadHealth(1);auto d=Defaults();
+        LoadSecond();LoadHealth(1);LoadAim(1);auto d=Defaults();
+        d.aim_mode=aim_mode[1];std::memcpy(d.scope_zoom[1],scope_zoom[1][1],sizeof(d.scope_zoom[1]));
         std::memcpy(d.health_pack[1],health_binding[1][1],sizeof(d.health_pack[1]));
         std::memcpy(d.controller,second_controller.binding,sizeof(d.controller));
         std::memcpy(d.deadzone,second_controller.deadzone,sizeof(d.deadzone));
         std::memcpy(d.native_profile,second_profile,sizeof(d.native_profile));
         d.spin_mode=second_spin_mode;std::memcpy(d.spin_binding[1],second_spin_binding,sizeof(second_spin_binding));return d;
     }
-    keyboard_init();controller_init();Draft d;
+    keyboard_init();controller_init();Draft d;LoadAim(0);
+    d.aim_mode=aim_mode[0];std::memcpy(d.scope_zoom,scope_zoom[0],sizeof(d.scope_zoom));
     LoadSpin();LoadFirearm();LoadHealth(0);d.spin_mode=spin_mode;std::memcpy(d.spin_binding,spin_binding,sizeof(spin_binding));
     std::memcpy(d.health_pack,health_binding[0],sizeof(d.health_pack));
+    LoadPartner();std::memcpy(d.heal_partner,partner_binding,sizeof(d.heal_partner));
     std::memcpy(d.previous_firearm,previous_firearm,sizeof(previous_firearm));
     AcquireSRWLockShared(&keyboard_lock);AcquireSRWLockShared(&controller_lock);
     std::memcpy(d.keyboard,keyboard_config.binding,sizeof(d.keyboard));
     std::memcpy(d.controller,controller_config.binding,sizeof(d.controller));
-    std::memcpy(d.deadzone,controller_config.deadzone,sizeof(d.deadzone));d.sensitivity=mouse_sensitivity;
+    std::memcpy(d.deadzone,controller_config.deadzone,sizeof(d.deadzone));d.sensitivity=mouse_sensitivity;d.invert_mouse=mouse_invert;
     ReleaseSRWLockShared(&controller_lock);ReleaseSRWLockShared(&keyboard_lock);return d;
 }
 static bool Save(const Draft& d,unsigned player){
@@ -174,6 +209,8 @@ static bool Save(const Draft& d,unsigned player){
     if(!player){
         swprintf(value,32,L"%u",d.sensitivity);
         ok=ok&&WritePrivateProfileStringW(L"Graphics",L"MouseSensitivity",value,temp);
+        swprintf(value,32,L"%u",d.invert_mouse);
+        ok=ok&&WritePrivateProfileStringW(L"Graphics",L"InvertMouseLook",value,temp);
     }
     const wchar_t* spin_section=player?L"PistolSpinPlayer2":L"PistolSpin";
     swprintf(value,32,L"%u",d.spin_mode);ok=ok&&WritePrivateProfileStringW(spin_section,L"Mode",value,temp);
@@ -189,6 +226,16 @@ static bool Save(const Draft& d,unsigned player){
         wchar_t key[32];swprintf(key,32,L"Binding%u_%u",device,slot);swprintf(value,32,L"%u",d.health_pack[device][slot]);
         ok=ok&&WritePrivateProfileStringW(player?L"HealthPacksPlayer2":L"HealthPacks",key,value,temp);
     }
+    if(!player)for(unsigned slot=0;slot<2;++slot){
+        wchar_t key[32];swprintf(key,32,L"Partner%u",slot);swprintf(value,32,L"%u",d.heal_partner[slot]);
+        ok=ok&&WritePrivateProfileStringW(L"HealthPacks",key,value,temp);
+    }
+    const wchar_t* aim_section=player?L"AimPlayer2":L"Aim";
+    swprintf(value,32,L"%u",d.aim_mode);ok=ok&&WritePrivateProfileStringW(aim_section,L"Mode",value,temp);
+    for(unsigned device=player;device<2;++device)for(unsigned slot=0;slot<2;++slot){
+        wchar_t key[32];swprintf(key,32,L"ScopeZoom%u_%u",device,slot);swprintf(value,32,L"%u",d.scope_zoom[device][slot]);
+        ok=ok&&WritePrivateProfileStringW(aim_section,key,value,temp);
+    }
     if(ok)WritePrivateProfileStringW(nullptr,nullptr,nullptr,temp);
     ok=ok&&MoveFileExW(temp,path,MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH);
     if(!ok)DeleteFileW(temp);return ok;
@@ -198,9 +245,13 @@ bool Apply(const Draft& d,std::string& error,unsigned player){
     if(player>1){error="Invalid local player.";return false;}
     if(player)for(unsigned i=0;i<7;++i)if(d.native_profile[i]>(i<5?1u:100u)){error="Invalid controller option.";return false;}
     if(d.spin_mode>1){error="Invalid pistol spin mode.";return false;}
+    if(d.aim_mode>1){error="Invalid aiming mode.";return false;}
+    if(!player&&d.invert_mouse>1){error="Invalid mouse look inversion.";return false;}
+    for(unsigned slot=0;slot<2;++slot)if((!player&&!keyboard_valid(d.scope_zoom[0][slot]))||d.scope_zoom[1][slot]>24){error="Invalid scope zoom binding.";return false;}
     for(unsigned slot=0;slot<2;++slot)if((!player&&!keyboard_valid(d.health_pack[0][slot]))||d.health_pack[1][slot]>24){error="Invalid health pack binding.";return false;}
     for(unsigned slot=0;slot<2;++slot)if((!player&&!keyboard_valid_action(24,d.spin_binding[0][slot]))||d.spin_binding[1][slot]>24){error="Invalid pistol spin binding.";return false;}
     if(!player){
+        for(unsigned source:d.heal_partner)if(!keyboard_valid(source)){error="Invalid partner healing binding.";return false;}
         for(unsigned source:d.previous_firearm)if(!keyboard_valid(source)){error="That key cannot be assigned to this action.";return false;}
         for(unsigned a=0;a<25;++a)for(unsigned s=0;s<2;++s)
             if(!keyboard_valid_action(a,d.keyboard[a][s])){error="That key cannot be assigned to this action.";return false;}
@@ -211,6 +262,9 @@ bool Apply(const Draft& d,std::string& error,unsigned player){
     if(!player){keyboard_init();controller_init();}
     if(!Save(d,player)){error="Could not save controls. Your previous bindings are unchanged.";return false;}
     health_loaded[player]=true;std::memcpy(health_binding[player],d.health_pack,sizeof(d.health_pack));
+    if(!player){partner_loaded=true;std::memcpy(partner_binding,d.heal_partner,sizeof(d.heal_partner));}
+    aim_loaded[player]=true;aim_mode[player]=d.aim_mode;
+    for(unsigned device=player;device<2;++device)std::memcpy(scope_zoom[player][device],d.scope_zoom[device],sizeof(d.scope_zoom[device]));
     if(player){
         second_loaded=true;std::memcpy(second_controller.binding,d.controller,sizeof(d.controller));
         std::memcpy(second_controller.deadzone,d.deadzone,sizeof(d.deadzone));
@@ -222,21 +276,14 @@ bool Apply(const Draft& d,std::string& error,unsigned player){
     AcquireSRWLockExclusive(&keyboard_lock);AcquireSRWLockExclusive(&controller_lock);
     std::memcpy(keyboard_config.binding,d.keyboard,sizeof(d.keyboard));
     std::memcpy(controller_config.binding,d.controller,sizeof(d.controller));
-    std::memcpy(controller_config.deadzone,d.deadzone,sizeof(d.deadzone));mouse_sensitivity=d.sensitivity;
+    std::memcpy(controller_config.deadzone,d.deadzone,sizeof(d.deadzone));mouse_sensitivity=d.sensitivity;mouse_invert=d.invert_mouse;
     controller_publish();ReleaseSRWLockExclusive(&controller_lock);ReleaseSRWLockExclusive(&keyboard_lock);
     return true;
 }
-static XBOX_GAMEPAD OriginalPad(const input::Pad& p){
-    XBOX_GAMEPAD pad;pad.wButtons=p.buttons;
-    std::memcpy(pad.bAnalogButtons,p.analog,sizeof(p.analog));
-    pad.sThumbLX=p.lx;pad.sThumbLY=p.ly;pad.sThumbRX=p.rx;pad.sThumbRY=p.ry;return pad;
-}
-bool HealthPackDown(bool keyboard,const input::Pad& p,unsigned player,bool mouse_active){
-    if(player>1||(player&&keyboard))return false;
-    std::lock_guard guard(input_lock);LoadHealth(player);
+static bool BindingDown(const unsigned (&bindings)[2],bool keyboard,const input::Pad& p,bool mouse_active){
     int strengths[24]{};
-    if(!keyboard&&p.connected){auto raw=OriginalPad(p);controller_strengths(&raw,strengths);}
-    for(unsigned source:health_binding[player][keyboard?0:1])if(source){
+    if(!keyboard&&p.connected)controller_strengths(&p,strengths);
+    for(unsigned source:bindings)if(source){
         if(!keyboard){if(strengths[source-1]>16384)return true;}
         else if(source>=UCRR_KEYBOARD_WHEEL_UP){
             AcquireSRWLockShared(&keyboard_wheel_lock);const bool down=keyboard_wheel_active==source;
@@ -245,11 +292,25 @@ bool HealthPackDown(bool keyboard,const input::Pad& p,unsigned player,bool mouse
     }
     return false;
 }
+bool HealthPackDown(bool keyboard,const input::Pad& p,unsigned player,bool mouse_active){
+    if(player>1||(player&&keyboard))return false;
+    std::lock_guard guard(input_lock);LoadHealth(player);
+    return BindingDown(health_binding[player][keyboard?0:1],keyboard,p,mouse_active);
+}
+bool HealPartnerDown(bool mouse_active){
+    std::lock_guard guard(input_lock);LoadPartner();
+    return BindingDown(partner_binding,true,input::Pad{},mouse_active);
+}
+bool ScopeZoomDown(bool keyboard,const input::Pad& p,unsigned player,bool mouse_active){
+    if(player>1||(player&&keyboard))return false;
+    std::lock_guard guard(input_lock);LoadAim(player);
+    return BindingDown(scope_zoom[player][keyboard?0:1],keyboard,p,mouse_active);
+}
 bool SpinButtonDown(bool keyboard,const input::Pad& p,unsigned player){
     if(player>1||(player&&keyboard))return false;
     std::lock_guard guard(input_lock);
     if(player)LoadSecond();else LoadSpin();int strengths[24]{};
-    if(!keyboard&&p.connected){auto raw=OriginalPad(p);controller_strengths(&raw,strengths);}
+    if(!keyboard&&p.connected)controller_strengths(&p,strengths);
     const unsigned* bindings=player?second_spin_binding:spin_binding[keyboard?0:1];
     for(unsigned slot=0;slot<2;++slot)if(const unsigned source=bindings[slot]){
         if(keyboard?keyboard_key_down(source)!=0:strengths[source-1]>16384)return true;
@@ -258,16 +319,14 @@ bool SpinButtonDown(bool keyboard,const input::Pad& p,unsigned player){
 }
 unsigned ControllerSource(const input::Pad& p){
     if(!p.connected)return 0;
-    auto pad=OriginalPad(p);int strengths[24];controller_strengths(&pad,strengths);
+    int strengths[24];controller_strengths(&p,strengths);
     for(unsigned i=0;i<24;++i)if(strengths[i]>(i>=16?16000:16384))return i+1;
     return 0;
 }
 void Remap(input::Pad& p,unsigned player){
     if(!p.connected||player>1)return;
-    std::lock_guard guard(input_lock);auto pad=OriginalPad(p);
-    if(player){LoadSecond();controller_apply_profile(&pad,&second_controller);}
-    else {controller_init();controller_apply(&pad);}
-    p.buttons=pad.wButtons;std::memcpy(p.analog,pad.bAnalogButtons,sizeof(p.analog));
-    p.lx=pad.sThumbLX;p.ly=pad.sThumbLY;p.rx=pad.sThumbRX;p.ry=pad.sThumbRY;
+    std::lock_guard guard(input_lock);
+    if(player){LoadSecond();controller_apply_profile(&p,&second_controller);}
+    else {controller_init();controller_apply(&p);}
 }
 }

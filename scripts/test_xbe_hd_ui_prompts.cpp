@@ -39,14 +39,35 @@ int main(){
     }
     auto orders=keyboard;orders.bindings[12]=4;std::strcpy(orders.labels[12],"Middle mouse");
     const auto orders_off=Art(orders,false),orders_on=Art(orders,true);
-    CHECK(RowEqual(orders_off,20,orders_on,20)&&!RowEqual(orders_on,20,on,20));
-    for(unsigned row=0;row<32;++row)if(row!=20)CHECK(RowEqual(orders_on,row,on,row));
+    for(unsigned row:{14u,19u,20u})
+        CHECK(RowEqual(orders_off,row,orders_on,row)&&!RowEqual(orders_on,row,on,row));
+    CHECK(!RowEqual(orders_on,14,orders_on,20)); // Choose Heal keeps its horizontal gesture.
+    auto region=[&](const auto& pixels,unsigned left,unsigned right){
+        std::vector<uint8_t> out;
+        for(unsigned y=48;y<81;++y)for(unsigned x=left;x<right;++x){
+            auto p=pixels.data()+((size_t(14)*128+y)*128+x)*4;
+            out.insert(out.end(),p,p+4);
+        }
+        return out;
+    };
+    auto left=region(orders_on,7,24),right=region(orders_on,104,121);
+    CHECK(std::any_of(left.begin(),left.end(),[](uint8_t b){return b!=0;}));
+    CHECK(std::any_of(right.begin(),right.end(),[](uint8_t b){return b!=0;}));
+    auto rebound=orders;rebound.bindings[12]='H';std::strcpy(rebound.labels[12],"H");
+    auto changed=Art(rebound,true);
+    CHECK(!RowEqual(changed,14,orders_on,14));
+    CHECK(region(changed,7,24)==left&&region(changed,104,121)==right);
+    for(unsigned row=0;row<32;++row)if(row!=14&&row!=19&&row!=20)CHECK(RowEqual(orders_on,row,on,row));
     TrialPromptInput controller=keyboard;controller.controller=true;
     static constexpr unsigned rows[12]={1,4,3,2,7,9,8,6,11,10,15,16};
     for(unsigned i=0;i<12;++i)controller.bindings[i]=12-i;
     const auto xbox=Art(controller,true);
     for(unsigned row=0;row<32;++row)if(actions[row]>=0)
         CHECK(RowEqual(xbox,row,uc_hd_ui::buttons.bgra,rows[controller.bindings[actions[row]]-1]));
+    controller.bindings[12]=4;std::strcpy(controller.labels[12],"Middle mouse");
+    const auto controller_orders=Art(controller,true);
+    CHECK(controller_orders==xbox); // P2 cannot inherit P1's contextual keycaps.
+    for(unsigned row:{14u,19u,20u})CHECK(RowEqual(xbox,row,uc_hd_ui::buttons.bgra,row));
     // PS/Nintendo symbols remain generated and keep their bound action ordering.
     for(unsigned family:{1u,2u,3u}){controller.family=family;
         auto a=Art(controller,false),b=Art(controller,true);

@@ -53,17 +53,18 @@ def transform(source):
 def prepare(source, area):
     area = Path(area)
     local = Path(__file__).parent
-    prior = local.parent/'third_party/xboxrecomp/src/nv2a'
     # Keep the validated exact-key, bounded read, payload hash and atomic replace
-    # implementation. Only the two C implicit conversions need C++ spellings.
-    header = (prior/'nv2a_shader_disk_cache.h').read_text()
+    # implementation in our maintained sources. These project-authored helpers
+    # formerly lived beside the historical runtime; they are not vendor files.
+    # Only the two C implicit conversions need C++ spellings.
+    header = (local/'xbe_shader_disk_cache.h').read_text()
     header = once(header, 'const unsigned char *b=p;', 'const unsigned char *b=(const unsigned char*)p;')
     header = once(header, 'saved=malloc(n?n:1);', 'saved=(char*)malloc(n?n:1);')
     # Rebuildable cache: keep atomic replacement, without a forced disk flush on
     # the render thread. An interrupted/corrupt cache entry is just another miss.
     header = once(header, 'MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH', 'MOVEFILE_REPLACE_EXISTING')
     (area/'src/compat/nv2a_shader_disk_cache.h').write_text(header)
-    (area/'src/compat/nv2a_shader_compiler_identity.h').write_text((prior/'nv2a_shader_compiler_identity.h').read_text())
+    (area/'src/compat/nv2a_shader_compiler_identity.h').write_text((local/'xbe_shader_compiler_identity.h').read_text())
     for name in ('xbe_shader_cache.h', 'xbe_shader_cache.cpp'):
         (area/'src/compat'/name).write_text((local/name).read_text())
     # Root signature/state construction changes invalidate driver blobs automatically.

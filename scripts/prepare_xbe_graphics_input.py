@@ -22,11 +22,18 @@ def prepare(source, area):
     keyboard_mode=re.search(r'int xbox_KeyboardMode\(\)\{[^\n]+\}',source)
     assert keyboard_mode
     fixture = Path(__file__).with_name('test_xbe_graphics_input.cpp').read_text()
-    control = (Path(__file__).resolve().parents[1] / 'src/recomp_manual.c').read_text()
+    control = Path(__file__).with_name('xbe_stick_reference.inc').read_text()
     control_stick = '\n'.join(function(control, name, 'static float ') for name in
                               ('ucrr_host_stick_value', 'ucrr_host_stick_axis'))
     helpers_start = source.index('namespace {\ntrial_controls::CaptureGate controls_capture[2];')
     helpers_end = source.index('\nvoid TrialMenuRightButton', helpers_start)
+    raw_start = source.index('    if(msg==WM_INPUT){')
+    raw_end = source.index('\n    return false;', raw_start)
+    guest = Path(__file__).with_name('xbe_trial_guest_input.cpp').read_text()
+    mouse_object = re.search(r'static bool MouseObject\([^\n]+\}', guest)
+    assert mouse_object
+    look_start = guest.index('    case 26:{')
+    look_end = guest.index('    case 27:', look_start)
     for marker, code in (
         ('// GENERATED_STATE', state + '\n' + pad_type[0] + '\n' + digital[0]),
         ('// GENERATED_KEY_DOWN', key_down[0].replace('GetAsyncKeyState', 'TestAsyncKeyState')),
@@ -40,6 +47,16 @@ def prepare(source, area):
             ('TrialMenuKeysBegin', 'TrialMenuKeysEnd', 'TrialGameplay', 'ucrr_host_menu_mode')) + '\nvoid TrialMenuKeysReset(){menu_key_taps.Clear();}'),
         ('// GENERATED_PAD', function(source, 'TrialInputPad') + '\n' + function(source, 'TrialFirearmDirection', 'int ')),
         ('// GENERATED_CONTROL_STICK', control_stick),
+        ('// GENERATED_MOUSE_HOST', '\n'.join((
+            re.search(r'int TrialMouseActive\(\)[^\n]+', source)[0],
+            function(source, 'TrialMouseTake'),
+            re.search(r'static unsigned OrderDirection\(\)[^\n]+', source)[0],
+            function(source, 'xbox_KeyboardSourceEvent'),
+            re.search(r'void xbox_KeyboardWheel\(int delta\)[^\n]+', source)[0],
+            'static void TestMouseMessage(uint32_t msg,intptr_t lp){\n' + source[raw_start:raw_end] + '\n}',
+        ))),
+        ('// GENERATED_MOUSE_OWNER', mouse_object[0]),
+        ('// GENERATED_MOUSE_GUEST', guest[look_start:look_end]),
     ):
         assert fixture.count(marker) == 1, marker
         fixture = fixture.replace(marker, code)

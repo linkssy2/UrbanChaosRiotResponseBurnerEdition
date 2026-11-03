@@ -1,4 +1,0 @@
-#ifndef MIGRATION_ANIMATION_WEIGHT_GUEST_H
-#define MIGRATION_ANIMATION_WEIGHT_GUEST_H
-int uc_migration_animation_weight(void);
-#endif

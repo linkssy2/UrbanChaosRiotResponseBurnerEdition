@@ -6,6 +6,7 @@
 #include <windows.h>
 #include <d3d12.h>
 #include <array>
+#include <bit>
 #include <cassert>
 #include <cstdint>
 #include <cstdio>
@@ -39,6 +40,7 @@ struct Device {
     }
 };
 static bool force_collision=false;
+/* ORIGINAL_HASH_IMPLEMENTATION */
 /* HASH_IMPLEMENTATION */
 static uint64_t Hash(const void* p,size_t n){return force_collision?0:ProductionHash(p,n,14695981039346656037ull);}
 
@@ -167,7 +169,40 @@ static void Pair(Reference::D3D12Backend& old,Candidate::D3D12Backend& next,cons
     next.Validate(s,next.TextureViewSlots(s));
 }
 static void AssertNoReferences(){for(const auto& r:resources)assert(r.refs==0);}
+static void AssertHashCompatibility(){
+    static_assert(std::endian::native==std::endian::little);
+    std::array<uint8_t,8192+16> bytes{};
+    for(size_t i=0;i<bytes.size();++i)bytes[i]=uint8_t(i*37+11);
+    // Frozen results preserve existing shader/disk keys independently of the extracted oracle.
+    struct Vector {size_t size;uint64_t seed,hash;};
+    for(const auto& v:std::array<Vector,6>{{
+        {0,0x14650fb0739d0383ull,0x65c9baff1f964c07ull},
+        {4,0x14650fb0739d0383ull,0x533b51a2fc65b034ull},
+        {20,0,0x6c42752adcf9c8f1ull},
+        {340,0x14650fb0739d0383ull,0x4b83f39d2370a0f1ull},
+        {340,~uint64_t(0),0x45f973753c2f51ccull},
+        {4096,0x123456789abcdef0ull,0xd9b33b3affa52798ull}}}){
+        assert(OriginalHash(bytes.data(),v.size,v.seed)==v.hash);
+        assert(ProductionHash(bytes.data(),v.size,v.seed)==v.hash);
+    }
+    uint64_t rng=0x6c240105e4b3a906ull;
+    auto random=[&]{rng^=rng<<13;rng^=rng>>7;return rng^=rng<<17;};
+    for(auto& byte:bytes)byte=uint8_t(random());
+    size_t checks=0;
+    auto compare=[&](const void* data,size_t size){const uint64_t seed=random();
+        assert(ProductionHash(data,size,seed)==OriginalHash(data,size,seed));++checks;
+    };
+    for(size_t size=0;size<=4096;++size)for(unsigned align=0;align<16;++align)compare(bytes.data()+align,size);
+    for(size_t i=0;i<340;++i)for(unsigned bit=0;bit<8;++bit){bytes[i]^=uint8_t(1u<<bit);compare(bytes.data(),340);bytes[i]^=uint8_t(1u<<bit);}
+    auto* pages=static_cast<uint8_t*>(VirtualAlloc(nullptr,16384,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE));
+    assert(pages);DWORD old=0;assert(VirtualProtect(pages+12288,4096,PAGE_NOACCESS,&old));
+    for(size_t i=0;i<12288;++i)pages[i]=uint8_t(random());
+    for(size_t size=0;size<=8192;++size)compare(pages+12288-size,size);
+    assert(VirtualFree(pages,0,MEM_RELEASE));
+    std::printf("PASS %zu exact hash checks, six frozen vectors, varied seeds/alignment and guard-page tails\n",checks);
+}
 int main(){
+    AssertHashCompatibility();
     for(unsigned i=0;i<resources.size();++i)resources[i].id=i;
     {
         Reference::D3D12Backend old;Candidate::D3D12Backend next;

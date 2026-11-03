@@ -18,6 +18,7 @@ struct TrialPromptPlayerScope {
 
 // Text identity follows each original queued quad until its individual draw.
 // 0 = ordinary binding, 1 = interaction/speech secondary binding (default F).
+// 2 = mouse Orders gesture, 3 = direct Context order binding.
 struct TrialPromptTextScope {
     unsigned previous;
     TrialPromptTextScope(uint8_t* base,uint32_t text,uint32_t flags,uint32_t caller=0,uint32_t label=0);

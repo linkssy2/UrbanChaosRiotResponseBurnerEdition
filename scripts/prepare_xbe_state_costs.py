@@ -1,4 +1,4 @@
-"""Specialize the renderer queue's common 64-byte comparison without changing its deltas."""
+"""Specialize full state blocks without changing the renderer queue's deltas."""
 from pathlib import Path
 from prepare_xbe_perf import once
 from prepare_xbe_prompt_handoff import between
@@ -21,13 +21,43 @@ SPECIAL64 = '''    // UC_STATE_COMPARE64: SendState's full blocks need exactly f
     }
 '''
 
+ORIGINAL_BLOCKS = '''        for (const Range& r : ranges_)
+            for (size_t off = r.off, end = r.off + r.len; off < end; off += 64)
+                Delta(reinterpret_cast<const uint8_t*>(&sent_) + off, now + off, std::min<size_t>(64, end - off));'''
+
+SPLIT64 = '''        // UC_STATE_BLOCKS64: keep full-block copies constant-sized; preserve each range's tail.
+        for (const Range& r : ranges_) {
+            const size_t full = r.len & ~size_t(63);
+            size_t off = r.off;
+            for (const size_t end = r.off + full; off < end; off += 64)
+                Delta(reinterpret_cast<const uint8_t*>(&sent_) + off, now + off, 64);
+            if (const size_t tail = r.len - full)
+                Delta(reinterpret_cast<const uint8_t*>(&sent_) + off, now + off, tail);
+        }'''
+
+ORIGINAL_HEADER_COPY = '        std::memcpy(now, kernel::HostPtr(header), type < 0x20000 || type == 0x30000 ? 12 : kHeaderBytes);'
+
+HEADER_COPY = '''        // UC_HEADER_COPY_SIZE: keep short headers bounded and expose constant copy lengths.
+        if (type < 0x20000 || type == 0x30000)
+            std::memcpy(now, kernel::HostPtr(header), 12);
+        else
+            std::memcpy(now, kernel::HostPtr(header), kHeaderBytes);'''
+
 
 def transform(source):
     if '// UC_STATE_COMPARE64:' in source:
         assert source.count(SPECIAL64) == 1
+    else:
+        signature = 'bool Same(const uint8_t* a, const uint8_t* b, size_t n) {\n'
+        source = once(source, signature, signature + SPECIAL64)
+    if '// UC_STATE_BLOCKS64:' in source:
+        assert source.count(SPLIT64) == 1 and ORIGINAL_BLOCKS not in source
+    else:
+        source = once(source, ORIGINAL_BLOCKS, SPLIT64)
+    if '// UC_HEADER_COPY_SIZE:' in source:
+        assert source.count(HEADER_COPY) == 1 and ORIGINAL_HEADER_COPY not in source
         return source
-    signature = 'bool Same(const uint8_t* a, const uint8_t* b, size_t n) {\n'
-    return once(source, signature, signature + SPECIAL64)
+    return once(source, ORIGINAL_HEADER_COPY, HEADER_COPY)
 
 
 def replay(source):
@@ -53,16 +83,31 @@ def replay(source):
     return transport
 
 
+def header_replay(source):
+    # Exercise the actual header/ring/cache code separately from state replay;
+    # only guest-address-to-host mapping is replaced by bounded fixture memory.
+    members = between(source, '    struct HeaderCopy {', '    Batch* cur_ =')
+    methods = between(source, '    uint32_t Scratch(', "    // a field of the render thread's State,")
+    return members + methods
+
+
 def prepare(area):
     area = Path(area)
     path = area / 'src/compat/render_thread.cpp'
     source = path.read_text()
     baseline = source.replace(SPECIAL64, '')
+    if '// UC_STATE_BLOCKS64:' in baseline:
+        baseline = once(baseline, SPLIT64, ORIGINAL_BLOCKS)
+    if '// UC_HEADER_COPY_SIZE:' in baseline:
+        baseline = once(baseline, HEADER_COPY, ORIGINAL_HEADER_COPY)
     optimized = transform(source)
     assert transform(optimized) == optimized
-    assert optimized.replace(SPECIAL64, '') == baseline
+    assert optimized.replace(SPECIAL64, '').replace(SPLIT64, ORIGINAL_BLOCKS).replace(HEADER_COPY, ORIGINAL_HEADER_COPY) == baseline
     path.write_text(optimized)
     fixture = Path(__file__).with_name('test_xbe_state_costs.cpp').read_text()
     fixture = once(fixture, '/* BASELINE_TRANSPORT */', replay(baseline))
     fixture = once(fixture, '/* OPTIMIZED_TRANSPORT */', replay(optimized))
+    fixture = once(fixture, '/* HEADER_CONSTANTS */', between(source, 'constexpr uint32_t kHeaderBytes', 'enum class WaitFor'))
+    fixture = once(fixture, '/* BASELINE_HEADER */', header_replay(baseline))
+    fixture = once(fixture, '/* OPTIMIZED_HEADER */', header_replay(optimized))
     (area / 'src/compat/test_state_costs.cpp').write_text(fixture)

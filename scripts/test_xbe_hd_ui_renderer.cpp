@@ -118,7 +118,7 @@ public:
     std::unordered_map<uc_xbe_signed::TextureKey,Tex,uc_xbe_signed::TextureKeyHash> textures_;
     struct PcPromptSlot {Tex texture;TrialPromptInput input;ULONGLONG updated=0;bool hd_ui=false;
         D3D12_RESOURCE_STATES state=D3D12_RESOURCE_STATE_COPY_DEST;};
-    PcPromptSlot pc_prompts_[5];
+    PcPromptSlot pc_prompts_[6];
     unsigned uploads=0,original_uploads=0;
     bool CreateTexture(Tex&,const TextureDesc&,const FormatInfo&,uc_xbe_signed::TextureKey);
     void RetireHdUi(Tex&);
@@ -189,15 +189,20 @@ int main(){
     prompt_input.held=true;CHECK(b.BindPcPrompt(2,0,0,d,stages,0));CHECK(art_calls==4);
     // Orders text, drag cue, interaction text and controller art cannot alias.
     auto* orders=b.BindPcPrompt(1,2,0,d,stages,0);
+    auto* context=b.BindPcPrompt(1,3,1,d,stages,0);
     auto* interaction=b.BindPcPrompt(1,1,0,d,stages,0);
     prompt_input.controller=true;auto* controller=b.BindPcPrompt(1,2,0,d,stages,0);
     CHECK(orders&&interaction&&controller&&orders!=prompt&&orders!=interaction&&orders!=controller);
+    CHECK(context&&context!=orders&&context!=interaction&&context!=controller&&context!=prompt);
     CHECK(orders!=b.pc_prompts_[1].texture.res.Get());
     prompt_input.controller=false;CHECK(b.BindPcPrompt(1,2,0,d,stages,0)==orders);
     // The same atlas is bound for both queued HUD owners without global mode reads.
     bind(); // finish the preceding layout/content refresh before tagging this fixture atlas
     tx.pc_prompt_id=1;state.uc_prompt_variant=1;state.uc_prompt_player=1;
     CHECK(bind()==interaction&&seen_player==1&&seen_variant==1);
+    state.uc_prompt_variant=3;CHECK(bind()==context&&seen_player==1&&seen_variant==3);
+    state.uc_prompt_variant=2;CHECK(bind()==orders&&seen_player==1&&seen_variant==2);
+    state.uc_prompt_variant=1;
     prompt_input.controller=true;state.uc_prompt_player=2;
     CHECK(bind()==controller&&seen_player==2&&seen_variant==1);
     const unsigned prior_art=art_calls;

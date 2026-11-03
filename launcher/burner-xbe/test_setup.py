@@ -23,7 +23,7 @@ import zlib
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 sys.dont_write_bytecode = True
-sys.path[:0] = [str(HERE), str(REPO / 'third_party/xboxrecomp/tools/xiso')]
+sys.path.insert(0, str(HERE))
 import import_game as worker
 import package as packager
 
@@ -62,17 +62,20 @@ def make_iso(path, files, base=0):
     with path.open('wb') as out:
         out.seek(base + 32 * 2048)
         header = bytearray(2048)
-        header[:18] = b'MICROSOFT*XBOX*MEDIA'
+        header[:20] = b'MICROSOFT*XBOX*MEDIA'
+        header[0x7EC:] = b'MICROSOFT*XBOX*MEDIA'
         struct.pack_into('<II', header, 0x14, dir_sectors[''], 2048)
         out.write(header)
         for name, records in dirs.items():
-            block = bytearray(2048)
+            block = bytearray(2048) if records else bytearray(b'\xFF' * 2048)
             at = 0
-            for leaf, sector, size, attr in records:
+            for index, (leaf, sector, size, attr) in enumerate(sorted(records)):
                 encoded = leaf.encode('ascii')
-                struct.pack_into('<HHIIBB', block, at, 0, 0, sector, size, attr, len(encoded))
+                next_at = at + ((14 + len(encoded) + 3) & ~3)
+                right = next_at // 4 if index + 1 < len(records) else 0
+                struct.pack_into('<HHIIBB', block, at, 0, right, sector, size, attr, len(encoded))
                 block[at+14:at+14+len(encoded)] = encoded
-                at += (14 + len(encoded) + 3) & ~3
+                at = next_at
             out.seek(base + dir_sectors[name] * 2048)
             out.write(block)
         for name, content in files.items():
@@ -103,6 +106,9 @@ def check_worker(tmp):
     required = {name: {'size': len(content), 'sha256': digest(content)} for name, content in files.items()}
     (package / 'tools/disc-manifest.json').write_text(json.dumps({'version': 1, 'files': required}))
     assert worker.RUNTIME_FILES == packager.RUNTIME_FILES
+    packaged_sources = packager.sources(package / 'runtime' / packager.RUNTIME_NAME)
+    assert packaged_sources['tools/disc.py'] == HERE / 'disc.py'
+    assert 'tools/xdvdfs.py' not in packaged_sources and 'xdvdfs' not in sys.modules
     for name in worker.RUNTIME_FILES:
         (package / 'runtime' / name).write_bytes(('fixture-only-' + name).encode('ascii'))
     runtime = {name: worker.sha(package / 'runtime' / name) for name in worker.RUNTIME_FILES}
@@ -332,6 +338,7 @@ def check_worker(tmp):
     assert not worker.supported_hash('Default.xbe', '0'*64, original)
     assert not worker.supported_hash('scene.ent', retail, original)
     return {'real_xdvdfs_import': True, 'base0_and_video_partition': True,
+            'standalone_xdvdfs_reader_and_package_verified': True,
             'existing_002_import_reused': True, 'all_payload_hashes_checked': True,
             'malformed_revision_cancel_and_corruption_rejected': True,
             'prior_install_and_both_save_trees_preserved': True,
@@ -558,6 +565,10 @@ def check_asset_audit(tmp):
     for name in packager.LAUNCHERS:
         (package / name).write_bytes(b'fixture-launcher-code')
     allowed = {p.relative_to(package).as_posix() for p in package.rglob('*') if p.is_file()} - packager.LAUNCHERS
+    def receipt():
+        (tmp / (package.name + '-allowlist.json')).write_text(json.dumps({'files': sorted(allowed)}))
+        packager.write_update_manifest(package)
+    receipt()
     assert packager.audit(package, allowed)['original_payload_files_in_package'] == 0
     artwork = package / 'runtime/hd-ui/restored.png'
     artwork.parent.mkdir()
@@ -568,6 +579,7 @@ def check_asset_audit(tmp):
     info = json.loads(manifest_path.read_text())
     info['artwork'] = {'hd-ui/restored.png': digest(png)}
     manifest_path.write_text(json.dumps(info))
+    receipt()
     assert packager.audit(package, allowed)['restored_artwork_files'] == 1
     artwork.write_bytes(b'bad-art')
     expect_error(lambda: packager.audit(package, allowed), ValueError)
@@ -745,6 +757,8 @@ def check_shader_seed(tmp):
     for launcher in packager.LAUNCHERS:
         (package / launcher).write_bytes(b'fixture launcher')
     allowed = {p.relative_to(package).as_posix() for p in package.rglob('*') if p.is_file()} - packager.LAUNCHERS
+    (tmp / (package.name + '-allowlist.json')).write_text(json.dumps({'files': sorted(allowed)}))
+    packager.write_update_manifest(package)
     assert packager.audit(package, allowed)['shader_seed_files'] == 1
     write_info({})
     expect_error(lambda: packager.audit(package, allowed), ValueError)
@@ -846,8 +860,8 @@ def check_compiled_direct(package, tmp):
     (harness / 'tools/import_game.py').write_text(
         "from pathlib import Path\nimport json,sys\n"
         "root=Path(__file__).resolve().parent.parent\n"
-        "data=Path(sys.argv[sys.argv.index('--data')+1]).resolve()\n"
-        "assert data==root/'GameData'\nassert Path.cwd()==root\n"
+        "assert '--data' not in sys.argv, 'Launcher must preserve the shared installation selection'\n"
+        "data=root/'GameData'\nassert Path.cwd()==root\n"
         "with (root/'tools/worker-events.jsonl').open('a',encoding='utf-8') as f:\n"
         " f.write(json.dumps({'action':sys.argv[1],'data':str(data),'cwd':str(Path.cwd())})+'\\n')\n"
         "if sys.argv[1]=='launch':(data/'launched.txt').write_text('harmless worker')\n")

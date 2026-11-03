@@ -120,7 +120,7 @@ def _movie_source(disc, name, scratch, check):
     return target
 
 
-def install(iso, data, cancel):
+def _install(iso, data, cancel, original):
     import import_game as worker
 
     iso, data = Path(iso).absolute(), Path(data).absolute()
@@ -141,7 +141,6 @@ def install(iso, data, cancel):
     # The previous audio install remains in place until atomic publication.
     if shutil.disk_usage(data).free < OUTPUT_LIMIT + spanish_movies.LIMIT + 256 * BLOCK:
         raise ValueError('At least 8.4 GiB of free space is needed to convert Spanish audio safely.')
-    original = data / 'installed/game_files'
     parent = data / 'xbe-runtime/translations'
     translated, destination = parent / 'es-zarf', parent / 'es-voices'
     for path in (original, translated, destination):
@@ -228,3 +227,15 @@ def install(iso, data, cancel):
             if temporary.resolve().parent != parent.resolve() or not temporary.name.startswith('.spanish-voice-iso-'):
                 raise ValueError('Invalid Spanish audio staging directory.')
             shutil.rmtree(temporary)
+
+
+def install(iso, data, cancel):
+    import import_game as worker
+
+    iso, data = Path(iso).absolute(), Path(data).absolute()
+    unlinked(iso, root=iso.parent)
+    if not iso.is_file() or not 32 * 2048 <= iso.stat().st_size <= 9 * 1024**3:
+        raise ValueError('Select your European PS2 Urban Chaos ISO (SLES-53991), not a ZIP or folder.')
+    names = {'Movies/' + name[7:] if name in MOVIES else name for name in OUTPUTS}
+    with worker.original_sources(data, names, cancel) as original:
+        return _install(iso, data, cancel, original)

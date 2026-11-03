@@ -25,6 +25,21 @@ static void Enter(unsigned slot){
     trial_coop::ResetPauseOwner();trial_coop::pause_state.Sample(false,false);
     trial_coop::pause_state.Sample(slot==0,slot==1);trial_coop::pause_state.Consume(true);trial_coop::pause_state.Enter();
 }
+static void WindowSwitcher(bool corrected,int owner){
+    ImGui::CreateContext();auto& io=ImGui::GetIO();io.IniFilename=nullptr;
+    io.DisplaySize={640,480};io.DeltaTime=1.f/60;io.Fonts->Build();
+    io.ConfigFlags|=ImGuiConfigFlags_NavEnableGamepad;io.BackendFlags|=ImGuiBackendFlags_HasGamepad;
+    trial_coop::ResetPauseOwner();if(owner>=0)Enter(unsigned(owner));
+    auto frame=[&]{
+        if(corrected)TrialCoopPauseImGuiInput();
+        ImGui::NewFrame();ImGui::Begin("Game HUD");ImGui::TextUnformatted("Health");ImGui::End();
+        ImGui::Begin("Game menu");ImGui::TextUnformatted("Options");ImGui::End();ImGui::Render();
+    };
+    frame();frame();io.AddKeyEvent(ImGuiKey_GamepadFaceLeft,true);
+    for(unsigned i=0;i<60;++i)frame();
+    assert(bool(GImGui->NavWindowingTarget)==!corrected);
+    ImGui::DestroyContext();
+}
 int main(){
     ImGui::CreateContext();trial_coop::SetActive(true);
     Dirty();Enter(1);TrialCoopPauseImGuiInput();
@@ -45,5 +60,7 @@ int main(){
     TrialCoopPauseImGuiInput();io.ConfigFlags|=ImGuiConfigFlags_NoMouse;
     Enter(1);TrialCoopPauseImGuiInput();trial_coop::ResetPauseOwner();TrialCoopPauseImGuiInput();
     assert(io.ConfigFlags&ImGuiConfigFlags_NoMouse); // preserve an already configured NoMouse flag
-    ImGui::DestroyContext();std::puts("Pause ImGui: actual held/queued key and mouse state cleared only on owner handoff; window lifecycle preserved.");
+    ImGui::DestroyContext();
+    WindowSwitcher(false,-1);for(int owner:{-1,0,1})WindowSwitcher(true,owner);
+    std::puts("Pause ImGui: owner handoff and mouse isolation; original hold-X window-switcher reproduced and disabled in gameplay and both pause owners.");
 }

@@ -1,4 +1,5 @@
 #pragma once
+#include "xbe_cheats.h"
 // Host copies this identity only; it must not read guest memory. Kind 0 revokes
 // the PC graphics entry, 1 is Main, 2 is Pause, and 3 is the Options hub.
 extern void TrialGraphicsMenuContext(uint32_t manager,uint32_t screen,uint32_t owner,uint32_t kind);
@@ -18,6 +19,13 @@ extern bool TrialControlsProfile(uint32_t* values,bool valid);
 static void GraphicsMenuPublish(TrialMenuContext context={}){
     graphics_published=context;
     TrialGraphicsMenuContext(context.manager,context.screen,context.owner,context.kind);
+    // menu_pointer_end publishes this same settled frontend frame before this
+    // callback. Pair the copied Cheats panel with its exact native main-menu epoch.
+    if(context.kind==1&&regs&&hf_view.epoch&&hf_view.kind==UC_HF_LIST&&
+       hf_view.screen==context.screen&&hf_view.owner==context.owner&&
+       !(hf_view.source_kind&UC_HF_TRANSITION))
+        TrialCheatsUpdate(*regs,ram,hf_view.epoch);
+    else TrialCheatsInvalidate();
     // Same profile storage and widths as original Controller Options factory 276810.
     constexpr uint32_t profile=0x5152d4;
     uint32_t values[7]{};

@@ -1,4 +1,4 @@
-"""Aspect-preserving Fill/4:3 on the original movie quad, before queued submission."""
+"""Full-frame Fill/original 4:3 on the movie quad, before queued submission."""
 from pathlib import Path
 import hashlib
 import re

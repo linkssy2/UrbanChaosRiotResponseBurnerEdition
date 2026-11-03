@@ -1,4 +1,0 @@
-#ifndef MIGRATION_PARTICLES_FIRE_CLEANUP_GUEST_H
-#define MIGRATION_PARTICLES_FIRE_CLEANUP_GUEST_H
-int uc_migration_particles_fire_cleanup(unsigned entry);
-#endif

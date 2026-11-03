@@ -11,7 +11,7 @@ import sys
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
-VERSION = '0.08'
+VERSION = '0.09'
 SDK = REPO / 'build/upstream-review-xboxxbe-20261014'
 RUNTIME_NAME = 'UrbanChaosXbeTrial.exe'
 RUNTIME_FILES = (RUNTIME_NAME, 'zlib1.dll', 'libusb-1.0.dll', 'msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll')
@@ -19,7 +19,8 @@ VS = Path('C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools')
 CRT = VS / 'VC/Redist/MSVC/14.44.35112/x64/Microsoft.VC143.CRT'
 PYTHON_FILES = ('python.exe', 'python312.dll', 'python3.dll', 'python312.zip',
                 'vcruntime140.dll', 'vcruntime140_1.dll', '_hashlib.pyd', 'libcrypto-3.dll',
-                '_ctypes.pyd', 'libffi-8.dll', 'LICENSE.txt')
+                '_ctypes.pyd', 'libffi-8.dll', '_ssl.pyd', 'libssl-3.dll', '_socket.pyd',
+                'select.pyd', 'unicodedata.pyd', 'LICENSE.txt')
 LAUNCHERS = {'Burner Edition Setup.exe', 'Play Burner Edition.exe'}
 ARTWORK = REPO / 'artwork/hd-ui'
 ARTWORK_LIMIT = 32 * 1024 * 1024
@@ -188,6 +189,10 @@ def sources(runtime):
     result = {
         'tools/import_game.py': HERE / 'import_game.py',
         'tools/setup_feedback.py': HERE / 'setup_feedback.py',
+        'tools/diagnostics.py': HERE / 'diagnostics.py',
+        'tools/release_check.py': HERE / 'release_check.py',
+        'tools/release_download.py': HERE / 'release_download.py',
+        'tools/release_update.py': HERE / 'release_update.py',
         'tools/disc.py': HERE / 'disc.py',
         'tools/world_textures.py': HERE / 'world_textures.py',
         'tools/shader_seed.py': HERE / 'shader_seed.py',
@@ -204,7 +209,6 @@ def sources(runtime):
         'tools/coop_injection_assets.py': REPO / 'scripts/coop_injection_assets.py',
         'tools/analyze_frontend.py': REPO / 'scripts/analyze_frontend.py',
         'tools/disc-manifest.json': HERE.parent / 'burner/disc-manifest.json',
-        'tools/xdvdfs.py': REPO / 'third_party/xboxrecomp/tools/xiso/xdvdfs.py',
         'runtime/' + RUNTIME_NAME: runtime,
         'runtime/zlib1.dll': runtime.parent / 'zlib1.dll',
         'runtime/libusb-1.0.dll': runtime.parent / 'libusb-1.0.dll',
@@ -212,10 +216,9 @@ def sources(runtime):
         'licenses/libusb-1.0.29.tar.bz2': REPO / '.tools/libusb-1.0.29/libusb-1.0.29.tar.bz2',
         'cover.png': HERE.parent / 'burner/cover.png',
         'README.txt': HERE / 'README-release.txt',
+        'assets/README.txt': HERE / 'README-assets.txt',
         'licenses/XboxXBERecomp.txt': SDK / 'LICENSE',
         'licenses/XboxXBERecomp-third-party.txt': SDK / 'THIRD_PARTY.txt',
-        'licenses/xboxrecomp.txt': REPO / 'third_party/xboxrecomp/LICENSE',
-        'licenses/xboxrecomp-notice.txt': REPO / 'third_party/xboxrecomp/NOTICE',
         'licenses/zlib.txt': Path('C:/Users/Administrator/.cache/codex-runtimes/codex-primary-runtime/dependencies/native/git/mingw64/share/licenses/zlib/LICENSE'),
         'licenses/Microsoft-Visual-Cpp-Runtime-license.rtf': HERE / 'Microsoft-Visual-Cpp-Runtime-license.rtf',
         'licenses/Microsoft-Visual-Studio-Redist.txt': VS / 'Licenses/1033/Redist.txt',
@@ -225,8 +228,6 @@ def sources(runtime):
         result['runtime/' + name] = CRT / name
     for name in PYTHON_FILES:
         result['tools/python/' + name] = REPO / '.tools/python' / name
-    for path in (REPO / 'third_party/xboxrecomp/LICENSES').glob('*.txt'):
-        result['licenses/' + path.name] = path
     tool_files = json.loads(VOICE_TOOLS.read_text(encoding='utf-8'))['files']
     for name in tool_files:
         if not re.fullmatch(r'ffmpeg/[A-Za-z0-9_.-]+', name):
@@ -239,7 +240,7 @@ def audit(package, allowlist, require_launchers=True):
     """Exact file allowlist plus full disc-payload hashes; writes nothing in package."""
     expected = set(allowlist)
     if require_launchers:
-        expected |= LAUNCHERS
+        expected |= LAUNCHERS | {'package-manifest.json'}
     paths = list(package.rglob('*'))
     if any(path.is_symlink() or path.is_junction() for path in paths):
         raise ValueError('Package contains a linked file or directory')
@@ -250,7 +251,7 @@ def audit(package, allowlist, require_launchers=True):
         # The embedded build interpreter does not put script directories on sys.path.
         saved_path = sys.path[:]
         try:
-            sys.path[:0] = [str(HERE), str(REPO / 'third_party/xboxrecomp/tools/xiso')]
+            sys.path.insert(0, str(HERE))
             spec = importlib.util.spec_from_file_location('burner_spanish_voice_iso', HERE / 'spanish_voice_iso.py')
             converter = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(converter)
@@ -328,6 +329,15 @@ def audit(package, allowlist, require_launchers=True):
         raise ValueError('Partner healing animation recipe identity changed')
     if 'coop_injection' in info and not {'tools/coop_injection_assets.py', 'tools/analyze_frontend.py'} <= actual:
         raise ValueError('Missing partner healing animation setup helpers')
+    if require_launchers:
+        receipt = json.loads((package / 'package-manifest.json').read_text())
+        shared = {name: digest for name, digest in files.items() if name not in
+                  ('package-manifest.json', 'burner.sh', 'README-linux.txt')}
+        if (receipt.get('files') != shared or receipt.get('version') != VERSION or
+                receipt.get('runtime_sha256') != files['runtime/' + RUNTIME_NAME] or
+                receipt.get('release_profile') != {'name': 'burner-release', 'diagnostics': False} or
+                receipt.get('complete') is not True):
+            raise ValueError('Online update manifest does not match the package')
     return {'version': VERSION, 'strict_allowlist': True, 'files': files,
             'disc_payload_hashes_checked': len(forbidden_hashes),
             'original_payload_files_in_package': 0,
@@ -369,7 +379,7 @@ def assemble(runtime, expected_sha256, output, shader_seed=None):
     (output / 'tools/runtime-manifest.json').write_text(json.dumps(info, indent=2) + '\n')
     (output / 'licenses/DEPENDENCIES.txt').write_text(
         'XboxXBERecomp by TGP482: https://github.com/TGP482/XboxXBERecomp (MIT).\n'
-        'Earlier port and retained import/input helpers: xboxrecomp by sp00nz (MIT); associated notices included.\n'
+        'Urban Chaos input profiles, UI and disc-import adapters are maintained with this port.\n'
         'SDL3, Dear ImGui and toml++ notices: XboxXBERecomp-third-party.txt.\n'
         'libusb 1.0.29 (LGPL-2.1-or-later): unmodified upstream Windows DLL; license and corresponding source archive included. https://github.com/libusb/libusb/releases/tag/v1.0.29\n'
         'Python3.12 and included OpenSSL: tools/python/LICENSE.txt. zlib: zlib.txt.\n'
@@ -388,6 +398,16 @@ def assemble(runtime, expected_sha256, output, shader_seed=None):
     print(output)
 
 
+def write_update_manifest(output):
+    allow = json.loads((output.parent / (output.name + '-allowlist.json')).read_text())['files']
+    files = {name: sha(output / name) for name in sorted(set(allow) | LAUNCHERS)
+             if name not in ('package-manifest.json', 'burner.sh', 'README-linux.txt')}
+    record = {'version': VERSION, 'complete': True,
+              'release_profile': {'name': 'burner-release', 'diagnostics': False},
+              'runtime_sha256': files['runtime/' + RUNTIME_NAME], 'files': files}
+    (output / 'package-manifest.json').write_text(json.dumps(record, indent=2) + '\n', encoding='utf-8')
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--runtime', type=Path)
@@ -395,8 +415,11 @@ def main():
     parser.add_argument('--shader-seed', type=Path, help='Validated seed directory; defaults to packaging/shader-seed when present')
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--audit', action='store_true')
+    parser.add_argument('--update-manifest', action='store_true')
     args = parser.parse_args()
-    if args.audit:
+    if args.update_manifest:
+        write_update_manifest(args.output)
+    elif args.audit:
         allowlist = json.loads((args.output.parent / (args.output.name + '-allowlist.json')).read_text())['files']
         result = audit(args.output, allowlist)
         (args.output.parent / (args.output.name + '-asset-audit.json')).write_text(json.dumps(result, indent=2) + '\n')

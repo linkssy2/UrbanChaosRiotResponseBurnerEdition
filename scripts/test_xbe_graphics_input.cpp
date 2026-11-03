@@ -13,6 +13,7 @@
 #include <string>
 #include "core/input.h"
 #include "xbe_controls.h"
+#include "xbe_health_packs.h"
 #include "xbe_controls_capture.h"
 #include "xbe_coop.h"
 #include "xbe_coop_pause.h"
@@ -31,7 +32,13 @@ unsigned capture_posts=0;
 bool conversation_down=false,conversation_enabled=false;
 bool reload_down=false,reload_enabled=false;
 bool health_down[2]{},health_allowed[2]{};
-void TrialHealthPackInput(unsigned slot,bool down,bool allowed){assert(slot<2);health_down[slot]=down;health_allowed[slot]=allowed;}
+TrialHealthPackStatus test_health_status[2]{};
+TrialHealthPackUse requested_health[2]{};unsigned health_requests[2]{};
+uint64_t test_ticks=1000;
+uint64_t TestTicks(){return test_ticks;}
+
+bool aim_cycle[2]{},aim_allowed[2]{};
+void TrialAimInput(unsigned slot,bool down,bool allowed){assert(slot<2);aim_cycle[slot]=down;aim_allowed[slot]=allowed;}
 void TrialReloadPublish(bool down,bool enabled){reload_down=down;reload_enabled=enabled;}
 void TrialConversationPublish(bool down,bool enabled){conversation_down=down;conversation_enabled=enabled;}
 bool focused(){return test_focused;}
@@ -48,11 +55,15 @@ SHORT TestAsyncKeyState(int key){if(key>0&&key<256){++key_queries[key];return ph
 int controller_path(wchar_t*){return 0;}
 BOOL TestPostMessage(HWND,UINT,WPARAM,LPARAM){++capture_posts;return TRUE;}
 }
+TrialHealthPackStatus TrialHealthPackSnapshot(unsigned slot){return test_health_status[slot];}
+void TrialHealthPackRequest(unsigned slot,TrialHealthPackUse use){requested_health[slot]=use;++health_requests[slot];}
+void TrialHealthPackInput(unsigned slot,bool down,bool allowed){assert(slot<2);health_down[slot]=down;health_allowed[slot]=allowed;}
 #define GetAsyncKeyState TestAsyncKeyState
+#define GetTickCount64 TestTicks
 #undef PostMessage
 #define PostMessage TestPostMessage
 #define xbox_KeyboardMode TrialGameplayKeyboardMode
-#include "third_party/xboxrecomp/src/input/host_keyboard_config.h"
+#include "xbe_keyboard_bindings.inc"
 #undef xbox_KeyboardMode
 // GENERATED_KEYBOARD_MODE
 #include "xbe_controls_backend.inc"
@@ -64,6 +75,27 @@ BOOL TestPostMessage(HWND,UINT,WPARAM,LPARAM){++capture_posts;return TRUE;}
 // GENERATED_MENU_KEYS
 // GENERATED_PAD
 // GENERATED_CONTROL_STICK
+
+static UINT TestRawInput(HRAWINPUT handle,UINT command,void* data,UINT* size,UINT header){
+    assert(command==RID_INPUT&&*size==sizeof(RAWINPUT)&&header==sizeof(RAWINPUTHEADER));
+    std::memcpy(data,handle,sizeof(RAWINPUT));return sizeof(RAWINPUT);
+}
+#define GetRawInputData TestRawInput
+// GENERATED_MOUSE_HOST
+#undef GetRawInputData
+static uint8_t mouse_guest[0x12000]{};
+static bool menu_pointer_readable(uint32_t at,uint32_t bytes){return at>=0x10000&&at<=sizeof mouse_guest&&bytes<=sizeof mouse_guest-at;}
+#define MEM32(a) (*reinterpret_cast<uint32_t*>(mouse_guest+uint32_t(a)))
+#define MEMF(a) (*reinterpret_cast<float*>(mouse_guest+uint32_t(a)))
+using std::isfinite;
+#include "pc_mouse_rotation.h"
+// GENERATED_MOUSE_OWNER
+static void TestGuestMouse(uint32_t object){
+    const uint32_t g_ebx=object;
+    switch(26){
+// GENERATED_MOUSE_GUEST
+    }
+}
 
 static bool Neutral(const input::Pad& p){
     if(p.buttons||p.lx||p.ly||p.rx||p.ry)return false;
@@ -102,9 +134,123 @@ static input::Pad Controller(unsigned control){
     }
     return p;
 }
+static void CheckMouseLook(){
+    constexpr uint32_t first=0x10000,second=0x11000;
+    RAWINPUT raw{};raw.header.dwType=RIM_TYPEMOUSE;
+    raw.data.mouse.lLastX=100;raw.data.mouse.lLastY=50;
+    for(bool coop:{false,true})for(unsigned invert:{0u,1u}){
+        ReleaseAll();trial_coop::Reset();trial_coop::SetActive(coop);
+        std::memset(mouse_guest,0,sizeof mouse_guest);
+        MEM32(second+0x368)=1;
+        MEMF(first+0x37c)=MEMF(second+0x37c)=1.5f;
+        MEMF(first+0x690)=.7f;
+        captured=true;gameplay=true;menu_mode=false;order_held=false;
+        dx=dy=spin_dx=spin_dy=order_x=order_y=0;mouse_sensitivity=400;mouse_invert=invert;
+        TestMouseMessage(WM_INPUT,reinterpret_cast<intptr_t>(&raw));
+        assert(dx==100&&dy==50&&spin_dx==100&&spin_dy==50);
+        TestGuestMouse(second);assert(dx==100&&dy==50); // P2 cannot consume P1's mouse.
+        assert(MEMF(second+0x688)==0&&MEMF(second+0x68c)==0);
+        TestGuestMouse(first);
+        assert(std::fabs(MEMF(first+0x688)-(invert?.05f:-.05f))<.000001f);
+        assert(std::fabs(MEMF(first+0x68c)+.1f)<.000001f&&MEMF(first+0x690)==.7f);
+        assert(!dx&&!dy&&spin_dx==100&&spin_dy==50); // Spin keeps physical direction.
+        const float pitch=MEMF(first+0x688),yaw=MEMF(first+0x68c);
+        TestGuestMouse(first);assert(MEMF(first+0x688)==pitch&&MEMF(first+0x68c)==yaw);
+        input::Pad pad;pad.connected=true;pad.rx=17000;pad.ry=-21000;
+        const auto actual=Poll(coop?1:0,pad);assert(actual.rx==pad.rx&&actual.ry==pad.ry);
+        InterlockedExchange(&keyboard_mode,0);dx=100;dy=50;TestGuestMouse(first);
+        assert(dx==100&&dy==50&&MEMF(first+0x688)==pitch); // Controller look is untouched.
+        xbox_KeyboardNoteInput();test_focused=false;TestGuestMouse(first);
+        assert(dx==100&&dy==50&&MEMF(first+0x688)==pitch);test_focused=true;
+        dx=dy=0;spin_dx=spin_dy=0;order_held=true;
+        TestMouseMessage(WM_INPUT,reinterpret_cast<intptr_t>(&raw));
+        assert(!dx&&!dy&&!spin_dx&&!spin_dy&&order_x==100&&order_y==50&&OrderDirection()==8);
+        order_x=order_y=0;raw.data.mouse.lLastX=0;raw.data.mouse.lLastY=-80;
+        TestMouseMessage(WM_INPUT,reinterpret_cast<intptr_t>(&raw));
+        assert(order_y==-80&&OrderDirection()==1); // Up remains Up in the order gesture.
+        order_held=false;raw.data.mouse.lLastX=100;raw.data.mouse.lLastY=50;
+        captured=false;TestMouseMessage(WM_INPUT,reinterpret_cast<intptr_t>(&raw));assert(!dx&&!dy);
+    }
+    mouse_invert=0;trial_coop::Reset();order_held=false;order_x=order_y=spin_dx=spin_dy=0;ReleaseAll();
+    gameplay=false;menu_mode=true;captured=false;
+}
+#undef MEM32
+#undef MEMF
+static void CheckNativeMenuY(){
+    // The UI observes Y for qualified pause shortcuts. With no native panel
+    // open, the original main-menu code recognizer must receive the same Y.
+    trial_coop::Reset();ReleaseAll();gameplay=false;menu_mode=true;captured=false;
+    InterlockedExchange(&keyboard_mode,0);
+    input::Pad raw;raw.connected=true;
+    for(unsigned pressure:{0u,30u,171u,255u}){
+        raw.analog[3]=uint8_t(pressure);
+        const auto calls=menu_pad_calls;
+        const auto actual=Poll(0,raw);
+        assert(menu_pad_calls==calls+1&&menu_pad_connected);
+        assert(bool(menu_pad_buttons&0x200)==(pressure>30));
+        assert(actual.connected&&actual.buttons==raw.buttons);
+        assert(!std::memcmp(actual.analog,raw.analog,sizeof raw.analog));
+    }
+    // A real host panel owns input, and its closing Y cannot leak into the
+    // native code sequence until released. A fresh Y resumes unchanged.
+    test_open=true;TrialGraphicsInputChanged();assert(Neutral(Poll(0,raw)));
+    Close();assert(Neutral(Poll(0,raw)));assert(Neutral(Poll(0,raw)));
+    assert(Neutral(Poll(0)));assert(Poll(0,raw).analog[3]==255);
+    ReleaseAll();xbox_KeyboardNoteInput();
+}
+static void HealthGestures(){
+    using Use=TrialHealthPackUse;
+    for(unsigned player=0;player<2;++player){
+        trial_coop::Reset();trial_coop::SetActive(true);ReleaseAll();
+        captured=true;menu_mode=false;gameplay=true;test_presentation=1;
+        health_requests[0]=health_requests[1]=0;health_gesture[player].Reset();
+        test_health_status[player]={1,3,true,false};
+        auto poll=[&](bool down,unsigned elapsed=0){
+            test_ticks+=elapsed;input::Pad p{};p.connected=true;p.buttons=down?2:0;return Poll(player,p);
+        };
+        poll(false);poll(true);poll(false,80);poll(true,150);
+        assert(health_requests[player]==1&&requested_health[player]==Use::Self&&!health_requests[1-player]);
+        poll(true,1000);assert(health_requests[player]==1);poll(false);
+        // A hold is admitted only for an aimed partner; one use per release.
+        test_health_status[player].can_revive=true;poll(true,500);
+        assert(!(poll(true,649).buttons&2)&&health_requests[player]==1);
+        poll(true,1);assert(health_requests[player]==2&&requested_health[player]==Use::Partner);
+        poll(true,1000);assert(health_requests[player]==2);poll(false);
+        poll(true,500);test_health_status[player].can_revive=false;poll(true,800);
+        assert(health_requests[player]==2);poll(false);poll(true,500);poll(true,700);
+        assert(health_requests[player]==2);poll(false); // ordinary held orders never heal
+        // A menu/focus/cinematic/disconnect transition cannot complete a stale hold or double tap.
+        for(unsigned reason=0;reason<6;++reason){
+            test_health_status[player].can_revive=true;poll(true,500);
+            if(reason==0)test_open=true;if(reason==1)menu_mode=true;if(reason==2)test_focused=false;
+            if(reason==3)test_presentation=2;if(reason==4)TrialGraphicsInputChanged();
+            if(reason==5){input::Pad p{};p.buttons=2;Poll(player,p);}else poll(true,800);
+            test_open=false;menu_mode=false;test_focused=true;test_presentation=1;
+            poll(true,800);assert(health_requests[player]==2);poll(false);
+        }
+        // X retains its normal gameplay action; only ImGui window switching is removed.
+        input::Pad x{};x.connected=true;x.analog[2]=255;assert(Poll(player,x).analog[2]==255);
+        test_health_status[player].can_revive=false;test_health_status[player].can_heal_partner=true;
+        poll(false);poll(true,500);poll(true,650);
+        assert(health_requests[player]==3&&requested_health[player]==Use::Partner&&!health_requests[1-player]);poll(false);
+    }
+    test_health_status[0]=test_health_status[1]={};trial_coop::Reset();ReleaseAll();
+    trial_coop::SetActive(true);captured=true;menu_mode=false;gameplay=true;test_presentation=1;
+    trial_controls::partner_loaded=true;trial_controls::partner_binding[0]='J';trial_controls::partner_binding[1]=0;
+    partner_key_held=false;health_requests[0]=health_requests[1]=0;
+    physical_keys['J']=true;Poll(1);assert(!health_requests[0]&&!health_requests[1]);
+    Poll(0);assert(health_requests[0]==1&&requested_health[0]==Use::Partner&&!health_requests[1]);
+    Poll(0);assert(health_requests[0]==1);physical_keys['J']=false;Poll(0);
+    menu_mode=true;physical_keys['J']=true;Poll(0);menu_mode=false;Poll(0);assert(health_requests[0]==1);
+    physical_keys['J']=false;Poll(0);physical_keys['J']=true;Poll(0);assert(health_requests[0]==2);
+    trial_coop::Reset();ReleaseAll();
+    puts("Health gestures: both pad owners, timing, one-shot use, cancelled partner, menus/focus/cinematics/disconnect and unchanged X passed");
+}
 int main(){
     keyboard_init();keyboard_defaults(&keyboard_config);
     controller_init();controller_defaults(&controller_config);controller_publish();
+    CheckMouseLook();
+    CheckNativeMenuY();
     // Character selection receives the first physical device before the keyboard
     // adapter marks logical port zero connected. Its input cannot hide the page.
     test_open=true;coop_menu_open=true;xbox_KeyboardNoteInput();
@@ -506,8 +652,23 @@ int main(){
     assert(health_down[1]&&health_allowed[1]);
     test_open=true;Poll(0);Poll(1,second);
     assert(!health_down[0]&&!health_down[1]&&!health_allowed[0]&&!health_allowed[1]);
+    assert(!aim_cycle[0]&&!aim_cycle[1]&&!aim_allowed[0]&&!aim_allowed[1]);
     test_open=false;test_focused=false;Poll(0);Poll(1,second);
     assert(!health_allowed[0]&&!health_allowed[1]);test_focused=true;
+    // The extra magnification key uses each player's physical bindings, while
+    // their normal Zoom action still passes through the original remapper.
+    ReleaseAll();captured=true;menu_mode=false;gameplay=true;
+    trial_controls::aim_loaded[0]=trial_controls::aim_loaded[1]=true;
+    trial_controls::scope_zoom[0][0][0]='N';trial_controls::scope_zoom[1][1][0]=11;
+    physical_keys['N']=true;Poll(0);Poll(1);
+    assert(aim_cycle[0]&&aim_allowed[0]&&!aim_cycle[1]&&aim_allowed[1]);
+    second={};second.connected=true;second.buttons=64;Poll(1,second);
+    assert(aim_cycle[1]&&aim_allowed[1]);physical_keys['N']=false;Poll(0);
+    assert(!aim_cycle[0]&&aim_cycle[1]);
+    test_presentation=2;Poll(0);Poll(1,second);
+    assert(!aim_allowed[0]&&!aim_allowed[1]);test_presentation=0;
+    test_focused=false;Poll(0);Poll(1,second);assert(!aim_allowed[0]&&!aim_allowed[1]);test_focused=true;
+    TrialGraphicsInputChanged();assert(!aim_cycle[0]&&!aim_cycle[1]&&!aim_allowed[0]&&!aim_allowed[1]);
     trial_coop::Reset();order_buttons=0;ReleaseAll();
     for(unsigned player=0;player<2;++player){
         ReleaseAll();trial_coop::SetActive(true);trial_coop::ResetPauseOwner();
@@ -533,4 +694,5 @@ int main(){
         trial_coop::Reset();
     }
     std::puts("graphics input: actual pad/keyboard ownership, focus, all ports, held keys/clicks/sticks and release handoff passed");
+    HealthGestures();
 }

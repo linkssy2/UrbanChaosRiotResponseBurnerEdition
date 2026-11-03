@@ -29,8 +29,11 @@ unsigned PromptTextVariant(uint8_t* base,uint32_t text,uint32_t flags,uint32_t c
         if(!TrialGuestReadable(text,1))return 0;
         unsigned c=base[text++];if(c>='A'&&c<='Z')c+='a'-'A';key[i]=char(c);
         if(!c){
-            // This authored D-pad hint means Orders, not menu navigation.
-            if(!std::strcmp(key,"hud-help-40"))return 2;
+            // These authored D-pad hints use the mouse Orders gesture.
+            if(!std::strcmp(key,"hud-help-40")||!std::strcmp(key,"hud-help-57"))return 2;
+            // The single up-direction hints use the separately bound Context order.
+            for(const char* command:{"hud-help-48","hud-help-102","hud-help-106","hud-help-107","hud-help-108"})
+                if(!std::strcmp(key,command))return 3;
             // Exact authored interaction IDs: Open/Close Door, Use Ladder,
             // Operate, Rescue, Recapture, Open. Reload is HUD-Help-50.
             if(i==13&&!std::memcmp(key,"hud-operate-",12)&&

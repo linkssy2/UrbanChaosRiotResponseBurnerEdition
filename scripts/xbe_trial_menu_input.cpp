@@ -19,6 +19,7 @@
 #include "xbe_coop_pause.h"
 #include "xbe_coop_cinematics.h"
 #include "xbe_health_packs.h"
+#include "xbe_aim_mode.h"
 #include "xbe_menu_key_taps.h"
 
 namespace {
@@ -30,11 +31,14 @@ float click_x,click_y;
 long dx=0,dy=0,order_x=0,order_y=0;
 long spin_dx=0,spin_dy=0;
 bool spin_button_held[2]={true,true};
+TrialHealthPackGesture health_gesture[2];
+bool partner_key_held=false;
 int firearm_direction=0;
 float spin_x=0,spin_y=0;
 uint64_t spin_tick=0;
 unsigned order_phase=0,order_buttons=0,order_selection=0;
 unsigned mouse_sensitivity=400;
+unsigned mouse_invert=0;
 bool order_held=false;
 bool escape_pause_held=false;
 bool menu_right_down=false,menu_right_pending=false,menu_right_consumed=false;
@@ -53,7 +57,7 @@ BOOL keyboard_key_down(int key){return !trial_coop::PauseBlocksKeyboard()&&focus
 int controller_path(wchar_t* path){auto p=app::ExeDir()/L"xboxrecomp.ini";if(p.native().size()>=MAX_PATH)return 0;wcscpy_s(path,MAX_PATH,p.c_str());return 1;}
 }
 #define xbox_KeyboardMode TrialGameplayKeyboardMode
-#include "third_party/xboxrecomp/src/input/host_keyboard_config.h"
+#include "xbe_keyboard_bindings.inc"
 #undef xbox_KeyboardMode
 int xbox_KeyboardMode(){const int owner=trial_coop::PauseOwner();return owner<0?TrialGameplayKeyboardMode():owner==0;}
 #include "xbe_controls_backend.inc"
@@ -163,8 +167,9 @@ void TrialGraphicsInputChanged(){
     for(unsigned port=0;port<4;++port)release_pad[port]=last_pad[port];
     click_pending=false;dx=dy=0;
     spin_dx=spin_dy=0;spin_tick=0;spin_button_held[0]=spin_button_held[1]=true;
-    for(unsigned slot=0;slot<2;++slot)TrialHealthPackInput(slot,false,false);
+    for(unsigned slot=0;slot<2;++slot){health_gesture[slot].Reset();TrialHealthPackInput(slot,false,false);TrialAimInput(slot,false,false);}
     firearm_direction=0;
+    partner_key_held=false;
     order_phase=order_buttons=0;order_held=false;keyboard_wheel_clear();
     xbox_KeyboardConsumeMouseClick(1);
     PostMessage(game_window,kCapture,0,0);
@@ -178,6 +183,8 @@ void TrialCoopPauseImGuiInput(){
     const int owner=trial_coop::PauseOwner();
     if(ImGui::GetCurrentContext()){
         auto& io=ImGui::GetIO();
+        // Our explicit pad navigation owns X; ImGui's hold-X window switcher does not.
+        io.ConfigFlags&=~ImGuiConfigFlags_NavEnableGamepad;
         if(owner==1){
             if(previous!=1)mouse_was_disabled=(io.ConfigFlags&ImGuiConfigFlags_NoMouse)!=0;
             io.ConfigFlags|=ImGuiConfigFlags_NoMouse;
@@ -193,7 +200,10 @@ void TrialCoopPauseImGuiInput(){
 void TrialInputWindow(void* window){
     std::lock_guard guard(input_lock);game_window=(HWND)window;
     wchar_t path[MAX_PATH];
-    if(controller_path(path))mouse_sensitivity=std::clamp(GetPrivateProfileIntW(L"Graphics",L"MouseSensitivity",400,path),1u,1600u);
+    if(controller_path(path)){
+        mouse_sensitivity=std::clamp(GetPrivateProfileIntW(L"Graphics",L"MouseSensitivity",400,path),1u,1600u);
+        mouse_invert=trial_input_profile::Read(path,L"Graphics",L"InvertMouseLook",0,1);
+    }
     RAWINPUTDEVICE device{1,2,0,game_window};
     if(!RegisterRawInputDevices(&device,1,sizeof(device)))throw std::runtime_error("Raw mouse registration failed");
 }
@@ -203,7 +213,8 @@ void TrialGameplay(){
     if(!gameplay){menu_key_taps.Clear();gameplay=true;menu_mode=false;PostMessage(game_window,kCapture,0,0);}
 }
 void TrialMouseTake(long* x,long* y,unsigned* sensitivity){
-    std::lock_guard guard(input_lock);*x=dx;*y=dy;dx=dy=0;
+    // Raw accumulation is bounded; invert only look, never order/spin gestures.
+    std::lock_guard guard(input_lock);*x=dx;*y=mouse_invert?-dy:dy;dx=dy=0;
     *sensitivity=mouse_sensitivity;
 }
 int TrialSpinSample(float* x,float* y,unsigned player){
@@ -294,7 +305,7 @@ bool TrialInputMessage(void*,uint32_t msg,uintptr_t wp,intptr_t lp,intptr_t* res
         intro_gate.FocusLost();
         title_gate.Context(false);
         spin_dx=spin_dy=0;spin_tick=0;spin_button_held[0]=spin_button_held[1]=true;
-        for(unsigned slot=0;slot<2;++slot)TrialHealthPackInput(slot,false,false);
+        for(unsigned slot=0;slot<2;++slot){TrialHealthPackInput(slot,false,false);TrialAimInput(slot,false,false);}
         menu_right_pending=menu_right_down=false;menu_right_consumed=(GetAsyncKeyState(VK_RBUTTON)&0x8000)!=0;
         captured=false;dx=dy=0;order_phase=order_buttons=0;order_held=false;click_pending=false;keyboard_wheel_clear();ClipCursor(nullptr);
     }
@@ -356,8 +367,16 @@ void TrialInputPad(int port,input::Pad& pad){
     last_pad[port]=pad;
     const int pause_owner=trial_coop::PauseOwner();
     if(input_pause_owner!=pause_owner){input_pause_owner=pause_owner;TrialGraphicsInputChanged();}
+    auto health_use=TrialHealthPackUse::None;
+    if(port<2){
+        const bool allowed=controller_connected&&focused()&&gameplay&&!menu_mode&&!TrialGraphicsOpen()&&
+            !intro_gate.owner&&!controls_capture[port].active&&trial_coop::PauseAllowsPlayer(port)&&
+            (!port||trial_coop::Active())&&TrialCoopPresentation()!=2;
+        const auto status=TrialHealthPackSnapshot(port);
+        health_use=health_gesture[port].Update((pad.buttons&2)!=0,allowed,status.visible&&(status.can_revive||status.can_heal_partner),GetTickCount64());
+    }
     if(!trial_coop::PauseAllowsPlayer(unsigned(port))){
-        if(port<2)TrialHealthPackInput(port,false,false);
+        if(port<2){TrialHealthPackInput(port,false,false);TrialAimInput(port,false,false);}
         const bool connected=pad.connected||port==0;pad={};pad.connected=connected;return;
     }
     if(port==0)for(unsigned key=1;key<256;++key)
@@ -390,7 +409,7 @@ void TrialInputPad(int port,input::Pad& pad){
     const int menu_port=trial_coop::PauseOwner()==1?1:0;
     if(port==menu_port&&focused())TrialCoopMenuPad(controller_connected,pad.buttons|(pad.analog[2]>30?0x100u:0u)|(pad.analog[3]>30?0x200u:0u),pad.analog[0],pad.analog[1],pad.lx,pad.ly);
     if(TrialGraphicsOpen()){
-        if(port<2)TrialHealthPackInput(port,false,false);
+        if(port<2){TrialHealthPackInput(port,false,false);TrialAimInput(port,false,false);}
         bool connected=pad.connected;pad={};pad.connected=connected;return;
     }
     // Consume only controls held across the handoff; drift must not lock other inputs.
@@ -407,13 +426,14 @@ void TrialInputPad(int port,input::Pad& pad){
     axis(pad.lx,held.lx,7849);axis(pad.ly,held.ly,7849);
     axis(pad.rx,held.rx,8689);axis(pad.ry,held.ry,8689);
     if(intro_gate.OwnsPad(port)){
-        if(port<2)TrialHealthPackInput(port,false,false);
+        if(port<2){TrialHealthPackInput(port,false,false);TrialAimInput(port,false,false);}
         bool connected=pad.connected;pad={};pad.connected=connected;return;
     }
     if(port==1&&trial_coop::Active()&&gameplay&&!menu_mode&&TrialCoopPresentation()==2){
         // The original cinematic controls P1. P2 shares that camera and must
         // not move or fire unseen, but its configured Pause still works.
         TrialHealthPackInput(1,false,false);
+        TrialAimInput(1,false,false);
         auto pause=pad;trial_controls::Remap(pause,1);
         release_pad[1]=last_pad[1];
         spin_button_held[1]=trial_controls::SpinButtonDown(false,last_pad[1],1);
@@ -422,9 +442,21 @@ void TrialInputPad(int port,input::Pad& pad){
     }
     if(port<2){
         const bool allowed=focused()&&gameplay&&!menu_mode&&!controls_capture[port].active&&(!port||trial_coop::Active());
-        const bool down=trial_controls::HealthPackDown(false,pad,port)||
+        auto health_pad=pad;health_pad.buttons&=~2u; // Physical Down is reserved for the two health gestures.
+        const bool down=trial_controls::HealthPackDown(false,health_pad,port)||
             (!port&&trial_controls::HealthPackDown(true,pad,0,captured));
         TrialHealthPackInput(port,down,allowed);
+        if(!port){
+            const bool partner_down=trial_controls::HealPartnerDown(captured);
+            if(partner_down&&!partner_key_held&&allowed&&TrialCoopPresentation()!=2)
+                TrialHealthPackRequest(0,TrialHealthPackUse::Partner);
+            partner_key_held=partner_down;
+        }
+        if(health_use!=TrialHealthPackUse::None)TrialHealthPackRequest(port,health_use);
+        if(health_gesture[port].Consumed())pad.buttons&=~2u;
+        const bool cycle=trial_controls::ScopeZoomDown(false,pad,port)||
+            (!port&&trial_controls::ScopeZoomDown(true,pad,0,captured));
+        TrialAimInput(port,cycle,allowed&&TrialCoopPresentation()!=2);
     }
     // Keep menu navigation on the physical controller; remaps apply to the
     // original gameplay slots before keyboard/mouse contributions are merged.

@@ -10,10 +10,13 @@ foreach ($direct in @($false,$true)) {
         '/reference:System.Windows.Forms.dll','/reference:System.Drawing.dll','/reference:System.Web.Extensions.dll',
         ('/win32icon:'+$icon),('/out:'+(Join-Path $packagePath $name)))
     if ($direct) { $arguments += '/define:DIRECT' }
-    & $compiler @arguments (Join-Path $PSScriptRoot 'Launcher.cs')
+    & $compiler @arguments (Join-Path $PSScriptRoot 'Launcher.cs') (Join-Path $PSScriptRoot 'UpdaterRecovery.cs')
     if ($LASTEXITCODE) { throw 'Launcher compilation failed' }
 }
+$python = Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) '.tools/python/python.exe'
+& $python -B (Join-Path $PSScriptRoot 'package.py') --output $packagePath --update-manifest
+if ($LASTEXITCODE) { throw 'Update manifest generation failed' }
 if ($PreviewExecutable) {
-    & $compiler /nologo /target:winexe /platform:x64 /optimize+ /define:LAUNCHER_PREVIEW /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /reference:System.Web.Extensions.dll ('/win32icon:'+$icon) ('/out:'+$PreviewExecutable) (Join-Path $PSScriptRoot 'Launcher.cs')
+    & $compiler /nologo /target:winexe /platform:x64 /optimize+ /define:LAUNCHER_PREVIEW /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /reference:System.Web.Extensions.dll ('/win32icon:'+$icon) ('/out:'+$PreviewExecutable) (Join-Path $PSScriptRoot 'Launcher.cs') (Join-Path $PSScriptRoot 'UpdaterRecovery.cs')
     if ($LASTEXITCODE) { throw 'Preview launcher compilation failed' }
 }

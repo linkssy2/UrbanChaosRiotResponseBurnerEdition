@@ -30,6 +30,7 @@ def main():
     raw, entries = parse_archive(assets / 'coopcharacters.lst')
     by_name = {e['name'].lower(): e for e in entries}
     prefix = 'assets_characters\\cha_multiplayer\\cha_multiplayer_tzero\\cha_multiplayer_tzero_skin.amf'
+    pistol = prefix.replace('tzero_skin.amf', 'tzero_handgun_skin.amf')
 
     def changed(name, edit):
         entry = by_name[name]
@@ -54,6 +55,10 @@ def main():
     cases = [
         ('truncated-archive', raw[:100], 'Invalid co-op character archive size'),
         ('truncated-model', changed(prefix, lambda p: p[:-1]), 'Unsupported co-op preview model'),
+        ('truncated-pistol', changed(pistol, lambda p: p[:-1]), 'Unsupported co-op preview pistol'),
+        ('unknown-pistol-material', changed('$n:\\' + pistol + '$0.skcsf', flip_program), 'Unsupported co-op preview material recipe'),
+        ('missing-pistol-attachment', changed('assets_characteranimation\\characterspecific\\cca_multiplayer\\cca_multiplayer_thirdperson_template.sttxt',
+            lambda p: p.replace(b'gundummy', b'badummyy')), 'Missing preview pistol attachment'),
         ('unknown-material-program', changed('$n:\\' + prefix + '$0.skcsf', flip_program), 'Unsupported co-op preview material recipe'),
         ('oversized-texture', changed('characters\\cha_multiplayer\\cha_multiplayer_tzero\\cha_mp_tzero_riot_helmet.tga', bad_texture), 'Unsupported co-op preview texture'),
         ('truncated-texture-sequence', changed('characters\\cha_multiplayer\\cha_multiplayer_tzero\\cha_mp_tzero_eyes.ifl', lambda p: p[:-1]), 'Unsupported preview texture sequence'),

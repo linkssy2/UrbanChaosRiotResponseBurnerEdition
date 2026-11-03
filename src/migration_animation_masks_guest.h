@@ -1,5 +1,0 @@
-#ifndef MIGRATION_ANIMATION_MASKS_GUEST_H
-#define MIGRATION_ANIMATION_MASKS_GUEST_H
-int uc_migration_animation_mask_subset(void);
-int uc_migration_animation_mask_intersect(void);
-#endif

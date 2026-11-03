@@ -9,6 +9,10 @@ namespace kernel {static std::array<uint8_t,0x800000> memory{};}
 namespace mem {bool IsCommitted(uint32_t page){return page<kernel::memory.size();}}
 namespace trial_graphics {
 static unsigned fov=53,fov2=53,reticle_percent=100,weapon_percent=100,weapon_percent2=100;static bool wide=true;
+static float game_view_width=2560;
+static unsigned color_choices[2][4]{};
+uint32_t ReticleColor(unsigned p,unsigned s){return p<2&&s<4?color_choices[p][s]:0;}
+float GameViewWidth(){return game_view_width;}
 uint32_t FieldOfView(){return fov;}bool Widescreen(){return wide;}
 uint32_t FieldOfView(unsigned player){return player==1?fov2:fov;}
 uint32_t ReticleScale(){return reticle_percent;}
@@ -37,12 +41,17 @@ X86_FUNC(sub_00077450);
 X86_FUNC(sub_00072200);
 X86_FUNC(sub_002739A0);
 X86_FUNC(sub_0007AAE0);
+X86_FUNC(sub_0007AFE0);X86_FUNC(sub_0007B340);X86_FUNC(sub_0009D7E0);
 X86_FUNC(sub_000656D0);
 X86_FUNC(sub_000731E0);
 X86_FUNC(sub_00273860);
 X86_FUNC(NativeHelpQueue);
 static bool retail_borders=false;
 static std::vector<std::array<float,5>> queued_borders;
+static bool sample_reticle=false,center_reticle=false;
+static constexpr uint32_t reticle_sprite=0x79100;
+static std::array<int16_t,4> reticle_xy{};
+static std::array<uint32_t,4> reticle_uv{};
 namespace kernel {
 uint32_t CallGuest(X86Context& c,uint32_t target,const uint32_t* p,size_t count){
     assert(target==0x656d0&&count==3);
@@ -57,6 +66,9 @@ uint32_t CallGuest(X86Context& c,uint32_t target,const uint32_t* p,size_t count)
 }
 }
 void x86_icall(X86Context& c,uint8_t* b,uint32_t target){
+    if(target==0x7afe0){sub_0007AFE0(c,b);return;}
+    if(target==0x7b340){sub_0007B340(c,b);return;}
+    if(target==0x701020){c.eax=reticle_sprite;c.esp+=4;return;} // Original size-interface forwarding.
     if(target==0x701012){c.eax=1;c.esp+=8;return;} // HUD visibility service.
     if(target==0x273860){sub_00273860(c,b);return;}
     if(target==0x701007){
@@ -85,8 +97,20 @@ void x86_icall(X86Context& c,uint8_t* b,uint32_t target){
     if(target==0x701004){c.eax=42;c.esp+=8;return;} // Untextured material lookup.
     if(target==0x701005){c.eax=0x6a200;c.esp+=4;return;} // Sprite queue.
     if(target==0x701006){
+        const uint32_t root=reticle?reticle->root_:0;
+        if(sample_reticle&&!center_reticle&&reticle)reticle->root_=0;
         TrialHudQuadScope quad(c,b);
+        if(sample_reticle&&reticle)reticle->root_=root;
         const auto a=Word(b,c.esp+4),z=Word(b,c.esp+8);
+        if(sample_reticle){
+            for(unsigned i=0;i<2;++i){
+                X86Context q{};q.esp=0x7d000;q.ecx=0x7d100+i*4;W(b,q.esp+4,i?z:a);
+                sub_0009D7E0(q,b);assert(q.esp==0x7d008);
+            }
+            std::memcpy(reticle_xy.data(),b+0x7d100,8);
+            const uint32_t u=Word(b,c.esp+20),v=Word(b,c.esp+24);
+            reticle_uv={Word(b,u),Word(b,u+4),Word(b,v),Word(b,v+4)};
+        }
         queued_borders.push_back({Real(b,a),Real(b,a+4),Real(b,z),Real(b,z+4),float(Word(b,c.esp+12)>>24)});
         c.esp+=36;return;
     }
@@ -169,6 +193,125 @@ X86_FUNC(sub_00018CE0){
 // GENERATED_HELP_TEXT_DRAW
 // GENERATED_HELP_DRAW
 // GENERATED_ORIGINAL_HELP_DRAW
+// GENERATED_RETICLE_COLOR
+static void CheckReticleColors(uint8_t* b){
+    constexpr uint32_t roots[]={0x79000,0x79200},owners[]={0x76000,0x77000},world=0x75000;
+    constexpr uint32_t native[]={0xffffff,0xff0000,0x00ff00,0x00ffff};
+    W(b,0x51c4dc,world);W(b,world+12,1000);Put(b,0x44bf94,1);
+    for(unsigned slot=0;slot<2;++slot){
+        W(b,owners[slot],0x46fbe8);W(b,owners[slot]+0x5c,0);
+        RegisterPlayer(b,owners[slot],slot,80+slot,0x70000+slot*0x100);
+        coop_players[slot]=owners[slot];W(b,roots[slot],0x453160);W(b,roots[slot]+4,owners[slot]);
+    }
+    unsigned cases=0;
+    for(bool active:{false,true})for(unsigned slot=0;slot<(active?2u:1u);++slot)
+        for(unsigned state=0;state<4;++state)for(unsigned choice=0;choice<std::size(trial_graphics::ReticlePalette);++choice){
+            trial_coop::active=active;
+            for(unsigned p=0;p<2;++p)for(unsigned s=0;s<4;++s)trial_graphics::color_choices[p][s]=p==slot&&s==state?choice:0;
+            W(b,owners[slot]+0x230,state==1?999:0);b[0x51bdf4]=state==3;
+            X86Context c{};c.esi=roots[slot];c.edi=state==2?2:0;c.esp=0x7c000;
+            NativeReticleColor(c,b);
+            const uint32_t expected=choice?trial_graphics::ReticlePalette[choice]:native[state];
+            for(unsigned channel=0;channel<3;++channel)
+                assert(std::abs(Real(b,roots[slot]+0x10+channel*4)-float((expected>>(16-channel*8))&255)/255)<1e-6f);
+            assert(Real(b,roots[slot]+0x1c)==1);++cases;
+        }
+    // Enemy and friendly targeting retain native priority over an armed spin.
+    for(unsigned state:{1u,2u}){
+        X86Context c{};c.esi=roots[0];c.edi=2;c.esp=0x7c000;
+        for(auto& row:trial_graphics::color_choices)for(auto& color:row)color=0;
+        W(b,owners[0]+0x230,state==1?999:0);b[0x51bdf4]=1;NativeReticleColor(c,b);
+        assert(Real(b,roots[0]+0x10)==(state==1?1.f:0.f)&&Real(b,roots[0]+0x14)==(state==2?1.f:0.f));
+    }
+    X86Context c{};c.esi=roots[0];trial_graphics::color_choices[0][0]=6;
+    Put(b,roots[0]+0x10,1);Put(b,roots[0]+0x14,1);Put(b,roots[0]+0x18,1);Put(b,roots[0]+0x1c,.25f);
+    const auto saved=c;const auto csr=_mm_getcsr();TrialReticleColor(c,b);
+    assert(Real(b,roots[0]+0x1c)==.25f&&!std::memcmp(&c,&saved,sizeof(c))&&csr==_mm_getcsr());
+    for(auto& row:trial_graphics::color_choices)for(auto& color:row)color=0;
+    trial_coop::active=false;coop_players[0]=coop_players[1]=0;b[0x51bdf4]=0;
+    std::printf("PASS %u native reticle state/color cases; per-player choices, targeting priority, alpha and register preservation\n",cases);
+}
+// GENERATED_RETICLE_SPRITE
+// GENERATED_RETICLE_SIZE
+// GENERATED_RETICLE_QUEUE
+
+static void CheckPlayerReticle(uint8_t* b){
+    // Execute retail X/Y centering, sprite flooring/half-pixel placement and
+    // signed-sixteenth queue conversion; compare only the new X correction.
+    const uint32_t root=0x79000,fade=0x79200,vt=0x79300,y=0x79400,x=0x79500;
+    const uint32_t hroot=0x79600,d=0x79700;
+    W(b,root,0x453160);W(b,root+0x90,y);W(b,fade,0x453d38);W(b,fade+4,reticle_sprite);
+    W(b,y,vt);W(b,y+4,x);W(b,y+8,1);W(b,x,vt);W(b,x+4,reticle_sprite);W(b,x+8,0);
+    W(b,vt+8,0x7aae0);W(b,vt+12,0x701020);
+    W(b,reticle_sprite,0x453b50);W(b,0x453b58,0x7afe0);W(b,0x453b5c,0x701020);W(b,0x453b64,0x7b340);
+    Put(b,reticle_sprite+16,0);Put(b,reticle_sprite+20,0);Put(b,reticle_sprite+24,1);Put(b,reticle_sprite+28,1);
+    W(b,0x5150b0,0x6a000);W(b,0x6a000,0x6a100);W(b,0x6a148,0x701005);
+    W(b,0x6a200,0x6a210);W(b,0x6a214,0x701006);
+    Put(b,0x44bf94,1);Put(b,0x4505cc,255);Put(b,0x44c1f8,.5f);Put(b,0x44c174,0);
+    W(b,0x516b58,1);Put(b,0x516b50,-.5f);Put(b,0x516b54,-.5f);Put(b,0x450808,16);
+    for(unsigned slot=0;slot<2;++slot){
+        const uint32_t actor=0x7e000+slot*0x1000;coop_players[slot]=actor;
+        RegisterPlayer(b,actor,slot,500+slot,600+slot);W(b,actor,0x46fbe8);W(b,actor+0x5c,0);W(b,actor+0x300,hroot);
+    }
+    sample_reticle=true;unsigned cases=0;
+    for(unsigned mode:{0u,1u,2u})for(unsigned slot=0;slot<2;++slot)for(bool wide:{false,true})
+        for(unsigned percent:{50u,80u,100u,125u,200u})for(unsigned item=0;item<28;++item){
+        trial_coop::active=mode!=0;presentation=mode;trial_graphics::wide=wide;trial_graphics::reticle_percent=percent;
+        W(b,hroot,0x4531a0);W(b,hroot+4,coop_players[slot]);W(b,root+4,coop_players[slot]);
+        for(unsigned i=0;i<28;++i)W(b,root+0x20+i*4,i==item?fade:0);
+        const float extent=item==27?128.f:64.f,top=mode==1?float(slot)*240:0;
+        Put(b,reticle_sprite+8,extent);Put(b,reticle_sprite+12,extent);
+        X86Context hctx{};hctx.ecx=hroot;hctx.esp=0x7b000;
+        Put(b,hctx.esp+16,0);Put(b,hctx.esp+20,top);Put(b,hctx.esp+24,640);Put(b,hctx.esp+28,mode==1?top+240:480);
+        TrialHudLayoutScope h(hctx,b);TrialHudLayout(hctx,b);assert(h.split_==(mode==1));
+        std::memset(b+d,0,0x44);Put(b,d,0);Put(b,d+4,top);Put(b,d+8,640/h.scale_);Put(b,d+12,mode==1?top+240:480);
+        for(unsigned i=0;i<4;++i)Put(b,d+16+i*4,1);Put(b,d+0x3c,1);Put(b,d+0x40,1);
+        std::array<uint8_t,0x44> descriptor;std::memcpy(descriptor.data(),b+d,descriptor.size());
+        auto draw=[&](bool fixed){
+            center_reticle=fixed;X86Context q{};q.ecx=root;q.esp=0x7c000;TrialReticleScope r(q,b);
+            q.ecx=y;W(b,q.esp,0);W(b,q.esp+4,d);queued_borders.clear();sub_0007AAE0(q,b);
+            assert(q.esp==0x7c008&&queued_borders.size()==1);
+            assert(!std::memcmp(b+d,descriptor.data(),descriptor.size()));return reticle_xy;
+        };
+        const auto old=draw(false),fixed=draw(true);
+        assert(old[1]==fixed[1]&&old[3]==fixed[3]); // Authored vertical placement is unchanged.
+        assert((reticle_uv==std::array<uint32_t,4>{0,0,0x3f800000,0x3f800000}));
+        const bool supported=item!=0&&item!=6&&item!=9&&item!=25&&item!=26;
+        const bool player_view=mode==1||(mode==0&&slot==0);
+        assert(h.root_==(player_view?hroot:0));
+        if(player_view&&supported){
+            const float original_u=(extent*.5f+.5f)/extent;
+            const float hd_u=(extent*2+2)/(extent*4);assert(original_u==hd_u);
+            const float aim=(fixed[0]+float(fixed[2]-fixed[0])*original_u)/16;
+            assert(std::fabs(aim-320)<.063f); // At most one native queue quantization step.
+            if(mode==0&&slot==0&&item==2&&percent==80&&wide){
+                const float baseline=(old[0]+float(old[2]-old[0])*original_u)/16;
+                assert(std::fabs(baseline-319.26904296875f)<.0001f);
+                std::printf("SP 80%% widescreen pistol anchor: %.9f -> %.9f native X; %.6f -> %.6f pixels from center at 2560 wide\n",baseline,aim,(baseline-320)*4,(aim-320)*4);
+            }
+        }else assert(old==fixed); // Foreign owners, cinematics and unsupported artwork retain retail placement.
+        if(player_view&&item==2&&percent==80){
+            auto reject=[&](uint32_t address,uint32_t value){
+                const uint32_t saved=Word(b,address);W(b,address,value);
+                assert(draw(false)==draw(true));W(b,address,saved);
+            };
+            reject(root+4,coop_players[1-slot]); // Wrong HUD actor.
+            reject(fade+4,reticle_sprite+0x100); // Foreign sprite in the same subtree.
+            reject(fade,0x453d39); // Unrecognized fade class.
+            reject(reticle_sprite+24,0x3f000000); // Cropped UV region.
+            reject(reticle_sprite+8,0x42000000); // Unrecognized sprite extent.
+            X86Context guard{};guard.esi=reticle_sprite;guard.esp=0x7d400;
+            W(b,guard.esp+4,0x7d500);W(b,guard.esp+8,0x7d508);
+            W(b,guard.esp+20,0x7d510);W(b,guard.esp+24,0x7d518);
+            Put(b,0x7d510,0);Put(b,0x7d514,0);Put(b,0x7d518,1);Put(b,0x7d51c,1);
+            assert(ReticleAimU(b,guard,root)==32.5f/64);
+            W(b,guard.esp+4,0x7d510);assert(ReticleAimU(b,guard,root)==0); // XY/UV alias.
+        }
+        ++cases;
+    }
+    sample_reticle=false;center_reticle=false;trial_coop::active=false;presentation=0;
+    std::printf("PASS %u native reticle placement cases: single-player/both split views, original/HD anchor, unchanged Y/cinematics\n",cases);
+}
 
 static void CheckCoopHelp(uint8_t* b){
     const uint32_t root=0x61000,main=0x61100,six=0x61200;
@@ -271,6 +414,7 @@ static void CheckCoopHud(uint8_t* b){
         TrialHudLayoutScope scope(c,b);TrialHudLayout(c,b);
         const bool changed=mode==1;
         assert(scope.split_==changed);assert(scope.scale_==(changed&&wide?.75f:1.f));
+        assert(scope.root_==(changed?root:0)); // Reject a split descriptor outside co-op.
         const auto descriptor=std::array<float,4>{Real(b,d),Real(b,d+4),Real(b,d+8),Real(b,d+12)};
         auto draw=[&](uint32_t node){X86Context q{};q.ecx=node;q.esp=0x71000;W(b,q.esp,0);W(b,q.esp+4,d);sub_0007C1E0(q,b);};
         sample_notice=false;draw(corner);
@@ -774,6 +918,8 @@ int main(){
     }
     std::printf("PASS player FOV/zoom, HUD aspect/anchors; %u reticle size/center/restoration cases, scope/menu/invalid exclusions\n",reticle_checks);
     CheckPlayerViews(b);
+    CheckReticleColors(b);
+    CheckPlayerReticle(b);
 }
 
 

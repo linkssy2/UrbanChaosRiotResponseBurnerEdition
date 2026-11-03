@@ -8,7 +8,7 @@ constexpr uint32_t D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING=5768,D3D12_SRV_DIMEN
 enum { kTssBumpEnvMat00,kTssBumpEnvMat01,kTssBumpEnvMat10,kTssBumpEnvMat11,kTssBumpEnvLScale,kTssBumpEnvLOffset };
 struct State { std::array<uint32_t,4> textures{};std::array<std::array<uint32_t,6>,4> tss{}; };
 struct TexInfo { unsigned kind=0;bool rect=false; };
-struct DrawTextures { TexInfo info[4];View sv[4];ID3D12Resource* res[4];uint32_t width[4],height[4];bool rt[4]{},aligned_depth_alias[4]{};float k[4]{1,1,1,1},wide[4]{}; };
+struct DrawTextures { TexInfo info[4];View sv[4];ID3D12Resource* res[4];uint32_t width[4],height[4];bool rt[4]{},aligned_depth_alias[4]{},aligned_screen_copy[4]{};float k[4]{1,1,1,1},wide[4]{}; };
 struct DrawConstants { float texsize[4][4]{},spread[4][4]{},bump[4][4]{},bumpl[4][2]{}; };
 struct Target { unsigned variant=0; };
 static std::vector<unsigned> effects;
@@ -50,6 +50,7 @@ Result Run(unsigned kind,unsigned extent,bool extension,unsigned mutation) {
     reads=0;effects.clear();DrawTextures stages;std::memset(&stages,0xa5,sizeof(stages));
     for(unsigned i=0;i<4;++i) {
         stages.aligned_depth_alias[i]=false;
+        stages.aligned_screen_copy[i]=false;
         state.textures[i]=kind==0?0:i+1;
         headers[i+1]={0x1000u*(i+1),kind==4?0x40u:0u,1u+extent*37+i,1u+extent*19+i,1,false,(i&1)!=0};
         valid[i+1]=kind!=1;

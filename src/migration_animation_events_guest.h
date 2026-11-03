@@ -1,8 +1,0 @@
-#ifndef MIGRATION_ANIMATION_EVENTS_GUEST_H
-#define MIGRATION_ANIMATION_EVENTS_GUEST_H
-int uc_migration_animation_handler_add(void);
-int uc_migration_animation_handler_remove(void);
-int uc_migration_animation_handler_invoke(void);
-int uc_migration_animation_events_deliver(void);
-int uc_migration_animation_events_collect(void);
-#endif

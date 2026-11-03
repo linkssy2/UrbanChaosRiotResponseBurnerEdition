@@ -1,12 +1,14 @@
 #pragma once
 #include "app/app.h"
 #include <string>
+#include <array>
 
 // Persist through GameInfo.options; zero follows the selected display at boot.
 extern uint32_t TrialAspectRatio;
 extern uint32_t TrialMsaaSamples;
 extern uint32_t TrialFieldOfView;
 extern uint32_t TrialReticleScale;
+extern std::array<uint32_t,4> TrialReticleColors[2];
 extern uint32_t TrialWeaponFovScale;
 // Missing values migrate once from the existing camera settings at startup.
 extern uint32_t TrialPlayer2FieldOfView, TrialPlayer2WeaponFovScale;
@@ -16,6 +18,10 @@ extern bool TrialHdUi;
 extern bool TrialWorldTextures;
 extern uint32_t TrialCharacterQuality, TrialRagdollMode;
 namespace trial_graphics {
+// Zero retains the authored state color. Values are stable settings-file IDs.
+inline constexpr uint32_t ReticlePalette[]={0,0xffffff,0xff4040,0x40ff40,0x00ffff,0xffff00,0xffa000,0xff60c0,0xb080ff,0x4080ff};
+inline constexpr const char* ReticleColorNames[]={"Original","White","Red","Green","Cyan","Yellow","Orange","Pink","Purple","Blue"};
+uint32_t ReticleColor(unsigned player,unsigned state);
 struct Draft {
     app::Settings settings;
     uint32_t aspect = 0, msaa = 1;
@@ -27,11 +33,13 @@ struct Draft {
     bool world_textures = false;
     uint32_t weapon_fov = 100; // percentage of each weapon's authored view window
     uint32_t fmv_scale = 0; // 0 fill, 1 preserve the complete 4:3 movie frame
+    std::array<uint32_t,4> reticle_colors{}; // normal, enemy, friendly, spin
 };
 Draft Snapshot();
 Draft Snapshot(unsigned player);
 void Initialize();
 bool Widescreen();
+float GameViewWidth(); // displayed game pixels after aspect bars; zero if no valid client area
 uint32_t FieldOfView();
 uint32_t FieldOfView(unsigned player);
 uint32_t ReticleScale();

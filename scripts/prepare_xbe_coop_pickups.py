@@ -6,7 +6,21 @@ import struct
 
 INCLUDE = '#include "xbe_coop_pickups.h"\n'
 ENTRY = '\tif(!TrialCoopPickupAllowed(ctx,base)){ctx.esp+=8;return;}\n'
+NOTICE_CALL='\t{ uint32_t t = X86_MEM32((uint32_t)(ctx.edx + 0x1Cu)); X86_PUSH32(0xC51D6u); x86_icall(ctx, base, t); }'
+OWNED_NOTICE_CALL=NOTICE_CALL.replace('{ uint32_t t', '{ TrialCoopPickupScope pickup_scope(ctx.esi,base); uint32_t t')
+HOOKS = {
+    0x4a290: [('X86_FUNC(__imp__sub_0004A290) {\n', '\tconst uint32_t pickup_channel=ctx.ecx;\n'), ('\t// 0004A390 pop edi', '\tTrialCoopPickupNotice(base,pickup_channel,ctx.eax);\n')],
+    0x4a3a0: [('\t// 0004A43F pop edi', '\tTrialCoopPickupNoticeExpired(base,ctx.ebx);\n')],
+    0x4b4d0: [('X86_FUNC(__imp__sub_0004B4D0) {\n', '\tTrialCoopPickupNoticesReset(ctx.ecx);\n')],
+    0x4ba80: [('X86_FUNC(__imp__sub_0004BA80) {\n', '\tTrialCoopPickupTextScope pickup_text(ctx,base);\n\tif(pickup_text.skip_){ctx.esp+=4;return;}\n')],
+}
+
 BODIES = (
+    (6,0x4a290,271,"f04a098336c051a2b5dd344cca262cade67cd6ca035fa596cf4ebb9a992967fd","4df26b45fcc16bbedb03b048769bd6e355b6409b74ac86dd1d1dadc63d29e105"),
+    (6,0x4a3a0,183,"3fe15178653aceff7ddab45352cc250afedfee38d536cd16e2e3b8d3fafd840b","ef0e57a2daaadbc78b42cee2267fa958daab7dcb238e5ca47f4aec3332ddf839"),
+    (6,0x4ab90,185,"cd421eeb23f5cc2bb6701b8bc7ff52a57617bd614a130753b2c2d956982242a8","bff25a180528fde02f9d76866b65961183a8a9658dac30f77ea6e0b6d3462512"),
+    (6,0x4ba80,736,"6543170324bc1777c63bf462a37067d4b78073a2e8590f527d29c82ffaf92e39","229557a42db842f40d9445654428a69ac8df2a678898e2fa363dd7dd09b5d44d"),
+    (6,0x4b4d0,546,"29a0e061d038e1f0532891cae7db45ea0f922bb36dff3788b1f6230f643ab558","787426a6b53b04023497cf71190bf5fbb31c7b66c5d81f6f696cc3566515feed"),
     (20,0xc5040,791,"84b01ab405994938568552abf7098a3ab66be488858aecc21556d1ec4103ad31","23303ad529152c7b28a12f1e72bc3220edd1c46b2d921b386d04862f8ef6ba9d"),
     (20,0xc7cc0,349,"49206f0404619be42194918a5525f6f696bc43fc5e797bfdb9872d58df340aab","b5a7358791db47dde85d428678e9056c398c568a2c0fbf6f1f5d8f52b3fba892"),
     (21,0xd8520,10,"aee5f49a048f993f18a3c9a35fd06a11282e601815ad232cb7741763d5a2db58","77f04937de5ceb51facb63f7afee6ebe8e6e7bba24cc48635320947ea3e00974"),
@@ -34,13 +48,17 @@ def body(source, address):
     return re.search(rf'X86_FUNC\(__imp__sub_{address:08X}\) \{{.*?^\}}', source, re.M | re.S).group()
 
 def clean(source):
-    return source.replace(INCLUDE, '').replace(ENTRY, '')
+    source=source.replace(INCLUDE, '').replace(ENTRY, '').replace(OWNED_NOTICE_CALL,NOTICE_CALL)
+    for hooks in HOOKS.values():
+        for _,hook in hooks:source=source.replace(hook,'')
+    return source
 
 def unprepare(area):
-    p=Path(area)/'generated/game/x86_recomp.20.cpp'
-    if p.exists():
-        before=p.read_text();after=clean(before)
-        if before!=after:p.write_text(after)
+    for unit in (6,20):
+        p=Path(area)/f'generated/game/x86_recomp.{unit}.cpp'
+        if p.exists():
+            before=p.read_text();after=clean(before)
+            if before!=after:p.write_text(after)
 
 def prepare(area):
     area=Path(area);local=Path(__file__).parent
@@ -61,18 +79,34 @@ def prepare(area):
         text=body(sources[unit],va)
         assert hashlib.sha256(text.encode()).hexdigest()==lifted_hash,hex(va)
         bodies[va]=text
-    original=bodies[0xc5040]
-    fixed=original.replace('X86_FUNC(__imp__sub_000C5040) {\n','X86_FUNC(__imp__sub_000C5040) {\n'+ENTRY,1)
-    fixtures=[]
+    fixed={}
     for va,text in bodies.items():
+        for marker,hook in HOOKS.get(va,[]):
+            assert text.count(marker)==1,hex(va)
+            text=text.replace(marker,marker+hook if marker.startswith('X86_FUNC') else hook+marker,1)
         if va==0xc5040:
-            fixtures += [text.replace('__imp__sub_000C5040','OriginalPickup'),fixed.replace('__imp__sub_000C5040','CoopPickup')]
+            assert text.count(NOTICE_CALL)==1
+            text=text.replace(NOTICE_CALL,OWNED_NOTICE_CALL,1).replace('X86_FUNC(__imp__sub_000C5040) {\n','X86_FUNC(__imp__sub_000C5040) {\n'+ENTRY,1)
+        fixed[va]=text
+    fixtures=[]
+    for va,text in fixed.items():
+        if va==0x4b4d0:continue # constructor reset is checked directly; no world factory in this fixture
+        if va==0xc5040:
+            fixtures += [bodies[va].replace('__imp__sub_000C5040','OriginalPickup'),text.replace('__imp__sub_000C5040','CoopPickup')]
         else:fixtures.append(text.replace('__imp__sub_','sub_'))
-    source=sources[20].replace(original,fixed,1).replace('#include "x86_recomp_shared.h"\n','#include "x86_recomp_shared.h"\n'+INCLUDE,1)
-    (area/'generated/game/x86_recomp.20.cpp').write_text(source)
+    for unit in (6,20):
+        source=sources[unit]
+        for u,va,*_ in BODIES:
+            if u==unit:source=source.replace(bodies[va],fixed[va],1)
+        source=source.replace('#include "x86_recomp_shared.h"\n','#include "x86_recomp_shared.h"\n'+INCLUDE,1)
+        (area/f'generated/game/x86_recomp.{unit}.cpp').write_text(source)
     for name in ('xbe_coop_pickups.cpp','xbe_coop_pickups.h'):
         (area/'src/common'/name).write_text((local/name).read_text())
-    test=(local/'test_xbe_coop_pickups.cpp').read_text();marker='// ORIGINAL_PICKUP_BODIES'
+    test=(local/'test_xbe_coop_pickups.cpp').read_text()
+    constants=sorted(set(int(x,16) for x in re.findall(r'\[0x([0-9A-F]{8})\]', bodies[0x4ba80]+bodies[0x4a3a0]+bodies[0x4a290])))
+    constants += list(range(0xc5358,0xc5398,4))
+    test=test.replace('// ORIGINAL_NOTICE_CONSTANTS',';'.join(f'Put(0x{x:x},0x{struct.unpack("<I",raw(x,4))[0]:x})' for x in constants if x not in (0x509704,0x51c4dc))+';')
+    marker='// ORIGINAL_PICKUP_BODIES'
     assert test.count(marker)==1
     functions=set(re.findall(r'\bsub_[0-9A-F]{8}(?=\(ctx)', '\n'.join(fixtures)))
     functions.update(f'sub_{va:08X}'for va in bodies)

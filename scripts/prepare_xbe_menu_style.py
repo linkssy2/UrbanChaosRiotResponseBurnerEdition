@@ -6,7 +6,7 @@ import hashlib
 def prepare(area):
     area=Path(area);local=Path(__file__).parent
     ui=(local/'xbe_trial_graphics_ui.cpp').read_text()
-    for name in ("xbe_controls_ui.inc","xbe_language_ui.inc"):
+    for name in ("xbe_controls_ui.inc","xbe_language_ui.inc","xbe_cheats_ui.inc"):
         marker='#include "'+name+'"'
         assert ui.count(marker)==1
         ui=ui.replace(marker,(local/name).read_text())

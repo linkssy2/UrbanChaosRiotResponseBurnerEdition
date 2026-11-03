@@ -9,6 +9,14 @@ ERROR_FILE = 'last-setup-error.txt'
 MAX_ERROR_BYTES = 16384
 
 
+def confirm(message):
+    import ctypes
+    box = ctypes.WinDLL('user32', use_last_error=True).MessageBoxW
+    box.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p, ctypes.c_wchar_p, ctypes.c_uint]
+    box.restype = ctypes.c_int
+    return box(None, message, 'Urban Chaos - Burner Edition', 0x10124) == 6
+
+
 def notify(message, error=False):
     """Show an acknowledged result without changing the worker's JSON output."""
     try:

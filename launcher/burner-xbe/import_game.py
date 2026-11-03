@@ -1,6 +1,7 @@
 """Verified local ISO import and isolated D3D12 launch; release has no disc payloads."""
 from pathlib import Path
 from collections import deque
+from contextlib import contextmanager, ExitStack
 import argparse
 import importlib.util
 import json
@@ -12,8 +13,14 @@ import subprocess
 import sys
 import uuid
 import tomllib
+# Recovery uses its independent interpreter before importing replaceable worker modules.
+if __name__ == '__main__':
+    import release_update
+    if release_update.bootstrap(Path(__file__).resolve().parent.parent):
+        raise SystemExit(0)
 import shader_seed
 import spanish_text
+import diagnostics
 
 from disc import Disc, XisoError, BLOCK, sha, supported_hash, progress, check_cancel, safe_name
 
@@ -21,6 +28,196 @@ ROOT = Path(__file__).resolve().parent.parent
 RUNTIME_NAME = 'UrbanChaosXbeTrial.exe'
 RUNTIME_FILES = (RUNTIME_NAME, 'zlib1.dll', 'libusb-1.0.dll', 'msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll')
 ARTWORK_LIMIT = 32 * 1024 * 1024
+SOURCE_FILES = frozenset(('Default.xbe', *spanish_text.FILES))
+
+
+def read_record(path, root):
+    unlinked_path(path, root=root)
+    if not path.is_file() or not 0 < path.stat().st_size <= 65536:
+        raise ValueError('The installation record is missing or damaged. Select your game again.')
+    value = json.loads(path.read_text(encoding='utf-8'))
+    if not isinstance(value, dict):
+        raise ValueError('Invalid installation record.')
+    return value
+
+
+def selected_data(explicit=None):
+    if explicit is not None:
+        data = Path(explicit).absolute()
+    else:
+        pointer = ROOT / 'installation.json'
+        unlinked_path(pointer, root=ROOT)
+        if not pointer.exists():
+            return ROOT / 'GameData'
+        record = read_record(pointer, ROOT)
+        value = record.get('data')
+        if record.get('version') != 1 or not isinstance(value, str) or not value:
+            raise ValueError('The selected installation is invalid. Select your existing installation again.')
+        data = Path(value)
+        if value == 'GameData':
+            data = ROOT / 'GameData'
+        elif not data.is_absolute() or '..' in data.parts:
+            raise ValueError('Invalid selected installation path.')
+    unlinked_path(data, root=data)
+    return data
+
+
+def select_installation(path, cancel=None):
+    data = Path(path).absolute()
+    unlinked_path(data, root=data)
+    if not (data / 'installed/installed.json').is_file():
+        data = data / 'GameData'
+    verify_installation(data, cancel)
+    pointer = ROOT / 'installation.json'
+    unlinked_path(pointer, root=ROOT)
+    value = 'GameData' if data.resolve() == (ROOT / 'GameData').resolve() else str(data)
+    temporary = ROOT / ('.installation-' + uuid.uuid4().hex)
+    try:
+        with temporary.open('x', encoding='utf-8') as stream:
+            json.dump({'version': 1, 'data': value}, stream)
+            stream.flush()
+            os.fsync(stream.fileno())
+        if cancel is not None:
+            check_cancel(cancel)
+        os.replace(temporary, pointer)
+    finally:
+        temporary.unlink(missing_ok=True)
+    return data
+
+
+@contextmanager
+def setup_lock(directory):
+    """The shared worker holds this lock throughout setup and the running game."""
+    directory = Path(directory).absolute()
+    unlinked_path(directory, root=directory)
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / '.burner.lock'
+    unlinked_path(path, root=directory)
+    with path.open('a+b') as stream:
+        if os.fstat(stream.fileno()).st_nlink != 1:
+            raise ValueError('The setup lock must not be linked.')
+        if os.fstat(stream.fileno()).st_size == 0:
+            stream.write(b'0')
+            stream.flush()
+        stream.seek(0)
+        try:
+            if os.name == 'nt':
+                import msvcrt
+                msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            raise ValueError('Close the game or other setup window before changing this installation.') from None
+        try:
+            yield
+        finally:
+            stream.seek(0)
+            if os.name == 'nt':
+                msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
+
+
+def source_record(data):
+    record = read_record(data / 'installed/installed.json', data)
+    mode = record.get('source_mode', 'extracted')
+    if record.get('version') != 1 or mode not in ('iso', 'extracted'):
+        raise ValueError('Invalid game source. Select your game again.')
+    if mode == 'iso':
+        path = record.get('iso_path')
+        if (not isinstance(path, str) or not Path(path).is_absolute() or
+                type(record.get('iso_size')) is not int or record['iso_size'] <= 0 or
+                type(record.get('iso_mtime_ns')) is not int):
+            raise ValueError('Invalid ISO source. Select the ISO again with Use ISO directly.')
+    return record
+
+
+@contextmanager
+def source_disc(record):
+    path = Path(record['iso_path'])
+    unlinked_path(path, root=path)
+    if not path.is_file():
+        raise ValueError('The game ISO is unavailable. Reconnect its drive or select its new location with Use ISO directly. Your saves are kept.')
+    before = path.stat()
+    if (before.st_size, before.st_mtime_ns) != (record['iso_size'], record['iso_mtime_ns']):
+        raise ValueError('The game ISO changed. Select it again with Use ISO directly to verify it. Your saves are kept.')
+    with Disc(path) as disc:
+        yield disc
+        after = os.fstat(disc._f.fileno())
+        current = path.stat()
+        identity = lambda info: (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns)
+        if identity(before) != identity(after) or identity(before) != identity(current):
+            raise ValueError('The source ISO changed during setup. Retry with an unchanged file.')
+
+
+def read_disc_files(disc, required, cancel, target=None, names=(), *, verify_all=True):
+    """Authenticate original bytes; only requested host inputs are materialized."""
+    import hashlib
+    entries = disc.entries()
+    for name, row in required.items():
+        if name.lower() not in entries or entries[name.lower()][1].size != row['size']:
+            raise ValueError('This ISO is not a supported Urban Chaos disc revision.')
+    names = set(names)
+    selected = required if verify_all else {name: required[name] for name in names}
+    total = sum(row['size'] for row in selected.values())
+    done = 0
+    for name, row in selected.items():
+        if cancel is not None:
+            check_cancel(cancel)
+        entry = entries[name.lower()][1]
+        with ExitStack() as stack:
+            output = None
+            if target is not None and name in names:
+                destination = target.joinpath(*name.split('/'))
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                output = stack.enter_context(destination.open('xb'))
+            disc._f.seek(disc.base + entry.sector * 2048)
+            digest, left = hashlib.sha256(), entry.size
+            while left:
+                if cancel is not None:
+                    check_cancel(cancel)
+                chunk = disc._f.read(min(BLOCK, left))
+                if not chunk:
+                    raise ValueError('Truncated ISO')
+                if output is not None:
+                    output.write(chunk)
+                digest.update(chunk)
+                left -= len(chunk)
+                done += len(chunk)
+            if not supported_hash(name, digest.hexdigest(), row['sha256']):
+                raise ValueError('Disc verification failed: ' + name)
+        progress('Importing game files' if len(names) == len(required) and target else
+                 'Verifying Xbox ISO', 2 + int(done * 96 / max(1, total)))
+
+
+@contextmanager
+def original_sources(data, names, cancel):
+    """Optional converters borrow originals without keeping a second disc copy."""
+    original = data / 'installed/game_files'
+    marker = data / 'installed/installed.json'
+    if not marker.exists() or source_record(data).get('source_mode') != 'iso':
+        yield original
+        return
+    required = manifest()['files']
+    names = set(names)
+    if not names <= required.keys():
+        raise ValueError('Unknown original conversion source.')
+    record = source_record(data)
+    stage = data / ('.source-' + uuid.uuid4().hex)
+    unlinked_path(stage, root=data)
+    if shutil.disk_usage(data).free < sum(required[name]['size'] for name in names) + 256 * BLOCK:
+        raise ValueError('Not enough free space for temporary original conversion files.')
+    stage.mkdir()
+    try:
+        with source_disc(record) as disc:
+            read_disc_files(disc, required, cancel, stage, names, verify_all=False)
+        yield stage
+    finally:
+        unlinked_path(stage, root=data)
+        if stage.exists():
+            assert stage.parent == data and stage.name.startswith('.source-')
+            shutil.rmtree(stage)
 
 
 def unlinked_path(path, *, root=None):
@@ -141,7 +338,7 @@ def manifest():
     return data
 
 
-def import_iso(iso_path, data, cancel):
+def import_iso(iso_path, data, cancel, *, direct=False):
     """Verify the disc, then publish assets while preserving existing portable saves."""
     check_cancel(cancel)
     required = manifest()['files']
@@ -153,46 +350,32 @@ def import_iso(iso_path, data, cancel):
     game.mkdir()
     try:
         progress('Checking Xbox disc', 1)
-        with Disc(iso_path) as disc:
-            entries = disc.entries()
-            for name, row in required.items():
-                if name.lower() not in entries or entries[name.lower()][1].size != row['size']:
-                    raise ValueError('This ISO is not a supported Urban Chaos disc revision.')
-            entry = entries['default.xbe'][1]
-            import hashlib
-            if not supported_hash('Default.xbe', hashlib.sha256(disc.read(entry)).hexdigest(),
-                                  required['Default.xbe']['sha256']):
-                raise ValueError('Unsupported Xbox executable revision')
-            total = sum(row['size'] for row in required.values())
-            if shutil.disk_usage(data).free < total + 256 * BLOCK:
-                raise ValueError('Not enough free space to import the game while keeping your current install.')
-            done = 0
-            for name, row in required.items():
-                check_cancel(cancel)
-                entry = entries[name.lower()][1]
-                dest = game.joinpath(*name.split('/'))
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                disc._f.seek(disc.base + entry.sector * 2048)
-                digest = hashlib.sha256()
-                left = entry.size
-                with dest.open('xb') as output:
-                    while left:
-                        check_cancel(cancel)
-                        chunk = disc._f.read(min(BLOCK, left))
-                        if not chunk:
-                            raise ValueError('Truncated ISO')
-                        output.write(chunk)
-                        digest.update(chunk)
-                        left -= len(chunk)
-                        done += len(chunk)
-                if not supported_hash(name, digest.hexdigest(), row['sha256']):
-                    raise ValueError('Disc verification failed: ' + name)
-                progress('Importing game files', 2 + int(done * 96 / total))
+        iso_path = Path(iso_path).absolute()
+        unlinked_path(iso_path, root=iso_path)
+        if not iso_path.is_file():
+            raise ValueError('Select a supported Xbox ISO/XISO file.')
+        if iso_path.resolve().is_relative_to((data / 'installed').resolve()):
+            raise ValueError('Keep the source ISO outside the managed installed folder before selecting it.')
+        source = iso_path.stat()
+        marker = {'version': 1, 'disc_manifest': sha(ROOT / 'tools/disc-manifest.json'),
+                  'files': len(required), 'importer': 'burner-xbe-0.09',
+                  'source_mode': 'iso' if direct else 'extracted'}
+        if direct:
+            marker.update(iso_path=str(iso_path), iso_size=source.st_size,
+                          iso_mtime_ns=source.st_mtime_ns)
+        names = set(required) & SOURCE_FILES if direct else set(required)
+        if shutil.disk_usage(data).free < sum(required[name]['size'] for name in names) + 256 * BLOCK:
+            raise ValueError('Not enough free space to prepare the game while keeping your current install.')
+        record = dict(iso_path=str(iso_path), iso_size=source.st_size, iso_mtime_ns=source.st_mtime_ns)
+        with source_disc(record) as disc:
+            read_disc_files(disc, required, cancel, game, names)
         check_cancel(cancel)
         _ensure_coop_assets(game, data, cancel=cancel)
-        (stage / 'installed.json').write_text(json.dumps({
-            'version': 1, 'disc_manifest': sha(ROOT / 'tools/disc-manifest.json'),
-            'files': len(required), 'importer': 'burner-xbe-0.08'}))
+        after = iso_path.stat()
+        if ((source.st_dev, source.st_ino, source.st_size, source.st_mtime_ns) !=
+                (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns)):
+            raise ValueError('The source ISO changed during setup. Retry with an unchanged file.')
+        (stage / 'installed.json').write_text(json.dumps(marker), encoding='utf-8')
         staged_runtime = stage_legacy_state(data, stage, cancel)
         publish_import(data, stage, staged_runtime, cancel)
         progress('Ready to play', 100)
@@ -203,24 +386,95 @@ def import_iso(iso_path, data, cancel):
             shutil.rmtree(stage)
 
 
+def check_installation(data, *, full=False, cancel=None):
+    record = source_record(data)
+    required = manifest()['files']
+    if record['disc_manifest'] != sha(ROOT / 'tools/disc-manifest.json'):
+        raise ValueError('The installed disc revision differs. Select your supported Xbox ISO again.')
+    direct = record.get('source_mode') == 'iso'
+    names = set(required) & SOURCE_FILES if direct else set(required)
+    source_xbe = None
+    if direct:
+        with source_disc(record) as disc:
+            if full:
+                read_disc_files(disc, required, cancel)
+            import hashlib
+            entries = disc.entries()
+            row = required['Default.xbe']
+            entry = entries.get('default.xbe', (None, None))[1]
+            if entry is None or entry.size != row['size']:
+                raise ValueError('The selected ISO has an unsupported Xbox executable.')
+            source_xbe = hashlib.sha256(disc.read(entry)).hexdigest()
+            if not supported_hash('Default.xbe', source_xbe, row['sha256']):
+                raise ValueError('The selected ISO has an unsupported Xbox executable.')
+    for name in names:
+        if cancel is not None:
+            check_cancel(cancel)
+        row = required[name]
+        path = data / 'installed/game_files' / name
+        unlinked_path(path, root=data)
+        if not path.is_file() or path.stat().st_size != row['size']:
+            raise ValueError('Installed game files need repair. Select your Xbox ISO again: ' + name)
+        if full or name == 'Default.xbe':
+            digest = sha(path)
+            if (not supported_hash(name, digest, row['sha256']) or
+                    (name == 'Default.xbe' and source_xbe is not None and digest != source_xbe)):
+                raise ValueError('Installed game verification failed: ' + name)
+    return record
+
+
 def ready(data):
-    """Reuse verified 0.02 imports; no obsolete generated movie/material dependency."""
-    install = data / 'installed'
+    """Existing extracted installs and authenticated direct-ISO sources are accepted."""
     try:
-        unlinked_path(install / 'installed.json', root=data)
-        marker = json.loads((install / 'installed.json').read_text())
-        required = manifest()['files']
-        if marker['disc_manifest'] != sha(ROOT / 'tools/disc-manifest.json'):
-            return False
-        for name, row in required.items():
-            path = install / 'game_files' / name
-            unlinked_path(path, root=data)
-            if not path.is_file() or path.stat().st_size != row['size']:
-                return False
-        return supported_hash('Default.xbe', sha(install / 'game_files/Default.xbe'),
-                              required['Default.xbe']['sha256'])
+        check_installation(data)
+        return True
     except (OSError, ValueError, KeyError, TypeError):
         return False
+
+
+def installation_status(data):
+    result = {'ready': False, 'source_mode': '', 'iso_path': '', 'data': str(data),
+              'message': 'Select your supported Xbox ISO or an existing installation.'}
+    result.update(diagnostics.status(ROOT))
+    try:
+        record = source_record(data)
+        result['source_mode'] = record.get('source_mode', 'extracted')
+        result['iso_path'] = record.get('iso_path', '')
+        check_installation(data)
+        result.update(ready=True, message='Ready to play from your ISO. Keep it in place.' if
+                      result['source_mode'] == 'iso' else 'Ready to play. Your installed game files are available.')
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        if (data / 'installed/installed.json').exists():
+            result['message'] = str(error)
+    return result
+
+
+def verify_installation(data, cancel=None):
+    check_installation(data, full=True, cancel=cancel)
+    progress('Game files verified. Saves and add-ons were kept.', 100)
+    return installation_status(data)
+
+
+def auto_setup(data, cancel, *, interactive=False):
+    """An existing selection always wins over an image dropped into assets."""
+    state = installation_status(data)
+    if state['ready'] or (data / 'installed').exists() or (ROOT / 'installation.json').exists():
+        return state
+    assets = ROOT / 'assets'
+    unlinked_path(assets, root=ROOT)
+    if not assets.is_dir():
+        return state
+    images = [path for path in assets.iterdir() if path.suffix.lower() in ('.iso', '.xiso')]
+    if len(images) > 1:
+        state['message'] = 'More than one ISO is in assets. Choose one in Select Game.'
+        return state
+    if len(images) == 1:
+        if interactive:
+            import setup_feedback
+            setup_feedback.notify('Press OK to prepare the Xbox ISO in assets. Keep it there for future play. Setup may take several minutes.')
+        import_iso(images[0], data, cancel, direct=True)
+        return installation_status(data)
+    return state
 
 
 def linked(path):
@@ -473,11 +727,12 @@ def language_settings(data, selected=None):
     return {'language':current,'spanish_available':available}
 
 
-def launch(data, language=None):
+def launch(data, language=None, *, interactive=False):
     """Keep new runtime settings/hdd separate; diagnostic environment never leaks in."""
     unlinked_path(data, root=data)
-    if not ready(data):
-        raise ValueError('Please import your supported Xbox ISO first.')
+    state = auto_setup(data, ROOT / ('.cancel-auto-' + uuid.uuid4().hex), interactive=interactive)
+    if not state['ready']:
+        raise ValueError(state['message'])
     info = runtime_files()
     ensure_coop_assets(data, info)
     ensure_spanish(data, info)
@@ -529,18 +784,36 @@ def launch(data, language=None):
     env = {k: v for k, v in os.environ.items()
            if not k.upper().startswith(('UCRR_', 'XBE_', 'XBOX_LOG_')) and k.upper() != 'BURNER_AIM_LOG'}
     env['UCRR_GAME_ASSETS'] = str(data / 'installed/game_files')
-    # The release runtime is compiled quiet; only bounded errors survive a failed run.
-    with open(os.devnull, 'wb') as null:
-        proc = subprocess.Popen([str(runtime / RUNTIME_NAME)], cwd=runtime, env=env,
-                                stdout=null, stderr=subprocess.PIPE,
-                                creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
-        tail = deque(maxlen=32)
-        while True:
-            chunk = proc.stderr.read(4096)
-            if not chunk:
-                break
-            tail.append(chunk)
-        code = proc.wait()
+    if state['source_mode'] == 'iso':
+        env['UCRR_GAME_ISO'] = state['iso_path']
+    # Only the saved launcher choice enables public logging, never inherited probes.
+    session = diagnostics.Session(ROOT, 'game', diagnostics.GAME_LIMIT)
+    if session.stream is not None:
+        env['UCRR_SESSION_LOG'] = '1'
+        session.append('Version: ' + info['version'] + '\nRuntime SHA256: ' + info['files'][RUNTIME_NAME] + '\n')
+        config = runtime / 'settings.toml'
+        try:
+            unlinked_path(config, root=data)
+            if config.is_file() and config.stat().st_size <= 65536:
+                session.append(b'Saved settings:\n' + config.read_bytes() + b'\n')
+        except (OSError, ValueError) as error:
+            session.append('Settings could not be logged: ' + str(error) + '\n')
+    try:
+        with open(os.devnull, 'wb') as null:
+            proc = subprocess.Popen([str(runtime / RUNTIME_NAME)], cwd=runtime, env=env,
+                                    stdout=null, stderr=subprocess.PIPE,
+                                    creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+            tail = deque(maxlen=32)
+            while True:
+                chunk = proc.stderr.read1(4096)
+                if not chunk:
+                    break
+                tail.append(chunk)
+                session.append(chunk)
+            code = proc.wait()
+            session.append('\nExit code: ' + hex(code & 0xffffffff) + '\n')
+    finally:
+        session.close()
     if code:
         report = data / 'last-error.txt'
         header = ('Version: ' + info['version'] + '\nExit code: ' + hex(code & 0xffffffff) +
@@ -558,8 +831,11 @@ def main():
             raise ValueError(message)
 
     parser = SetupParser()
-    parser.add_argument('action', choices=['import', 'status', 'launch', 'textures', 'voices', 'language'])
-    parser.add_argument('--data', type=Path, default=ROOT / 'GameData')
+    parser.add_argument('action', choices=['import', 'use-iso', 'use-installation', 'verify', 'auto-setup', 'status', 'launch', 'textures', 'voices', 'language', 'diagnostics', 'check-updates', 'update'])
+    parser.add_argument('--launcher-pid', type=int)
+    parser.add_argument('--logging', choices=['on', 'off'])
+    parser.add_argument('--data', type=Path)
+    parser.add_argument('--installation', type=Path)
     parser.add_argument('--iso', type=Path)
     parser.add_argument('--pack', type=Path)
     parser.add_argument('--cancel', type=Path)
@@ -569,41 +845,122 @@ def main():
     interactive = '--interactive' in sys.argv[1:]
     action = 'Setup'
     try:
+        diagnostics.start(ROOT, action)
         args = parser.parse_args()
         action = args.action
-        if args.interactive and action in ('import', 'textures', 'voices'):
-            setup_feedback.notify('Press OK to start ' + {'import': 'ISO import.', 'textures': 'HD texture installation.', 'voices': 'Spanish voice installation.'}[action] +
-                '\n\nThis can take several minutes. Leave Steam running; another message will confirm success or explain any error.')
-        if args.action == 'import':
-            if args.iso is None or args.cancel is None:
-                raise ValueError('Import requires an ISO and cancellation path.')
-            import_iso(args.iso, args.data, args.cancel)
-        elif args.action == 'textures':
-            if args.pack is None or args.cancel is None:
-                raise ValueError('Select the HD texture ZIP download.')
-            from world_textures import install
-            install(args.pack, args.data, args.cancel)
-        elif args.action == 'voices':
-            if args.iso is None or args.cancel is None or args.pack is not None:
-                raise ValueError('Select your European PS2 ISO (SLES-53991) to import Spanish voices.')
-            from spanish_voice_iso import install
-            install(args.iso, args.data, args.cancel)
-        elif args.action == 'status':
-            imported = ready(args.data)
+        diagnostics.record('Action=' + action)
+        if action == 'check-updates':
+            import release_update
+            state = release_update.check(ROOT)
+            print(json.dumps(state), flush=True)
             if args.interactive:
-                setup_feedback.notify('Game data is ready.' if imported else 'Import your supported Xbox ISO first.')
-            return 0 if imported else 2
-        elif args.action == 'language':
-            print(json.dumps(language_settings(args.data, args.language)))
-        else:
-            launch(args.data,args.language)
+                setup_feedback.notify(state['message'])
+            return 0
+        data = ROOT / 'GameData' if action == 'use-installation' else selected_data(args.data)
+        if args.interactive and action in ('import', 'use-iso', 'textures', 'voices'):
+            setup_feedback.notify('Press OK to start ' + {'import': 'ISO import.', 'use-iso': 'direct ISO setup. Keep the ISO in place for future play.',
+                'textures': 'HD texture installation.', 'voices': 'Spanish voice installation.'}[action] +
+                '\n\nThis can take several minutes. Leave Steam running; another message will confirm success or explain any error.')
+        read_only = action == 'status' or (action == 'language' and args.language is None)
+        with ExitStack() as locks:
+            if not read_only:
+                locks.enter_context(setup_lock(ROOT))
+                if data.exists() and data.absolute() != ROOT.absolute():
+                    locks.enter_context(setup_lock(data))
+            if action == 'update':
+                import release_update
+                if release_update.platform(ROOT) == 'linux':
+                    raise ValueError('Close the Steam shortcut and run ./burner.sh update from the package folder. The native updater preserves Linux file permissions and your existing Steam shortcut.')
+                if os.name != 'nt':
+                    raise ValueError('Use the bundled setup worker through Steam/Proton to update.')
+                if args.launcher_pid is None and release_update.platform(ROOT) == 'windows':
+                    raise ValueError('Start the update from Manage in the launcher.')
+                if args.launcher_pid is not None and args.launcher_pid <= 0:
+                    raise ValueError('Invalid launcher process.')
+                if release_update.game_running():
+                    raise ValueError('Close the game before updating.')
+                info = release_update.check(ROOT)
+                if info['status'] != 'available':
+                    if args.interactive:
+                        setup_feedback.notify(info['message'])
+                    print(json.dumps(info), flush=True)
+                    return 2
+                if args.interactive and not setup_feedback.confirm(
+                        'Install Burner Edition ' + info['latest_version'] + '?\n\nThe official update will replace launcher files in this folder. Saves, settings, your ISO and installed add-ons are kept. Leave Steam running until setup confirms completion.'):
+                    return 2
+                notify = lambda event, message, **fields: progress(message, fields.get('percent', 0))
+                cancel_update = lambda: check_cancel(args.cancel) if args.cancel else None
+                with release_update.exclusive(release_update.safe(ROOT, '.release-update.lock')):
+                    current = release_update.read(release_update.safe(ROOT, release_update.MANIFEST))['version']
+                    result = release_update.prepare(ROOT, current, release_update.platform(ROOT), notify, cancel_update)
+                    try:
+                        cancel_update()
+                        release_update.launch_worker(ROOT, data, args.launcher_pid,
+                            restart=args.launcher_pid is not None, interactive=args.interactive)
+                    except Exception:
+                        release_update.recover(ROOT)
+                        raise
+                print(json.dumps({'event': 'release_ready', 'message': 'Update verified; applying after setup closes.', 'version': result['version']}), flush=True)
+                return 0
+            elif action == 'diagnostics':
+                state = diagnostics.configure(ROOT, args.logging) if args.logging is not None else diagnostics.status(ROOT)
+                diagnostics.start(ROOT, action)
+                print(json.dumps(state))
+            elif action in ('import', 'use-iso'):
+                if args.iso is None or args.cancel is None:
+                    raise ValueError('Import requires an ISO and cancellation path.')
+                if action == 'use-iso':
+                    import_iso(args.iso, data, args.cancel, direct=True)
+                else:
+                    import_iso(args.iso, data, args.cancel)
+            elif action == 'use-installation':
+                if args.installation is None:
+                    raise ValueError('Choose a previous launcher folder or its GameData folder.')
+                chosen = args.installation.absolute()
+                if not (chosen / 'installed/installed.json').is_file():
+                    chosen = chosen / 'GameData'
+                if chosen != data and chosen.exists():
+                    locks.enter_context(setup_lock(chosen))
+                data = select_installation(args.installation, args.cancel)
+                print(json.dumps(installation_status(data)))
+            elif action == 'verify':
+                print(json.dumps(verify_installation(data, args.cancel)))
+            elif action == 'auto-setup':
+                state = auto_setup(data, args.cancel or ROOT / ('.cancel-auto-' + uuid.uuid4().hex), interactive=args.interactive)
+                print(json.dumps(state))
+                return 0 if state['ready'] else 2
+            elif action == 'textures':
+                if args.pack is None or args.cancel is None:
+                    raise ValueError('Select the HD texture ZIP download.')
+                from world_textures import install
+                install(args.pack, data, args.cancel)
+            elif action == 'voices':
+                if args.iso is None or args.cancel is None or args.pack is not None:
+                    raise ValueError('Select your European PS2 ISO (SLES-53991) to import Spanish voices.')
+                from spanish_voice_iso import install
+                install(args.iso, data, args.cancel)
+            elif action == 'status':
+                state = installation_status(data)
+                print(json.dumps(state))
+                if args.interactive:
+                    setup_feedback.notify(state['message'])
+                return 0 if state['ready'] else 2
+            elif action == 'language':
+                print(json.dumps(language_settings(data, args.language)))
+            else:
+                launch(data, args.language, interactive=args.interactive)
         if args.interactive and action != 'launch':
             setup_feedback.notify({'import': 'ISO import completed successfully. Restore the normal play command in Steam.',
+                'use-iso': 'Direct ISO setup completed successfully. Keep your ISO in place and restore the normal play command in Steam.',
+                'use-installation': 'Existing installation selected. Your files and saves stay there without duplication.',
+                'verify': 'Game file verification completed successfully.',
                 'textures': 'HD textures installed successfully. Restore the normal play command in Steam.',
                 'voices': 'Spanish voices installed. Select Spanish, then restore the normal play command in Steam.',
+                'diagnostics': 'Diagnostic logging is ' + ('on' if diagnostics.enabled(ROOT) else 'off') + '. Applies to the next game session. Local logs: ' + str(ROOT / 'GameData/logs'),
                 'language': 'Language settings are ready. Restore the normal play command in Steam.'}[action])
         return 0
     except Exception as error:
+        diagnostics.record(action + ' failed: ' + repr(error))
         message = setup_feedback.report_error(ROOT, action, error)
         try:
             progress(message, 0)
@@ -612,6 +969,8 @@ def main():
         if interactive:
             setup_feedback.notify(message, error=True)
         return 1
+    finally:
+        diagnostics.finish()
 
 
 if __name__ == '__main__':

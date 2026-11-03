@@ -1,11 +1,13 @@
 #include "xbe_coop_orders.h"
 #include "xbe_coop.h"
 #include "xbe_coop_guest.h"
+#include "xbe_health_packs.h"
 #include "cpu/x86_ops.h"
 #include "kernel/kernel.h"
 #include "kernel/memory.h"
 #include "xbe_input_memory.h"
 #include <array>
+#include <cmath>
 #include <cstring>
 #include <xmmintrin.h>
 
@@ -36,6 +38,30 @@ int Slot(const uint8_t* b,uint32_t manager){
     return -1;
 }
 uint32_t Other(const uint8_t* b,uint32_t manager){const int slot=Slot(b,manager);return slot<0?0:Manager(b,unsigned(slot)^1);}
+uint32_t QueryManager(const uint8_t* b,uint32_t client){
+    if(!b||!TrialGuestReadable(client,0xa4)||Entity(b,Word(b,client+0x54))!=client)return 0;
+    if(trial_coop::Active())return Slot(b,selecting)>=0?selecting:0;
+    const uint32_t manager=Entity(b,Word(b,client+0x98));
+    if(!TrialGuestReadable(manager,0x10c)||Word(b,manager)!=0x46caa8)return 0;
+    const uint32_t actor=Entity(b,Word(b,manager+0x58));
+    return TrialGuestReadable(actor,0x7f0)&&Word(b,actor)==0x46fbe8&&
+        Word(b,actor+0x7ec)==Word(b,manager+0x54)?manager:0;
+}
+uint32_t AimedMedic(const uint8_t* b,uint32_t manager,uint32_t owner){
+    struct Restore {unsigned csr=_mm_getcsr();~Restore(){_mm_setcsr(csr);}} restore;
+    if(!TrialGuestReadable(manager,0x10c)||!TrialGuestReadable(owner,0x4c)||Word(b,manager+0xe8)!=4)return 0;
+    const uint32_t target=Entity(b,Word(b,manager+0xec));
+    if(!TrialGuestReadable(target,0x4c))return 0;
+    // The manager's native look ray already checked facing and occlusion.
+    // Keep the original dialogue's 300-unit reach for each viewer separately.
+    double distance=0;
+    for(unsigned i=0;i<3;++i){
+        float a,z;std::memcpy(&a,b+owner+0x40+4*i,4);std::memcpy(&z,b+target+0x40+4*i,4);
+        if(!std::isfinite(a)||!std::isfinite(z))return 0;
+        const double d=double(a)-z;distance+=d*d;
+    }
+    return distance<=300.0*300.0?target:0;
+}
 bool Stack(const X86Context& c){return c.esp>=0x11000&&TrialGuestReadable(c.esp-4096,4096)&&TrialGuestReadable(c.esp,0x38);}
 struct CopyCall {
     X86Context c;uint8_t* b;uint32_t low,sp;std::array<uint8_t,4096> saved;
@@ -147,13 +173,36 @@ void TrialCoopOrdersEvent(X86Context& c,uint8_t* b,uint32_t callback){
     if(!TrialGuestReadable(sender,4))return;
     CopyCall call(c,b);call.Run(callback,other,{payload,sender});
 }
-void TrialCoopOrdersChoose(X86Context& c,uint8_t* b){
-    if(!b||!trial_coop::Active()||!TrialGuestReadable(c.esp,12)||!TrialGuestReadable(c.ecx,0xa4))return;
+bool TrialCoopMedicPrompt(const X86Context& c,const uint8_t* b,bool offer,bool decline){
+    const uint32_t manager=QueryManager(b,c.esi);
+    if(!manager)return false;
+    const uint32_t owner=Entity(b,Word(b,manager+0x58)),target=AimedMedic(b,manager,owner);
+    if(!target)return false;
+    return decline?TrialHealthPackMedicOfferOwner(b,owner,c.esi,target):
+        TrialHealthPackMedicPrompt(b,owner,c.esi,target,offer);
+}
+bool TrialCoopOrdersChoose(X86Context& c,uint8_t* b){
+    if(!b||!TrialGuestReadable(c.esp,12)||!TrialGuestReadable(c.ecx,0xa4))return true;
+    const uint32_t kind=Word(b,c.ecx),payload=Word(b,c.esp+4);
+    const bool medic=kind==0x46e960||kind==0x4727a0;
     const uint32_t sender=Word(b,c.esp+8);
-    if(!TrialGuestReadable(sender,4))return;
+    if(!TrialGuestReadable(sender,4)||!TrialGuestReadable(payload,4))return !medic;
     const uint32_t manager=Entity(b,Word(b,sender));
-    if(Slot(b,manager)<0||Entity(b,Word(b,c.ecx+0x54))!=c.ecx||!ClientIn(b,manager,Word(b,c.ecx+0x54)))return;
+    const bool valid_manager=trial_coop::Active()?Slot(b,manager)>=0:
+        TrialGuestReadable(manager,0x10c)&&Word(b,manager)==0x46caa8;
+    if(!valid_manager||Entity(b,Word(b,c.ecx+0x54))!=c.ecx||!ClientIn(b,manager,Word(b,c.ecx+0x54)))return !medic;
+    const uint32_t command=Word(b,payload),owner=Entity(b,Word(b,manager+0x58));
+    if(kind==0x46e960&&command==4){
+        const uint32_t target=AimedMedic(b,manager,owner);
+        if(!target||!TrialHealthPackMedicClaim(b,owner,c.ecx,target))return false;
+    }
+    if(kind==0x4727a0&&(command==5||command==6)){
+        if(!TrialHealthPackMedicOfferOwner(b,owner,c.ecx))return false;
+        if(command==5){const uint32_t target=AimedMedic(b,manager,owner);
+            if(!target||!TrialHealthPackMedicPrompt(b,owner,c.ecx,target,true))return false;}
+    }
     // An actual selected command, unlike a look query, has one initiator;
     // preserve that native owner for asynchronous completion and feedback.
-    Put(b,c.ecx+0x98,Word(b,manager+0x54));
+    if(trial_coop::Active()||medic)Put(b,c.ecx+0x98,Word(b,manager+0x54));
+    return true;
 }

@@ -36,6 +36,27 @@ unsigned SettingsPlayer(const uint8_t* b,uint32_t owner){
     return trial_coop::Active()&&LivePlayer(b,owner)&&Word(b,owner)==0x46fbe8&&
         !(Word(b,owner+0x5c)&1)&&Word(b,owner+0x368)==1&&TrialCoopPlayer(1)==owner?1u:0u;
 }
+float ReticleAimU(const uint8_t* b,const X86Context& c,uint32_t root){
+    if(!root||!TrialGuestReadable(c.esp,28))return 0;
+    const uint32_t uv0=Word(b,c.esp+20),uv1=Word(b,c.esp+24);
+    if(!TrialGuestReadable(uv0,8)||!TrialGuestReadable(uv1,8)||
+       Real(b,uv0)!=0||Real(b,uv0+4)!=0||Real(b,uv1)!=1||Real(b,uv1+4)!=1||
+       Real(b,c.esi+0x10)!=0||Real(b,c.esi+0x14)!=0||
+       Real(b,c.esi+0x18)!=1||Real(b,c.esi+0x1c)!=1)return 0;
+    for(uint32_t point:{Word(b,c.esp+4),Word(b,c.esp+8)})
+        for(uint32_t uv:{uv0,uv1})if(uint64_t(point)+8>uv&&uint64_t(uv)+8>point)return 0;
+    // 73790 retains each weapon's fade owner and the separate sniper fade.
+    // Original and reconstructed HD art share these normalized aiming texels.
+    for(unsigned i=0;i<28;++i){
+        if(i==0||i==6||i==9||i==25||i==26)continue; // Empty slots or diffuse soft-dot artwork.
+        const uint32_t fade=Word(b,root+0x20+i*4);
+        if(!TrialGuestReadable(fade,8)||Word(b,fade)!=0x453d38u||Word(b,fade+4)!=c.esi)continue;
+        const float extent=i==27?128.f:64.f;
+        if(Real(b,c.esi+8)!=extent||Real(b,c.esi+12)!=extent)return 0;
+        return (extent*.5f+.5f)/extent;
+    }
+    return 0;
+}
 }
 
 void TrialPlayerCameraCreated(const X86Context& c,const uint8_t* b){
@@ -147,13 +168,14 @@ TrialTaserVertices::~TrialTaserVertices(){
 }
 TrialHudLayoutScope::TrialHudLayoutScope(const X86Context& c,const uint8_t* b):previous_(hud){
     hud=this;
-    if(!b||!trial_coop::Active()||TrialCoopPresentation()!=1||
+    const bool coop=trial_coop::Active();
+    if(!b||(coop&&TrialCoopPresentation()!=1)||
        !TrialGuestReadable(c.ecx,0x18)||Word(b,c.ecx)!=0x4531a0)return;
     const uint32_t owner=Word(b,c.ecx+4);
     if(!LivePlayer(b,owner)||Word(b,owner)!=0x46fbe8||
        (Word(b,owner+0x5c)&1)||Word(b,owner+0x300)!=c.ecx)return;
     const uint32_t slot=Word(b,owner+0x368);
-    if(slot>1||TrialCoopPlayer(slot)!=owner)return;
+    if(slot>1||(coop?TrialCoopPlayer(slot)!=owner:slot!=0))return;
     root_=c.ecx;slot_=slot;
 }
 TrialHudLayoutScope::~TrialHudLayoutScope(){hud=previous_;}
@@ -186,9 +208,9 @@ void TrialHudLayout(const X86Context& c,uint8_t* b){
     if(!hud||c.esp>0xffffffabu||!TrialGuestReadable(c.esp+0x10,0x44))return;
     const uint32_t d=c.esp+0x10;
     const float top=float(hud->slot_)*240;
-    hud->split_=hud->root_&&Real(b,d)==0&&Real(b,d+4)==top&&
+    hud->split_=trial_coop::Active()&&hud->root_&&Real(b,d)==0&&Real(b,d+4)==top&&
         Real(b,d+8)==640&&Real(b,d+12)==top+240;
-    if(!hud->split_&&(Real(b,d)!=0||Real(b,d+4)!=0||Real(b,d+8)!=640||Real(b,d+12)!=480))return;
+    if(!hud->split_&&(Real(b,d)!=0||Real(b,d+4)!=0||Real(b,d+8)!=640||Real(b,d+12)!=480)){hud->root_=0;return;}
     if(!trial_graphics::Widescreen())return;
     Arithmetic arithmetic;hud->scale_=.75f;Put(b,d+8,640/.75f);
 }
@@ -274,14 +296,32 @@ TrialProjectedHudScope::~TrialProjectedHudScope(){
     if(descriptor_right_)std::memcpy(base_+descriptor_right_,&saved_right_,4);
     hud=previous_;
 }
+void TrialReticleColor(const X86Context& c,uint8_t* b){
+    const uint32_t root=c.esi;
+    if(!b||!TrialGuestReadable(root,0x20)||Word(b,root)!=0x453160u)return;
+    const uint32_t owner=Word(b,root+4);
+    if(!LivePlayer(b,owner)||Word(b,owner)!=0x46fbe8u||(Word(b,owner+0x5c)&1))return;
+    const uint32_t r=Word(b,root+0x10),g=Word(b,root+0x14),blue=Word(b,root+0x18),one=0x3f800000;
+    // The native update has already chosen target/spin priority for this owner.
+    const unsigned state=r==one&&g==one&&blue==one?0:r==one&&!g&&!blue?1:
+        !r&&g==one&&!blue?2:!r&&g==one&&blue==one?3:4;
+    const auto choice=trial_graphics::ReticleColor(SettingsPlayer(b,owner),state);
+    if(!choice||choice>=std::size(trial_graphics::ReticlePalette))return;
+    Arithmetic arithmetic;const uint32_t rgb=trial_graphics::ReticlePalette[choice];
+    Put(b,root+0x10,float((rgb>>16)&255)/255);
+    Put(b,root+0x14,float((rgb>>8)&255)/255);
+    Put(b,root+0x18,float(rgb&255)/255);
+}
 TrialReticleScope::TrialReticleScope(const X86Context& c,const uint8_t* b):previous_(reticle){
     reticle=nullptr;
     const unsigned percent=trial_graphics::ReticleScale();
     // 0x73790 builds this class from weapon crosshair shaders. The sniper
     // mask/brackets use different classes and never enter its 0x73aa0 draw.
-    if(!hud||percent==100||percent<50||percent>200||
+    if(!hud||percent<50||percent>200||
        !TrialGuestReadable(c.ecx,0x94)||Word(b,c.ecx)!=0x453160u||
        !TrialGuestReadable(Word(b,c.ecx+0x90),4))return;
+    if(hud->root_&&Word(b,c.ecx+4)==Word(b,hud->root_+4))root_=c.ecx;
+    if(percent==100&&!root_)return;
     Arithmetic arithmetic;scale_=float(percent)*.01f;reticle=this;
 }
 TrialReticleScope::~TrialReticleScope(){reticle=previous_;}
@@ -326,10 +366,18 @@ TrialHudQuadScope::TrialHudQuadScope(const X86Context& c,uint8_t* b):base_(b){
        Word(b,c.esi)==0x453b50u&&(uint64_t(a)+8<=z||uint64_t(z)+8<=a)&&
        std::isfinite(Real(b,a+4))&&std::isfinite(Real(b,z+4))){
         float x0=Real(b,a),x1=Real(b,z),y0=Real(b,a+4),y1=Real(b,z+4);
-        const float half_change=(reticle->scale_-1)*.5f;
-        const float dx=(x1-x0)*half_change,dy=(y1-y0)*half_change;
-        x0-=dx;x1+=dx;y0-=dy;y1+=dy;
+        if(reticle->scale_!=1){
+            const float half_change=(reticle->scale_-1)*.5f;
+            const float dx=(x1-x0)*half_change,dy=(y1-y0)*half_change;
+            x0-=dx;x1+=dx;y0-=dy;y1+=dy;
+        }
         if(hud->scale_!=1){x0=trial_view::HudX(x0,hud->scale_);x1=trial_view::HudX(x1,hud->scale_);}
+        const float aim_u=ReticleAimU(b,c,reticle->root_);
+        if(aim_u&&x1>x0&&y1>y0){
+            // Each validated player viewport is 640 wide. Center the visible
+            // aiming texel, not the quad midpoint; retain native vertical aim.
+            const float dx=320-(x0+(x1-x0)*aim_u);x0+=dx;x1+=dx;
+        }
         if(std::isfinite(x0)&&std::isfinite(x1)&&std::isfinite(y0)&&std::isfinite(y1)){
             const uint32_t addresses[]={a,a+4,z,z+4};const float values[]={x0,y0,x1,y1};
             for(unsigned i=0;i<4;++i){address_[i]=addresses[i];original_[i]=Word(b,addresses[i]);Put(b,addresses[i],values[i]);}

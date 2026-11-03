@@ -1,6 +1,0 @@
-#ifndef MIGRATION_ANIMATION_ASSET_LIFETIME_GUEST_H
-#define MIGRATION_ANIMATION_ASSET_LIFETIME_GUEST_H
-int uc_migration_animation_asset_destroy(void);
-int uc_migration_animation_asset_allocate(void);
-int uc_migration_animation_asset_free(void);
-#endif

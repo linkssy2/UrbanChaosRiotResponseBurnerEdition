@@ -30,7 +30,13 @@ try:
  report['deferred_tests']=[]
  report['live_status']='New executable pending checks and live verification'
  save()
+ from prepare_xbe_cheats import unprepare as unprepare_cheats
+ unprepare_cheats(AREA)
  (AREA/'src/compat').mkdir(parents=True,exist_ok=True)
+ from prepare_xbe_aim_mode import unprepare as unprepare_aim_mode
+ unprepare_aim_mode(AREA)
+ from prepare_xbe_camera_push import unprepare as unprepare_camera_push
+ unprepare_camera_push(AREA)
  from prepare_xbe_coop_cinematics import unprepare as unprepare_coop_cinematics
  from prepare_xbe_coop_spin import unprepare as unprepare_coop_spin
  from prepare_xbe_coop_pickups import unprepare as unprepare_coop_pickups
@@ -183,6 +189,10 @@ try:
  prepare_coop_death(AREA)
  from prepare_xbe_health_packs import prepare as prepare_health_packs
  prepare_health_packs(AREA)
+ from prepare_xbe_aim_mode import prepare as prepare_aim_mode
+ prepare_aim_mode(AREA)
+ from prepare_xbe_camera_push import prepare as prepare_camera_push
+ prepare_camera_push(AREA)
  from prepare_xbe_intro_skip import prepare as prepare_intro_skip
  prepare_intro_skip(AREA)
  from prepare_xbe_fmv_layout import prepare as prepare_fmv_layout
@@ -197,6 +207,8 @@ try:
  prepare_pc_prompt_guest(AREA)
  from prepare_xbe_frontend import prepare as prepare_frontend
  prepare_frontend(AREA)
+ from prepare_xbe_cheats import prepare as prepare_cheats
+ prepare_cheats(AREA)
  from prepare_xbe_level_details import prepare as prepare_level_details
  prepare_level_details(AREA)
  from prepare_xbe_frontend_fonts import prepare as prepare_frontend_fonts
@@ -211,6 +223,8 @@ try:
  prepare_audio_config(SDK, AREA)
  from prepare_xbe_language import prepare as prepare_language
  prepare_language(SDK, AREA)
+ from prepare_xbe_file_query_efficiency import prepare as prepare_file_query_efficiency
+ prepare_file_query_efficiency(AREA)
  from prepare_xbe_heap_probe import prepare as prepare_heap_probe
  prepare_heap_probe(AREA)
  from prepare_xbe_coop_spin import prepare as prepare_coop_spin
@@ -354,7 +368,8 @@ int main(){uint32_t r=0;if(uc_ds_ref(r,false)!=0||uc_ds_ref(r,true)!=1||uc_ds_re
  for name in ('xbe_trial_menu_input.cpp','xbe_trial_hud.cpp','xbe_trial_graphics_ui.cpp','xbe_trial_graphics_ui.h',
               'xbe_coop_controls.cpp','xbe_coop_controls.h',
               'xbe_coop_preview.h','xbe_coop_preview.cpp','xbe_coop_preview_assets.h','xbe_coop_preview_assets.cpp',
-              'xbe_window_keys.h','xbe_menu_key_taps.h','xbe_controls.h','xbe_controls_backend.inc','xbe_controls_capture.h','xbe_controls_ui.inc','xbe_language_ui.inc'):
+              'xbe_window_keys.h','xbe_menu_key_taps.h','xbe_controls.h','xbe_controls_backend.inc','xbe_controls_capture.h','xbe_controls_ui.inc','xbe_language_ui.inc','xbe_cheats_ui.inc',
+              'xbe_host_input.h','xbe_keyboard_bindings.inc','xbe_controller_bindings.inc'):
   source=(ROOT/'scripts'/name).read_text()
   if name=='xbe_trial_menu_input.cpp':
    source,renderer_source=prepare_pc_prompts(source,renderer_path.read_text(),AREA)
@@ -380,7 +395,7 @@ int main(){uint32_t r=0;if(uc_ds_ref(r,false)!=0||uc_ds_ref(r,true)!=1||uc_ds_re
  info=info.replace('.init = nullptr,','.init = trial_graphics::Initialize,')
  info=info.replace('#include "xbe_graphics_settings.h"','#include "xbe_graphics_settings.h"\n#include "xbe_language.h"')
  info=info.replace('{"ragdoll_amount", nullptr, &TrialRagdollMode}',
-                   '{"ragdoll_amount", nullptr, &TrialRagdollMode}, {"language", nullptr, &TrialLanguage}, {"world_textures", &TrialWorldTextures, nullptr}, {"hd_ui", &TrialHdUi, nullptr}, {"reticle_scale", nullptr, &TrialReticleScale}, {"weapon_fov_scale", nullptr, &TrialWeaponFovScale}, {"player2_field_of_view", nullptr, &TrialPlayer2FieldOfView}, {"player2_weapon_fov_scale", nullptr, &TrialPlayer2WeaponFovScale}, {"fmv_scale", nullptr, &TrialFmvScale}')
+                   '{"ragdoll_amount", nullptr, &TrialRagdollMode}, {"language", nullptr, &TrialLanguage}, {"world_textures", &TrialWorldTextures, nullptr}, {"hd_ui", &TrialHdUi, nullptr}, {"reticle_scale", nullptr, &TrialReticleScale}, {"reticle_normal_color", nullptr, &TrialReticleColors[0][0]}, {"reticle_enemy_color", nullptr, &TrialReticleColors[0][1]}, {"reticle_friendly_color", nullptr, &TrialReticleColors[0][2]}, {"reticle_spin_color", nullptr, &TrialReticleColors[0][3]}, {"player2_reticle_normal_color", nullptr, &TrialReticleColors[1][0]}, {"player2_reticle_enemy_color", nullptr, &TrialReticleColors[1][1]}, {"player2_reticle_friendly_color", nullptr, &TrialReticleColors[1][2]}, {"player2_reticle_spin_color", nullptr, &TrialReticleColors[1][3]}, {"weapon_fov_scale", nullptr, &TrialWeaponFovScale}, {"player2_field_of_view", nullptr, &TrialPlayer2FieldOfView}, {"player2_weapon_fov_scale", nullptr, &TrialPlayer2WeaponFovScale}, {"fmv_scale", nullptr, &TrialFmvScale}')
  info=info.replace('.init = trial_graphics::Initialize,',
                    '.init = []{trial_graphics::Initialize();trial_language::Initialize();},')
  info=info.replace('Game Title','Urban Chaos XboxXBERecomp Integration').replace('L"Game"','L"UrbanChaosXbeTrial"').replace('"game",','"urban_chaos_xbe_trial",').replace('"Game"}}','"UrbanChaosXbeTrial"}}')
@@ -402,6 +417,10 @@ int main(){uint32_t r=0;if(uc_ds_ref(r,false)!=0||uc_ds_ref(r,true)!=1||uc_ds_re
  prepare_draw_batches(AREA)
  from prepare_xbe_device_busy import prepare as prepare_device_busy
  prepare_device_busy(SDK, AREA)
+ from prepare_xbe_draw_bindings import prepare as prepare_draw_bindings
+ prepare_draw_bindings(AREA)
+ from prepare_xbe_screen_sampling import prepare as prepare_screen_sampling
+ prepare_screen_sampling(AREA)
  from prepare_xbe_hd_ui import prepare as prepare_hd_ui
  prepare_hd_ui(AREA)
  from prepare_xbe_world_textures import prepare as prepare_world_textures
@@ -422,6 +441,8 @@ int main(){uint32_t r=0;if(uc_ds_ref(r,false)!=0||uc_ds_ref(r,true)!=1||uc_ds_re
   prepare_shadow_diagnostic(AREA)
  from prepare_xbe_coop_input import prepare_host as prepare_coop_pause_host
  prepare_coop_pause_host(AREA)
+ from prepare_xbe_draw_bindings import finalize as finalize_draw_bindings
+ finalize_draw_bindings(AREA)
  (AREA/'CMakeLists.txt').write_text('''cmake_minimum_required(VERSION 3.25)
 project(UrbanChaosXbeTrial LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 20)
@@ -464,8 +485,8 @@ list(FILTER XBE_RUNTIME_SOURCES EXCLUDE REGEX "/runtime/gpu/d3d12.cpp$")
 list(FILTER XBE_RUNTIME_SOURCES EXCLUDE REGEX "/runtime/gpu/vertex.cpp$")
 list(FILTER XBE_RUNTIME_SOURCES EXCLUDE REGEX "/runtime/gpu/texture.cpp$")
 list(FILTER XBE_RUNTIME_SOURCES EXCLUDE REGEX "/runtime/gpu/shaders.cpp$")
-list(FILTER XBE_RUNTIME_SOURCES EXCLUDE REGEX "/runtime/kernel/(xboxkrnl|files)[.]cpp$")
-list(APPEND XBE_HOST_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/compat/files.cpp")
+list(FILTER XBE_RUNTIME_SOURCES EXCLUDE REGEX "/runtime/kernel/(xboxkrnl|files|disc)[.]cpp$")
+list(APPEND XBE_HOST_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/compat/files.cpp" "${CMAKE_CURRENT_SOURCE_DIR}/src/compat/disc.cpp")
 list(FILTER XBE_RUNTIME_SOURCES EXCLUDE REGEX "/runtime/core/input.cpp$")
 list(APPEND XBE_HOST_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/compat/input.cpp")
 list(FILTER XBE_RUNTIME_SOURCES EXCLUDE REGEX "/runtime/core/log.cpp$")
@@ -531,6 +552,11 @@ add_executable(test_frame_reuse src/compat/test_xbe_frame_reuse.cpp)
 add_executable(test_wall_depth src/compat/test_xbe_wall_depth.cpp)
 add_executable(test_descriptor_lifetime src/compat/test_xbe_descriptor_lifetime.cpp)
 add_executable(test_draw_reuse src/compat/test_draw_reuse.cpp)
+add_executable(test_draw_bindings src/compat/test_draw_bindings.cpp)
+target_include_directories(test_draw_bindings PRIVATE src "'''+(SDK/'runtime').as_posix()+'''")
+add_executable(test_screen_sampling src/compat/test_xbe_screen_sampling.cpp src/compat/shaders.cpp)
+target_include_directories(test_screen_sampling PRIVATE src src/compat "'''+(SDK/'runtime').as_posix()+'''")
+target_link_libraries(test_screen_sampling PRIVATE d3d11 d3dcompiler)
 add_executable(test_sampler_inputs src/compat/test_sampler_inputs.cpp)
 target_include_directories(test_sampler_inputs PRIVATE src "'''+(SDK/'runtime').as_posix()+'''")
 add_executable(test_vertex_costs src/compat/test_vertex_costs.cpp)
@@ -573,11 +599,9 @@ target_include_directories(test_recorded_draws PRIVATE "'''+ROOT.as_posix()+'''"
 add_executable(test_voice_mode "'''+(ROOT/'scripts/test_xbe_voice_mode.cpp').as_posix()+'''")
 add_executable(test_coroutines src/compat/test_coroutines.cpp)
 target_include_directories(test_coroutines PRIVATE "'''+(SDK/'runtime').as_posix()+'''")
-add_executable(test_pc_keyboard "'''+(ROOT/'scripts/test_keyboard_config.c').as_posix()+'''")
-target_include_directories(test_pc_keyboard PRIVATE "'''+(ROOT/'third_party/xboxrecomp/src/input').as_posix()+'''")
-target_include_directories(test_pc_keyboard PRIVATE "'''+(ROOT/'third_party/xboxrecomp/include').as_posix()+'''")
-target_include_directories(test_pc_keyboard PRIVATE "'''+(ROOT/'third_party/xboxrecomp/src').as_posix()+'''")
-target_link_libraries(test_pc_keyboard PRIVATE user32 xinput)
+add_executable(test_pc_keyboard "'''+(ROOT/'scripts/test_xbe_input_bindings.cpp').as_posix()+'''")
+target_include_directories(test_pc_keyboard PRIVATE "'''+(ROOT/'scripts').as_posix()+'''" "'''+(SDK/'runtime').as_posix()+'''")
+target_link_libraries(test_pc_keyboard PRIVATE user32)
 add_executable(test_pc_camera "'''+(ROOT/'scripts/test_pc_mouse_camera.c').as_posix()+'''")
 add_executable(test_pc_memory "'''+(ROOT/'scripts/test_xbe_input_memory.cpp').as_posix()+'''")
 add_executable(test_graphics_menu_context src/common/test_xbe_graphics_menu_context.cpp)
@@ -649,6 +673,10 @@ add_executable(test_coop_turret_view src/compat/test_coop_turret_view.cpp)
 target_include_directories(test_coop_turret_view PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
 add_executable(test_health_packs src/compat/test_health_packs.cpp)
 target_include_directories(test_health_packs PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
+add_executable(test_aim_mode src/compat/test_aim_mode.cpp)
+target_include_directories(test_aim_mode PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
+add_executable(test_camera_push src/compat/test_camera_push.cpp)
+target_include_directories(test_camera_push PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
 add_executable(test_coop_menu src/compat/test_coop_menu.cpp)
 target_include_directories(test_coop_menu PRIVATE src/common "'''+ROOT.as_posix()+'''")
 add_executable(test_health_pulse src/compat/test_health_pulse.cpp)
@@ -701,12 +729,16 @@ target_include_directories(test_language PRIVATE "'''+ROOT.as_posix()+'''" src/c
 add_executable(test_release src/compat/test_release.cpp src/compat/log.cpp)
 target_include_directories(test_release PRIVATE src src/compat "'''+(SDK/'runtime').as_posix()+'''")
 target_compile_definitions(test_release PRIVATE UC_BURNER_RELEASE)
-add_executable(test_release_assets src/compat/test_release_assets.cpp "'''+(SDK/'runtime/kernel/crypto.cpp').as_posix()+'''")
+add_executable(test_release_assets src/compat/test_release_assets.cpp src/compat/disc.cpp "'''+(SDK/'runtime/kernel/crypto.cpp').as_posix()+'''")
 target_include_directories(test_release_assets PRIVATE src/compat "'''+(SDK/'runtime').as_posix()+'''" generated/game)
+add_executable(test_disc_files src/compat/test_disc_files.cpp src/compat/disc.cpp)
+target_include_directories(test_disc_files PRIVATE src/compat "'''+(SDK/'runtime').as_posix()+'''" generated/game)
 add_executable(test_filter src/compat/test_filter.cpp)
 target_include_directories(test_filter PRIVATE src "'''+(SDK/'runtime').as_posix()+'''")
 add_executable(test_frontend src/compat/test_frontend.cpp)
 target_include_directories(test_frontend PRIVATE src src/common src/compat generated/game "'''+ROOT.as_posix()+'''" "'''+(SDK/'runtime').as_posix()+'''")
+add_executable(test_cheats src/compat/test_cheats.cpp)
+target_include_directories(test_cheats PRIVATE src src/common src/compat generated/game "'''+ROOT.as_posix()+'''" "'''+(SDK/'runtime').as_posix()+'''")
 add_executable(test_level_details src/compat/test_level_details.cpp)
 target_include_directories(test_level_details PRIVATE src/common "'''+(ROOT/'src').as_posix()+'''" "'''+(SDK/'runtime').as_posix()+'''")
 add_executable(test_frontend_fonts src/compat/test_frontend_fonts.cpp src/compat/xbe_frontend_fonts.cpp src/compat/xbe_hd_ui.cpp src/compat/xbe_pc_prompt_art.cpp "'''+(ROOT/'native/font.c').as_posix()+'''"
@@ -730,10 +762,10 @@ target_include_directories(test_coop_preview_render PRIVATE src/common src/compa
 target_link_libraries(test_coop_preview_render PRIVATE uc_native_preview gdi32 windowscodecs ole32 bcrypt)
 add_executable(test_graphics_input src/compat/test_graphics_input.cpp)
 target_include_directories(test_graphics_input PRIVATE src/common "'''+ROOT.as_posix()+'''" "'''+(SDK/'runtime').as_posix()+'''")
-target_link_libraries(test_graphics_input PRIVATE user32 xinput)
+target_link_libraries(test_graphics_input PRIVATE user32)
 add_executable(test_controls "'''+(ROOT/'scripts/test_xbe_controls.cpp').as_posix()+'''")
 target_include_directories(test_controls PRIVATE "'''+ROOT.as_posix()+'''" "'''+(SDK/'runtime').as_posix()+'''")
-target_link_libraries(test_controls PRIVATE user32 xinput)
+target_link_libraries(test_controls PRIVATE user32)
 add_executable(test_graphics_settings src/compat/test_graphics_settings.cpp)
 target_include_directories(test_graphics_settings PRIVATE src/compat "'''+(SDK/'runtime').as_posix()+'''")
 target_link_libraries(test_graphics_settings PRIVATE user32)
@@ -748,7 +780,7 @@ if(UC_BURNER_RELEASE)
     target_compile_definitions(UrbanChaosXbeTrial PRIVATE UC_BURNER_RELEASE)
 endif()
 target_compile_definitions(UrbanChaosXbeTrial PRIVATE UC_PRESENT_SURFACE_LAYOUT=2)
-target_link_libraries(UrbanChaosXbeTrial PRIVATE SDL3::SDL3 bcrypt gdi32 xinput uc_native_texture uc_native_preview windowscodecs ole32)
+target_link_libraries(UrbanChaosXbeTrial PRIVATE SDL3::SDL3 bcrypt gdi32 uc_native_texture uc_native_preview windowscodecs ole32)
 # Generated GPU headers must precede the pinned SDK in every game translation unit.
 target_include_directories(UrbanChaosXbeTrial BEFORE PRIVATE src)
 target_include_directories(UrbanChaosXbeTrial PRIVATE "'''+ROOT.as_posix()+'''" src/compat src/common)
@@ -761,7 +793,7 @@ target_include_directories(UrbanChaosXbeTrial PRIVATE "'''+ROOT.as_posix()+'''" 
  config=(AREA/'out-msvc/_deps/sdl3-build/include-config-relwithdebinfo/build_config/SDL_build_config.h').read_text()
  assert '#define HAVE_LIBUSB 1' in config,'Switch 2 USB driver would be silently omitted'
  run('build-game-msvc',['cmake','--build',AREA/'out-msvc','--target','UrbanChaosXbeTrial','test_device_refs','test_pc_keyboard','test_pc_camera','test_pc_memory','test_coroutines','test_voice_mode','test_stream_factory','test_io_apc','test_recorded_draws','test_visibility','test_query_resolves','test_query_resolves_gpu','test_inline_draws','test_resource_refs','test_shader_state','test_cursor','test_target60','test_signed_lighting','test_depth_alias','test_audio_rolloff','test_audio_cone','test_audio_factors','test_audio_pitch','test_stream_status','test_audio_loop','test_audio_routing','test_heap_probe','test_graphics_menu_context','test_graphics_input','test_graphics_settings','test_target_resize','test_smooth_fog','-j','4'])
- run('build-interface-fixtures',['cmake','--build',AREA/'out-msvc','--target','test_world_textures','test_pistol_spin','test_firearm_cycle','test_release_assets','test_language','test_audio_config','test_missing_texture','test_release','test_prompt_handoff','test_state_costs','test_event_callback','test_shader_cache','test_perf','test_controls','test_msaa','test_effect_settings','test_ragdoll_settings','test_ragdoll_contacts','test_filter','test_intro_skip','test_conversation_skip','test_health_pulse','test_view_layout','test_coop_input','test_coop_controls','test_pause_imgui','test_coop_guest','test_coop_resources','test_coop_body','test_coop_effects','test_coop_cinematics','test_coop_death','test_coop_downed_blur','test_coop_shields','test_coop_progression','test_coop_interactions','test_coop_rewards','test_coop_collectibles','test_coop_ko_rewards','test_coop_turrets','test_coop_turret_assets','test_coop_turret_view','test_health_packs','test_coop_menu','test_pc_prompts','test_hd_ui_renderer','test_hd_ui_prompts','test_hd_ui_gpu','test_coop_blur_gpu','test_hd_ui','test_hd_ui_restored','test_hd_ui_reconstruct','test_frontend','test_level_details','test_frontend_fonts','test_menu_style','-j','4'])
+ run('build-interface-fixtures',['cmake','--build',AREA/'out-msvc','--target','test_world_textures','test_pistol_spin','test_firearm_cycle','test_release_assets','test_disc_files','test_language','test_audio_config','test_missing_texture','test_release','test_prompt_handoff','test_state_costs','test_event_callback','test_shader_cache','test_perf','test_controls','test_msaa','test_effect_settings','test_ragdoll_settings','test_ragdoll_contacts','test_filter','test_intro_skip','test_conversation_skip','test_health_pulse','test_view_layout','test_coop_input','test_coop_controls','test_pause_imgui','test_coop_guest','test_coop_resources','test_coop_body','test_coop_effects','test_coop_cinematics','test_coop_death','test_coop_downed_blur','test_coop_shields','test_coop_progression','test_coop_interactions','test_coop_rewards','test_coop_collectibles','test_coop_ko_rewards','test_coop_turrets','test_coop_turret_assets','test_coop_turret_view','test_health_packs','test_aim_mode','test_coop_menu','test_pc_prompts','test_hd_ui_renderer','test_hd_ui_prompts','test_hd_ui_gpu','test_coop_blur_gpu','test_hd_ui','test_hd_ui_restored','test_hd_ui_reconstruct','test_frontend','test_cheats','test_level_details','test_frontend_fonts','test_menu_style','-j','4'])
  run('build-controller-device',['cmake','--build',AREA/'out-msvc','--target','test_controller_device','-j','4'])
  run('test-controller-device',[AREA/'out-msvc/test_controller_device.exe'])
  run('test-language',[AREA/'out-msvc/test_language.exe'])
@@ -769,6 +801,7 @@ target_include_directories(UrbanChaosXbeTrial PRIVATE "'''+ROOT.as_posix()+'''" 
  run('test-missing-texture',[AREA/'out-msvc/test_missing_texture.exe'])
  run('test-release',[AREA/'out-msvc/test_release.exe'])
  run('test-release-assets',[AREA/'out-msvc/test_release_assets.exe',AREA/'assets/Default.xbe',ROOT/'game_files/Default.xbe'])
+ run('test-disc-files',[AREA/'out-msvc/test_disc_files.exe'])
  run('test-event-callback',[AREA/'out-msvc/test_event_callback.exe'])
  run('build-frame-reuse',['cmake','--build',AREA/'out-msvc','--target','test_frame_reuse','test_descriptor_lifetime','test_readback_reuse','test_draw_reuse','test_sampler_inputs','test_vertex_costs','test_palette_init','test_texture_constants','test_texture_formats','test_draw_batches','test_vblank_wait','-j','4'])
  run('test-frame-reuse',[AREA/'out-msvc/test_frame_reuse.exe'])
@@ -776,6 +809,11 @@ target_include_directories(UrbanChaosXbeTrial PRIVATE "'''+ROOT.as_posix()+'''" 
  run('test-wall-depth',[AREA/'out-msvc/test_wall_depth.exe'])
  run('test-descriptor-lifetime',[AREA/'out-msvc/test_descriptor_lifetime.exe'])
  run('test-draw-reuse',[AREA/'out-msvc/test_draw_reuse.exe'])
+ run('build-draw-bindings',['cmake','--build',AREA/'out-msvc','--target','test_draw_bindings','-j','4'])
+ run('test-draw-bindings',[AREA/'out-msvc/test_draw_bindings.exe'])
+ run('build-screen-sampling',['cmake','--build',AREA/'out-msvc','--target','test_screen_sampling','-j','4'])
+ run('test-screen-sampling',[AREA/'out-msvc/test_screen_sampling.exe'])
+ run('test-file-query-efficiency',[sys.executable,ROOT/'scripts/xbe_file_query_efficiency_checks.py','--run','--area',AREA,'--sdk',SDK])
  run('test-sampler-inputs',[AREA/'out-msvc/test_sampler_inputs.exe'])
  run('test-vertex-costs',[AREA/'out-msvc/test_vertex_costs.exe'])
  run('test-palette-init',[AREA/'out-msvc/test_palette_init.exe'])
@@ -834,6 +872,9 @@ target_include_directories(UrbanChaosXbeTrial PRIVATE "'''+ROOT.as_posix()+'''" 
  run('build-coop-downed-camera',['cmake','--build',AREA/'out-msvc','--target','test_coop_downed_camera','-j','4'])
  run('test-coop-downed-camera',[AREA/'out-msvc/test_coop_downed_camera.exe'])
  run('test-health-packs',[AREA/'out-msvc/test_health_packs.exe'])
+ run('test-aim-mode',[AREA/'out-msvc/test_aim_mode.exe'])
+ run('build-camera-push',['cmake','--build',AREA/'out-msvc','--target','test_camera_push','-j','4'])
+ run('test-camera-push',[AREA/'out-msvc/test_camera_push.exe'])
  run('test-coop-shields',[AREA/'out-msvc/test_coop_shields.exe'])
  run('test-coop-progression',[AREA/'out-msvc/test_coop_progression.exe'])
  run('test-coop-progression-assets',[sys.executable,ROOT/'scripts/test_coop_progression_assets.py'])
@@ -863,6 +904,7 @@ target_include_directories(UrbanChaosXbeTrial PRIVATE "'''+ROOT.as_posix()+'''" 
  run('test-prompt-handoff',[AREA/'out-msvc/test_prompt_handoff.exe'])
  run('test-state-costs',[AREA/'out-msvc/test_state_costs.exe'])
  run('test-frontend',[AREA/'out-msvc/test_frontend.exe'])
+ run('test-cheats',[AREA/'out-msvc/test_cheats.exe'])
  run('test-level-details',[AREA/'out-msvc/test_level_details.exe'])
  run('test-frontend-fonts',[AREA/'out-msvc/test_frontend_fonts.exe'])
  run('test-hd-ui-font-fallback',[AREA/'out-msvc/test_frontend_fonts.exe','--font-fallback'])
@@ -910,6 +952,7 @@ target_include_directories(UrbanChaosXbeTrial PRIVATE "'''+ROOT.as_posix()+'''" 
  run('test-pc-keyboard',[AREA/'out-msvc/test_pc_keyboard.exe'])
  run('test-pc-camera',[AREA/'out-msvc/test_pc_camera.exe'])
  run('test-pc-memory',[AREA/'out-msvc/test_pc_memory.exe'])
+ run('test-texture-sdk',[sys.executable,ROOT/'scripts/native_texture_sdk_checks/run.py'])
  report['runtime_compiled']=True
  report['runtime_built']=not BUILD_ONLY
  if BUILD_ONLY:report['live_status']='Compiled only; all test execution and live verification deferred by request'

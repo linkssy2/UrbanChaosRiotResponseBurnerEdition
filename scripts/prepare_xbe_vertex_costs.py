@@ -102,7 +102,32 @@ def packed_vertices(source):
 
 
 def transform(source):
-    return strip_index_fill(ranged_sequence(packed_vertices(converted_storage(format_dispatch(source)))))
+    return index_dispatch(quad_index_fill(strip_index_fill(ranged_sequence(packed_vertices(converted_storage(format_dispatch(source)))))))
+
+
+def index_dispatch(source):
+    if '// UC_CONVERTED_INDEX_DISPATCH' in source:return source
+    assert function(source, 'uint32_t DrawVertex(') == '''uint32_t DrawVertex(const State& s, const DrawRange& d, uint32_t i) {
+    if (!d.ip) return d.start + i;
+    uint16_t v;
+    std::memcpy(&v, d.ip + i * 2, 2);
+    return v + s.base_vertex;
+}'''
+    assert '    d.first = bounds.first;\n    d.first_vertex = ip ? bounds.first + s.base_vertex : start;' in source
+    before='''    auto local = [&](uint32_t i) { return ranged ? DrawVertex(s, d, i) - d.first_vertex : i; };
+    ListIndices(d.prim, d.count, local, out.indices, out.topology);'''
+    after='''    // UC_CONVERTED_INDEX_DISPATCH: base vertex cancels; choose the source once per draw.
+    if (ranged && d.ip) {
+        const auto local = [ip = d.ip, first = d.first](uint32_t i) {
+            uint16_t v;
+            std::memcpy(&v, ip + i * 2, 2);
+            return uint32_t(v) - first;
+        };
+        ListIndices(d.prim, d.count, local, out.indices, out.topology);
+    } else {
+        ListIndices(d.prim, d.count, [](uint32_t i) { return i; }, out.indices, out.topology);
+    }'''
+    return once(source,before,after)
 
 
 def ranged_sequence(source):
@@ -136,9 +161,31 @@ def strip_index_fill(source):
     return once(source,before,after)
 
 
+def quad_index_fill(source):
+    if '// UC_QUAD_INDEX_FILL' in source:return source
+    before='''        case 8:  // quad list
+            for (uint32_t i = 0; i + 3 < count; i += 4) {
+                ix.insert(ix.end(), {local(i), local(i + 1), local(i + 2), local(i), local(i + 2), local(i + 3)});
+            }
+            break;'''
+    after='''        case 8: { // UC_QUAD_INDEX_FILL: retain original winding and discard incomplete quads.
+            const size_t quads = count / 4, first = ix.size();
+            ix.resize(first + quads * 6);
+            for (size_t q = 0; q < quads; ++q) {
+                const uint32_t i = uint32_t(q * 4);
+                uint32_t* output = ix.data() + first + q * 6;
+                output[0] = local(i); output[1] = local(i + 1); output[2] = local(i + 2);
+                output[3] = local(i); output[4] = local(i + 2); output[5] = local(i + 3);
+            }
+            break;
+        }'''
+    return once(source,before,after)
+
+
 def prepare(source, area, header):
     baseline = converted_storage(format_dispatch(source))
-    result = transform(source)
+    before_dispatch = quad_index_fill(strip_index_fill(ranged_sequence(packed_vertices(baseline))))
+    result = index_dispatch(before_dispatch)
     assert transform(result) == result
     target = Path(area) / 'src/gpu/vertex.h'
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -151,5 +198,11 @@ void OriginalFvfInputs(uint32_t, VertexShader&);''')
     fixture = Path(__file__).with_name('test_xbe_vertex_costs.cpp').read_text()
     fixture = once(fixture, '/* ORIGINAL_VERTEX */', original)
     fixture = once(fixture, '/* PRODUCTION_VERTEX */', result)
+    previous = function(before_dispatch, 'bool AssembleConverted(')
+    previous += '\n' + once(function(before_dispatch, 'bool Assemble('),
+        'return AssembleConverted(s, inputs, d, out);',
+        'return previous_index_dispatch::AssembleConverted(s, inputs, d, out);')
+    fixture = once(fixture, '/* PREVIOUS_INDEX_DISPATCH */',
+        'namespace previous_index_dispatch {\nusing namespace gpu;\n' + previous + '\n}\n')
     (Path(area) / 'src/compat/test_vertex_costs.cpp').write_text(fixture)
     return result

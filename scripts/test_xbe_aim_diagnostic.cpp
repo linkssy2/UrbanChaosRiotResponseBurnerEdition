@@ -13,6 +13,7 @@ namespace mem {bool IsCommitted(uint32_t page){return page<aim_test::memory.size
 namespace aim_test {
 constexpr uint32_t P=0x600000,Q=0x602000,C=0x610000,S=0x7f0000,R=0x620000,B=0x630000,H=0x640000,T=0x650000,V=0x660000;
 constexpr uint32_t W=0x670000,L=0x672000,M=0x674000,I=0x676000,F=0x678000;
+constexpr uint32_t D=0x680000,DQ=D+0x100,DM=D+0x200,DN=D+0x300;
 uint8_t* Data(){return memory.data();}
 void Put(uint32_t a,uint32_t v){std::memcpy(Data()+a,&v,4);}
 void Float(uint32_t a,float v){std::memcpy(Data()+a,&v,4);}
@@ -26,6 +27,146 @@ void OriginalFirePrefix(X86Context& ctx,uint8_t* base){
     X86_LOAD_FLAGS();
 // ORIGINAL_FIRE_PREFIX
     X86_SAVE_FLAGS();
+}
+unsigned decal_calls=0;
+void AimDecalCall(X86Context& c,uint8_t* b,uint32_t target){
+    assert(target==0x9bbb0&&c.ecx==DM);
+    assert(aim_diagnostic::Word(b,c.esp)==0x223d0e);
+    assert(aim_diagnostic::Word(b,c.esp+4)==D&&aim_diagnostic::Word(b,c.esp+8)==DQ);
+    assert(aim_diagnostic::Word(b,c.esp+12)==0&&aim_diagnostic::Word(b,c.esp+16)==0);
+    ++decal_calls;c.esp+=20;
+}
+void OriginalDecalPublish(X86Context& ctx,uint8_t* base){
+    X86_LOAD_FLAGS();
+// ORIGINAL_DECAL_PUBLISH
+    X86_SAVE_FLAGS();
+}
+void InstrumentedDecalPublish(X86Context& ctx,uint8_t* base){
+    X86_LOAD_FLAGS();
+// INSTRUMENTED_DECAL_PUBLISH
+    X86_SAVE_FLAGS();
+}
+void DecalWitness(){
+    assert(aim_diagnostic::impact&&aim_diagnostic::impact->base_);
+    const std::vector<uint8_t> saved(memory.begin(),memory.end());
+    Put(D,DN);Put(D+4,D+0x400);Put(DM,0x456ae0);Put(0x456ae4,0x9bbb0);
+    const char shader[]="FX\\FX_Decals\\FX_Decal_Concrete.shader";
+    std::memcpy(Data()+DN,shader,sizeof shader);
+    const float quad[12]={110,220,334,114,220,334,114,224,334,110,224,334};
+    std::memcpy(Data()+DQ,quad,sizeof quad);
+    auto c=Context();c.esp=S-0x300;c.eax=D;c.esi=DM;c.ebx=0x456ae0;
+    Put(c.esp,DQ);Put(c.esp+4,0);Put(c.esp+8,0);
+    const auto initial=c;const unsigned csr=_mm_getcsr();
+    const std::vector<uint8_t> bytes(memory.begin(),memory.end());
+    OriginalDecalPublish(c,Data());const auto expected=c;
+    const std::vector<uint8_t> expected_bytes(memory.begin(),memory.end());const auto expected_csr=_mm_getcsr();
+    std::memcpy(Data(),bytes.data(),bytes.size());c=initial;_mm_setcsr(csr);
+    const auto lines=aim_diagnostic::lines;InstrumentedDecalPublish(c,Data());
+    assert(aim_diagnostic::lines==lines+1&&decal_calls%2==0);
+    assert(!std::memcmp(&c,&expected,sizeof c)&&_mm_getcsr()==expected_csr);
+    assert(!std::memcmp(Data(),expected_bytes.data(),expected_bytes.size()));
+    // Direct observer probes use the exact stack shape immediately before CALL.
+    auto publish=initial;publish.esp-=4;publish.ecx=DM;Put(publish.esp,D);
+    auto bad=publish;bad.esp=0xfffffffcu;
+    const auto before=aim_diagnostic::lines;
+    Immutable(bad,[&]{TrialAimDecalPublish(bad,Data());});
+    Put(publish.esp+4,0xfffffff0u);Immutable(publish,[&]{TrialAimDecalPublish(publish,Data());});Put(publish.esp+4,DQ);
+    Put(publish.esp,0xfffffffcu);Immutable(publish,[&]{TrialAimDecalPublish(publish,Data());});Put(publish.esp,D);
+    Put(DM,0);Immutable(publish,[&]{TrialAimDecalPublish(publish,Data());});Put(DM,0x456ae0);
+    Put(0x456ae4,0);Immutable(publish,[&]{TrialAimDecalPublish(publish,Data());});Put(0x456ae4,0x9bbb0);
+    auto* outer=aim_diagnostic::impact;
+    auto unrelated=Context();unrelated.ecx=0;
+    try{TrialAimImpactScope nested(unrelated,Data());assert(aim_diagnostic::impact!=outer);
+        Immutable(publish,[&]{TrialAimDecalPublish(publish,Data());});throw 7;}
+    catch(int){assert(aim_diagnostic::impact==outer);}
+    Put(B+0x54,23);Immutable(publish,[&]{TrialAimDecalPublish(publish,Data());});Put(B+0x54,22);
+    // A level transition or recycled actor identity cannot inherit the old decal.
+    const auto players=aim_diagnostic::players;
+    Put(W+4,L+0x1000);Immutable(publish,[&]{TrialAimDecalPublish(publish,Data());});Put(W+4,L);
+    aim_diagnostic::players=players;
+    Put(outer->owner_+0x54,99);Immutable(publish,[&]{TrialAimDecalPublish(publish,Data());});Put(outer->owner_+0x54,outer->id_);
+    aim_diagnostic::players=players;
+    assert(aim_diagnostic::lines==before);
+    for(unsigned i=0;i<8;++i)Immutable(publish,[&]{TrialAimDecalPublish(publish,Data());});
+    assert(outer->publications_==4&&aim_diagnostic::lines==before+3);
+    std::memcpy(Data(),saved.data(),saved.size());_mm_setcsr(csr);
+}
+// Only the two external call boundaries are stubbed; all C77D0 math/branches,
+// target history copies and instrumented locations come from the pinned body.
+bool autoaim_override=false;
+void AimTargetCall(X86Context& c,uint8_t* b,uint32_t target){
+    assert(target==0x46760&&c.ecx==T+0x100);
+    const uint32_t destination=aim_diagnostic::Word(b,c.esp+4);
+    std::memcpy(b+destination,b+T+0x300,64);c.eax=destination;c.esp+=8;
+}
+void AimTargetAutoaim(X86Context& c,uint8_t*){
+    if(autoaim_override){Put(c.ecx+0x448,91);c.eax=c.ecx+0x43c;}else c.eax=0;
+    c.esp+=4;
+}
+void OriginalTargetUpdate(X86Context& ctx,uint8_t* base){
+// ORIGINAL_TARGET_UPDATE
+}
+void InstrumentedTargetUpdate(X86Context& ctx,uint8_t* base){
+// INSTRUMENTED_TARGET_UPDATE
+}
+void TargetWitness(){
+    const std::vector<uint8_t> saved(memory.begin(),memory.end());
+    for(unsigned slot=0;slot<2;++slot)for(unsigned shake=0;shake<2;++shake)
+    for(unsigned aim=0;aim<2;++aim)for(uint32_t classification:{0u,1u,4u}){
+        std::memcpy(Data(),saved.data(),saved.size());const uint32_t owner=slot?Q:P;
+        Float(0x44bf94,1);Float(0x4500e4,15000);Put(T+0x100,T+0x200);Put(T+0x224,0x46760);
+        for(unsigned i=0;i<16;++i){Float(owner+0x6b0+4*i,i%5==0?1.f:0.f);Float(T+0x300+4*i,i%5==0?1.f:0.f);}
+        Float(owner+0x6e0,12);Float(owner+0x6e4,24);Float(owner+0x6e8,36);
+        Float(T+0x320,.1f);Float(T+0x324,-.2f);
+        for(unsigned i=0;i<3;++i){Float(owner+0x454+4*i,float(10+i));Float(owner+0x460+4*i,float(20+i));Float(owner+0x43c+4*i,float(100+i));}
+        Put(owner+0x1c4,shake?T+0x100:0);Put(owner+0x38c,classification);Put(owner+0x448,0x1234);autoaim_override=aim!=0;
+        auto c=Context();c.ecx=owner;c.esi=slot?P:Q;c.ebp=0x123400;Put(S,0xc7b00);
+        const auto initial=c;const std::vector<uint8_t> bytes(memory.begin(),memory.end());const unsigned csr=_mm_getcsr();
+        OriginalTargetUpdate(c,Data());const auto expected=c;const std::vector<uint8_t> expected_bytes(memory.begin(),memory.end());const unsigned expected_csr=_mm_getcsr();
+        c=initial;std::memcpy(Data(),bytes.data(),bytes.size());_mm_setcsr(csr);InstrumentedTargetUpdate(c,Data());
+        assert(std::memcmp(&c,&expected,sizeof c)==0&&std::memcmp(Data(),expected_bytes.data(),expected_bytes.size())==0&&_mm_getcsr()==expected_csr);
+        const auto& player=aim_diagnostic::players[slot];const auto& update=player.targets[(player.target_count-1)%aim_diagnostic::kTargetHistory];
+        assert(update.complete&&update.before_event<update.after_event&&update.sequence==player.last_target);
+        assert(update.before.autoaim_id==0x1234&&update.after.autoaim_id==(aim&&classification==0?91u:0xffffffffu));
+        assert(update.shake_valid==(shake!=0));
+        if(shake){assert(update.before.shake==T+0x100&&update.before.shake_vtable==T+0x200&&update.before.shake_getter==0x46760);
+            assert(std::memcmp(update.shake_matrix.data(),Data()+T+0x300,64)==0);}
+        assert(std::memcmp(update.before.target.data(),update.after.previous.data(),12)==0);
+        assert(std::memcmp(update.after.target.data(),Data()+owner+0x454,12)==0);
+        _mm_setcsr(csr);
+    }
+    std::memcpy(Data(),saved.data(),saved.size());aim_diagnostic::players={};
+    auto c=Context();c.ecx=P;c.eax=T+0x300;
+    for(unsigned i=0;i<12;++i){Float(P+0x454,float(i));Immutable(c,[&]{TrialAimTargetScope update(c,Data());update.Shake(c,Data());update.After(Data());update.After(Data());});}
+    auto& player=aim_diagnostic::players[0];assert(player.target_count==12);
+    for(unsigned i=4;i<12;++i){const auto& update=player.targets[i%aim_diagnostic::kTargetHistory];assert(update.complete&&update.before.target[0]==float(i));}
+    // A nested update cannot corrupt an older scope's entry, including ring reuse.
+    {TrialAimTargetScope outer(c,Data());const auto index=outer.index_;const auto sequence=outer.sequence_;
+        for(unsigned i=0;i<8;++i){TrialAimTargetScope inner(c,Data());inner.After(Data());}
+        const auto newest=player.targets[index];outer.After(Data());
+        assert(player.targets[index].sequence!=sequence&&player.targets[index].sequence==newest.sequence&&player.targets[index].after_event==newest.after_event);
+    }
+    // No common return hook means an incomplete record, even on exception unwind.
+    try{TrialAimTargetScope aborted(c,Data());throw 7;}catch(int){}
+    assert(!player.targets[(player.target_count-1)%aim_diagnostic::kTargetHistory].complete);
+    {TrialAimTargetScope old(c,Data());Put(P+0x54,99);old.After(Data());assert(!player.targets[old.index_].complete);Put(P+0x54,7);}
+    {TrialAimTargetScope old(c,Data());Put(0x51c4dc,W+0x1000);old.After(Data());assert(!player.targets[old.index_].complete);Put(0x51c4dc,W);}
+    {TrialAimTargetScope old(c,Data());Put(W+4,L+0x1000);old.After(Data());assert(!player.targets[old.index_].complete);Put(W+4,L);}
+    {TrialAimTargetScope old(c,Data());Put(P+0x5c,1);old.After(Data());assert(!player.targets[old.index_].complete);Put(P+0x5c,0);}
+    {TrialAimTargetScope old(c,Data());auto invalid=c;invalid.eax=0xfffffff0;Immutable(invalid,[&]{old.Shake(invalid,Data());});old.After(Data());assert(!player.targets[old.index_].shake_valid);}
+    // Changing state with the same actor pointer/id starts a fresh lifetime.
+    const auto lifetime=player.lifetime;Put(W+4,L+0x1000);
+    Immutable(c,[&]{TrialAimTargetScope fresh(c,Data());fresh.After(Data());});
+    assert(player.lifetime!=lifetime&&player.target_count==1);Put(W+4,L);
+    std::memcpy(Data(),saved.data(),saved.size());aim_diagnostic::players={};
+}
+void SeedTargetHistory(unsigned slot){
+    const uint32_t owner=slot?Q:P;auto c=Context();c.ecx=owner;Put(S,0xc7b00);
+    Put(owner+0x448,91);Put(owner+0x38c,0);
+    for(unsigned i=0;i<3;++i){Float(owner+0x43c+4*i,float(3+3*i));Float(owner+0x454+4*i,float(1+i));Float(owner+0x460+4*i,float(4+i));}
+    TrialAimTargetScope update(c,Data());
+    for(unsigned i=0;i<3;++i){Float(owner+0x454+4*i,float(7+i));Float(owner+0x460+4*i,float(1+i));}
+    Immutable(c,[&]{update.After(Data());});
 }
 void EntryWitness(unsigned slot){
     auto c=Context();c.ecx=slot?Q:P;c.esi=slot?P:Q;c.ebp=0x12345678;c.fs_base=F;
@@ -53,15 +194,15 @@ void Shot(unsigned slot){
     Immutable(entry,[&]{TrialAimFireScope firing(entry,Data());
         Immutable(c,[&]{TrialAimShotScope shot(c,Data());
             auto spawned=Context();spawned.esi=B;Immutable(spawned,[&]{TrialAimBullet(spawned,Data());});
-            Immutable(hit,[&]{TrialAimImpact(hit,Data());});
+            Immutable(hit,[&]{TrialAimImpactScope impact(hit,Data());if(previous_shots<2)DecalWitness();});
         });
         assert(firing.ordinary_==1&&firing.accepted_==(previous_shots<64?1u:0u));
     });
     // Preserve the binding after the firing function returns; no TLS owner.
-    Immutable(hit,[&]{TrialAimImpact(hit,Data());});
+    Immutable(hit,[&]{TrialAimImpactScope impact(hit,Data());});
     const unsigned lines=aim_diagnostic::lines;
-    Put(B+0xe0,1000);Immutable(hit,[&]{TrialAimImpact(hit,Data());});assert(aim_diagnostic::lines==lines);
-    Put(B+0xe0,7+slot);Put(B+0x54,23);Immutable(hit,[&]{TrialAimImpact(hit,Data());});assert(aim_diagnostic::lines==lines);
+    Put(B+0xe0,1000);Immutable(hit,[&]{TrialAimImpactScope impact(hit,Data());});assert(aim_diagnostic::lines==lines);
+    Put(B+0xe0,7+slot);Put(B+0x54,23);Immutable(hit,[&]{TrialAimImpactScope impact(hit,Data());});assert(aim_diagnostic::lines==lines);
     Put(B+0x54,22);
 }
 }
@@ -69,9 +210,9 @@ int main(int argc,char** argv){
     using namespace aim_test;assert(argc==2);
     trial_coop::SetAvailable(true);
     if(std::string(argv[1])=="off"){
-        auto c=Context();Immutable(c,[&]{TrialAimFireScope fire(c,nullptr);TrialAimShotScope a(c,nullptr);TrialAimReticleScope r(c,nullptr);
-            TrialAimBullet(c,nullptr);TrialAimImpact(c,nullptr);TrialAimRender(c,nullptr);TrialAimQuad(c,nullptr);});
-        assert(aim_diagnostic::lines==0&&aim_diagnostic::fire_calls==0&&aim_diagnostic::fire==nullptr);return 0;
+        auto c=Context();Immutable(c,[&]{TrialAimTargetScope target(c,nullptr);target.Shake(c,nullptr);target.After(nullptr);TrialAimFireScope fire(c,nullptr);TrialAimShotScope a(c,nullptr);TrialAimReticleScope r(c,nullptr);
+            TrialAimBullet(c,nullptr);TrialAimImpactScope impact(c,nullptr);TrialAimDecalPublish(c,nullptr);TrialAimRender(c,nullptr);TrialAimQuad(c,nullptr);});
+        assert(aim_diagnostic::lines==0&&aim_diagnostic::fire_calls==0&&aim_diagnostic::fire==nullptr&&aim_diagnostic::target_sequence==0&&aim_diagnostic::event_sequence==0&&aim_diagnostic::lifetime_sequence==0);return 0;
     }
     Owner(P,0);Owner(Q,1);Put(C,0x47c780);Put(T,0x453160);Put(T+4,P);
     admitted={P,Q};Put(P+0x308,43);Put(Q+0x308,44);Put(C+0x54,43);Put(C+0x58,7);
@@ -91,9 +232,10 @@ int main(int argc,char** argv){
         Float(source+0x48,float(i));Put(source+0x74,state);Put(state,0xabc0+i);Put(state+4,30+i);
     }
     trial_coop::SetAvailable(false);auto disabled=Context();
-    Immutable(disabled,[&]{TrialAimFireScope fire(disabled,nullptr);TrialAimShotScope a(disabled,nullptr);TrialAimReticleScope r(disabled,nullptr);
-        TrialAimBullet(disabled,nullptr);TrialAimImpact(disabled,nullptr);TrialAimRender(disabled,nullptr);TrialAimQuad(disabled,nullptr);});
+    Immutable(disabled,[&]{TrialAimTargetScope target(disabled,nullptr);target.Shake(disabled,nullptr);target.After(nullptr);TrialAimFireScope fire(disabled,nullptr);TrialAimShotScope a(disabled,nullptr);TrialAimReticleScope r(disabled,nullptr);
+        TrialAimBullet(disabled,nullptr);TrialAimImpactScope impact(disabled,nullptr);TrialAimDecalPublish(disabled,nullptr);TrialAimRender(disabled,nullptr);TrialAimQuad(disabled,nullptr);});
     assert(aim_diagnostic::shots==0&&aim_diagnostic::lines==0&&aim_diagnostic::fire_calls==0);trial_coop::SetAvailable(true);
+    TargetWitness();SeedTargetHistory(0);SeedTargetHistory(1);
     EntryWitness(0);EntryWitness(1);
     auto resumed=Context();resumed.esi=Q;resumed.ecx=P;resumed.edi=2;
     Immutable(resumed,[&]{TrialAimFireScope outer(resumed,Data(),true);
@@ -104,6 +246,13 @@ int main(int argc,char** argv){
     auto render=Context();render.edi=P;render.esi=C;
     Put(S+0x84,V);Put(V,0x456f98);Float(V+8,0);Float(V+12,0);Float(V+16,240);Float(V+20,640);
     for(unsigned i=0;i<64;++i)Float(S+0x80+0x10+i*4,float(i));
+    for(unsigned i=0;i<16;++i){Float(C+0x10+i*4,float(100+i));Float(C+0x240+i*4,float(200+i));}
+    Put(C+0x2c0,C+0x400);Float(C+0x404,2.5f);
+    Immutable(render,[&]{TrialAimRender(render,Data());});
+    assert(aim_diagnostic::players[0].camera_pair_valid&&aim_diagnostic::players[0].feedback_valid);
+    Put(W+0x10,0x800);Immutable(render,[&]{TrialAimRender(render,Data());});assert(!aim_diagnostic::players[0].feedback_valid);Put(W+0x10,0);
+    Data()[0x4e83c8]=1;Immutable(render,[&]{TrialAimRender(render,Data());});assert(!aim_diagnostic::players[0].feedback_valid);Data()[0x4e83c8]=0;
+    Put(C+0x2c0,0xfffffffcu);Immutable(render,[&]{TrialAimRender(render,Data());});assert(!aim_diagnostic::players[0].feedback_valid);Put(C+0x2c0,C+0x400);
     Immutable(render,[&]{TrialAimRender(render,Data());});
     Shot(0);Shot(1);
     render.edi=P;Immutable(render,[&]{TrialAimRender(render,Data());});
@@ -123,13 +272,25 @@ int main(int argc,char** argv){
     // Shot records stop at 64; fire coverage has its own 128-entry budget.
     Put(P+0x54,7);for(unsigned i=2;i<68;++i)Shot(i%2);
     assert(aim_diagnostic::shots==64);
+    auto finished=Context();finished.ecx=P;const auto updates=aim_diagnostic::target_sequence;
+    Immutable(finished,[&]{TrialAimTargetScope target(finished,Data());target.Shake(finished,Data());target.After(Data());});
+    assert(aim_diagnostic::target_sequence==updates);
     std::ifstream input(argv[1]);std::string log((std::istreambuf_iterator<char>(input)),{});
+    assert(log.find("target-before")!=std::string::npos&&log.find("target-after")!=std::string::npos);
+    assert(log.find("autoaim_id=0000005B")!=std::string::npos&&log.find("autoaim_point=3,6,9")!=std::string::npos);
+    assert(log.find("target=7,8,9 previous_target=1,2,3")!=std::string::npos);
+    assert(log.find("target_update=")!=std::string::npos&&log.find("lifetime=")!=std::string::npos);
     assert(log.find("base_direction=100,200,300")!=std::string::npos);
     assert(log.find("spread_direction=101,202,303")!=std::string::npos);
     assert(log.find("static-hit")!=std::string::npos&&log.find("point=111,222,333")!=std::string::npos);
+    assert(log.find("decal-publish")!=std::string::npos&&log.find("center=112,222,334")!=std::string::npos);
+    assert(log.find("corners=110,220,334,114,220,334,114,224,334,110,224,334")!=std::string::npos);
+    assert(log.find("shader_hex=46585C46585F446563616C735C46585F446563616C5F436F6E63726574652E736861646572")!=std::string::npos);
     assert(log.find("owner=00602000 id=8")!=std::string::npos);
     assert(log.find("previous-render")!=std::string::npos&&log.find("camera_inverse=16,17,18,19")!=std::string::npos);
     assert(log.find("viewport_tlbr=0,0,240,640")!=std::string::npos);
+    assert(log.find("base_camera_world=100,101,102,103")!=std::string::npos&&log.find("sampled_camera_world=200,201,202,203")!=std::string::npos);
+    assert(log.find("feedback_valid=1 feedback_times10_bits=40200000")!=std::string::npos);
     assert(log.find("reticle-quad")!=std::string::npos&&log.find("xy0=315.5,115.5")!=std::string::npos);
     assert(log.find("entry=CAB20 item=2 return=000BE947 owner=00600000")!=std::string::npos);
     assert(log.find("entry=CAB20 item=2 return=000BE947 owner=00602000")!=std::string::npos);

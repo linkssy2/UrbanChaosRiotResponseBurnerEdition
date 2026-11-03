@@ -11,7 +11,8 @@ typedef struct UCControlModelVertex { float position[3],normal[3]; } UCControlMo
  * Triangle strips expand in original alternating order, retaining degenerates.
  * All indices must be below vertex_count. NULL output queries the required
  * triangle-corner count; otherwise capacity is in uint32_t elements. Failure
- * publishes neither output nor count. Input/output must not overlap. */
+ * publishes neither output nor count. Input/output must not overlap, and input
+ * must remain unchanged throughout the call. */
 int uc_control_model_indices(const void *pushbuffer,size_t bytes,uint32_t vertex_count,
     uint32_t *output,size_t capacity,size_t *count);
 /* Same validated buffer contract, retaining source list(5)/strip(6) topology
@@ -19,6 +20,11 @@ int uc_control_model_indices(const void *pushbuffer,size_t bytes,uint32_t vertex
  * Failure leaves both count and primitive unchanged. */
 int uc_control_model_indexed(const void *pushbuffer,size_t bytes,uint32_t vertex_count,
     uint32_t *output,size_t capacity,size_t *count,uint32_t *primitive);
+/* Same indexed contract and validation, with capacity in uint16_t elements.
+ * Packed Xbox payloads copy directly on the supported little-endian runtime.
+ * Failure leaves output, count and primitive unchanged. */
+int uc_control_model_indexed16(const void *pushbuffer,size_t bytes,uint32_t vertex_count,
+    uint16_t *output,size_t capacity,size_t *count,uint32_t *primitive);
 /* Live stream0 is ten bytes: normalized SHORT3 plus packed 11/11/10 normal.
  * Stream4 is eight bytes: three signed16 palette offsets, two byte weights.
  * Caller supplies the current ordered palette, not a resampled/bind pose.

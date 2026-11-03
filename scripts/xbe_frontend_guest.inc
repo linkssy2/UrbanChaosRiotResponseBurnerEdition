@@ -1,4 +1,5 @@
 #include "xbe_frontend_text.h"
+#include "xbe_coop_pause.h"
 extern int xbox_KeyboardMode();
 // Native presentation submits identities to the original handlers. Profile
 // activation and name validation retain their original callbacks/save policy.
@@ -141,7 +142,8 @@ static bool FrontendDifficultyDialog(uint32_t owner){
 static void FrontendPauseDialogEnter(){
     // Reuse the original modal capture before its first glyph submission, so
     // presentation must accept the replacement before any source text hides.
-    if(!xbox_KeyboardMode()||!hf_settled()||!(FrontendPauseDialog(dialog_owner)||FrontendDifficultyDialog(dialog_owner))||
+    if((!xbox_KeyboardMode()&&!(trial_coop::PauseOwner()>=0&&FrontendPauseDialog(dialog_owner)))||
+       !hf_settled()||!(FrontendPauseDialog(dialog_owner)||FrontendDifficultyDialog(dialog_owner))||
        (hf_view.kind==UC_HF_DIALOG&&hf_view.owner==dialog_owner&&
         hf_view.screen==menu_screen&&TrialFrontendPresents(dialog_owner,UC_HF_DIALOG)))return;
     menu_dialog_capture();
@@ -150,7 +152,8 @@ static void FrontendPauseDialogEnter(){
 bool TrialFrontendHidePauseDialogText(uint32_t owner){
     // Suppress at the three original text calls, before glyphs are queued.
     // The shade/backdrop and original layout, sounds and callbacks still run.
-    return xbox_KeyboardMode()&&dialog_running&&dialog_owner==owner&&
+    return (xbox_KeyboardMode()||(trial_coop::PauseOwner()>=0&&FrontendPauseDialog(owner)))&&
+        dialog_running&&dialog_owner==owner&&
         (FrontendPauseDialog(owner)||FrontendDifficultyDialog(owner))&&TrialFrontendPresents(owner,UC_HF_DIALOG);
 }
 static bool FrontendNameValid(uint32_t owner){
@@ -345,8 +348,10 @@ bool TrialFrontendHideListSprites(){
     if(dialog_running)return false;
     // Incoming/outgoing lists can draw before host ownership changes. Hide their
     // submissions throughout mouse mode; the parent backdrop is outside this scope.
-    return xbox_KeyboardMode()&&(TrialFrontendLevelDrawHidden||(menu_owner&&GraphicsMenuKind(menu_owner))||
-        (TrialFrontendProfileDrawOwner&&TrialFrontendPresents(TrialFrontendProfileDrawOwner,UC_HF_PROFILES)));
+    const bool owned_pause=trial_coop::PauseOwner()>=0&&menu_owner&&
+        TrialFrontendPresents(menu_owner,UC_HF_LIST);
+    return owned_pause||(xbox_KeyboardMode()&&(TrialFrontendLevelDrawHidden||(menu_owner&&GraphicsMenuKind(menu_owner))||
+        (TrialFrontendProfileDrawOwner&&TrialFrontendPresents(TrialFrontendProfileDrawOwner,UC_HF_PROFILES))));
 }
 static void FrontendRewardSidebar(){
     const uint32_t owner=g_esi;

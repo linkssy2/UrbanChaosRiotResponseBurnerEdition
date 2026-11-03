@@ -4,10 +4,18 @@ import hashlib
 import struct
 
 PINS=(
+    (0x1688b0,0x84,"dc01f2253b9ee220865f62e4065b24edcef98ac5dd66857d9b8d73fe404df09b"),
+    (0x168d58,0x1b,"342c97c11a9e89f0b6d830d75533c67e653ce46d30f5037a4a572cfdc6612df4"),
+    (0x168f20,0xac,"8d00899f2fea392b9f1c49cd4526abaa3037fe6dbd330a1fae19948abe24486a"),
+    (0x20a230,0x2e,"46ed0f6bb09ef6c4111f864d06722430432e556ee4661018ac7a54c8c2ef7f9c"),
     (0x70d90,455,'879111defca52dd723604dadc820a063cf5705351be989ed3f38d58867be6671'),
     (0x76a50,736,'5d703977efb27bb1283f614464c7a46dcf7269c5af635b34aa5cc119268d030e'),
     (0x4af40,0x58,"a882f5e7b60a51f78d55c9a30af24bb6c5e86204086bb031fdf67460c382af6a"),
     (0x73de6,0x7c,"c2cdc041da11aacca6fdc3f954e778412faf1e4343abb65a322c35cfe326f73a"),
+    (0x22d360,7,"0b1e1d37d7cbdbd10d4c974017dd477e62ee9c4ebbd5bb19cd91d832621c5606"),
+    (0x48154c,32,"36dd16ee1078fe42e0ed1fbdf457680dcda32e73308ece420fa1ee6bbddac0db"),
+    (0x2223d0,120,"8c3e7d6f4f8b35dc6a418f3aeba18cb2e2c2af28ba802a141b19878efeea4af5"),
+    (0x6bac0,87,"d101e68c97c4a12196f932013f380e1e10af4738b21ba039c26045cee64b8869"),
     (0x4531a0,0xc,"191b35b27aa8ba753c68868de9de52a3cd944940b3d1e810a6fe1693468b42f9"),
     (0x450588,0x38,"8c0bd52d6656740e68af63306e989e90876303d3d90d2b1b955fcc1d5ed6bab6"),
     (0x44bf20,0x38,"40ee4d7d4fe0099b53ac58d654cf88ea4485483ff9d61bab2d83f3d88a8c80e4"),
@@ -46,6 +54,7 @@ ENTRY={
     21:{'000D2AB0':'\tTrialHealthPackUpdate(ctx,base);\n'},
     36:{'00168B80':'\tTrialHealthPackMedicScope trial_health_medic(ctx,base);\n',
         '00168A40':'\tTrialHealthPackMedicScope trial_health_medic(ctx,base);\n',
+        '00168F20':'\tTrialHealthPackMedicScope trial_health_medic(ctx,base);\n\tTrialHealthPackMedicEnd(ctx,base);\n',
         '00169570':'\tif(TrialHealthPackMedicStockBlocked(ctx,base)){ctx.esp+=12;return;}\n'},
     37:{'00172E80':'\tTrialHealthPackDestroyed(ctx,base);\n'},
     38:{'00182C20':'\tTrialHealthPackMedicScope trial_health_medic(ctx,base);\n',
@@ -72,7 +81,7 @@ EXTRACTED_HASHES={
 
 def clean(source,unit):
     source=source.replace('#include "xbe_health_packs.h"\n','').replace(NEW,OLD)
-    for hook in ENTRY.get(unit,{}).values():source=source.replace(hook,'')
+    for hook in sorted(ENTRY.get(unit,{}).values(),key=len,reverse=True):source=source.replace(hook,'')
     for _,hook in SEAMS.get(unit,()):source=source.replace(hook,'')
     return source
 
@@ -149,6 +158,18 @@ def prepare(area):
     s=originals[6];a=s.index('X86_FUNC(__imp__sub_0004AF40) {');z=s.index('\nX86_WEAK_FUNC',a)
     assert hashlib.sha256(s[a:z].encode()).hexdigest()=='6cc239fda29236f7e04372b36ffa90f845448c05160f43de0932ebe34697da97'
     pieces.append(s[a:z].replace('__imp__sub_0004AF40','OriginalHudAllowed',1))
+    for unit,name,label,digest in (
+        (10,'0006BAC0','sub_0006BAC0','e50c500a76dd1ddd951293be1172b4dd5f2689293406540dfcecf12613a06d5a'),
+        (55,'00222400','sub_00222400','09c13a1e23d706cb811e6af7bbb18ca18f5fb01c54ae195a3002f493ac6f732e'),
+        (55,'002223D0','OriginalFadeAlpha','a9a5ea237d54c9038ae50977cd597103ae28484a7f8e316db297c603938b795d')):
+        s=(area/f'generated/game/x86_recomp.{unit}.cpp').read_text()
+        a=s.index(f'X86_FUNC(__imp__sub_{name}) {{');z=s.index('\nX86_WEAK_FUNC',a)
+        assert hashlib.sha256(s[a:z].encode()).hexdigest()==digest,name
+        pieces.append(s[a:z].replace('__imp__sub_'+name,label,1))
+    s=(area/'generated/game/x86_recomp.11.cpp').read_text()
+    a=s.index('\t// 00073E37 ');z=s.index('\t// 00073E5B ',a)
+    assert hashlib.sha256(s[a:z].encode()).hexdigest()=='14e3d65d24ac77f7a2305ebc8f5482632af262e4b0474b63b0927372fbe222e7'
+    pieces.append('X86_FUNC(OriginalHudFade) {\n'+s[a:z]+'}\n')
     test=(local/'test_xbe_health_packs.cpp').read_text();marker='// ORIGINAL_HEALTH_PACK_CONTRACTS'
     assert test.count(marker)==1
     bridge_marker='// ORIGINAL_CALL_GUEST_CONTRACT';assert test.count(bridge_marker)==1

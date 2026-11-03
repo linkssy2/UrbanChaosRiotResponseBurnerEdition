@@ -9,7 +9,7 @@ import tempfile
 import unittest
 
 HERE = Path(__file__).resolve().parent
-sys.path[:0] = [str(HERE), str(HERE.parents[1] / 'third_party/xboxrecomp/tools/xiso')]
+sys.path.insert(0, str(HERE))
 import import_game as worker
 import spanish_voice_iso as installer
 import spanish_voice_setup as setup
@@ -147,6 +147,42 @@ class IsoInstallTests(unittest.TestCase):
         self.assertEqual(self.save.read_bytes(), b'user progress')
         self.assertEqual(self.settings.read_bytes(), b'language=1\nfps_cap=120\n')
         self.assertFalse(list(self.parent.glob('.spanish-voice-iso-*')))
+
+    def test_direct_xbox_source_converts_from_temporary_originals_then_cleans_up(self):
+        from test_setup import make_iso
+        xbox = self.root / 'Xbox.iso'
+        sources = {name: (self.original / name).read_bytes() for name in self.game_files}
+        make_iso(xbox, sources)
+        (self.data / 'installed/installed.json').write_text(json.dumps({
+            'version': 1, 'source_mode': 'iso', 'iso_path': str(xbox),
+            'iso_size': xbox.stat().st_size, 'iso_mtime_ns': xbox.stat().st_mtime_ns,
+        }))
+        for name in sources:
+            if name not in worker.SOURCE_FILES:
+                (self.original / name).unlink()
+        borrowed = []
+        def speech_from_iso(original, *args, **kwargs):
+            borrowed.append(original)
+            self.assertNotEqual(original, self.original)
+            self.assertEqual(original.parent, self.data)
+            self.assertEqual({name: (original / name).read_bytes() for name in sources}, sources)
+            previous = self.original
+            try:
+                self.original = original
+                self.speech(original, *args, **kwargs)
+            finally:
+                self.original = previous
+        with patch.object(installer.spanish_voices, 'build', speech_from_iso), patch.object(worker, 'progress', lambda *args: None):
+            self.install()
+        self.assertEqual(len(borrowed), 1)
+        self.assertFalse(borrowed[0].exists())
+        self.assertFalse(list(self.data.glob('.source-*')))
+        self.assertFalse((self.original / '1.saf').exists())
+        self.assertEqual(len(self.movies), 31)
+        info = json.loads((self.destination / 'install.json').read_text())
+        self.assertEqual(set(info['files']), installer.OUTPUTS)
+        setup.validate(self.data, info['text_sha256'])
+        self.assertEqual(self.save.read_bytes(), b'user progress')
 
     def test_tool_hash_and_required_dependency_validation(self):
         self.assertEqual(installer.validate_tools(self.root), self.root / 'tools/ffmpeg/ffmpeg.exe')

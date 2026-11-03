@@ -22,9 +22,14 @@ static int decode(const unsigned char *p,size_t size,uint32_t vertices,uint32_t 
         uint32_t h=word(p+at);at+=4;
         if((h&0xe003ffffu)==0x40001800u&&!odd){
             uint32_t words=(h>>18)&2047u;if(words>(size-4-at)/4)return 0;
-            for(uint32_t i=0;i<words;i++){
-                uint32_t v=word(p+at);at+=4;if((v&65535u)>=vertices||(v>>16)>=vertices)return 0;
-                index_value(&s,v&65535u);index_value(&s,v>>16);
+            if(!out&&!expand&&vertices==65536u){
+                // Packed 16-bit values cannot exceed this bound; validate the packet structure below.
+                s.input+=2u*words;s.output+=2u*words;at+=4u*words;
+            }else{
+                for(uint32_t i=0;i<words;i++){
+                    uint32_t v=word(p+at);at+=4;if((v&65535u)>=vertices||(v>>16)>=vertices)return 0;
+                    index_value(&s,v&65535u);index_value(&s,v>>16);
+                }
             }
             arrays++;
         }else if(h==0x41808u&&!odd&&arrays){
@@ -57,6 +62,25 @@ int uc_control_model_indexed(const void *pb,size_t bytes,uint32_t vertices,uint3
         (out&&capacity<needed))return 0;
     if(out&&!decode((const unsigned char*)pb,bytes,vertices,out,&needed,0))return 0;
     *count=needed;*primitive=word((const unsigned char*)pb+4);return 1;
+}
+int uc_control_model_indexed16(const void *pb,size_t bytes,uint32_t vertices,uint16_t *out,size_t capacity,size_t *count,uint32_t *primitive){
+    if(!pb||!vertices||vertices>65536||!count||!primitive)return 0;
+    const unsigned char *p=(const unsigned char*)pb;size_t needed;
+    if(!decode(p,bytes,vertices,NULL,&needed,0)||(out&&capacity<needed))return 0;
+    if(out){
+        size_t at=8,written=0;
+        // The complete immutable packet is validated above; copy its original index order.
+        while(written<needed){
+            uint32_t h=word(p+at);at+=4;
+            if(h==0x41808u){out[written++]=(uint16_t)word(p+at);at+=4;}
+            else{
+                uint32_t words=(h>>18)&2047u;
+                memcpy(out+written,p+at,4u*words);
+                written+=2u*words;at+=4u*words;
+            }
+        }
+    }
+    *count=needed;*primitive=word(p+4);return 1;
 }
 int uc_control_model_vertex(const void *position10,const void *skin8,const UCModelRenderPalette *palette,UCControlModelVertex *out){
     if(!position10||!skin8||!palette||!out)return 0;

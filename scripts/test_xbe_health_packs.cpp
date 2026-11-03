@@ -14,6 +14,8 @@ namespace mem {bool IsCommitted(uint32_t page){return page<kernel::memory.size()
 namespace hp_test {
 constexpr uint32_t p0=0x610000,p1=0x612000,world=0x620000,medic=0x630000;
 constexpr uint32_t behavior=0x631000,controller=0x632000,root=0x633000,manager=0x634000,stack=0x7f0000;
+constexpr uint32_t registry=0x660000,client=0x664000,offer=0x665000,dialogue=0x666000;
+constexpr uint32_t fades=0x670000,fade_head=0x670100;
 bool stored=false,duplicate=false,revive_success=false,throw_call=false;
 uint32_t nearby=0;unsigned stock_calls=0,receipts=0,revives=0;
 unsigned injection_sounds=0,self_pulses=0,animation_plays=0,lowers=0,raises=0;
@@ -28,6 +30,18 @@ uint8_t* Bytes(){return kernel::memory.data();}
 uint32_t Word(uint32_t p){uint32_t v;std::memcpy(&v,Bytes()+p,4);return v;}
 void Put(uint32_t p,uint32_t v){std::memcpy(Bytes()+p,&v,4);}
 void Float(uint32_t p,float v){std::memcpy(Bytes()+p,&v,4);}
+struct Fade {uint32_t owner,category;float alpha;};
+void Fades(std::initializer_list<Fade> entries){
+    assert(entries.size()<=8);std::memset(Bytes()+fades,0,0x1000);
+    Put(registry+0x10,fades);Put(fades,0x48154c);Put(0x481568,0x2223d0);Put(fades+8,fade_head);
+    Put(fade_head,entries.size()?fade_head+0x40:fade_head);Bytes()[fade_head+0x19]=1;
+    unsigned i=0;for(const auto& entry:entries){
+        const uint32_t node=fade_head+0x40+0x40*i,object=fades+0x800+0x20*i;
+        Put(node,fade_head);Put(node+4,i?node-0x40:fade_head);Put(node+8,i+1<entries.size()?node+0x40:fade_head);
+        Put(node+0xc,entry.category);Put(node+0x10,entry.owner);Put(node+0x14,object);Float(object+0x10,entry.alpha);++i;
+    }
+}
+void Register(uint32_t p){const uint32_t id=Word(p+0x54),entry=registry+0x3c+(id&1023)*8;Put(entry,id);Put(entry+4,p);}
 X86Context Context(uint32_t owner){X86Context c{};c.esp=stack;c.ecx=owner;c.eax=0x1234;c.esi=0x5678;c.edi=0x9876;c.ebp=0xabcd;c.cf=1;c.pf=1;c.top=2;return c;}
 void Setup(bool coop=true){
     kernel::memory.fill(0);health_packs::world=0;health_packs::medics.clear();health_packs::delivery=nullptr;health_packs::medic_owner=0;
@@ -52,6 +66,13 @@ void Setup(bool coop=true){
     }
     Put(medic+0x54,201);Put(medic+0x15c,0);Put(behavior+0xd4,medic);Put(behavior+0xd0,controller);Put(behavior+0x54,301);Put(behavior+0xf8,0xffffffff);
     Put(controller+0x1c,401);Put(controller+0x18,402);Put(root,0x46eef0);Put(root+0x88,medic);Put(root+0x54,401);
+    Put(world+4,registry);
+    Fades({});
+    Put(client,0x46e960);Put(client+0x54,501);Put(client+0x58,401);
+    Put(offer,0x4727a0);Put(offer+0x54,502);Put(offer+0x58,302);
+    Put(dialogue,0x46e9d8);Put(dialogue+0x54,302);Put(dialogue+0xd0,controller);Put(dialogue+0xd4,medic);Put(dialogue+0x100,502);
+    for(uint32_t p:{medic,behavior,root,client,offer,dialogue})Register(p);
+    Register(p0);if(coop)Register(p1);
     for(uint32_t p:{p0,p1}){Float(p+0x6b0,1);Float(p+0x6c4,1);Float(p+0x6d8,1);Float(p+0x6ec,1);Put(p+0x38c,1);}
     Put(manager+0x834,101);Put(0x51c398,0x635000);Put(0x635008,0x636000);Put(0x4f9f18,77);
 }
@@ -66,6 +87,7 @@ bool TrialCoopRevivePlayer(X86Context&,uint8_t*,uint32_t owner){assert(owner==hp
 [[noreturn]] void x86_trap(X86Context&,uint32_t,const char*){std::abort();}
 X86_FUNC(OriginalReceipt);X86_FUNC(StoredReceipt);X86_FUNC(OriginalStock);X86_FUNC(StoredStock);X86_FUNC(OriginalPlayerId);X86_FUNC(StoredPlayerId);
 X86_FUNC(OriginalInjectionState);
+X86_FUNC(sub_0006BAC0);X86_FUNC(sub_00222400);
 X86_FUNC(sub_000C1A10){ctx.eax=0;ctx.esp+=4;}
 X86_FUNC(sub_000BC6A0){assert(false);}X86_FUNC(sub_000BECB0){assert(false);}
 X86_FUNC(sub_000BED30){assert(false);}X86_FUNC(sub_000BC640){assert(false);}X86_FUNC(sub_000BC760){assert(false);}
@@ -108,6 +130,7 @@ void x86_icall(X86Context& c,uint8_t* base,uint32_t target){
     assert(base==Bytes());
     if(target==0x123450){c.eax=mode_hud_mask;c.esp+=4;return;}
     if(target==0x4af40){assert(Word(c.esp+4)==1);OriginalHudAllowed(c,base);return;}
+    if(target==0x2223d0){assert(c.ecx==fades&&Word(c.esp+8)==0);OriginalFadeAlpha(c,base);return;}
     if(target==0x207d70){assert(Word(c.esp+4)==401);c.eax=medic_root_available?root:0;c.esp+=8;return;}
     if(target==0xbdab0){sub_000BDAB0(c,base);return;}
     if(target==0x22b930){
@@ -188,6 +211,102 @@ void Eligibility(){
     c.top=0;c.st[0]=100;c.esp=stack;StoredEligibility(c,Bytes());assert(c.eax);
     health_packs::players[1].count=3;c.top=0;c.st[0]=10;c.esp=stack;StoredEligibility(c,Bytes());assert(!c.eax);
 }
+void MedicOrders(){
+    for(unsigned slot=0;slot<2;++slot){
+        Setup();const uint32_t owner=slot?p1:p0,other=slot?p0:p1;
+        // Full health is not full inventory. Pure queries cannot select a
+        // recipient; the explicit command wins even when the partner is nearer.
+        Float(owner+0x40,100);Float(other+0x40,1);
+        assert(TrialHealthPackMedicPrompt(Bytes(),owner,client,medic,false));
+        assert(TrialHealthPackMedicPrompt(Bytes(),other,client,medic,false));
+        assert(health_packs::medics.empty()&&Word(world+0xf74)==3);
+        assert(TrialHealthPackMedicClaim(Bytes(),owner,client,medic));Put(client+0xb4,4);
+        assert(!TrialHealthPackMedicClaim(Bytes(),other,client,medic));
+        auto c=Context(dialogue);{TrialHealthPackMedicScope scope(c,Bytes());}
+        assert(TrialHealthPackMedicOfferOwner(Bytes(),owner,offer,medic));
+        assert(!TrialHealthPackMedicOfferOwner(Bytes(),other,offer,medic));
+        assert(!TrialHealthPackMedicOfferOwner(Bytes(),owner,offer,other));
+        assert(TrialHealthPackMedicPrompt(Bytes(),owner,offer,medic,true));
+        assert(!TrialHealthPackMedicPrompt(Bytes(),other,offer,medic,true));
+        const auto retained=health_packs::medics[0];
+        for(unsigned i=0;i<4;++i){TrialHealthPackMedicPrompt(Bytes(),other,offer,medic,true);TrialHealthPackMedicPrompt(Bytes(),owner,offer,medic,true);}
+        assert(!std::memcmp(&retained,&health_packs::medics[0],sizeof retained));
+        duplicate=true;Deliver(true);Deliver(true);
+        assert(TrialHealthPackSnapshot(slot).count==3&&TrialHealthPackSnapshot(1-slot).count==1&&Word(world+0xf74)==1);
+        Deliver(true);assert(Word(world+0xf74)==1&&stock_calls==2);
+        assert(!TrialHealthPackMedicPrompt(Bytes(),owner,offer,medic,true));
+        assert(TrialHealthPackMedicOfferOwner(Bytes(),owner,offer)); // can decline a no-longer-useful offer
+        Put(client+0xb4,0);assert(!TrialHealthPackMedicClaim(Bytes(),other,client,medic)); // dialogue still owns handoff
+        TrialHealthPackMedicEnd(c,Bytes());assert(TrialHealthPackMedicClaim(Bytes(),other,client,medic));
+        Put(client+0xb4,4);Deliver(true);
+        assert(TrialHealthPackSnapshot(1-slot).count==2&&Word(world+0xf74)==0);
+    }
+    Setup(false);assert(TrialHealthPackMedicPrompt(Bytes(),p0,client,medic,false));
+    assert(TrialHealthPackMedicClaim(Bytes(),p0,client,medic));Put(client+0xb4,4);Deliver(true);
+    assert(TrialHealthPackSnapshot(0).count==2&&Word(world+0xf74)==2);
+    // An automatic offer is retained too; a partner cannot replace its owner
+    // with an ordinary collect command while the dialogue is still active.
+    Setup();auto c=Context(dialogue);{TrialHealthPackMedicScope scope(c,Bytes());}
+    assert(TrialHealthPackMedicOfferOwner(Bytes(),p1,offer));
+    assert(!TrialHealthPackMedicClaim(Bytes(),p0,client,medic));
+    Float(p0+0x40,0);Deliver(true);assert(TrialHealthPackSnapshot(1).count==2&&TrialHealthPackSnapshot(0).count==1);
+    TrialHealthPackMedicEnd(c,Bytes());assert(TrialHealthPackMedicClaim(Bytes(),p0,client,medic));
+    // Invalid queued recipients must not be replaced by a nearby partner.
+    for(unsigned reason=0;reason<4;++reason){
+        Setup();assert(TrialHealthPackMedicClaim(Bytes(),p1,client,medic));Put(client+0xb4,4);
+        if(reason==0)Put(p1+0x54,999);
+        if(reason==1){auto dead=Context(p1);TrialHealthPackDestroyed(dead,Bytes());}
+        if(reason==2)Float(p1+0x9c,0);
+        if(reason==3)Put(p1+0x170,12);
+        Deliver(true);assert(Word(world+0xf74)==3&&!stock_calls&&!receipts&&TrialHealthPackSnapshot(0).count==1);
+    }
+    // Stale request clients block implicit reassignment, but a new explicit
+    // request after dialogue exit can recover the medic instead of locking it.
+    Setup();assert(TrialHealthPackMedicClaim(Bytes(),p1,client,medic));Put(client+0xb4,4);
+    Put(client+0x54,601);Register(client);Put(client+0xb4,0);
+    Deliver(true);assert(TrialHealthPackSnapshot(1).count==2&&TrialHealthPackSnapshot(0).count==1);
+    assert(TrialHealthPackMedicClaim(Bytes(),p0,client,medic));
+    // Reusing a medic address with a new registry identity must replace the
+    // old record. Otherwise Select encounters its stale entry first and loses
+    // the explicit farther requester's claim to the nearest partner.
+    Setup();c=Context(behavior);{TrialHealthPackMedicScope scope(c,Bytes(),true);}
+    assert(health_packs::medics.size()==1&&health_packs::medics[0].owner==p1);
+    Put(medic+0x54,1225);Register(medic); // same registry slot, next identity
+    assert(TrialHealthPackMedicClaim(Bytes(),p0,client,medic));Put(client+0xb4,4);
+    assert(health_packs::medics.size()==1&&health_packs::medics[0].id==1225&&health_packs::medics[0].owner==p0);
+    Deliver(true);
+    assert(health_packs::medics.size()==1&&TrialHealthPackSnapshot(0).count==2&&TrialHealthPackSnapshot(1).count==1&&Word(world+0xf74)==2);
+    for(unsigned reason=0;reason<12;++reason){
+        Setup();
+        if(reason==0)health_packs::players[0].count=3;
+        if(reason==1)Put(world+0xf74,0);
+        if(reason==2)Put(world+0xf74,0xffffffffu);
+        if(reason==3)Put(client+0x58,999);
+        if(reason==4)Put(client+0x54,999);
+        if(reason==5)Put(root,0x46ffff);
+        if(reason==6)Put(root+0x88,p1);
+        if(reason==7)Put(medic+0x5c,1);
+        if(reason==8)Put(client+0x5c,1);
+        if(reason==9)Put(client+0xb4,4);
+        if(reason==10)Float(p0+0x9c,NAN);
+        if(reason==11)Put(world+4,0xfffffff0u);
+        const uint32_t before=Word(world+0xf74);
+        assert(!TrialHealthPackMedicPrompt(Bytes(),p0,client,medic,false));
+        assert(!TrialHealthPackMedicClaim(Bytes(),p0,client,medic));
+        assert(health_packs::medics.empty()&&Word(world+0xf74)==before);
+    }
+    for(unsigned reason=0;reason<6;++reason){
+        Setup();c=Context(dialogue);{TrialHealthPackMedicScope scope(c,Bytes());}
+        if(reason==0)Put(offer+0x58,999);
+        if(reason==1)Put(dialogue+0x100,999);
+        if(reason==2)Put(dialogue,0x46ffff);
+        if(reason==3)Put(controller+0x1c,999);
+        if(reason==4)Put(root+0x88,p0);
+        if(reason==5)TrialHealthPackMedicEnd(c,Bytes());
+        assert(!TrialHealthPackMedicOfferOwner(Bytes(),p1,offer));
+    }
+    puts("medic orders: full-health SP/P1/P2, explicit requester, read-only offers, busy/stale ownership, finite stock and capacity passed");
+}
 void Use(){
     Setup();Press(0);Update(0);assert(TrialHealthPackSnapshot(0).count==1&&!Bytes()[p0+0x470]);
     Float(p0+0x9c,600);Press(0);auto c=Context(p0);const auto before=c;std::array<uint8_t,256> scratch{};std::memcpy(scratch.data(),Bytes()+stack-256,256);
@@ -205,6 +324,20 @@ void Use(){
     Setup();Float(p0+0x9c,100);throw_call=true;Press(0);c=Context(p0);const auto saved=c;try{TrialHealthPackUpdate(c,Bytes());assert(false);}catch(int){}assert(!std::memcmp(&c,&saved,sizeof c)&&TrialHealthPackSnapshot(0).count==1);
 }
 void PartnerInjection(){
+    for(unsigned slot=0;slot<2;++slot){
+        const uint32_t healer=slot?p1:p0;
+        Setup();nearby=slot?p0:p1;Float(healer+0x9c,600);
+        TrialHealthPackRequest(slot,TrialHealthPackUse::Self);Update(slot);
+        assert(Bytes()[healer+0x470]&&!health_packs::injections[slot].target);
+        assert(TrialHealthPackSnapshot(slot).count==0&&TrialHealthPackSnapshot(1-slot).count==1);
+        Setup();Float(healer+0x9c,600);nearby=0;
+        TrialHealthPackRequest(slot,TrialHealthPackUse::Partner);Update(slot);
+        assert(!Bytes()[healer+0x470]&&TrialHealthPackSnapshot(slot).count==1);
+        Setup();nearby=slot?p0:p1;
+        TrialHealthPackRequest(slot,TrialHealthPackUse::Partner);Update(slot);
+        assert(health_packs::injections[slot].target==nearby&&TrialHealthPackSnapshot(slot).count==1);
+    }
+
     // Execute the native aiming branch as a sign/row witness, including a
     // rotated/scaled eye frame. Behind/sideways requests never become self use.
     for(unsigned slot=0;slot<2;++slot){
@@ -274,6 +407,33 @@ void PartnerInjection(){
     assert(animation_path==0x458a48&&!TrialHealthPackPartnerAnimation(Bytes(),p0));
     Bytes()[p0+0x1a2]=1;InjectionTick(0);assert(Word(p0+0x46c)&&self_pulses==1&&injection_sounds==1&&!revives);
     puts("partner injection: original self-heal failure witness, both owners, native lowering/contact/raising, cancellation, one-time stock and self-heal isolation passed (offline; authored clip playback requires live QA)");
+}
+void LivingPartner(){
+    for(unsigned slot=0;slot<2;++slot)for(unsigned fault=0;fault<7;++fault){
+        Setup();trial_coop::SetActive(true);
+        const uint32_t healer=slot?p1:p0,target=slot?p0:p1;
+        for(uint32_t actor:{healer,target}){
+            Float(actor+0x40,0);Float(actor+0x44,0);Float(actor+0x48,actor==target?100.f:0.f);
+            Float(actor+0x6e0,0);Float(actor+0x6e4,100);Float(actor+0x6e8,actor==target?100.f:0.f);
+        }
+        Float(target+0x9c,600);Update(1-slot);Update(slot);
+        assert(TrialHealthPackSnapshot(slot).can_heal_partner&&!TrialHealthPackSnapshot(slot).can_revive);
+        TrialHealthPackRequest(slot,TrialHealthPackUse::Partner);Update(slot);StartInjection(slot);
+        assert(!health_packs::injections[slot].reviving&&health_packs::injections[slot].target==target);
+        if(fault==1)Float(target+0x9c,1200);
+        if(fault==2)Float(target+0x48,201);
+        if(fault==3)Float(healer+0x6d8,-1);
+        if(fault==4)Float(target+0x9c,0);
+        if(fault==5)Put(target+0x54,999);
+        if(fault==6)Float(target+0x46c,200);
+        Bytes()[healer+0x1a2]=1;InjectionTick(slot);InjectionTick(slot);
+        assert(!revives&&!self_pulses&&!Word(healer+0x46c));
+        assert(health_packs::players[slot].count==(fault?1u:0u)&&health_packs::players[1-slot].count==1);
+        assert(health_packs::Real(Bytes(),target+0x46c)==(fault==0?1200.f:fault==6?200.f:0.f));
+        assert(injection_sounds==(fault?0u:1u));
+    }
+    trial_coop::Reset();
+    puts("Living partner: both recipients, giver animation/stock, native refill, no revive prompt, contact revalidation and exactly-once spending passed");
 }
 void RevivePrompt(){
     for(unsigned slot=0;slot<2;++slot){
@@ -349,6 +509,64 @@ void HudVisibility(){
         Press(0);Update(0);assert(TrialHealthPackSnapshot(0).count==0&&Bytes()[p0+0x470]);
     }
 }
+void HudLetterbox(){
+    // Execute the original HUD's owner/category selection and alpha multiply,
+    // including the original fade tree traversal and wildcard-owner branch.
+    const auto original=[&](uint32_t owner){
+        auto c=Context(owner);c.eax=fades;c.esi=Word(owner+0x300);c.edi=manager;
+        Float(c.esp+0x2c,health_packs::Real(Bytes(),c.esi+0x14));OriginalHudFade(c,Bytes());
+        return health_packs::Real(Bytes(),stack+0x2c);
+    };
+    for(bool coop:{false,true})for(unsigned selected=0;selected<(coop?2u:1u);++selected){
+        Setup(coop);const uint32_t owner=selected?p1:p0,id=Word(owner+0x54);
+        Float(Word(owner+0x300)+0x14,.6f);
+        for(float fade:{0.f,.25f,.5f,.75f,1.f,.75f,.5f,.25f,0.f,1.5f,-.5f}){
+            Fades({{id,0,fade},{999,0,1},{id,1,1}});
+            for(unsigned slot=0;slot<(coop?2u:1u);++slot){
+                const uint32_t actor=slot?p1:p0;const float expected=original(actor);
+                std::array<uint8_t,256> scratch{};std::memcpy(scratch.data(),Bytes()+stack-256,256);
+                std::array<uint8_t,0x1000> tree{};std::memcpy(tree.data(),Bytes()+fades,tree.size());
+                auto c=Context(actor);const auto before=c;const auto csr=_mm_getcsr();TrialHealthPackUpdate(c,Bytes());
+                const auto result=TrialHealthPackSnapshot(slot);
+                assert(!std::memcmp(&c,&before,sizeof c)&&_mm_getcsr()==csr);
+                assert(result.visible==(expected>0)&&std::fabs(result.opacity-expected)<=1.f/255.f&&result.count==1);
+                assert(!std::memcmp(scratch.data(),Bytes()+stack-256,256)&&!std::memcmp(tree.data(),Bytes()+fades,tree.size()));
+            }
+        }
+        Fades({{0xffffffffu,0,.35f},{id,0,.75f},{id,0,.1f}});
+        for(unsigned slot=0;slot<(coop?2u:1u);++slot){Update(slot);assert(std::fabs(TrialHealthPackSnapshot(slot).opacity-original(slot?p1:p0))<=1.f/255.f);}
+        Fades({{0xffffffffu,0,1}});Update(selected);assert(!TrialHealthPackSnapshot(selected).visible);
+        Fades({});Update(selected);assert(TrialHealthPackSnapshot(selected).visible);
+    }
+    // Publication is also called outside Update's host-state guard; both
+    // quantizing and unpacking opacity can raise the SSE inexact flag.
+    Setup();Update(0);const auto original_csr=_mm_getcsr();
+    for(unsigned csr:{0x1f80u,0x3f80u,0x5f80u,0x7f80u})for(float opacity:{0.f,.1f,.5f,.6f,1.f}){
+        health_packs::players[0].hud_opacity=opacity;_mm_setcsr(csr);
+        health_packs::Publish(Bytes(),0);assert(_mm_getcsr()==csr);
+        const auto status=TrialHealthPackSnapshot(0);assert(_mm_getcsr()==csr);
+        assert(status.visible==(opacity>0));
+    }
+    _mm_setcsr(original_csr);
+    for(unsigned reason=0;reason<5;++reason){
+        Setup();
+        if(reason==0)Put(world+4,0);
+        if(reason==1)Put(registry+0x10,0);
+        if(reason==2)Put(fades,0x481548);
+        if(reason==3)Put(0x481568,0);
+        if(reason==4)Put(fades+8,0);
+        Update(0);assert(!TrialHealthPackSnapshot(0).visible&&TrialHealthPackSnapshot(0).opacity==0);
+    }
+    // Visual-only fades must not change previously accepted use/animation
+    // admission, spend twice, or cancel an injection already in progress.
+    Setup(false);Float(p0+0x9c,600);Fades({{101,0,1}});Press(0);Update(0);
+    assert(!TrialHealthPackSnapshot(0).visible&&TrialHealthPackSnapshot(0).count==0&&Bytes()[p0+0x470]);
+    Setup();nearby=p1;revive_success=true;Press(0);Update(0);StartInjection(0);Fades({{101,0,1}});Update(0);
+    assert(!TrialHealthPackSnapshot(0).visible&&!health_packs::injections[0].cancelled);
+    Bytes()[p0+0x1a2]=1;InjectionTick(0);InjectionTick(0);assert(revives==1&&TrialHealthPackSnapshot(0).count==0);
+    assert(TrialHealthPackSnapshot(2).opacity==0);
+    puts("health HUD fade: original owner/category query, native opacity, both players/SP, wildcard/max, caller isolation and unchanged injection admission passed");
+}
 void Checkpoints(){
     Setup();
     constexpr uint32_t settings=0x640000,save=0x641000,snapshot=save+4;
@@ -391,4 +609,4 @@ void Checkpoints(){
     std::filesystem::remove(directory);
 }
 }
-int main(){hp_test::GuestReturnContract();hp_test::Pickup();hp_test::Eligibility();hp_test::Use();hp_test::PartnerInjection();hp_test::RevivePrompt();hp_test::HealthBarExtent();hp_test::HudVisibility();hp_test::Checkpoints();std::puts("health packs: retail delivery/stock/eligibility/HUD admission, isolated input, healing, revive and checkpoint contracts passed");}
+int main(){hp_test::GuestReturnContract();hp_test::Pickup();hp_test::Eligibility();hp_test::MedicOrders();hp_test::Use();hp_test::PartnerInjection();hp_test::LivingPartner();hp_test::RevivePrompt();hp_test::HealthBarExtent();hp_test::HudVisibility();hp_test::HudLetterbox();hp_test::Checkpoints();std::puts("health packs: retail delivery/stock/eligibility/HUD admission, isolated input, healing, revive and checkpoint contracts passed");}

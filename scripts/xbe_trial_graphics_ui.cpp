@@ -26,7 +26,8 @@
 #include "xbe_coop_death.h"
 #include "xbe_coop_pause.h"
 #include "xbe_health_packs.h"
-#include "third_party/xboxrecomp/include/host_controller.h"
+#include "xbe_host_input.h"
+#include "xbe_cheats.h"
 
 bool TrialSmoothFog = false;
 bool TrialDistanceFog = true;
@@ -66,15 +67,18 @@ bool TakeNativeConfirm(bool ready){
     return ready&&received&&received==navigation_generation.load();
 }
 std::atomic<bool> panel_open=false, open_requested=false;
-std::atomic<unsigned> settings_page=0; // 0 Graphics, 1 Controls, 2 Language, all under Options.
+std::atomic<unsigned> settings_page=0; // 0 Graphics, 1 Controls, 2 Language, 3 Cheats.
 unsigned settings_player=0;
 int settings_pause_player=-1;
+uint64_t cheats_epoch=0;
 void ControlsReadDraft();
 void ControlsOpen(int player);
 void LanguageReadDraft();
 void ControlsCancelCapture();
 trial_graphics::Draft draft;
 bool draft_fps=true, confirm_back=false;
+bool reticle_page=false;
+unsigned reticle_focus=0;
 uint32_t draft_fog_mode=1;
 std::string message;
 ImFont *body_font=nullptr, *title_font=nullptr;
@@ -96,10 +100,11 @@ bool Dirty() {
         a.render_percent!=b.render_percent||a.vsync!=b.vsync||a.fps_cap!=b.fps_cap||a.aniso!=b.aniso||
         draft.fov!=live.fov||draft.weapon_fov!=live.weapon_fov||draft.fmv_scale!=live.fmv_scale||draft.aspect!=live.aspect||draft.msaa!=live.msaa||draft.scenery!=live.scenery||
         draft.characters!=live.characters||draft.character_quality!=live.character_quality||
-        draft.world_textures!=live.world_textures||draft.ragdolls!=live.ragdolls||draft.hd_ui!=live.hd_ui||draft.reticle_scale!=live.reticle_scale||draft_fps!=TrialShowFps||draft_fog_mode!=FogMode();
+        draft.world_textures!=live.world_textures||draft.ragdolls!=live.ragdolls||draft.hd_ui!=live.hd_ui||draft.reticle_scale!=live.reticle_scale||draft.reticle_colors!=live.reticle_colors||draft_fps!=TrialShowFps||draft_fog_mode!=FogMode();
 }
 void Close() {
     ControlsCancelCapture();
+    reticle_page=false;
     panel_open=false;open_requested=false;confirm_back=false;message.clear();
     frontend_events=0;++navigation_generation;TrialGraphicsInputChanged();
 }
@@ -159,7 +164,7 @@ struct MenuCanvas {
         if(translate)text=trial_language::Ui(text);
         if(max_width>0)height*=std::min(1.f,max_width/std::max(1.f,Font(title)->CalcTextSizeA(height*sy,100000,0,text).x/sx));
         const auto p=Point(x,y);const float px=height*sy;
-        draw->AddText(Font(title),px,{p.x+sy,p.y+sy},IM_COL32(0,0,0,210),text);
+        draw->AddText(Font(title),px,{p.x+sy,p.y+sy},IM_COL32(0,0,0,(210*(color>>IM_COL32_A_SHIFT)+127)/255),text);
         draw->AddText(Font(title),px,p,color,text);
     }
     void Center(const char* text,float x,float y,float width,float height,ImU32 color=white,bool title=false){
@@ -180,9 +185,11 @@ struct MenuCanvas {
         const float direction=right?1.f:-1.f;
         draw->AddTriangleFilled(Point(x+direction*3.5f,y),Point(x-direction*3.5f,y-5),Point(x-direction*3.5f,y+5),color);
     }
-    void Icon(unsigned code,float x,float y,float size){
+    bool Icon(unsigned code,float x,float y,float size,ImU32 color=IM_COL32_WHITE){
         float uv[4];
-        if(TrialMenuIconUV(code,uv))draw->AddImage(ImGui::GetIO().Fonts->TexID,Point(x,y),Point(x+size*sy/sx,y+size),{uv[0],uv[1]},{uv[2],uv[3]});
+        if(!TrialMenuIconUV(code,uv))return false;
+        draw->AddImage(ImGui::GetIO().Fonts->TexID,Point(x,y),Point(x+size*sy/sx,y+size),{uv[0],uv[1]},{uv[2],uv[3]},color);
+        return true;
     }
     void Footer(float top=382){
         Rect(0,top,640,480-top,IM_COL32(0,0,0,255));Line(0,top,640);
@@ -211,6 +218,28 @@ void BeginMenu(const char* name,const ImGuiViewport* view,ImGuiWindowFlags extra
 }
 void EndMenu(){ImGui::End();ImGui::PopStyleVar();}
 float revive_slide[2]{};
+void DrawHealthBinding(MenuCanvas& c,bool keyboard,unsigned source,bool gesture,const char* binding,float x,float y,ImU32 color){
+    constexpr float size=18.f;
+    const float unit=c.sy/c.sx;
+    const unsigned buttons[]={0,0x101,0x102,0x105,0x104};
+    const unsigned icon=gesture?0x103:keyboard?(source<256?source:0):source<5?buttons[source]:0;
+    const bool drawn=icon&&c.Icon(icon,x,y,size,color);
+    if(gesture){
+        if(!drawn){
+            c.Rect(x+6*unit,y,6*unit,size,color);
+            c.Rect(x,y+6,size*unit,6,color);
+        }
+        // Highlight the lower arm: the original atlas icon is an undirected pad.
+        c.draw->AddTriangleFilled(c.Point(x+6*unit,y+12),c.Point(x+12*unit,y+12),c.Point(x+9*unit,y+16),color);
+        c.Text("\xC3\x97" "2",x+20*unit,y+3,11,color,0,false,false);
+    }else if(!drawn){
+        const float width=std::max(size*unit,c.Width(binding,10)+6*unit);
+        const auto a=c.Point(x,y),b=c.Point(x+width,y+size);
+        c.draw->AddRectFilled(a,b,IM_COL32(28,35,32,((color>>IM_COL32_A_SHIFT)*190+127)/255),2*c.sy);
+        c.draw->AddRect(a,b,color,2*c.sy,0,std::max(1.f,c.sy*.6f));
+        c.Text(binding,x+(width-c.Width(binding,10))*.5f,y+4,10,color,0,false,false);
+    }
+}
 void DrawReviveCountdown(MenuCanvas& c,unsigned slot,unsigned seconds){
     if(slot>=2||!seconds||seconds>10)return;
     const bool urgent=seconds<=3;
@@ -502,7 +531,8 @@ void ObjectivesUi(const TrialFrontendFrame& f,const ImGuiViewport* view,bool int
     const char* labels[]={"Scroll up","Back","Scroll down"};const bool enabled[]={true,true,true};
     const unsigned actions[]={UC_HF_LEFT,UC_HF_BACK,UC_HF_RIGHT};
     RowStrip(c,labels,enabled,3,398,3,[](unsigned){},[&](unsigned i){if(ready)FrontendAction(f,actions[i]);});
-    FooterPrompts(c,{{38,"Scroll up"},{40,"Scroll down"},{VK_RBUTTON,"Back"}});
+    if(xbox_KeyboardMode())FooterPrompts(c,{{38,"Scroll up"},{40,"Scroll down"},{VK_RBUTTON,"Back"}});
+    else FooterPrompts(c,{{0x103,"Navigate"},{0x102,"Back"}});
     ImGui::EndDisabled();EndMenu();
 }
 void FrontendUi(const TrialFrontendFrame& f,const ImGuiViewport* view,bool interactive=true){
@@ -513,16 +543,29 @@ void FrontendUi(const TrialFrontendFrame& f,const ImGuiViewport* view,bool inter
     // Graphics belongs to Options in both the front end and pause flow. Keep
     // the original main/pause rows instead of adding a second shortcut there.
     const bool graphics=src.kind==UC_HF_LIST&&f.list_kind==3;
+    const bool pause=src.kind==UC_HF_LIST&&f.list_kind==2;
     const bool main=IsMainMenu(f);
-    const bool coop=main&&trial_coop::Available()&&trial_coop::CampaignRow(f)>=0;
-    const unsigned count=src.count+(profiles?3:graphics?2:main?1+unsigned(coop):0);
+    const int campaign=main?trial_coop::CampaignRow(f):-1;
+    const bool coop=main&&trial_coop::Available()&&campaign>=0;
+    unsigned rows[23]{},count=0;
+    for(unsigned i=0;i<src.count;++i){
+        if(main&&!std::strcmp(src.rows[i].label,"NewFrontEnd-Internet-2"))continue;
+        rows[count++]=i;
+        if(coop&&int(i)==campaign)rows[count++]=src.count;
+    }
+    if(main){rows[count++]=src.count+unsigned(coop);rows[count++]=src.count+unsigned(coop)+1;}
+    else for(unsigned i=0,n=profiles?3:graphics?2:0;i<n;++i)rows[count++]=src.count+i;
     static uint64_t last_epoch=0;static unsigned focus=0,profile_slot=0;static TrialFrontendReleaseGate gate;
-    if(last_epoch!=src.epoch){last_epoch=src.epoch;focus=profile_slot=src.selected;}
+    if(last_epoch!=src.epoch){
+        last_epoch=src.epoch;profile_slot=src.selected;focus=0;
+        for(unsigned i=0;i<count;++i)if(rows[i]==src.selected)focus=i;
+    }
     const bool ready=interactive&&gate.Accept(navigation_generation.load(),UiHeld());
     focus=std::min(focus,count-1);
-    auto choose=[&](unsigned i){if(!ready||quit_open)return;focus=i;if(i<src.count&&src.rows[i].enabled){profile_slot=i;FrontendAction(f,UC_HF_SELECT,i);}};
+    auto choose=[&](unsigned i){if(!ready||quit_open)return;focus=i;i=rows[i];if(i<src.count&&src.rows[i].enabled){profile_slot=i;FrontendAction(f,UC_HF_SELECT,i);}};
     auto remove_profile=[&](){if(profiles&&(f.profile_delete_mask&(1u<<profile_slot)))FrontendAction(f,TRIAL_HF_DELETE,profile_slot);};
     auto activate=[&](unsigned i){
+        i=rows[i]; // Visible order differs from the guest callback identities only on Main Menu.
         if(!ready||quit_open||(i<src.count&&!src.rows[i].enabled))return;
         if(profiles&&i>=src.count){
             if(i==src.count+1)remove_profile();
@@ -531,14 +574,14 @@ void FrontendUi(const TrialFrontendFrame& f,const ImGuiViewport* view,bool inter
             return;
         }
         if(coop&&i==src.count){OpenCoop(f);return;}
-        if(main&&i==src.count+unsigned(coop)){OpenQuit(f);return;}
+        if(main&&i==src.count+unsigned(coop)+1){OpenQuit(f);return;}
         const bool controls=graphics&&i<src.count&&
             !std::strcmp(src.rows[i].label,"NewFrontEnd-ControllerOptions-1");
-        if(graphics&&(i>=src.count||controls)){
+        if((graphics&&(i>=src.count||controls))||(main&&i==src.count+unsigned(coop))){
             std::lock_guard lock(context_lock);
             if(frontend_active&&frontend.source.epoch==src.epoch&&context.owner==src.owner&&
-               context.screen==src.screen&&context.kind==3){
-                opened=context;settings_page=controls?1:i==src.count+1?2:0;open_requested=true;
+               context.screen==src.screen&&context.kind==f.list_kind){
+                opened=context;settings_page=main?3:controls?1:i==src.count+1?2:0;cheats_epoch=src.epoch;open_requested=true;
             }
         }else FrontendAction(f,UC_HF_ACTIVATE,i);
     };
@@ -612,13 +655,14 @@ void FrontendUi(const TrialFrontendFrame& f,const ImGuiViewport* view,bool inter
         RowStrip(canvas,labels,enabled,4,398,4,[](unsigned){},[&](unsigned i){FrontendAction(f,actions[i],src.selected);});
         canvas.Center(f.labels[src.selected],40,432,560,12,muted);
     }else{
-        const char* labels[22]{};bool enabled[22]{};
+        const char* labels[23]{};bool enabled[23]{};
         for(unsigned i=0;i<count;++i){
-            labels[i]=i>=src.count?(main?(coop&&i==src.count?"Co-op":"Quit to desktop"):i==src.count?"Graphics":"Language"):
-                graphics&&!std::strcmp(src.rows[i].label,"NewFrontEnd-ControllerOptions-1")?"Controls":f.labels[i];
-            enabled[i]=i>=src.count||src.rows[i].enabled;
+            const unsigned row=rows[i];
+            labels[i]=row>=src.count?(main?(coop&&row==src.count?"Co-op":row==src.count+unsigned(coop)?"Cheats":"Quit to desktop"):row==src.count?"Graphics":"Language"):
+                graphics&&!std::strcmp(src.rows[row].label,"NewFrontEnd-ControllerOptions-1")?"Controls":f.labels[row];
+            enabled[i]=row>=src.count||src.rows[row].enabled;
         }
-        if(xbox_KeyboardMode()){
+        if(xbox_KeyboardMode()||main){
             const char* title=TrialFrontendDifficulty(src)?"DIFFICULTY":main?"MAIN MENU":f.list_kind==2?"PAUSED":f.list_kind==7?"MISSION FAILED":"OPTIONS";
             // Mission Failed already has authored scene shading over its death sequence.
             canvas.SettingsFrame((src.source_kind&0x80000000u)!=0,title,f.list_kind!=7);
@@ -782,7 +826,7 @@ void SettingSlider(MenuCanvas& c,const char* label,uint32_t& value,int low,int h
         value=uint32_t(std::clamp(low+int(std::round((raw-low)/increment))*increment,low,high));
         focus=index;message.clear();
     }
-    const float y=top+index*step+step-1;
+    const float y=top+index*step+std::min(18.f,step)-1;
     c.Line(418,y,124,IM_COL32(118,126,121,180));
     const float knob=418+124*(float(value)-low)/(high-low);
     c.Line(knob-2,y-1,4,white);
@@ -790,7 +834,7 @@ void SettingSlider(MenuCanvas& c,const char* label,uint32_t& value,int low,int h
 
 void SettingsUi(const ImGuiViewport* view,bool paused){
     BeginMenu("Burner graphics",view);MenuCanvas canvas(view);
-    canvas.SettingsFrame(paused,settings_pause_player<0?"GRAPHICS":settings_player?"GRAPHICS - PLAYER 2":"GRAPHICS - PLAYER 1");
+    canvas.SettingsFrame(paused,reticle_page?"RETICLE":settings_pause_player<0?"GRAPHICS":settings_player?"GRAPHICS - PLAYER 2":"GRAPHICS - PLAYER 1");
     static TrialFrontendReleaseGate gate;static uint64_t epoch=0;
     static unsigned focus=0,confirmation=2;
     const auto generation=navigation_generation.load();
@@ -800,7 +844,37 @@ void SettingsUi(const ImGuiViewport* view,bool paused){
     const bool back=ready&&((events&8)||ImGui::IsMouseClicked(1,false)||ImGui::IsKeyPressed(ImGuiKey_Escape,false)||ImGui::IsKeyPressed(ImGuiKey_Q,false));
     const bool enter=TakeNativeConfirm(ready)||(ready&&(events&4));
     ImGui::BeginDisabled(!ready);
-    if(confirm_back){
+    if(reticle_page){
+        int delta=0;
+        if(ready){
+            if((events&1)||ImGui::IsKeyPressed(ImGuiKey_UpArrow))reticle_focus=(reticle_focus+5)%6;
+            if((events&2)||ImGui::IsKeyPressed(ImGuiKey_DownArrow)||ImGui::IsKeyPressed(ImGuiKey_Tab))reticle_focus=(reticle_focus+1)%6;
+            if((events&16)||ImGui::IsKeyPressed(ImGuiKey_LeftArrow))delta=-1;
+            if((events&32)||ImGui::IsKeyPressed(ImGuiKey_RightArrow)||enter)delta=1;
+        }
+        const unsigned selected=reticle_focus;
+        SettingSlider(canvas,"Reticle size",draft.reticle_scale,50,200,5,"%",0,reticle_focus,selected==0?delta:0,130,32);
+        const char* labels[]={"Normal reticle","Enemy reticle","Friendly NPC reticle","Pistol-spin reticle"};
+        const uint32_t choices[]={0,1,2,3,4,5,6,7,8,9};
+        const uint32_t original[]={0xffffff,0xff0000,0x00ff00,0x00ffff};
+        for(unsigned i=0;i<4;++i){
+            SettingChoice(canvas,labels[i],draft.reticle_colors[i],choices,trial_graphics::ReticleColorNames,i+1,reticle_focus,selected==i+1?delta:0,130,32);
+            const auto choice=draft.reticle_colors[i];
+            const auto rgb=choice<std::size(trial_graphics::ReticlePalette)&&choice?trial_graphics::ReticlePalette[choice]:original[i];
+            const auto color=IM_COL32((rgb>>16)&255,(rgb>>8)&255,rgb&255,255);
+            const float y=130+(i+1)*32+8;
+            canvas.Line(370,y,8,color);
+            canvas.draw->AddLine(canvas.Point(374,y-4),canvas.Point(374,y+4),color,std::max(1.f,canvas.sy));
+        }
+        canvas.Center("Choose each reticle color. Original keeps the game's colors.",40,325,560,12,muted);
+        const char* back_label[]={"Back to Graphics"};
+        auto leave=[&](unsigned){reticle_page=false;frontend_events=0;++navigation_generation;};
+        RowStrip(canvas,back_label,nullptr,1,395,reticle_focus==5?0:1,[&](unsigned){reticle_focus=5;},leave);
+        if(back||(enter&&reticle_focus==5))leave(0);
+        if(xbox_KeyboardMode())FooterPrompts(canvas,{{37,""},{39,"Change"},{13,"Select"},{VK_RBUTTON,"Back"}});
+        else FooterPrompts(canvas,{{0x103,"Navigate"},{0x101,"Select"},{0x102,"Back"}});
+        ImGui::EndDisabled();EndMenu();return;
+    }else if(confirm_back){
         canvas.Center("Apply your changes?",40,163,560,24,white,true);
         canvas.Center("Save your graphics settings before going back.",50,204,540,14,white);
         const char* labels[]={"Apply","Discard","Keep editing"};
@@ -875,7 +949,9 @@ void SettingsUi(const ImGuiViewport* view,bool paused){
         SettingChoice(canvas,"Ragdoll amount",draft.ragdolls,amounts,amount_names,13,focus,keyboard_row==13?delta:0,top,step);
         SettingSlider(canvas,"Field of view (vertical)",draft.fov,40,90,1," degrees",14,focus,keyboard_row==14?delta:0,top,step);
         SettingChoice(canvas,"HD HUD and menus",draft.hd_ui,flags,flag_names,15,focus,keyboard_row==15?delta:0,top,step);
-        SettingSlider(canvas,"Reticle size",draft.reticle_scale,50,200,5,"%",16,focus,keyboard_row==16?delta:0,top,step);
+        if(SettingRow(canvas,"Reticle settings","Edit",16,focus,keyboard_row==16?delta:0,step,top)){
+            reticle_page=true;reticle_focus=0;frontend_events=0;++navigation_generation;
+        }
         SettingSlider(canvas,"Weapon FOV",draft.weapon_fov,50,150,5,"%",17,focus,keyboard_row==17?delta:0,top,step);
         const bool textures_available=trial_graphics::WorldTexturesAvailable();
         if(textures_available){
@@ -891,10 +967,10 @@ void SettingsUi(const ImGuiViewport* view,bool paused){
         const uint32_t fmv_scales[]={0,1};const char* fmv_names[]={"Fill","4:3"};
         SettingChoice(canvas,"FMV scaling",draft.fmv_scale,fmv_scales,fmv_names,19,focus,keyboard_row==19?delta:0,top,step);
         canvas.Line(60,364,520,IM_COL32(118,126,121,100));
-        canvas.Text(focus==19?(draft.fmv_scale==0?"Fill zooms without stretching and crops top/bottom. Cinema bars may remain.":"4:3 preserves the complete movie picture. Logos always keep their original proportions."):
+        canvas.Text(focus==19?(draft.fmv_scale==0?"Fill stretches the complete picture to the screen. Built-in black bars remain.":"4:3 preserves the complete movie picture and original proportions."):
                     focus==18?(textures_available?"Optional HD game texture pack. Keeps HUD and menus unchanged; uses more video memory.":"Not installed. Use Install HD Texture Pack in the launcher, then restart the game."):
                     focus==17?"Weapon FOV: 100% is original. Changes the gun and hands; keeps the world view.":
-                    focus==16?"Reticle size: 100% is original. Applies to the crosshair, not the rest of the HUD.":
+                    focus==16?"Change reticle size and colors for normal aim, enemies, friends and pistol spin.":
                     focus==15?"Sharper original HUD, menus, text and prompts. Keeps the original layout.":
                     focus==14?"Vertical FOV: 53 is original. Applies to gameplay; weapon zoom is preserved.":
                     focus==2?"Aspect ratio changes take effect after restarting the game.":
@@ -921,8 +997,8 @@ void SettingsUi(const ImGuiViewport* view,bool paused){
     const char* status=!message.empty()?message.c_str():trial_graphics::ScalePending()?
         "Rendering quality will update on the next complete scene redraw.":Dirty()?"Changes not applied.":
         settings_pause_player<0?"":settings_player?
-        "FOV applies to Player 2. Other graphics settings are shared.":
-        "FOV applies to Player 1. Other graphics settings are shared.";
+        "FOV and reticle colors apply to Player 2. Other graphics settings are shared.":
+        "FOV and reticle colors apply to Player 1. Other graphics settings are shared.";
     canvas.Center(status,30,429,580,11,IM_COL32(207,217,219,255));
     if(xbox_KeyboardMode()){
         if(confirm_back)FooterPrompts(canvas,{{13,"Select"},{VK_RBUTTON,"Keep editing"}});
@@ -933,13 +1009,15 @@ void SettingsUi(const ImGuiViewport* view,bool paused){
 }
 #include "xbe_controls_ui.inc"
 #include "xbe_language_ui.inc"
+#include "xbe_cheats_ui.inc"
 }
 
 void TrialFrontendPublish(const TrialFrontendFrame& frame){
     // Original profile/name/level screens suit a pad. Keep added settings and
     // desktop actions reachable in the shared main, pause and options lists.
-    const bool owned_options=trial_coop::PauseOwner()>=0&&frame.source.kind==UC_HF_LIST&&frame.list_kind==3;
-    const bool native=xbox_KeyboardMode()||frame.delete_dialog||coop_open.load()||owned_options;
+    const bool owned_pause=trial_coop::PauseOwner()>=0&&
+        ((frame.source.source_kind&0x80000000u)||(frame.source.kind==UC_HF_LIST&&frame.list_kind==3));
+    const bool native=xbox_KeyboardMode()||IsMainMenu(frame)||frame.delete_dialog||coop_open.load()||owned_pause;
     const bool active=TrialFrontendSupported(frame)&&native;bool changed;
     {std::lock_guard lock(context_lock);
         coop_menu.Observe(frame);
@@ -988,7 +1066,7 @@ bool TrialFrontendTakeName(TrialFrontendNameActionData& action){
 static bool ControllerSupplement(){
     return !xbox_KeyboardMode()&&TrialFrontendSupported(frontend)&&
         frontend.source.kind==UC_HF_LIST&&context.owner==frontend.source.owner&&
-        context.screen==frontend.source.screen&&(context.kind==1||context.kind==3);
+        context.screen==frontend.source.screen&&(context.kind==2||context.kind==3);
 }
 void TrialFrontendPad(uint32_t buttons,uint8_t confirm,uint8_t back,int16_t x,int16_t y){
     const bool controls=PanelOpen();
@@ -1069,9 +1147,9 @@ void TrialGraphicsUi() {
         (menu.owner==frame.source.owner&&menu.screen==frame.source.screen&&menu.kind==frame.list_kind));
     const bool current=active&&eligible;
     const bool graphics=eligible&&frame.source.kind==UC_HF_LIST&&frame.list_kind==3;
+    const bool main=eligible&&IsMainMenu(frame);
     if(!xbox_KeyboardMode()&&!current&&eligible&&!PanelOpen()&&!quit_open&&!coop_open){
         const unsigned events=frontend_events.exchange(0);
-        if(menu.kind==1&&(events&128))OpenQuit(frame);
         if(graphics&&(events&(64|128))){
             std::lock_guard lock(context_lock);
             opened=menu;settings_page=(events&128)?1:0;open_requested=true;
@@ -1079,17 +1157,17 @@ void TrialGraphicsUi() {
         }
     }
     if(open_requested.load()) {
-        if(graphics&&SameMenu(menu,opened)){
+        if((settings_page==3?(main&&frame.source.epoch==cheats_epoch):graphics)&&SameMenu(menu,opened)){
             panel_open=true;open_requested=false;frontend_events=0;++navigation_generation;
             TrialGraphicsInputChanged();
             settings_pause_player=trial_coop::PauseOwner();
             settings_player=settings_pause_player<0?0u:unsigned(settings_pause_player);
             const int controls_owner=settings_pause_player>=0?settings_pause_player:(frame.source.source_kind&0x80000000u)?0:-1;
-            if(settings_page==1)ControlsOpen(controls_owner);else if(settings_page==2)LanguageReadDraft();else{ReadDraft();EnumerateModes();}
+            if(settings_page==1)ControlsOpen(controls_owner);else if(settings_page==2)LanguageReadDraft();else if(settings_page==0){ReadDraft();EnumerateModes();}
             message.clear();confirm_back=false;
         }else open_requested=false;
     }
-    if(panel_open&&(!graphics||!SameMenu(menu,opened)||settings_pause_player!=trial_coop::PauseOwner()))Close();
+    if(panel_open&&(!(settings_page==3?(main&&frame.source.epoch==cheats_epoch):graphics)||!SameMenu(menu,opened)||settings_pause_player!=trial_coop::PauseOwner()))Close();
     if(quit_open&&(!eligible||!QuitMatches(frame)||!SameMenu(menu,quit_origin)))CloseQuit();
     const bool transition=!current&&presentation.visible&&presentation.transition;
     const float skip_progress=TrialIntroProgress();
@@ -1114,7 +1192,7 @@ void TrialGraphicsUi() {
         }
     }
     bool health_hud=false;
-    if(!menu.kind&&!current&&!transition&&!TrialGraphicsOpen()&&!TrialIntroPlaying()){
+    if(trial_coop::PauseOwner()<0&&!menu.kind&&!current&&!transition&&!TrialGraphicsOpen()&&!TrialIntroPlaying()){
         const unsigned presentation=trial_coop::Active()?TrialCoopPresentation():0;
         const auto* hud_view=ImGui::GetMainViewport();
         if(presentation!=2&&hud_view->Size.x>0&&hud_view->Size.y>0){
@@ -1139,24 +1217,29 @@ void TrialGraphicsUi() {
                     }
                 }
                 const auto status=TrialHealthPackSnapshot(slot);
-                if(!status.visible){revive_slide[slot]=0;continue;}
+                if(!status.visible||!(status.opacity>0)){revive_slide[slot]=0;continue;}
+                const unsigned alpha=unsigned(std::clamp(status.opacity,0.f,1.f)*255.f+.5f);
+                auto faded=[&](ImU32 color){return (color&~IM_COL32_A_MASK)|(((color>>IM_COL32_A_SHIFT)*alpha/255)<<IM_COL32_A_SHIFT);};
                 const auto profile=trial_controls::Snapshot(slot);
                 const bool keyboard=!slot&&(split||xbox_KeyboardMode());
                 const auto& bindings=profile.health_pack[keyboard?0:1];
                 const unsigned source=bindings[0]?bindings[0]:bindings[1];
+                const bool gesture=!keyboard&&(!source||source==14);
                 const char* binding=keyboard?xbox_KeyboardSourceName(source):trial_controller::Label(source);
                 const bool wide=trial_graphics::Widescreen();
                 const float x=((split?74.f:106.f)+status.bar_extent)*(wide?.75f:1.f)-.5f+6.f*c.sy/c.sx;
                 const float y=split?14.f+slot*240.f:38.f;
                 constexpr float icon_height=16.f;
                 const float icon_width=icon_height*c.sy/c.sx;
-                c.Rect(x,y,icon_width,icon_height,IM_COL32(38,102,49,255));
-                c.Rect(x+icon_width*.4f,y+icon_height*.2f,icon_width*.2f,icon_height*.6f,IM_COL32_WHITE);
-                c.Rect(x+icon_width*.2f,y+icon_height*.4f,icon_width*.6f,icon_height*.2f,IM_COL32_WHITE);
+                c.Rect(x,y,icon_width,icon_height,faded(IM_COL32(38,102,49,255)));
+                c.Rect(x+icon_width*.4f,y+icon_height*.2f,icon_width*.2f,icon_height*.6f,faded(IM_COL32_WHITE));
+                c.Rect(x+icon_width*.2f,y+icon_height*.4f,icon_width*.6f,icon_height*.2f,faded(IM_COL32_WHITE));
                 char label[192];
-                std::snprintf(label,sizeof(label),"%u/%u  [%s]",status.count,status.capacity,binding);
-                c.Text(label,x+icon_width+3.f,y+2,12,status.count?white:muted,94,false,false);
-                DrawRevivePrompt(c,slot,split,status.can_revive,source,binding);
+                std::snprintf(label,sizeof(label),"%u/%u",status.count,status.capacity);
+                const auto color=faded(status.count?white:muted);
+                c.Text(label,x+icon_width+3.f,y+2,12,color,0,false,false);
+                DrawHealthBinding(c,keyboard,source,gesture,binding,x+icon_width+6.f+c.Width(label,12),y-1,color);
+                DrawRevivePrompt(c,slot,split,status.can_revive,gesture?14:source,gesture?trial_language::Ui("Hold Down"):binding);
             }
             if(split)DrawCoopDivider(hud_view);
             ImGui::End();ImGui::PopStyleVar();
@@ -1170,7 +1253,7 @@ void TrialGraphicsUi() {
     else if(quit_open)QuitUi(view);
     else if(panel_open){
         const bool paused=opened.kind==2||(frame.source.source_kind&0x80000000u);
-        if(settings_page==1)ControlsUi(view,paused);else if(settings_page==2)LanguageUi(view,paused);else SettingsUi(view,paused);
+        if(settings_page==1)ControlsUi(view,paused);else if(settings_page==2)LanguageUi(view,paused);else if(settings_page==3)CheatsUi(view);else SettingsUi(view,paused);
     }
     else if(current){
         if(frame.source.kind==UC_HF_OBJECTIVES)ObjectivesUi(frame,view);
@@ -1178,11 +1261,10 @@ void TrialGraphicsUi() {
         else if(frame.source.kind==UC_HF_LIST&&(frame.list_kind>=4&&frame.list_kind<=6))OriginalSettingsUi(frame,view);
         else if(frame.source.kind==TRIAL_HF_NAME)NameUi(frame,view);else FrontendUi(frame,view);
     }
-    else if(!xbox_KeyboardMode()&&eligible&&(menu.kind==1||menu.kind==3)){
+    else if(!xbox_KeyboardMode()&&eligible&&menu.kind==3){
         BeginMenu("PC controller shortcuts",view);MenuCanvas canvas(view);
         canvas.Rect(0,440,640,40,IM_COL32(0,0,0,255));
-        if(menu.kind==3)FooterPrompts(canvas,{{0x104,"Graphics"},{0x105,"Controls"}});
-        else FooterPrompts(canvas,{{0x105,"Quit to desktop"}});
+        FooterPrompts(canvas,{{0x104,"Graphics"},{0x105,"Controls"}});
         ImGui::End();ImGui::PopStyleVar();
     }
     else if(transition){

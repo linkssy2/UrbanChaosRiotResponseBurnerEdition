@@ -8,15 +8,23 @@
 #include <cstdio>
 #include <cstring>
 #include <limits>
+#include <vector>
+#include <string>
 #include "kernel/kernel.h"
 namespace kernel {static std::array<uint8_t,0x800000> memory{};}
 namespace mem {bool IsCommitted(uint32_t p){return p<kernel::memory.size();}}
 #include "../common/xbe_coop_pickups.cpp"
 constexpr uint32_t P[2]={0x600000,0x602000},I[2]={0x610000,0x612000},H[2]={0x620000,0x621000};
 constexpr uint32_t W=0x630000,STATE=0x631000,ITEM=0x640000,PROFILE=0x650000,OPTIONS=0x651000;
+constexpr uint32_t CONTROLLER=0x690000,CHANNEL=CONTROLLER+0x3ec;
 constexpr uint32_t DEFS=0x660000,LISTS=0x670000,CELL=0x680000,SP=0x7e0000,ID=123;
 unsigned hud[2]{},sounds[2]{},retired=0,switched[2]{};bool patched=true,button=false;
 uint32_t admitted[2]={P[0],P[1]};
+unsigned presentation=1;
+unsigned TrialCoopPresentation(){return presentation;}
+struct NoticeDraw {float x,y;std::string text;};
+std::vector<NoticeDraw> notice_draws;
+float notice_step=0;
 uint8_t* B(){return kernel::memory.data();}
 uint32_t Read(uint32_t a){uint32_t v;std::memcpy(&v,B()+a,4);return v;}
 void Put(uint32_t a,uint32_t v){std::memcpy(B()+a,&v,4);}
@@ -38,9 +46,22 @@ X86_FUNC(sub_00042ED0){
     assert(Read(ctx.esp+4)==end&&Read(ctx.esp+8)==1);Put(end,Read(value));Put(ctx.ecx+8,end+4);ctx.esp+=16;
 }
 X86_FUNC(sub_000643E0){ctx.eax=OPTIONS;ctx.esp+=4;}
-X86_FUNC(sub_0004A840){ctx.eax=PROFILE;ctx.esp+=4;}
+X86_FUNC(sub_0004A840){ctx.eax=CONTROLLER;ctx.esp+=4;}
 X86_FUNC(sub_001F92B0){const auto p=Read(ctx.esp+4);Put(p,Read(ctx.esp+8));ctx.eax=p;ctx.esp+=4;}
-X86_FUNC(sub_00018140){assert(false);}
+X86_FUNC(sub_00018140){
+    const auto dest=Read(ctx.esp+4);std::strcpy(reinterpret_cast<char*>(base+dest),"Picked up weapon");
+    ctx.eax=dest+16;ctx.esp+=12;
+}
+X86_FUNC(sub_001F9010){x87_push(ctx,notice_step);ctx.esp+=4;}
+X86_FUNC(sub_0004A460){x87_push(ctx,100);ctx.esp+=8;}
+X86_FUNC(sub_00017060){ctx.esp+=8;}
+X86_FUNC(sub_00017160){ctx.esp+=12;}
+X86_FUNC(sub_00017730){ctx.esp+=8;}
+X86_FUNC(sub_000176A0){std::strcpy(reinterpret_cast<char*>(base+Read(ctx.esp+4)),reinterpret_cast<char*>(base+Read(ctx.esp+8)));ctx.esp+=12;}
+X86_FUNC(sub_00017E40){x87_push(ctx,12);ctx.esp+=20;}
+X86_FUNC(sub_00018DE0){
+    notice_draws.push_back({X86_MEMF32(ctx.esp+8),X86_MEMF32(ctx.esp+12),reinterpret_cast<char*>(base+Read(ctx.esp+4))});ctx.esp+=24;
+}
 X86_FUNC(sub_000BFE00){++switched[Owner(ctx.ecx)];ctx.esp+=12;}
 X86_FUNC(sub_000BC560){Owner(ctx.ecx);ctx.esp+=4;}
 X86_FUNC(sub_00216BD0){++sounds[Owner(ctx.ecx)];ctx.esp+=16;}
@@ -53,10 +74,12 @@ X86_FUNC(sub_00210890){ctx.esp+=4;}
 void x86_icall(X86Context& ctx,uint8_t* base,uint32_t fn){
     if(fn==0xef600){sub_000EF600(ctx,base);return;}
     if(fn==0x1eefd0){sub_001EEFD0(ctx,base);return;}
-    if(fn==0xf001){ctx.eax=0;ctx.esp+=16;return;} // profile resource query
+    if(fn==0xf001){sub_0004AB90(ctx,base);return;} // actual controller text-channel query
+    if(fn==0x4a290){sub_0004A290(ctx,base);return;}
     if(fn==0xf002){
         assert(ctx.ecx==H[0]||ctx.ecx==H[1]);++hud[ctx.ecx==H[1]];ctx.esp+=12;return;
     }
+    if(fn!=0xf003)std::fprintf(stderr,"unexpected virtual %x this=%x return=%x\n",fn,ctx.ecx,Read(ctx.esp));
     assert(fn==0xf003&&ctx.ecx==ITEM&&Read(ctx.esp+12)==4);
     const auto sender=Read(ctx.esp+16),payload=Read(ctx.esp+8);
     const auto collector=Read(sender);assert(collector==100||collector==101);
@@ -70,6 +93,10 @@ void x86_icall(X86Context& ctx,uint8_t* base,uint32_t fn){
 X86_FUNC(sub_000C5040){if(patched)CoopPickup(ctx,base);else OriginalPickup(ctx,base);}
 void Setup(unsigned type=3,bool ammo=false,bool owned=true){
     kernel::memory.fill(0);trial_coop::Reset();trial_coop::SetAvailable(true);assert(trial_coop::Request());trial_coop::SetActive(true);
+    TrialCoopPickupNoticesReset(CONTROLLER);presentation=1;notice_draws.clear();notice_step=0;
+    // ORIGINAL_NOTICE_CONSTANTS
+    Put(0x509a60,CONTROLLER);Put(CONTROLLER,PROFILE+0x900);
+    Put(CHANNEL,0x45055c);Put(0x450560,0x4a290);Real(CHANNEL+0x3c8,140);Put(CHANNEL+0x3cc,4);Real(0x4e8394,640);
     patched=true;button=false;retired=0;hud[0]=hud[1]=sounds[0]=sounds[1]=switched[0]=switched[1]=0;
     Put(0x51c4dc,W);Put(W+4,STATE);Put(STATE+0x3c+(ID&0x3ff)*8,ID);Put(STATE+0x40+(ID&0x3ff)*8,ITEM);
     Put(ITEM,ammo?0x47f6e8:0x460898);Put(ITEM+0x54,ID);Put(ITEM+0xd0,type);Put(ITEM+0x98,type);Put(CELL,ID);
@@ -96,7 +123,51 @@ void Collect(unsigned s,bool fixed=true,bool query=false){
     assert(std::memcmp(partner.data(),B()+P[1-s],partner.size())==0&&std::memcmp(partner_weapons.data(),B()+I[1-s],partner_weapons.size())==0);
     assert(_mm_getcsr()==csr);
 }
+void DrawNotice(){
+    notice_draws.clear();X86Context c{};c.esp=SP;c.ecx=CHANNEL;c.fcw=0x37f;
+    const auto y=Read(CHANNEL+0x3c8);sub_0004BA80(c,B());assert(c.esp==SP+4&&Read(CHANNEL+0x3c8)==y);
+}
+void ExpireNotice(){
+    X86Context c{};c.esp=SP;c.ecx=CHANNEL;c.fcw=0x37f;notice_step=100;
+    sub_0004A3A0(c,B());assert(c.esp==SP+4);notice_step=0;
+}
+void AppendNotice(unsigned owner,bool urgent=false,unsigned dedup=0){
+    X86Context c{};c.esp=SP;c.ecx=owner<2?P[owner]:0;
+    TrialCoopPickupScope pickup(c.ecx,B());c.ecx=CHANNEL;
+    const uint32_t args[]={0xffffffffu,unsigned(urgent),0,dedup,0xffffffffu,0xffffffffu,0x6a0000,0x6a0000,0,0};
+    for(unsigned i=0;i<10;++i)Put(SP+4+4*i,args[i]);
+    sub_0004A290(c,B());assert(c.esp==SP+44);
+    if(c.eax)std::strcpy(reinterpret_cast<char*>(B()+c.eax),"Queued pickup");
+}
+void CheckNotices(){
+    for(unsigned owner:{0u,1u}){
+        // Negative witness: the unmodified producer's large notice stays at P1's Y.
+        Setup(3,false,false);Collect(owner,false);DrawNotice();assert(notice_draws.size()==3);
+        const auto original=notice_draws;assert(Read(CHANNEL+0x3c4)==1);
+        Setup(3,false,false);Collect(owner);DrawNotice();assert(notice_draws.size()==original.size());
+        for(unsigned i=0;i<original.size();++i){assert(notice_draws[i].text==original[i].text&&notice_draws[i].x==original[i].x);assert(notice_draws[i].y==original[i].y+240*owner);}
+        assert(notice_draws[1].text=="Picked up weapon"&&notice_draws[1].y>=owner*240&&notice_draws[1].y<(owner+1)*240);
+        presentation=2;DrawNotice();assert(notice_draws.empty());presentation=1;
+        Put(P[owner]+0x54,999);DrawNotice();assert(notice_draws.empty());Put(P[owner]+0x54,100+owner);
+        admitted[owner]=0;DrawNotice();assert(notice_draws.empty());admitted[owner]=P[owner];
+        DrawNotice();assert(!notice_draws.empty());ExpireNotice();DrawNotice();assert(notice_draws.empty());
+        Setup(3,false,false);trial_coop::SetActive(false);Collect(owner);DrawNotice();assert(notice_draws[1].y==original[1].y);
+    }
+    Setup();AppendNotice(2);DrawNotice();const float baseline=notice_draws[1].y;
+    Setup();AppendNotice(1);AppendNotice(0);AppendNotice(2);AppendNotice(1);AppendNotice(0);
+    for(unsigned owner:{1u,0u,0u,1u,0u}){DrawNotice();assert(notice_draws[1].y==(baseline+240*owner));ExpireNotice();}
+    assert(!Read(CHANNEL+0x3c4));
+    Setup();AppendNotice(1);AppendNotice(0);AppendNotice(1);AppendNotice(2,true);assert(Read(CHANNEL+0x3c4)==2);
+    DrawNotice();assert(notice_draws[1].y==baseline+240);ExpireNotice();DrawNotice();assert(notice_draws[1].y==baseline);
+    Setup();AppendNotice(1,false,123);AppendNotice(0,false,123);assert(Read(CHANNEL+0x3c4)==1);DrawNotice();assert(notice_draws[1].y==baseline+240);
+    TrialCoopPickupNoticesReset(CONTROLLER);DrawNotice();assert(notice_draws[1].y==baseline);
+    // Reset/reuse of the same controller, world changes, full queue rejection.
+    Setup();for(unsigned i=0;i<5;++i)AppendNotice(1);AppendNotice(0);DrawNotice();assert(notice_draws[1].y==baseline+240);
+    Put(0x51c4dc,W+0x100);DrawNotice();assert(notice_draws[1].y==baseline);
+    puts("PASS large weapon notice: original producer/query/FIFO/draw, both owners, FIFO shifts, overwrite/dedup/full queue, stale actor, cinematic suppression, reset and single-player isolation");
+}
 int main(){
+    CheckNotices();
     for(bool ammo:{false,true})for(unsigned first=0;first<2;++first){
         // Witness: native ID resolution still sees an item marked for deletion,
         // so two local actors can both receive it before the next world cleanup.

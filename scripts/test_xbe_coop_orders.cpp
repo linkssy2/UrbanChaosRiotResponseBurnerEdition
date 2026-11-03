@@ -14,6 +14,8 @@
 #include <cstdlib>
 #include <cstring>
 #include <stdexcept>
+#include <string>
+#include <unordered_map>
 #include "kernel/kernel.h"
 namespace kernel {static std::array<uint8_t,0x800000> memory{};uint8_t* g_base=memory.data();}
 namespace mem {bool IsCommitted(uint32_t page){return page<kernel::memory.size();}}
@@ -35,7 +37,12 @@ void Put(uint32_t a,uint32_t v){std::memcpy(B()+a,&v,4);}
 float Real(uint32_t a){float v;std::memcpy(&v,B()+a,4);return v;}
 void Float(uint32_t a,float v){std::memcpy(B()+a,&v,4);}
 uint32_t TrialCoopPlayer(unsigned s){return s<2?admitted[s]:0;}
+#include "../common/xbe_health_packs.cpp"
 #include "../common/xbe_coop_orders.cpp"
+uint32_t TrialCoopNearbyDownedPlayer(const uint8_t*,uint32_t){return 0;}
+bool TrialCoopDownedPosition(const uint8_t*,uint32_t,float (&)[3]){return false;}
+unsigned TrialCoopPresentation(){return 0;}
+bool TrialCoopRevivePlayer(X86Context&,uint8_t*,uint32_t){assert(false);return false;}
 // ORIGINAL_DECLARATIONS
 static uint32_t Allocate(uint32_t bytes){const uint32_t p=heap;heap+=(bytes+15)&~15u;assert(heap<0x700000);return p;}
 static uint32_t Find(uint32_t m,uint32_t id){const uint32_t h=Read(m+0xac);for(uint32_t n=Read(h);n!=h;n=Read(n))if(Read(n+8)==id)return n;return 0;}
@@ -43,6 +50,14 @@ static unsigned Owner(uint32_t m){assert(m==M[0]||m==M[1]);return m==M[1];}
 static void RemoveSprite(uint32_t m,uint32_t id){const auto h=Read(m+0xbc);for(auto n=Read(h);n!=h;n=Read(n))if(Read(n+8)==id){Put(Read(n+4),Read(n));Put(Read(n)+4,Read(n+4));Put(m+0xc0,Read(m+0xc0)-1);return;}}
 static void RetireClient(uint32_t m,uint32_t id){const auto n=Find(m,id);if(!n)return;for(auto a=Read(n+0x10);a<Read(n+0x14);a+=0x1c)RemoveSprite(m,Read(a+0x14));Put(Read(n+4),Read(n));Put(Read(n)+4,Read(n+4));Put(m+0xb0,Read(m+0xb0)-1);}
 static void Invoke(uint32_t fn,uint32_t self,std::initializer_list<uint32_t> args);
+// Text allocation/comparison are resource boundaries; the complete retail
+// HealOrderClient property branches, result stores and unwind still execute.
+static std::unordered_map<uint32_t,std::string> text_values;
+X86_FUNC(sub_00011EF0){const auto p=Read(ctx.esp+4),n=Read(ctx.esp+8);text_values[ctx.ecx]=std::string(reinterpret_cast<char*>(B()+p),n);Put(ctx.ecx+0x14,n);ctx.eax=ctx.ecx;ctx.esp+=12;}
+X86_FUNC(sub_00015940){assert(Read(ctx.esp+4)==0);const auto p=Read(ctx.esp+12),n=Read(ctx.esp+16);ctx.eax=text_values.at(ctx.ecx).compare(0,Read(ctx.esp+8),reinterpret_cast<char*>(B()+p),n);ctx.esp+=20;}
+X86_FUNC(sub_0005D910){ctx.eax=text_values.at(Read(ctx.esp+4))==reinterpret_cast<char*>(B()+Read(ctx.esp+8));ctx.esp+=4;}
+X86_FUNC(sub_00088040){text_values.erase(ctx.ecx);ctx.esp+=4;}
+X86_FUNC(sub_002D5CCD){assert(false);ctx.esp+=4;}
 
 // Help-list construction/insert/clear execute the pinned original callers;
 // allocator and text-resource creation are explicit boundary stubs.
@@ -132,7 +147,7 @@ X86_FUNC(sub_001F7A70){
 // Scene boundaries consume the native routine's actual ray, never a seeded
 // manager target. Their two camera origins deliberately identify different rays.
 static unsigned RayOwner(uint32_t origin){
-    const float x=Real(origin);assert(x==0.f||x==1000.f);return x==1000.f;
+    const float x=Real(origin);assert(x==0.f||x==100.f||x==1000.f);return x!=0.f;
 }
 X86_FUNC(sub_00214230){
     const auto origin=Read(ctx.esp+4),end=Read(ctx.esp+8);const unsigned slot=RayOwner(origin);
@@ -166,6 +181,7 @@ X86_FUNC(sub_00045490){
 }
 X86_FUNC(sub_0020A140){assert(ctx.ecx==NPC[0]||ctx.ecx==NPC[1]);assert(Read(ctx.esp+4)==0x1000000);++marks[ctx.ecx==NPC[1]];ctx.esp+=8;}
 X86_FUNC(sub_00159150){if(candidate)Coop_00159150(ctx,base);else Original_00159150(ctx,base);}
+X86_FUNC(sub_00040DD0){if(candidate)Coop_00040DD0(ctx,base);else Original_00040DD0(ctx,base);}
 X86_FUNC(sub_00158EF0){Coop_00158EF0(ctx,base);}
 X86_FUNC(sub_00158D90){Coop_00158D90(ctx,base);}
 X86_FUNC(sub_001F90A0){
@@ -179,6 +195,9 @@ X86_FUNC(sub_001F90A0){
 void x86_resume(X86Context&,uint8_t*,const X86Resume&){std::abort();}
 void x86_icall(X86Context& c,uint8_t* b,uint32_t fn){
     switch(fn){
+    case 0x1682b0:Coop_001682B0(c,b);return;
+    case 0x184200:Coop_00184200(c,b);return;
+    case 0x207d70:{const auto id=Read(c.esp+4),entry=STATE+0x3c+(id&1023)*8;c.eax=Read(entry)==id?Read(entry+4):0;c.esp+=8;return;}
     case 0x140860:if(candidate)Coop_00140860(c,b);else Original_00140860(c,b);return;
     case 0x140e10:if(candidate)Coop_00140E10(c,b);else Original_00140E10(c,b);return;
     case 0x1407f0:sub_001407F0(c,b);return;
@@ -215,6 +234,9 @@ static X86Context Context(uint32_t self){X86Context c{};c.ecx=self;c.esp=SP;c.eb
 static void Identity(uint32_t p,uint32_t id){Put(p+0x54,id);const auto e=STATE+0x3c+(id&1023)*8;Put(e,id);Put(e+4,p);}
 static void Seed(){
     kernel::memory.fill(0);trial_coop::Reset();trial_coop::SetAvailable(true);assert(trial_coop::Request());trial_coop::SetActive(true);
+    health_packs::world=0;health_packs::medics.clear();health_packs::medic_owner=0;health_packs::delivery=nullptr;text_values.clear();
+    for(auto& p:health_packs::players)p={};
+    for(auto& r:health_packs::restored)r={};
     candidate=true;fail_copy=false;throw_text=medic_present=false;attached=chosen=0;heap=0x620000;
     selectable_available=true;target_positions={{{0,0,100},{1000,0,-100}}};
     for(unsigned i=0;i<2;++i){look_queries[i]=filter_queries[i]=ray_queries[i]=marks[i]=0;target_types[i]=3;
@@ -237,6 +259,8 @@ static void Seed(){
         Put(HELP[slot],0x46b4d0);Identity(HELP[slot],500+slot);Put(HELP[slot]+0x58,100+slot);Put(HELP[slot]+0x80,0x25);
         Put(P[slot]+0x7f0,500+slot);health[slot]=100;orders_available[slot]=false;clears[slot]=0;
         Put(M[slot]+0xec,400+slot);Put(M[slot]+0xe8,3);
+        Float(P[slot]+0x9c,100);Float(P[slot]+0xa0,100);Float(P[slot]+0x40,slot?1000.f:0.f);
+        auto created=Context(P[slot]);created.eax=P[slot];TrialHealthPackCreated(created,B());
     }
     Put(0x516124,M[1]+0xb4);
     // Resource IDs normally come from 3A7D20/string interning. Text construction
@@ -319,6 +343,106 @@ static bool HealPlayer(unsigned slot,bool scoped=true,bool fixed=true){
     else {if(fixed)Coop_00168210(c,B());else Original_00168210(c,B());}
     assert(c.esp==SP+4&&c.esi==saved.esi&&c.edi==saved.edi&&c.ebp==saved.ebp&&c.ebx==saved.ebx);return uint8_t(c.eax)!=0;
 }
+constexpr uint32_t MEDIC=NPC[1],MEDIC_ROOT=0x612000,DIALOGUE=0x613000,OFFER=0x614000,CONTROLLER=0x615000;
+static void MedicSeed(){
+    Seed();Register(0);Put(C,0x46e960);Put(C+0x58,600);Put(0x46e960+0x68,0x1682b0);
+    Identity(MEDIC_ROOT,600);Put(MEDIC_ROOT,0x46eef0);Put(MEDIC_ROOT+0x88,MEDIC);
+    Identity(DIALOGUE,601);Put(DIALOGUE,0x46e9d8);Put(DIALOGUE+0xd0,CONTROLLER);Put(DIALOGUE+0xd4,MEDIC);
+    Put(DIALOGUE+0xf8,0xffffffffu);Put(DIALOGUE+0x100,602);Put(CONTROLLER+0x1c,600);
+    Identity(OFFER,602);Put(OFFER,0x4727a0);Put(OFFER+0x58,601);Put(OFFER+0x98,200);Put(0x4727a0+0x68,0x184200);
+    Put(W+0xf74,3);Put(W+0xf78,3);Float(MEDIC+0x48,100);
+    // Two independent native rays see the same nearby medic; a farther dummy
+    // target keeps the original two-object scene query boundary intact.
+    target_positions={{{0,0,10000},{0,0,100}}};target_types[1]=4;
+    Float(P[1]+0x40,100);look_matrices[1][12]=100;look_matrices[1][8]=-std::sqrt(.5f);look_matrices[1][10]=std::sqrt(.5f);
+    ComputeLook(0);ComputeLook(1);assert(Read(M[0]+0xec)==301&&Read(M[1]+0xec)==301);
+}
+static bool OfferProperty(unsigned slot,uint32_t key,bool fixed=true){
+    auto update=Context(M[slot]);TrialCoopOrdersScope scope(update,B());
+    auto c=Context(OFFER);c.fs_base=0x710000;Put(c.fs_base,0x12345678);Put(SP+4,key);Put(SP+8,DATA+0x700);
+    Put(DATA+0x700,0);Put(DATA+0x704,0);const unsigned csr=_mm_getcsr();
+    if(fixed)Coop_001842F0(c,B());else Original_001842F0(c,B());
+    assert(c.esp==SP+12&&c.ebp==0x1111&&c.esi==0x2222&&c.edi==0x3333&&c.ebx==0x4444);
+    assert(_mm_getcsr()==csr&&Read(c.fs_base)==0x12345678&&(c.eax&255)==1&&Read(DATA+0x700)==3);
+    return B()[DATA+0x704]!=0;
+}
+static void Command(unsigned slot,uint32_t client,uint32_t command){
+    auto c=Context(client);Put(DATA+0x720,command);Put(DATA+0x724,200+slot);Put(SP+4,DATA+0x720);Put(SP+8,DATA+0x724);
+    const unsigned csr=_mm_getcsr();Coop_00040D60(c,B());
+    assert(c.esp==SP+12&&c.ebp==0x1111&&c.esi==0x2222&&c.edi==0x3333&&c.ebx==0x4444&&_mm_getcsr()==csr);
+}
+static void MedicCollection(){
+    constexpr uint32_t properties[]={0x47278c,0x47277c,0x46a894};
+    MedicSeed();assert(!HealPlayer(0,true,false)&&!HealPlayer(1,true,false));
+    assert(HealPlayer(0)&&HealPlayer(1)&&health_packs::medics.empty());
+    health_packs::players[0].count=3;assert(!HealPlayer(0)&&HealPlayer(1));health_packs::players[0].count=1;
+    Put(W+0xf74,0);assert(!HealPlayer(0)&&!HealPlayer(1));Put(W+0xf74,3);
+    Put(C+0xb4,4);assert(!HealPlayer(0)&&!HealPlayer(1));Put(C+0xb4,0);
+    Float(P[0]+0x40,1000);assert(!HealPlayer(0)&&HealPlayer(1));Float(P[0]+0x40,0);
+    blocked[0]=true;ComputeLook(0);assert(!HealPlayer(0)&&HealPlayer(1));blocked[0]=false;ComputeLook(0);
+    look_matrices[0][8]=1;look_matrices[0][10]=0;ComputeLook(0);assert(!HealPlayer(0)&&HealPlayer(1));
+    look_matrices[0][8]=0;look_matrices[0][10]=1;ComputeLook(0);
+    Float(P[0]+0x9c,0);assert(!HealPlayer(0)&&HealPlayer(1));Float(P[0]+0x9c,100);
+    assert(!HealPlayer(0,false)); // No co-op query context may borrow saved owner.
+    for(unsigned requester=0;requester<2;++requester){
+        MedicSeed();Command(requester,C,4);
+        assert(Read(C+0xb4)==4&&Read(C+0xb0)==4&&Read(C+0x98)==200+requester&&complete[requester]==1);
+        assert(health_packs::medics.size()==1&&health_packs::medics[0].owner==P[requester]);
+        // A second request and pure queries cannot redirect the first handoff,
+        // even when the partner is closer and requests in the opposite order.
+        Command(1-requester,C,4);assert(Read(C+0x98)==200+requester&&complete[1-requester]==0);
+        Float(P[1-requester]+0x48,99);auto behaviour=Context(DIALOGUE);
+        {TrialHealthPackMedicScope scope(behaviour,B(),true);auto lookup=Context(0);TrialHealthPackMedicPlayer(lookup,B(),false);assert(lookup.eax==100+requester);}
+        // Native registration is an explicit list boundary here: offer clients
+        // already registered to both independent managers share one recipient.
+        for(unsigned slot=0;slot<2;++slot){auto node=Allocate(0x20),head=Read(M[slot]+0xac);Put(node,Read(head));Put(node+4,head);Put(Read(head)+4,node);Put(head,node);Put(node+8,602);}
+        for(auto property:properties){
+            assert(OfferProperty(0,property,false)&&OfferProperty(1,property,false)); // Failing retail witness.
+            assert(OfferProperty(requester,property)&&!OfferProperty(1-requester,property));
+        }
+        assert(Read(OFFER+0x98)==200&&health_packs::medics[0].owner==P[requester]);
+        blocked[requester]=true;ComputeLook(requester);for(auto property:properties)assert(!OfferProperty(requester,property));
+        blocked[requester]=false;ComputeLook(requester);
+        health_packs::players[requester].count=3;
+        assert(!OfferProperty(requester,properties[0])&&OfferProperty(requester,properties[1])&&!OfferProperty(requester,properties[2]));
+        Command(1-requester,OFFER,6);assert(Read(OFFER+0xb4)==0&&Read(OFFER+0x98)==200);
+        health_packs::players[requester].count=1;Put(W+0xf74,0);
+        assert(!OfferProperty(requester,properties[0])&&OfferProperty(requester,properties[1])&&!OfferProperty(requester,properties[2]));Put(W+0xf74,3);
+        Command(requester,OFFER,5);assert(Read(OFFER+0xb4)==5&&Read(OFFER+0x98)==200+requester);
+        // Identity reuse/stale manager must not attach an old offer to either player.
+        Put(P[requester]+0x54,999);for(auto property:properties)assert(!OfferProperty(requester,property)&&!OfferProperty(1-requester,property));
+    }
+    MedicSeed();trial_coop::SetActive(false);assert(!HealPlayer(0,true,false)&&HealPlayer(0));
+    Command(0,C,4);assert(Read(C+0xb4)==4&&health_packs::medics[0].owner==P[0]);
+    std::puts("medic orders: actual inventory helper + native availability/offer/command bodies passed full-health/capacity/stock, independent ray/range/occlusion, retained initiator, no cross-view forced wheel, stale identity and SP admission");
+}
+static void MedicRepeatHint(){
+    for(unsigned first=0;first<2;++first){
+        MedicSeed();medic_present=true;
+        B()[DATA+0x500+0x128]=B()[DATA+0x500+0x129]=1;
+        assert(HealPlayer(0)&&HealPlayer(1));
+        // Saved tutorial history suppresses the old hint despite available packs.
+        auto original=Context(HELP[first]);{
+            TrialCoopHelpScope scope(original,B());Original_00140FB0(original,B());
+        }
+        assert(!(original.eax&255));
+        HelpUpdate(first);assert(HelpCount(first)>0&&Read(HELP[first]+0x80)==0x18);
+        HelpUpdate(1-first);assert(HelpCount(1-first)>0&&Read(HELP[1-first]+0x80)==0x18);
+        for(unsigned tick=0;tick<600;++tick)HelpUpdate(first);
+        assert(HelpCount(first)>0&&Read(HELP[first]+0x80)==0x18);
+        // Look-away, capacity and stock remain per-view eligibility gates.
+        blocked[first]=true;ComputeLook(first);HelpUpdate(first);assert(!HelpCount(first)&&HelpCount(1-first)>0);
+        blocked[first]=false;ComputeLook(first);HelpUpdate(first);assert(HelpCount(first)>0);
+        health_packs::players[first].count=3;HelpUpdate(first);assert(!HelpCount(first)&&HelpCount(1-first)>0);
+        health_packs::players[first].count=1;Put(W+0xf74,0);
+        HelpUpdate(0);HelpUpdate(1);assert(!HelpCount(0)&&!HelpCount(1));
+        assert(B()[DATA+0x500+0x128]==1&&B()[DATA+0x500+0x129]==1);
+    }
+    MedicSeed();medic_present=true;trial_coop::SetActive(false);
+    B()[DATA+0x500+0x128]=1;HelpUpdate(0);
+    assert(HelpCount(1)>0&&Read(HELP[0]+0x80)==0x18); // Native SP singleton.
+    std::puts("medic hints: saved tutorial history, repeated requests, both viewers, looking away, full inventory, empty stock and SP passed");
+}
 static void HelpRouting(){
     // The native constructor leaves the global pointing to the second HUD.
     // Original P1 publication goes to P2, and P2's no-help update erases it.
@@ -343,18 +467,6 @@ static void HelpRouting(){
     for(unsigned slot=0;slot<2;++slot){ComputeLook(slot);HelpUpdate(slot);assert(HelpCount(slot)>0&&Read(HELP[slot]+0x80)==0x19);}
     look_matrices[0][8]=1;look_matrices[0][10]=0;ComputeLook(0);const auto partner=HelpCount(1);HelpUpdate(0);
     assert(!HelpCount(0)&&HelpCount(1)==partner&&!Eligible(0)&&Eligible(1)&&!chosen);
-    // Native 'heal player' threshold/target/busy rules use viewer health.
-    for(unsigned viewer=0;viewer<2;++viewer){
-        Seed();Register(1-viewer);Put(M[viewer]+0xe8,4);Put(M[1-viewer]+0xe8,4);
-        health[viewer]=25;health[1-viewer]=100;assert(HealPlayer(viewer));
-        assert(!HealPlayer(1-viewer));health[viewer]=100;assert(!HealPlayer(viewer));
-        health[viewer]=25;Put(C+0xb4,4);assert(!HealPlayer(viewer));Put(C+0xb4,0);
-        Put(M[viewer]+0xe8,0);assert(!HealPlayer(viewer));Put(M[viewer]+0xe8,4);
-        assert(Read(C+0x98)==201-viewer); // Look/health queries never take over an issued command.
-    }
-    Seed();Register(1);Put(M[1]+0xe8,4);health[0]=100;health[1]=25;
-    assert(!HealPlayer(1,true,false)&&HealPlayer(1)&&!HealPlayer(1,false));
-    trial_coop::SetActive(false);assert(!HealPlayer(1));
     // Scope and identity failures do not publish into the last singleton.
     for(unsigned damage=0;damage<5;++damage){
         Seed();Invoke(0x1407f0,HELP[1],{0x46b660,0});const auto n=HelpCount(1);
@@ -376,7 +488,7 @@ static void HelpRouting(){
     std::puts("help prompts: native singleton regression, own publication/event/clear, native look-away/medic eligibility, stale ownership, nested unwind and SP fallback passed (text resources are boundary stubs)");
 }
 int main(){
-    NativeLookSelection();HelpRouting();
+    NativeLookSelection();HelpRouting();MedicCollection();MedicRepeatHint();
     // Negative witness: P1 registers commands, but both HUDs dispatch P2's
     // last-constructed empty list. Merely replacing key glyphs cannot fix it.
     Seed();candidate=false;Register(0);assert(attached==1&&Find(M[0],300)&&!Find(M[1],300));Hud(0,false);Hud(1,false);assert(drawn[0]==0&&drawn[1]==0);

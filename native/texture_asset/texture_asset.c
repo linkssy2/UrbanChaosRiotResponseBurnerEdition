@@ -6,22 +6,38 @@ static uint32_t read32(const uint8_t *p) {
     return (uint32_t)p[0] | (uint32_t)p[1]<<8 | (uint32_t)p[2]<<16 | (uint32_t)p[3]<<24;
 }
 
-/* The existing proven xbox_unswizzle_rect masked-increment kernel, narrowed
- * to one/four-byte pixels with memcpy to avoid alignment/aliasing assumptions.
- * Provenance: third_party/xboxrecomp/src/d3d/d3d8_swizzle.h. */
-static void linearize(uint8_t *dst, const uint8_t *src, uint32_t w, uint32_t h, uint32_t bytes) {
-    uint32_t mx=0, my=0, slot=1, oy=0;
-    for (uint32_t bit=1; bit<w || bit<h; bit<<=1) {
-        if(bit<w) { mx|=slot; slot<<=1; }
-        if(bit<h) { my|=slot; slot<<=1; }
+/* 2D C adaptation of SwizzleMasks/Deposit/DecodeLevel from
+ * TGP482/XboxXBERecomp runtime/gpu/texture.cpp, revision
+ * c1f7d60c8728c6151bcfbb1d05e397eaf0618dc7.
+ * Copyright (c) 2026 TGP482, MIT; see the bundled XboxXBERecomp license.
+ * Keep P8 indices and BGRA bytes intact; palette expansion belongs to the draw. */
+static uint32_t texture_log2(uint32_t size) {
+    uint32_t bits=0;
+    while((1u<<bits)<size) ++bits;
+    return bits;
+}
+static uint32_t texture_deposit(uint32_t value, uint32_t mask) {
+    uint32_t result=0;
+    for(uint32_t bit=1; mask; bit<<=1) {
+        uint32_t low=mask & (~mask+1u);
+        if(value&bit) result|=low;
+        mask&=mask-1;
     }
+    return result;
+}
+static void linearize(uint8_t *dst, const uint8_t *src, uint32_t w, uint32_t h, uint32_t bytes) {
+    uint32_t mx=0, my=0, bit=1, lx=texture_log2(w), ly=texture_log2(h);
+    uint32_t xo[4096]; /* uc_texture_decode admits dimensions up to 4096. */
+    for(uint32_t i=0; i<lx || i<ly; ++i) {
+        if(i<lx) { mx|=bit; bit<<=1; }
+        if(i<ly) { my|=bit; bit<<=1; }
+    }
+    for(uint32_t x=0; x<w; ++x) xo[x]=texture_deposit(x,mx);
     for(uint32_t y=0; y<h; ++y) {
-        uint32_t ox=0;
+        const uint32_t oy=texture_deposit(y,my);
         for(uint32_t x=0; x<w; ++x) {
-            memcpy(dst+((size_t)y*w+x)*bytes, src+(size_t)(ox+oy)*bytes, bytes);
-            ox=(ox-mx)&mx;
+            memcpy(dst+((size_t)y*w+x)*bytes, src+(size_t)(xo[x]|oy)*bytes, bytes);
         }
-        oy=(oy-my)&my;
     }
 }
 

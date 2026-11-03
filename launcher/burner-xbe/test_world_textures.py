@@ -11,7 +11,7 @@ from types import SimpleNamespace
 import unittest.mock as mock
 import zipfile
 HERE = Path(__file__).resolve().parent
-sys.path[:0] = [str(HERE), str(HERE.parents[1] / 'third_party/xboxrecomp/tools/xiso')]
+sys.path.insert(0, str(HERE))
 from world_textures import install
 
 

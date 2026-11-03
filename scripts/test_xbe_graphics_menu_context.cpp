@@ -1,11 +1,19 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <initializer_list>
 using std::isfinite;
 
 static uint8_t ram[0x800000];
+struct X86Context {};
+static X86Context context,*regs=&context;
+static uint64_t cheats_epoch;
+void TrialCheatsUpdate(X86Context& c,uint8_t* b,uint64_t epoch){
+    if(&c!=regs||b!=ram)std::abort();cheats_epoch=epoch;
+}
+void TrialCheatsInvalidate(){cheats_epoch=0;}
 size_t g_xbox_total_ram=sizeof(ram);
 #define MEM8(a) (ram[uint32_t(a)])
 #define MEM32(a) (*(uint32_t*)(ram+uint32_t(a)))
@@ -128,5 +136,18 @@ int main(){
     CHECK(MEM8(0x5152e5)==0&&MEM8(0x5152e1)==1&&MEM32(0x5152dc)==75&&MEM32(0x5152d8)==35);
     CHECK(MEM8(0x5152d5)==0x5a&&MEM8(0x5152e2)==0x5a);
     GraphicsMenuPublish();CHECK(!profile_seen);
+    // Cheat requests use the exact frontend epoch, not a separately sampled
+    // main-menu identity. Mismatched/transitioning/deleted screens revoke them.
+    hf_view={};hf_view.kind=UC_HF_LIST;hf_view.epoch=71;
+    hf_view.screen=Screen;hf_view.owner=Owner;
+    GraphicsMenuPublish({Manager,Screen,Owner,1});CHECK(cheats_epoch==71);
+    hf_view.epoch=72;GraphicsMenuPublish({Manager,Screen,Owner,1});CHECK(cheats_epoch==72);
+    hf_view.screen=Screen+4;GraphicsMenuPublish({Manager,Screen,Owner,1});CHECK(!cheats_epoch);
+    hf_view.screen=Screen;hf_view.owner=Owner+4;GraphicsMenuPublish({Manager,Screen,Owner,1});CHECK(!cheats_epoch);
+    hf_view.owner=Owner;hf_view.source_kind=UC_HF_TRANSITION;
+    GraphicsMenuPublish({Manager,Screen,Owner,1});CHECK(!cheats_epoch);
+    hf_view.source_kind=0;GraphicsMenuPublish({Manager,Screen,Owner,2});CHECK(!cheats_epoch);
+    GraphicsMenuPublish({Manager,Screen,Owner,3});CHECK(!cheats_epoch);
+    GraphicsMenuPublish({Manager,Screen,Owner,1});GraphicsMenuDestroy(Manager);CHECK(!cheats_epoch);
     std::puts("graphics menu context: qualified source menus, transitions, modals, destruction and original clicks passed");
 }

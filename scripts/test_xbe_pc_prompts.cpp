@@ -108,6 +108,15 @@ static void SnapshotChecks(){
     bindings[24][1]=0;std::strcpy(labels[24],"Unbound");
     CHECK(TrialPromptSnapshot(1,out,2)&&!out.bindings[12]&&!std::strcmp(out.labels[12],"Unbound"));
     bindings[24][0]=VK_MBUTTON;bindings[24][1]=0;std::strcpy(labels[24],"Middle mouse");
+    // Context hints use the direct order key, not the independent mouse gesture.
+    for(unsigned source:{unsigned(VK_UP),unsigned('T'),unsigned(VK_XBUTTON1),0u}){
+        bindings[12][0]=0;bindings[12][1]=source;
+        std::strcpy(labels[12],source?"Context":"Unbound");
+        CHECK(TrialPromptSnapshot(1,out,3)&&out.bindings[12]==source&&!std::strcmp(out.labels[12],labels[12]));
+        CHECK(TrialPromptSnapshot(1,out,2)&&out.bindings[12]==VK_MBUTTON);
+        CHECK(TrialPromptSnapshot(2,out,3)&&out.bindings[12]==VK_MBUTTON);
+    }
+    bindings[12][0]='T';bindings[12][1]=0;std::strcpy(labels[12],"T");
     order_held=true;order_x=-61;order_y=3;
     for(unsigned i=0;i<100;++i){CHECK(TrialPromptSnapshot(2,out)&&out.held&&out.x==-60&&out.y==2&&out.direction==4);}
     CHECK(order_phase==3&&order_buttons==0&&order_selection==0&&order_x==-61&&order_y==3);
@@ -164,10 +173,11 @@ static void CoopSnapshotChecks(){
     controller_bindings[0][0]=4;
     for(unsigned action=0;action<24;++action)trial_controls::second_controller.binding[action][0]=action+1;
     TrialPromptInput p1,p2;
-    for(bool mode:{false,true})for(unsigned variant=0;variant<3;++variant){
+    for(bool mode:{false,true})for(unsigned variant=0;variant<4;++variant){
         keyboard_mode=mode;
         CHECK(TrialPromptSnapshot(1,p1,variant,1)&&!p1.controller);
         CHECK(p1.bindings[0]==unsigned(variant==1?'F':'R'));
+        if(variant>=2)CHECK(p1.bindings[12]==bindings[variant==3?12:24][0]);
         CHECK(!TrialPromptSnapshot(1,p2,variant,2)&&p2.controller&&p2.bindings[0]==1);
         CHECK(!p2.labels[12][0]);
         CHECK(!TrialPromptSnapshot(2,p2,variant,2)&&!p2.held);
@@ -279,6 +289,12 @@ static void ArtworkChecks(){
     input.bindings[0]=input.bindings[12];std::strcpy(input.labels[0],input.labels[12]);
     CHECK(TrialPromptArtwork(1,source.data(),input,pixels,w,h));
     CHECK(!std::memcmp(&pixels[128*128*4],&pixels[20*128*128*4],128*128*4));
+    // The medic's up-direction hint carries the user's Context order key.
+    CHECK(TrialPromptSnapshot(1,input,3,1)&&input.bindings[12]=='T');
+    input.bindings[0]=input.bindings[12];std::strcpy(input.labels[0],input.labels[12]);
+    CHECK(TrialPromptArtwork(1,source.data(),input,pixels,w,h));
+    CHECK(!std::memcmp(&pixels[128*128*4],&pixels[19*128*128*4],128*128*4));
+    CHECK(std::memcmp(&old[19*128*128*4],&pixels[19*128*128*4],128*128*4));
     CHECK(TrialPromptSnapshot(1,input));CHECK(TrialPromptArtwork(1,source.data(),input,pixels,w,h)&&pixels==old);
     CHECK(TrialPromptSnapshot(2,input));input.bindings[12]=VK_MBUTTON;std::strcpy(input.labels[12],"Middle mouse");
     CHECK(TrialPromptArtwork(2,nullptr,input,pixels,w,h)&&w==256&&h==256);auto idle=pixels;

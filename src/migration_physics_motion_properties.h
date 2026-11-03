@@ -1,2 +1,0 @@
-#pragma once
-int uc_migration_physics_motion_properties(unsigned entry);

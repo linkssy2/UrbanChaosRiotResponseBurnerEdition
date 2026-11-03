@@ -18,6 +18,7 @@ bool TrialSceneryLighting = true, TrialCharacterLighting = true;
 bool TrialHdUi = false;
 bool TrialWorldTextures = false;
 uint32_t TrialReticleScale = 100;
+std::array<uint32_t,4> TrialReticleColors[2]{};
 uint32_t TrialWeaponFovScale = 100;
 uint32_t TrialPlayer2FieldOfView = 0, TrialPlayer2WeaponFovScale = 0;
 uint32_t TrialFmvScale = 0;
@@ -28,6 +29,10 @@ static std::atomic<uint32_t> field_of_view{53};
 static std::atomic<bool> hd_ui{false};
 static std::atomic<bool> world_textures{false};
 static std::atomic<uint32_t> reticle_scale{100};
+static std::atomic<uint32_t> reticle_colors[2][4]{};
+uint32_t ReticleColor(unsigned player,unsigned state){
+    return player<2&&state<4?reticle_colors[player][state].load():0;
+}
 static std::atomic<uint32_t> weapon_fov_scale{100};
 static std::atomic<uint32_t> player2_field_of_view{53},player2_weapon_fov_scale{100};
 static std::atomic<uint32_t> fmv_scale{0};
@@ -52,6 +57,7 @@ static void PublishEffects(const Draft& d){
     hd_ui=d.hd_ui;
     world_textures=d.world_textures;
     reticle_scale=d.reticle_scale;
+    for(unsigned p=0;p<2;++p)for(unsigned s=0;s<4;++s)reticle_colors[p][s]=TrialReticleColors[p][s];
     weapon_fov_scale=d.weapon_fov;
     player2_field_of_view=TrialPlayer2FieldOfView?TrialPlayer2FieldOfView:d.fov;
     player2_weapon_fov_scale=TrialPlayer2WeaponFovScale?TrialPlayer2WeaponFovScale:d.weapon_fov;
@@ -59,9 +65,10 @@ static void PublishEffects(const Draft& d){
     effects=uint32_t(d.scenery)|(uint32_t(d.characters)<<1)|(d.character_quality<<2)|(d.ragdolls<<3);
 }
 static Draft Current(){return {app::Get(),TrialAspectRatio,TrialMsaaSamples,
-    TrialSceneryLighting,TrialCharacterLighting,TrialCharacterQuality,TrialRagdollMode,TrialFieldOfView,TrialHdUi,TrialReticleScale,TrialWorldTextures,TrialWeaponFovScale,TrialFmvScale};}
+    TrialSceneryLighting,TrialCharacterLighting,TrialCharacterQuality,TrialRagdollMode,TrialFieldOfView,TrialHdUi,TrialReticleScale,TrialWorldTextures,TrialWeaponFovScale,TrialFmvScale,TrialReticleColors[0]};}
 static Draft Current(unsigned player){
     Draft d=Current();
+    if(player<2)d.reticle_colors=TrialReticleColors[player];
     if(player==1){d.fov=TrialPlayer2FieldOfView?TrialPlayer2FieldOfView:d.fov;
         d.weapon_fov=TrialPlayer2WeaponFovScale?TrialPlayer2WeaponFovScale:d.weapon_fov;}
     return d;
@@ -73,6 +80,7 @@ static void Store(const Draft& d){
     TrialHdUi=d.hd_ui;
     TrialWorldTextures=d.world_textures;
     TrialReticleScale=d.reticle_scale;
+    TrialReticleColors[0]=d.reticle_colors;
     TrialWeaponFovScale=d.weapon_fov;
     TrialFmvScale=d.fmv_scale;
 }
@@ -93,6 +101,9 @@ static bool RequestedWide(const Draft& d, app::Mode desktop) {
 }
 
 bool Validate(const Draft& d, app::Mode desktop, std::string& message) {
+    for(auto color:d.reticle_colors)if(color>=std::size(ReticlePalette)){
+        message="Choose a listed reticle color.";return false;
+    }
     const auto& s=d.settings;
     if(uint32_t(s.display_mode)>2 || d.aspect>2) message="Invalid display or aspect setting.";
     else if((s.width==0)!=(s.height==0) || (s.width &&
@@ -137,6 +148,8 @@ Draft Snapshot(unsigned player) {
 
 void Initialize() {
     std::lock_guard lock(app::UiLock());
+    // A bad optional color must not reset valid display or camera settings.
+    for(auto& colors:TrialReticleColors)for(auto& color:colors)if(color>=std::size(ReticlePalette))color=0;
     Draft d=Current();
     std::string ignored;
     if(!Validate(d,app::Desktop(),ignored)) {
@@ -154,6 +167,16 @@ void Initialize() {
 }
 
 bool Widescreen() { return boot_wide.load(); }
+float GameViewWidth() {
+    const auto window=static_cast<HWND>(app::Window());
+    RECT client{};
+    if(!window||!GetClientRect(window,&client))return 0;
+    const auto width=int64_t(client.right)-client.left;
+    const auto height=int64_t(client.bottom)-client.top;
+    if(width<=0||height<=0)return 0;
+    const float aspect=Widescreen()?16.0f/9.0f:4.0f/3.0f;
+    return std::min(float(width),float(height)*aspect);
+}
 bool ScalePending() { return scale_pending.load(); }
 void SetScalePending(bool pending) { scale_pending.store(pending); }
 bool FullscreenRequested() {
@@ -188,6 +211,7 @@ bool Apply(const Draft& draft,std::string& message,unsigned player) {
     if(!Validate(draft,desktop,message) || !DisplaySupported(draft.settings,message)) return false;
     if(!MsaaSupported(draft.msaa)){message="That MSAA mode is not supported by this graphics device.";return false;}
     const Draft old=Current();
+    const auto old_player2_colors=TrialReticleColors[1];
     const uint32_t old_player2_fov=TrialPlayer2FieldOfView,old_player2_weapon=TrialPlayer2WeaponFovScale;
     bool display=old.settings.display_mode!=draft.settings.display_mode ||
                  old.settings.width!=draft.settings.width || old.settings.height!=draft.settings.height;
@@ -197,6 +221,7 @@ bool Apply(const Draft& draft,std::string& message,unsigned player) {
     if(TrialPlayer2FieldOfView<40||TrialPlayer2FieldOfView>90)TrialPlayer2FieldOfView=old.fov;
     if(TrialPlayer2WeaponFovScale<50||TrialPlayer2WeaponFovScale>150)TrialPlayer2WeaponFovScale=old.weapon_fov;
     if(player==1){
+        TrialReticleColors[1]=draft.reticle_colors;committed.reticle_colors=old.reticle_colors;
         TrialPlayer2FieldOfView=draft.fov;TrialPlayer2WeaponFovScale=draft.weapon_fov;
         committed.fov=old.fov;committed.weapon_fov=old.weapon_fov;
     }
@@ -205,6 +230,7 @@ bool Apply(const Draft& draft,std::string& message,unsigned player) {
     try { app::Save(); }
     catch(const std::exception& e) {
         Store(old);
+        TrialReticleColors[1]=old_player2_colors;
         TrialPlayer2FieldOfView=old_player2_fov;TrialPlayer2WeaponFovScale=old_player2_weapon;
         message=std::string("Could not save graphics settings: ")+e.what();return false;
     }

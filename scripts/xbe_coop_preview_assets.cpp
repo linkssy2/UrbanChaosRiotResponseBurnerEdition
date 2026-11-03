@@ -28,6 +28,7 @@ constexpr const char* Models[]={
     "assets_characters\\cha_multiplayer\\cha_multiplayer_burners\\cha_multiplayer_prophet_skin.amf"};
 constexpr const char* Stand="assets_characteranimation\\characterspecific\\cca_multiplayer\\cca_multiplayer_anim_stand.kfa";
 constexpr const char* Lowered="assets_characteranimation\\characterspecific\\cca_multiplayer\\cca_multiplayer_anim_handgun_idle_lowered.kfa";
+constexpr const char* Pistol="assets_characters\\cha_multiplayer\\cha_multiplayer_tzero\\cha_multiplayer_tzero_handgun_skin.amf";
 constexpr float Identity[]={1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1};
 template<class T,auto Free>struct Owner {T value{};~Owner(){Free(&value);}};
 using Bytes=Owner<UCArchiveBytes,uc_archive_bytes_free>;
@@ -52,9 +53,9 @@ void Read(const UCArchive* archive,const char* name,Bytes& bytes){
     Require(found!=SIZE_MAX&&uc_archive_read(archive,found,UC_AR_LOCAL_PAYLOAD,&bytes.value)==UC_AR_OK,
             "Missing or invalid co-op preview resource");
 }
-struct Recipe {bool sequence=false;};
+struct Recipe {bool sequence=false,vertex_alpha=false;};
 Recipe Material(const UCMaterialAsset& m){
-    // These four exact 40-01 recipes differ only in dependency names. No source
+    // These exact 40-01 recipes differ only in dependency names. No source
     // shader is executed; unknown programs or setup instructions fail closed.
     uint64_t hash=1469598103934665603ull;size_t size=0;
     const auto add=[&](const uint8_t* p,size_t n){size+=n;for(size_t i=0;i<n;++i){hash^=p[i];hash*=1099511628211ull;}};
@@ -70,6 +71,8 @@ Recipe Material(const UCMaterialAsset& m){
     // Source8FF30 uses source-alpha blending for these direct visor/glasses/blade
     // textures. Preserve authored alpha; enclosing game alpha-test state varies.
     if(hash==0x9f754e75e0f0b16full&&size==84)return {};
+    // The pistol uses the same skin/texture formula with authored white alpha.
+    if(hash==0xf5c7c3827372d964ull&&size==790)return {false,true};
     throw std::runtime_error("Unsupported co-op preview material recipe");
 }
 Image Texture(const UCArchive* archive,const char* name){
@@ -124,6 +127,38 @@ void Tile(Model& model,unsigned image_index){
         for(auto index:triangle.indices)for(unsigned k=0;k<2;++k)
             model.vertices[index].uv[k]=(model.vertices[index].uv[k]-start[k])/count[k];
 }
+void Append(const UCArchive* archive,const UCModel& model,const UCModelRender& mesh,Model& result){
+    const auto image_base=static_cast<unsigned>(result.images.size());
+    const auto vertex_base=static_cast<uint32_t>(result.vertices.size());
+    Require(mesh.ready&&model.material_count<=MaxImages-image_base&&mesh.vertex_count<=120000-vertex_base,
+            "Co-op preview geometry budget exceeded");
+    for(uint32_t i=0;i<model.material_count;++i){
+        Bytes bytes;Read(archive,model.material_names[i],bytes);
+        Owner<UCMaterialAsset,uc_material_free> material;
+        Require(uc_material_decode(bytes.value.data,bytes.value.size,&material.value)==UC_MATERIAL_OK,
+                "Invalid co-op preview material");
+        const auto recipe=Material(material.value);auto image=MaterialImage(archive,material.value,recipe);
+        if(recipe.vertex_alpha)for(size_t p=3;p<image.rgba.size();p+=4)image.rgba[p]=255;
+        result.images.push_back(std::move(image));
+    }
+    for(uint32_t i=0;i<mesh.vertex_count;++i){
+        Vertex v;std::memcpy(v.position,mesh.vertices[i].position,sizeof v.position);
+        std::memcpy(v.normal,mesh.vectors[i].normal,sizeof v.normal);
+        std::memcpy(v.uv,mesh.vertices[i].uv,sizeof v.uv);v.color=mesh.vertices[i].color;
+        float length2=0;for(float n:v.normal)length2+=n*n;
+        Require(std::isfinite(length2),"Invalid co-op preview normal");
+        if(length2>1e-12f)for(float& n:v.normal)n/=std::sqrt(length2);else v.normal[1]=1;
+        for(float p:v.position)Require(std::isfinite(p),"Invalid co-op preview position");
+        result.vertices.push_back(v);
+    }
+    for(uint32_t i=0;i<mesh.range_count;++i){const auto& range=mesh.ranges[i];
+        for(uint32_t j=0;j<range.index_count;j+=3){
+            Triangle t{{vertex_base+mesh.indices[range.first_index+j],vertex_base+mesh.indices[range.first_index+j+1],
+                        vertex_base+mesh.indices[range.first_index+j+2]},image_base+range.material_index};
+            result.triangles.push_back(t);
+        }
+    }
+}
 }
 bool Load(const std::filesystem::path& game,unsigned character,Model& out,std::string& error){
     const unsigned previous=_mm_getcsr();
@@ -174,13 +209,6 @@ bool Load(const std::filesystem::path& game,unsigned character,Model& out,std::s
         }
         Require(uc_model_pose_equipment(&equipment,pose.value.local,m.bone_count)==0,"Cannot apply co-op preview appearance");
         Model result;
-        for(uint32_t i=0;i<m.material_count;++i){
-            Bytes material_bytes;Read(archive.get(),m.material_names[i],material_bytes);
-            Owner<UCMaterialAsset,uc_material_free> material;
-            Require(uc_material_decode(material_bytes.value.data,material_bytes.value.size,&material.value)==UC_MATERIAL_OK,
-                    "Invalid co-op preview material");
-            const auto recipe=Material(material.value);result.images.push_back(MaterialImage(archive.get(),material.value,recipe));
-        }
         std::vector<uint8_t> draw(m.batch_count,1);
         for(uint32_t i=0;i<m.batch_count;++i)
             Require(m.batches[i].light_index==UINT16_MAX&&m.batches[i].flags[1],"Unexpected preview draw pass");
@@ -189,22 +217,30 @@ bool Load(const std::filesystem::path& game,unsigned character,Model& out,std::s
                 prepared.value.vertex_count<=150000&&
                 uc_model_render_update(&prepared.value,pose.value.local,Identity,nullptr,nullptr)==UC_MODEL_RENDER_OK,
                 "Cannot prepare co-op character geometry");
-        const auto& p=prepared.value;result.vertices.resize(p.vertex_count);
+        Append(archive.get(),m,prepared.value,result);
+        // FD530/FD7F0 attach the original third-person pistol to posed gundummy.
+        int gun_bone=-1;
+        for(uint32_t bone=0;bone<skeleton.value.bone_count;++bone)if(Key(skeleton.value.bone_names[bone])=="gundummy"){
+            Require(gun_bone==-1,"Duplicate preview pistol attachment");gun_bone=int(bone);
+        }
+        Require(gun_bone>=0&&prepared.value.world_valid[gun_bone],"Missing preview pistol attachment");
+        // 21B0D0 converts the weapon's authored Y/Z basis before the hand world.
+        float attachment[16];constexpr unsigned rows[]={0,2,1,3};
+        for(unsigned row=0;row<4;++row)std::copy_n(prepared.value.world[gun_bone]+rows[row]*4,4,attachment+row*4);
+        Bytes gun_bytes;Read(archive.get(),Pistol,gun_bytes);Owner<UCModel,uc_model_free> gun;
+        Require(uc_model_load(gun_bytes.value.data,gun_bytes.value.size,&gun.value)==UC_MODEL_OK&&
+                gun.value.bone_count<=128&&gun.value.vertex_count<=8192&&gun.value.batch_count<=128,
+                "Unsupported co-op preview pistol");
+        std::vector<uint8_t> gun_draw(gun.value.batch_count,1);
+        for(uint32_t i=0;i<gun.value.batch_count;++i)
+            Require(gun.value.batches[i].light_index==UINT16_MAX&&gun.value.batches[i].flags[1],"Unexpected preview pistol draw pass");
+        Owner<UCModelRender,uc_model_render_free> gun_mesh;
+        Require(uc_model_render_init_lighting(&gun.value,gun_draw.data(),&gun_mesh.value)==UC_MODEL_RENDER_OK&&
+                uc_model_render_update(&gun_mesh.value,nullptr,attachment,nullptr,nullptr)==UC_MODEL_RENDER_OK,
+                "Cannot prepare co-op preview pistol");
+        Append(archive.get(),gun.value,gun_mesh.value,result);
         float low[3]{INFINITY,INFINITY,INFINITY},high[3]{-INFINITY,-INFINITY,-INFINITY};
-        for(uint32_t i=0;i<p.vertex_count;++i){
-            auto& v=result.vertices[i];std::memcpy(v.position,p.vertices[i].position,sizeof v.position);
-            std::memcpy(v.normal,p.vectors[i].normal,sizeof v.normal);std::memcpy(v.uv,p.vertices[i].uv,sizeof v.uv);v.color=p.vertices[i].color;
-            float length2=0;for(float n:v.normal)length2+=n*n;
-            Require(std::isfinite(length2),"Invalid co-op preview normal");
-            if(length2>1e-12f)for(float& n:v.normal)n/=std::sqrt(length2);else v.normal[1]=1;
-            for(unsigned k=0;k<3;++k){Require(std::isfinite(v.position[k]),"Invalid co-op preview position");low[k]=std::min(low[k],v.position[k]);high[k]=std::max(high[k],v.position[k]);}
-        }
-        for(uint32_t i=0;i<p.range_count;++i){const auto& range=p.ranges[i];
-            for(uint32_t j=0;j<range.index_count;j+=3){
-                Triangle t{{p.indices[range.first_index+j],p.indices[range.first_index+j+1],p.indices[range.first_index+j+2]},range.material_index};
-                result.triangles.push_back(t);
-            }
-        }
+        for(const auto& v:result.vertices)for(unsigned k=0;k<3;++k){low[k]=std::min(low[k],v.position[k]);high[k]=std::max(high[k],v.position[k]);}
         Require(!result.triangles.empty(),"Empty co-op preview geometry");
         float radius2=0;for(unsigned k=0;k<3;++k){result.center[k]=(low[k]+high[k])*.5f;radius2+=(high[k]-low[k])*(high[k]-low[k])*.25f;}
         result.radius=std::sqrt(radius2);Require(std::isfinite(result.radius)&&result.radius>0&&result.radius<10000,"Invalid co-op preview bounds");

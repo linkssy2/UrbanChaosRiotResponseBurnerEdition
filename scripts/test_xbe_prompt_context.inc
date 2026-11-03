@@ -20,12 +20,13 @@ static std::vector<unsigned> prompt_player_submissions;
 static float prompt_input_value=0;
 static void PromptEnqueue(X86Context&,uint8_t*);
 static bool prompt_throw=false;
+static const char* prompt_help_key="HUD-Help-40";
 void x86_icall(X86Context& ctx,uint8_t* base,uint32_t target){
     if(target>=0xf0010&&target<=0xf0012){
         if(prompt_throw)throw 1;
         if(target==0xf0010){CHECK(X86_MEM32(ctx.esp+4)==0);PromptEnqueue(ctx,base);ctx.esp+=8;}
         else{
-            const char* key=target==0xf0011?"HUD-Operate-1":"HUD-Help-40";
+            const char* key=target==0xf0011?"HUD-Operate-1":prompt_help_key;
             std::strcpy(reinterpret_cast<char*>(base+0x64000),key);
             TrialPromptTextScope text(base,0x64000,0);PromptEnqueue(ctx,base);
             ctx.esp+=target==0xf0011?12:4;
@@ -117,7 +118,7 @@ static void PromptContextChecks(){
     X86_MEM32(kPromptOwner+0x10)=kPromptBuffer;
     X86_MEM32(kPromptOwner)=0;CHECK(!PromptRecordVariant(base,kPromptOwner));
     X86_MEM32(kPromptOwner)=0x456bb8;
-    for(const char* key:{"HUD-Help-50","HUD-Help-400","HUD-Help-40-extra","HUD-Operate-","HUD-Operate-7","HUD-Operate-9","HUD-Operate-10",
+    for(const char* key:{"HUD-Help-50","HUD-Help-400","HUD-Help-40-extra","HUD-Help-47","HUD-Help-570","HUD-Help-57-extra","HUD-Help-1070","HUD-Help-107-extra","HUD-Operate-","HUD-Operate-7","HUD-Operate-9","HUD-Operate-10",
                          "HUD-Operate-11","HUD-Operate-1-extra","newfrontend-friends-111"}){
         std::strcpy(reinterpret_cast<char*>(base+0x64000),key);
         TrialPromptTextScope scope(base,0x64000,0);CHECK(!prompt_text_variant);
@@ -137,9 +138,10 @@ static void PromptContextChecks(){
     // It must keep F through the delayed queue, while a subsequent Reload is R.
     // PlayerHelpPrompt140680 uses this same constructor with font2/flags0x11;
     // its Orders key must also survive the later draw and ordinary Reload.
-    for(bool orders:{false,true}){
+    for(const char* key:{"HUD-Help-120","HUD-Help-40","HUD-Help-57","HUD-Help-48","HUD-Help-102","HUD-Help-106","HUD-Help-107","HUD-Help-108"}){
         conversation_prompt=false;X86_MEM32(kPromptOwner+0x1c)=0;
-        const char* key=orders?"HUD-Help-40":"HUD-Help-120";
+        const bool orders=std::strcmp(key,"HUD-Help-120")!=0;
+        const unsigned variant=!orders?1u:(!std::strcmp(key,"HUD-Help-40")||!std::strcmp(key,"HUD-Help-57"))?2u:3u;
         std::strcpy(reinterpret_cast<char*>(base+0x64000),key);
         X86Context ctor{};ctor.ecx=0x69000;ctor.esp=0x50000;
         const uint32_t args[]={0x66000,orders?0x3ecccccdu:0x3e4ccccdu,3,0x64000,
@@ -155,7 +157,7 @@ static void PromptContextChecks(){
         CHECK(render.esp==0x50008&&!prompt_text_variant);
         CHECK(!std::memcmp(object.data(),base+0x69000,object.size()));
         text("HUD-Help-50");draw(6);draw(7);
-        CHECK(prompt_submissions[prompt_submissions.size()-2]==0&&prompt_submissions.back()==(orders?2u:1u));
+        CHECK(prompt_submissions[prompt_submissions.size()-2]==0&&prompt_submissions.back()==variant);
         TrialPromptQueueReset(kPromptOwner);
     }
     // Both non-conversation Skip producers poll the original A action. This
@@ -223,6 +225,16 @@ static void PromptContextChecks(){
         CHECK(prompt_player_submissions[first_submission+i]==expected_players[i]);
         CHECK(prompt_submissions[first_submission+i]==expected_variants[i]);
     }
+    // Both medic strings survive the native per-player HUD and delayed queue.
+    for(const char* key:{"HUD-Help-57","HUD-Help-107"}){
+        setup_players();prompt_help_key=key;
+        const unsigned variant=!std::strcmp(key,"HUD-Help-57")?2u:3u;
+        for(unsigned slot=0;slot<2;++slot){auto c=hud_context(slot);PromptOwnedHudLayer(c,base);CHECK(!prompt_player);}
+        draw(2);draw(5);
+        CHECK(prompt_player_submissions[prompt_player_submissions.size()-2]==2&&prompt_player_submissions.back()==1);
+        CHECK(prompt_submissions[prompt_submissions.size()-2]==variant&&prompt_submissions.back()==variant);
+    }
+    prompt_help_key="HUD-Help-40";
     // Wrong owner, stale world, missing layer or disconnected co-op cannot tag
     // another player's glyph. A nested invalid scope and exceptions restore TLS.
     for(unsigned invalid=0;invalid<7;++invalid){

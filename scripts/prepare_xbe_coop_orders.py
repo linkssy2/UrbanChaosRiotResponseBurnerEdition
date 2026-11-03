@@ -6,7 +6,7 @@ import struct
 
 INCLUDE='#include "xbe_coop_orders.h"\n'
 ENTRIES={
- 0x40d60:'\tTrialCoopOrdersChoose(ctx,base);\n',
+ 0x40d60:'\tif(!TrialCoopOrdersChoose(ctx,base)){ctx.esp+=12;return;}\n',
  0x73d80:'\tTrialCoopOrdersHudScope coop_orders_hud(ctx,base);\n',
  0x73fa0:'\tTrialCoopOrdersHudScope coop_orders_hud(ctx,base);\n',
  0x140e10:'\tTrialCoopHelpScope coop_help(ctx,base);\n',
@@ -20,7 +20,21 @@ SEAMS={
  '001591E5':(2,'\tif(TrialCoopOrdersRegister(ctx,base))goto loc_00159219;\n'),
  '00168240':(1,'\tTrialCoopOrdersPlayer(ctx,base);\n'),
 }
+MEDIC_REPLACEMENTS={
+ '\t// 00168264 jnb 0x0016829D\n\tif (!cf) { goto loc_0016829D; }':
+ '\t// 00168264 jnb 0x0016829D\n\tif (!TrialCoopMedicPrompt(ctx,base)) { goto loc_0016829D; }',
+ '\t// 00168295 mov al, 0x01\n\t{ ctx.eax = (ctx.eax & 0xFFFFFF00u) | (uint8_t)(0x1u); }':
+ '\t// 00168295 mov al, 0x01\n\t{ ctx.eax = (ctx.eax & 0xFFFFFF00u) | (uint8_t)(TrialCoopMedicPrompt(ctx,base)); }',
+ **{f'\t// {a} mov byte ptr [eax+0x04], 0x01\n\t{{ uint32_t ea = (uint32_t)(ctx.eax + 0x4u); X86_MEM8(ea) = (uint8_t)(0x1u); }}':
+    f'\t// {a} mov byte ptr [eax+0x04], 0x01\n\t{{ uint32_t ea = (uint32_t)(ctx.eax + 0x4u); X86_MEM8(ea) = (uint8_t)(TrialCoopMedicPrompt(ctx,base,true,{decline})); }}'
+    for a,decline in [('001843B9','false'),('0018440B','true'),('00184545','false')]},
+}
+MEDIC_HINT_OLD='\t// 0014110E jz 0x00141125\n\tif (((uint8_t)(ca & cb)) == 0) { goto loc_00141125; }'
+MEDIC_HINT_NEW='\t// Stored-pack collection remains available after the original tutorial was seen.\n\tgoto loc_00141125;'
 PINS=(
+ (36,0x1682b0,134,"c986d746f30f897971413019679d4f664dfee862cccd6eb31eb4285da6a090d8","079236606de0bc6131799b7587e20517fc7b8ce0cbcd69e8a1d8f2c72668046a"),
+ (38,0x184200,38,"ae4435d09c70660d9327ca605c49f577b652cd0149d27d7930f85d8f9832cb40","d914d0845106eada7a53e3a5e4791e47ef546ed4330d90df1de0a1d3d18faca2"),
+ (38,0x1842f0,655,"4e669d5d8e900aa8622e5ba909f587cf194389a94e16586f686a2757942bc803","880fa2defe1d6eb3aadbe7bd9fef740d00c7cfbdec155ac347b47d771f29abb0"),
  (11,0x72a80,18,"4b549099d417481d2183797f10c87c7cd2be09f50244e6d7c99ad572918a3042","f7b24009e3f22f800b26ffc8c9eb4ba89886853008427b14aa31a1364bba4be3"),
  (11,0x73090,68,"125f63267ae2493a03f299cab4bf30dcace9a8ee17dde384ffce9d2f824ac434","e3f112083c2820417bacb3890d604ad9c70e3fb0f216183c6e30b991d67d5a42"),
  (11,0x77500,97,"ff9290c607e9031d9178b29e64c154795c707a399b15066570fec99a3e13c397","1ae4eb66ccda93619e32495e4bd397ac61b5e3f489e44c491a0ce0273b240002"),
@@ -60,13 +74,15 @@ def body(source,address):
     return re.search(rf'X86_FUNC\(__imp__sub_{address:08X}\) \{{.*?^\}}',source,re.M|re.S).group()
 
 def clean(source):
-    source=source.replace(INCLUDE,'')
+    source=source.replace(INCLUDE,'').replace(MEDIC_HINT_NEW,MEDIC_HINT_OLD)
+    source=source.replace('\tTrialCoopOrdersChoose(ctx,base);\n','')
+    for original,fixed in MEDIC_REPLACEMENTS.items():source=source.replace(fixed,original)
     for hook in set(ENTRIES.values())|{h for _,h in SEAMS.values()}:source=source.replace(hook,'')
     source=source.replace('TrialCoopOrdersHud(base,X86_MEM32(ea))','X86_MEM32(ea)').replace('TrialCoopHelpHud(base,X86_MEM32(ea))','X86_MEM32(ea)')
     return source.replace('loc_00159219:\n','')
 
 def unprepare(area):
-    for unit in (5,11,32,34,36):
+    for unit in (5,11,32,34,36,38):
         p=Path(area)/f'generated/game/x86_recomp.{unit}.cpp'
         if p.exists():
             before=p.read_text();after=clean(before)
@@ -81,6 +97,10 @@ def prepare(area):
         s=next(s for s in sections if s[1]<=va and va+size<=s[1]+s[4]);o=s[3]+va-s[1]
         return xbe[o:o+size]
     assert struct.unpack('<I',raw(0x46caa8+8,4))[0]==0x156c50
+    assert struct.unpack('<I',raw(0x4727a0+8,4))[0]==0x1842f0
+    assert struct.unpack('<II',raw(0x4727a0+0x64,8))==(0x184230,0x184200)
+    assert struct.unpack('<II',raw(0x46e960+0x64,8))==(0x167fc0,0x1682b0)
+    assert struct.unpack('<7I',raw(0x168338,28))==(0x16831a,0x16831a,0x1682dd,0x1682cf,0x16832e,0x16832e,0x16831a)
     assert struct.unpack('<III',raw(0x4531a0,12))==(0x73f10,0x73fa0,0x73d80)
     # Fresh actor-owned helper ID and constructor ownership are retail facts,
     # separate from the last-created global help queue.
@@ -89,15 +109,23 @@ def prepare(area):
     assert struct.unpack('<III',raw(0x453580,12))==(0x775a0,0xa5c00,0x77570)
     assert struct.unpack('<III',raw(0x453bd0,12))==(0x7b860,0x7b5c0,0x7b5f0)
     assert struct.unpack('<III',raw(0x453c20,12))==(0x7ba60,0x7b740,0x7b770)
-    sources={u:clean((area/f'generated/game/x86_recomp.{u}.cpp').read_text())for u in (5,11,32,34,36,41)}
+    sources={u:clean((area/f'generated/game/x86_recomp.{u}.cpp').read_text())for u in (5,11,32,34,36,38,41)}
     originals={}
     for unit,va,size,raw_hash,lifted_hash in PINS:
         assert hashlib.sha256(raw(va,size)).hexdigest()==raw_hash,hex(va)
         text=body(sources[unit],va)
         assert hashlib.sha256(text.encode()).hexdigest()==lifted_hash,hex(va)
         originals[va]=text
-    for unit in (5,11,32,34,36):
+    for unit in (5,11,32,34,36,38):
         source=sources[unit]
+        if unit==32:
+            assert source.count(MEDIC_HINT_OLD)==1
+            source=source.replace(MEDIC_HINT_OLD,MEDIC_HINT_NEW,1)
+        if unit in (36,38):
+            for original,fixed in MEDIC_REPLACEMENTS.items():
+                if (unit==36)!=('001682' in original):continue
+                assert source.count(original)==1,original.splitlines()[0]
+                source=source.replace(original,fixed,1)
         for va,hook in ENTRIES.items():
             marker=f'X86_FUNC(__imp__sub_{va:08X}) {{\n'
             if marker in source:
@@ -143,9 +171,11 @@ def prepare(area):
     fixture=fixture.replace('// PRODUCTION_CALL_GUEST',runtime_call_guest())
     constants=(0x44b800,0x462870,0x465074,0x46a8a8,0x45819c,0x458184,0x458254,0x458238,
                0x44d94c,0x46ca34,0x465ae0,0x465b00,0x44db94,0x44bf94,0x44c724,0x44bf18,0x4581c0,0x44c178,0x46b45c,0x46b454,
-               0x46b660,0x46b53c,0x46b530,0x46b50c,0x46b51c,0x46b548,0x46b554)
+               0x46b660,0x46b53c,0x46b530,0x46b50c,0x46b51c,0x46b548,0x46b554,
+               0x47278c,0x47277c,0x46ca50,0x46a894,0x45fe34)
     strings='\n'.join(f'std::memcpy(B()+0x{a:x},"'+''.join(f'\\x{v:02x}'for v in raw(a,32))+f'",32);'for a in constants)
     strings+='\n'+'\n'.join(f'Put(0x{a:x},0x{struct.unpack("<I",raw(a,4))[0]:x});'for a in range(0x158e08,0x158e18,4))
+    strings+='\n'+'\n'.join(f'Put(0x{a:x},0x{struct.unpack("<I",raw(a,4))[0]:x});'for a in range(0x168338,0x168354,4))
     fixture=fixture.replace('// ORIGINAL_CONSTANTS',strings)
     (area/'src/compat/test_coop_orders.cpp').write_text(fixture)
     for name in ('xbe_coop_orders.cpp','xbe_coop_orders.h'):

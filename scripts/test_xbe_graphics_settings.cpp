@@ -15,15 +15,32 @@
 #include "xbe_world_textures.h"
 
 static bool platform_supported=true;
+static HWND client_window=reinterpret_cast<HWND>(uintptr_t(1));
+static RECT client_rect{0,0,2560,1440};
+static bool client_available=true;
+static unsigned client_queries=0;
+static BOOL WINAPI TestGetClientRect(HWND window,LPRECT rect) {
+    assert(window==client_window&&window&&rect);++client_queries;
+    if(!client_available)return FALSE;
+    *rect=client_rect;return TRUE;
+}
 namespace app {
 static Settings settings;
 static std::recursive_mutex ui_lock;
 static std::filesystem::path file;
 static bool fail_save=false;
+static std::string ColorTable(){
+    std::string result;
+    const char* states[]={"normal","enemy","friendly","spin"};
+    for(unsigned p=0;p<2;++p)for(unsigned s=0;s<4;++s)
+        result+="\n"+std::string(p?"player2_":"")+"reticle_"+states[s]+"_color="+std::to_string(TrialReticleColors[p][s]);
+    return result;
+}
 static unsigned display_posts=0;
 Settings& Get() { return settings; }
 std::recursive_mutex& UiLock() { return ui_lock; }
 Mode Desktop() { return {2560,1440}; }
+void* Window() { return client_window; }
 void ApplyDisplay() { ++display_posts; }
 static std::filesystem::path File() { return file; }
 static std::string Table() {
@@ -37,11 +54,39 @@ static std::string Table() {
         "\nhd_ui="+std::to_string(TrialHdUi)+"\nreticle_scale="+std::to_string(TrialReticleScale)+
         "\nweapon_fov_scale="+std::to_string(TrialWeaponFovScale)+"\nfmv_scale="+std::to_string(TrialFmvScale)+
         "\nplayer2_field_of_view="+std::to_string(TrialPlayer2FieldOfView)+
-        "\nplayer2_weapon_fov_scale="+std::to_string(TrialPlayer2WeaponFovScale);
+        "\nplayer2_weapon_fov_scale="+std::to_string(TrialPlayer2WeaponFovScale)+ColorTable();
 }
 // GENERATED_SAVE
 }
+#define GetClientRect TestGetClientRect
 // GENERATED_SETTINGS
+#undef GetClientRect
+
+static void CheckGameViewWidth() {
+    const auto saved_aspect=TrialAspectRatio;
+    const auto saved_scale=app::settings.render_percent;
+    auto check=[](LONG width,LONG height,float expected) {
+        client_rect={0,0,width,height};
+        const float actual=trial_graphics::GameViewWidth();
+        assert(actual>=expected-0.001f&&actual<=expected+0.001f);
+    };
+    TrialAspectRatio=2;trial_graphics::Initialize();
+    check(2560,1440,2560);check(3440,1440,2560);check(1920,1200,1920);
+    check(1280,720,1280);check(800,600,800);check(1001,500,500*(16.0f/9.0f));
+    app::settings.render_percent=200;check(2560,1440,2560);
+    TrialAspectRatio=1; // A requested aspect does not alter the running presentation.
+    check(2560,1440,2560);
+    trial_graphics::Initialize();
+    check(2560,1440,1920);check(1920,1080,1440);check(800,600,800);check(600,800,600);
+    client_rect={17,29,817,629};assert(trial_graphics::GameViewWidth()==800);
+    check(0,720,0);check(1280,0,0);check(-1,720,0);check(1280,-1,0);
+    client_available=false;check(1280,720,0);client_available=true;
+    const unsigned queries=client_queries;client_window=nullptr;
+    assert(trial_graphics::GameViewWidth()==0&&client_queries==queries);
+    client_window=reinterpret_cast<HWND>(uintptr_t(1));client_rect={0,0,2560,1440};
+    TrialAspectRatio=saved_aspect;app::settings.render_percent=saved_scale;
+    trial_graphics::Initialize();
+}
 
 static std::string Read() {
     std::ifstream f(app::file);return {std::istreambuf_iterator<char>(f),{}};
@@ -51,6 +96,7 @@ int main() {
         (L"uc-graphics-fixture-"+std::to_wstring(GetCurrentProcessId())+L".toml");
     app::settings.join_ip="retained";
     trial_graphics::Initialize();assert(trial_graphics::Widescreen());
+    CheckGameViewWidth();
     assert(!TrialWorldTextures&&!trial_graphics::WorldTextures());
     assert(!TrialHdUi&&!trial_graphics::HdUi()&&!trial_graphics::Snapshot().hd_ui);
     assert(TrialReticleScale==100&&trial_graphics::ReticleScale()==100);
@@ -236,6 +282,26 @@ int main() {
     assert(trial_graphics::Apply(draft,message));
     assert(trial_graphics::FieldOfView(0)==60&&trial_graphics::WeaponFovScale(0)==80);
     assert(trial_graphics::FieldOfView(1)==shared.fov&&trial_graphics::WeaponFovScale(1)==shared.weapon_fov);
+    for(unsigned p:{0u,1u,0u}){
+        auto colors=trial_graphics::Snapshot(p);const auto other=trial_graphics::Snapshot(1-p);
+        colors.reticle_colors=p?std::array<uint32_t,4>{9,8,7,6}:std::array<uint32_t,4>{1,2,3,4};
+        assert(trial_graphics::Snapshot(p).reticle_colors!=colors.reticle_colors||p==0);
+        assert(trial_graphics::Apply(colors,message,p));
+        for(unsigned s=0;s<4;++s)assert(trial_graphics::ReticleColor(p,s)==colors.reticle_colors[s]);
+        assert(trial_graphics::Snapshot(1-p).reticle_colors==other.reticle_colors);
+        const auto saved_colors=colors.reticle_colors;const auto text=Read();
+        assert(text.find(std::string(p?"player2_":"")+"reticle_normal_color="+std::to_string(saved_colors[0]))!=std::string::npos);
+        colors.reticle_colors.fill(0);app::fail_save=true;assert(!trial_graphics::Apply(colors,message,p));app::fail_save=false;
+        assert(Read()==text&&trial_graphics::Snapshot(p).reticle_colors==saved_colors);
+        colors.reticle_colors[0]=10;assert(!trial_graphics::Apply(colors,message,p));
+        trial_graphics::Initialize();assert(trial_graphics::Snapshot(p).reticle_colors==saved_colors);
+        assert(trial_graphics::Snapshot(1-p).reticle_colors==other.reticle_colors);
+    }
+    const auto before_colors=trial_graphics::Snapshot();
+    TrialReticleColors[1][2]=0xffffffff;trial_graphics::Initialize();
+    assert(trial_graphics::ReticleColor(1,2)==0&&trial_graphics::Snapshot().fov==before_colors.fov);
+    assert(trial_graphics::Snapshot().reticle_colors==before_colors.reticle_colors);
+    assert(trial_graphics::ReticleColor(2,0)==0&&trial_graphics::ReticleColor(0,4)==0);
     std::filesystem::remove(app::file);
     std::puts("graphics settings: staged apply, per-player FOV migration/isolation, persistence rollback, validation, aspect restart and shared display routing passed");
 }

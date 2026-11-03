@@ -1,4 +1,0 @@
-#ifndef UC_HYBRID_PARTICLE_SOURCE_MATH_GUEST_H
-#define UC_HYBRID_PARTICLE_SOURCE_MATH_GUEST_H
-int uc_hybrid_particle_source_math(unsigned entry);
-#endif

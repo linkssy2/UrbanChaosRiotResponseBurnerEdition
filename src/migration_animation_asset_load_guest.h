@@ -1,5 +1,0 @@
-#ifndef MIGRATION_ANIMATION_ASSET_LOAD_GUEST_H
-#define MIGRATION_ANIMATION_ASSET_LOAD_GUEST_H
-int uc_migration_animation_asset_load(void);
-int uc_migration_animation_asset_times(void);
-#endif

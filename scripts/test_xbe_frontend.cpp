@@ -10,6 +10,7 @@
 #include <mutex>
 #include "cpu/x86_ops.h"
 #include "xbe_frontend.h"
+#include "xbe_coop_pause.h"
 using std::isfinite;
 static uint8_t storage[0x800000],*ram=storage;
 static X86Context context,*regs=&context;
@@ -39,11 +40,13 @@ uint64_t ucrr_host_menu_milliseconds(){return 1000;}
 void TrialFrontendPublish(const TrialFrontendFrame& f){
     published=f;
     presentation.Publish(f,TrialFrontendSupported(f)&&
-        (f.delete_dialog||name_keyboard_mode));
+        (f.delete_dialog||name_keyboard_mode||(trial_coop::PauseOwner()>=0&&(f.source.source_kind&0x80000000u))));
 }
 bool TrialFrontendTakeAction(UcHybridFrontendAction& a){if(!queued.kind)return false;a=queued;queued={};return true;}
-bool TrialFrontendOwns(uint32_t p,uint32_t k){return (published.delete_dialog||name_keyboard_mode)&&TrialFrontendSupported(published)&&published.source.owner==p&&published.source.kind==k;}
+bool TrialFrontendOwns(uint32_t p,uint32_t k){return (published.delete_dialog||name_keyboard_mode||(trial_coop::PauseOwner()>=0&&(published.source.source_kind&0x80000000u)))&&TrialFrontendSupported(published)&&published.source.owner==p&&published.source.kind==k;}
 void TrialGraphicsMenuContext(uint32_t,uint32_t,uint32_t,uint32_t){}
+void TrialCheatsUpdate(X86Context&,uint8_t*,uint64_t){}
+void TrialCheatsInvalidate(){}
 struct Draw {uint32_t function,texture,color;float x,y,right,bottom;};
 static std::vector<Draw> draws;
 static std::vector<Draw> sidebar_quads;
@@ -597,6 +600,14 @@ static void CheckPauseQuit(uint32_t callback=0x267400){
     open();name_keyboard_mode=false;
     assert(PauseDialogFrame()==0&&pause_texts==3&&pause_separators==1&&pause_backdrops==1);
     assert(!TrialFrontendOwns(0x646000,UC_HF_DIALOG)&&!presentation.visible);
+    // The co-op pause owner uses the accepted menu even when its device is a pad.
+    trial_coop::SetActive(true);trial_coop::pause_state.owner=1;open();
+    assert(!name_keyboard_mode&&PauseDialogFrame()==0&&pause_texts==0&&pause_separators==0&&pause_backdrops==1);
+    assert(TrialFrontendOwns(0x646000,UC_HF_DIALOG));
+    action(UC_HF_ACTIVATE,1);assert(PauseDialogFrame()==0x284310);
+    action(UC_HF_BACK);assert(PauseDialogFrame()==0x284310);
+    action(UC_HF_ACTIVATE,0);assert(PauseDialogFrame()==callback);
+    trial_coop::Reset();trial_coop::ResetPauseOwner();
     name_keyboard_mode=true;open();PauseDialogFrame();
     MEM8(0x600014)=1;pause_texts=pause_separators=0;
     assert(PauseDialogFrame()==0&&pause_texts==0&&pause_separators==0);

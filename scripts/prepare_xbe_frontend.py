@@ -20,6 +20,10 @@ def prepare(area):
     assert read(0x27212f,11)==bytes.fromhex('683017270050e8e613ffff')
     campaign_key=b'NewFrontend-Singleplayer-1\0'
     assert read(0x488df4,len(campaign_key))==campaign_key
+    # Hide the Xbox Live row by its stable localization key, preserving native indices.
+    assert read(0x272177,10)==bytes.fromhex('68605325006874554800')
+    live_key=b'NewFrontEnd-Internet-2\0'
+    assert read(0x485574,len(live_key))==live_key
     for va,data in [(0x270927,'e884e8ffff'),(0x270949,'e862e7ffff'),
                     (0x26f1b0,'558bec83e4f0'),(0x17b39,'8bf1'),(0x25c71f,'8bf157'),(0x25c89e,'e87d7a0100')]:
         assert read(va,len(bytes.fromhex(data)))==bytes.fromhex(data),hex(va)

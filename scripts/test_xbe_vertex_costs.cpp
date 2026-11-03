@@ -26,6 +26,7 @@ namespace logx { void Write(Level,const char*,...){} }
 
 /* ORIGINAL_VERTEX */
 /* PRODUCTION_VERTEX */
+/* PREVIOUS_INDEX_DISPATCH */
 
 namespace {
 constexpr unsigned kHeader=0x100,kData=0x1000,kStride=64,kVertices=65536+32;
@@ -50,6 +51,15 @@ gpu::State PackedState(unsigned layout) {
     if(layout>=1&&layout<=3)s.vs->inputs[3]={2,0,0x22};
     if(layout==1||layout==2)s.vs->inputs[4]={2,8,0x22};
     s.vs->inputs[7]={4,0,0x35};s.vs->inputs[8]={4,6,0x24};
+    return s;
+}
+
+gpu::State ParticleState() {
+    gpu::State s{};s.vs_handle=1;s.vs=std::make_shared<gpu::VertexShader>();
+    // Original 9A225/9B4D1 inline quad declaration, verified by test_inline_draws.
+    s.streams[0]={kHeader,52};
+    s.vs->inputs[0]={0,0,0x32};s.vs->inputs[1]={0,12,0x40};
+    s.vs->inputs[2]={0,16,0x32};s.vs->inputs[3]={0,28,0x32};s.vs->inputs[4]={0,40,0x32};
     return s;
 }
 
@@ -129,6 +139,89 @@ void Check(gpu::State& s,uint32_t prim,uint32_t start,uint32_t count,const uint1
     if(prim!=1 && prim!=2 && prim!=5)assert(before.indices==after.indices);
 }
 
+void CheckDispatch(gpu::State& s,uint32_t prim,uint32_t start,uint32_t count,const uint8_t* ip) {
+    Check(s,prim,start,count,reinterpret_cast<const uint16_t*>(ip));
+    if(!count)return;
+    const auto bounds=ip?gpu::IndexRange(ip,count):gpu::IndexBounds{start,start+count-1};
+    gpu::DrawRange draw{prim,start,count,ip,bounds.first,
+        ip?bounds.first+s.base_vertex:start,bounds.last-bounds.first+1};
+    gpu::Assembled before,after;
+    before.indices=after.indices={91,82,73};
+    int regs[16];
+    const int nregs=gpu::CollectRegs(s,*s.vs,regs,before);
+    after.regs=before.regs;
+    gpu::Inputs inputs{*s.vs,regs,nregs};
+    const bool a=previous_index_dispatch::AssembleConverted(s,inputs,draw,before);
+    const bool b=gpu::AssembleConverted(s,inputs,draw,after);
+    assert(a==b&&before.indices==after.indices&&before.topology==after.topology);
+    assert(before.indices.size()>=3&&before.indices[0]==91&&before.indices[1]==82&&before.indices[2]==73);
+    ++checks;
+}
+
+void CheckIndexDispatch() {
+    const uint16_t dense[]={7,8,9,7,9,10,10,10,8,9,7,10};
+    const uint16_t sparse[]={1,3000,6000,1,6000,9000,9000,9000,1,6000,3000,9000};
+    const uint16_t high[]={65533,65534,65535,65535,65534,65533,65533,65533,65535,65534,65533,65535};
+    for(auto s:{State(),PackedState(2)})for(unsigned prim=1;prim<=10;++prim)for(unsigned count=0;count<=12;++count){
+        for(uint32_t base:{0u,3u,0xfffffff9u}){
+            s.base_vertex=base;
+            CheckDispatch(s,prim,5,count,nullptr);
+            std::array<uint8_t,sizeof(dense)+1> unaligned{};
+            std::memcpy(unaligned.data()+1,dense,sizeof(dense));
+            CheckDispatch(s,prim,0,count,unaligned.data()+1);
+        }
+        s.base_vertex=0;CheckDispatch(s,prim,0,count,reinterpret_cast<const uint8_t*>(sparse));
+        s.base_vertex=uint32_t(0)-65530;CheckDispatch(s,prim,0,count,reinterpret_cast<const uint8_t*>(high));
+    }
+    // Long odd/even strips retain degenerates, 65535 and incomplete-quad behavior.
+    std::vector<uint16_t> indices(65536);
+    for(unsigned i=0;i<indices.size();++i)indices[i]=uint16_t(i/2*31);
+    auto s=State();
+    for(unsigned prim:{6u,8u})for(unsigned count:{65535u,65536u})
+        CheckDispatch(s,prim,0,count,reinterpret_cast<const uint8_t*>(indices.data()));
+#ifdef _WIN32
+    auto* guarded=static_cast<uint8_t*>(VirtualAlloc(nullptr,0x2000,MEM_COMMIT|MEM_RESERVE,PAGE_READWRITE));
+    assert(guarded);DWORD previous=0;
+    assert(VirtualProtect(guarded+0x1000,0x1000,PAGE_NOACCESS,&previous));
+    for(unsigned count:{1u,2u,3u,4u,7u,12u}){
+        auto* ip=guarded+0x1000-count*2;
+        std::memcpy(ip,dense,count*2);
+        for(unsigned prim=1;prim<=10;++prim)CheckDispatch(s,prim,0,count,ip);
+    }
+    assert(VirtualFree(guarded,0,MEM_RELEASE));
+#endif
+}
+
+void CheckParticleQuads() {
+    auto state=ParticleState();std::vector<uint16_t> indices(65536);
+    for(unsigned i=0;i<indices.size();++i)indices[i]=uint16_t(i*31);
+    for(unsigned count:{1u,2u,3u,4u,5u,7u,8u,9u,11u,12u,15u,16u,156u,157u,65532u,65535u,65536u}){
+        Check(state,8,0,count,nullptr);Check(state,8,0,count,indices.data());
+        auto converted=state;converted.vs=std::make_shared<gpu::VertexShader>(*state.vs);converted.vs->inputs[0].offset=1;
+        Check(converted,8,0,count,nullptr);Check(converted,8,0,count,indices.data());
+    }
+    for(uint32_t count=0;count<1024;++count){
+        std::vector<uint32_t> expected{91,82,73},actual=expected;
+        auto local=[](uint32_t v){return(v*1789)&65535;};
+        for(uint32_t q=0;q<count/4;++q)for(uint32_t corner:{0u,1u,2u,0u,2u,3u})expected.push_back(local(q*4+corner));
+        gpu::Topology topology;gpu::ListIndices(8,count,local,actual,topology);
+        assert(actual==expected&&topology==gpu::Topology::Triangles);++checks;
+    }
+#ifdef _WIN32
+    auto* guarded=static_cast<uint8_t*>(VirtualAlloc(nullptr,0x2000,MEM_COMMIT|MEM_RESERVE,PAGE_READWRITE));
+    assert(guarded);DWORD previous=0;
+    assert(VirtualProtect(guarded+0x1000,0x1000,PAGE_NOACCESS,&previous));
+    for(unsigned count:{3u,4u,7u,156u,157u}){
+        uint8_t* ip=guarded+0x1000-count*2;
+        for(unsigned i=0;i<count;++i){uint16_t value=uint16_t(i);std::memcpy(ip+i*2,&value,2);}
+        Check(state,8,0,count,reinterpret_cast<const uint16_t*>(ip));
+        std::vector<uint8_t> unaligned(count*2+1);std::memcpy(unaligned.data()+1,ip,count*2);
+        Check(state,8,0,count,reinterpret_cast<const uint16_t*>(unaligned.data()+1));
+    }
+    assert(VirtualFree(guarded,0,MEM_RELEASE));
+#endif
+}
+
 using AssembleFn=bool(*)(const gpu::State&,uint32_t,uint32_t,uint32_t,const uint8_t*,gpu::Assembled&);
 double Bench(AssembleFn assemble,const gpu::State& s,uint32_t prim,const std::vector<uint16_t>& indices,unsigned rounds,bool mixed) {
     gpu::Assembled output;
@@ -148,9 +241,24 @@ double Bench(AssembleFn assemble,const gpu::State& s,uint32_t prim,const std::ve
     assert(witness);
     return std::chrono::duration<double,std::micro>(std::chrono::steady_clock::now()-start).count()/rounds;
 }
+
+void BenchIndexDispatch() {
+    for(bool packed:{false,true})for(unsigned vertices:{34u,329u,1000u}){
+        auto s=packed?PackedState(2):State();std::vector<uint16_t> indices(vertices*2-2);
+        for(unsigned i=0;i<indices.size();++i)indices[i]=uint16_t(i%vertices);
+        std::array<double,7> before{},after{};
+        for(unsigned pass=0;pass<before.size();++pass){
+            if(pass%2){after[pass]=Bench(gpu::Assemble,s,6,indices,20000,false);before[pass]=Bench(previous_index_dispatch::Assemble,s,6,indices,20000,false);}
+            else{before[pass]=Bench(previous_index_dispatch::Assemble,s,6,indices,20000,false);after[pass]=Bench(gpu::Assemble,s,6,indices,20000,false);}
+        }
+        std::sort(before.begin(),before.end());std::sort(after.begin(),after.end());
+        std::printf("BENCH index dispatch only %s: %u vertices, %zu indices | median before %.3f us after %.3f us (%.1f%%); synthetic CPU assembly, not FPS\n",
+            packed?"packed":"converted",vertices,indices.size(),before[3],after[3],100*(before[3]-after[3])/before[3]);
+    }
+}
 }
 
-int main(int argc,char**) {
+int main(int argc,char** argv) {
     kernel::g_base=memory.data();kernel::W32(kHeader+4,kData);
     for(unsigned i=0;i<kVertices;++i){
         auto* p=memory.data()+kData+i*kStride;
@@ -301,7 +409,10 @@ int main(int argc,char**) {
     kernel::g_base=memory.data();
     assert(VirtualFree(guarded,0,MEM_RELEASE));
 #endif
-    std::printf("PASS vertex assembly: %u previous/new cases, exact authored values and primitive order; packed padding, fallback, mutation and independent storage preserved (GPU decode tested separately)\n",checks);
+    CheckParticleQuads();
+    CheckIndexDispatch();
+    std::printf("PASS vertex assembly: %u previous/new cases, exact authored values and primitive order; packed padding, fallback, mutation, particle quads and independent storage preserved (GPU decode tested separately)\n",checks);
+    if(argc>1&&!std::strcmp(argv[1],"dispatch")){BenchIndexDispatch();return 0;}
     if(argc>1){
         s=State();
         for(unsigned vertices:{24u,200u,1000u})for(unsigned prim:{5u,6u})for(bool mixed:{false,true}){

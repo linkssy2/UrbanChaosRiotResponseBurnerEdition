@@ -25,7 +25,7 @@ void x86_icall(X86Context& ctx,uint8_t* base,uint32_t target){
         ctx.ecx=manager;sub_000567F0(ctx,base);return;
     }
     if(target==widget_delete){assert(ctx.ecx==widget);ctx.esp+=8;return;}
-    std::abort();
+    std::fprintf(stderr,"Unexpected guest input target %08x\n",target);std::abort();
 }
 uint32_t kernel::CallGuest(X86Context& c,uint32_t fn,const uint32_t* args,size_t n){
     for(size_t i=n;i;--i){c.esp-=4;W32(c.esp,args[i-1]);}c.esp-=4;W32(c.esp,0x11223344);
@@ -73,6 +73,7 @@ static float Query(unsigned player){
 static void Button(unsigned player,unsigned button,bool down){
     X86Context ctx{};ctx.ecx=manager;ctx.esp=stack;W32(stack+4,states+player*0xd0);W32(stack+8,button);
     sub_00055CD0(ctx,g_base);assert(ctx.eax);G<float>(ctx.eax+4)=down?1.f:0.f;
+    g_base[ctx.eax]=down?3:0; // Native held/rising bits used by the direct help query.
 }
 static void Frontend(bool candidate=true){
     X86Context c{};c.ecx=0x509a70;c.esp=stack;c.ebx=123;c.esi=456;c.edi=789;
@@ -131,7 +132,29 @@ static void PauseTests(){
     Seed();trial_coop::SetActive(true);Map(true);W32(pause_menu+4,0x267b40);Menu(false);
     assert(trial_coop::PauseOwner()==-1);
 }
+static bool NativeBack(bool candidate,unsigned action=0x17){
+    X86Context c{};c.esp=stack;c.ebx=123;c.esi=456;W32(stack+4,action);
+    if(candidate)CandidateNativeQuery(c,g_base);else OriginalNativeQuery(c,g_base);
+    assert(c.esp==stack+4&&c.ebx==123&&c.esi==456);return (c.eax&255)!=0;
+}
+static void NativeHelpTests(){
+    // The original help widget calls 2745F0 directly, bypassing the shared pause list.
+    Seed();trial_coop::SetActive(true);Map(true);
+    trial_coop::pause_state.Sample(false,false);trial_coop::pause_state.Sample(false,true);
+    trial_coop::pause_state.Consume(true);trial_coop::pause_state.Enter();
+    Button(1,0x17,true);assert(!NativeBack(false)&&query_slots[0]&&!query_slots[1]);
+    assert(NativeBack(true)&&query_slots[1]);
+    Button(1,0x17,false);Button(0,0x17,true);assert(!NativeBack(true));
+    trial_coop::ResetPauseOwner();assert(NativeBack(true));
+    for(unsigned action=0x16;action<0x22;++action){
+        Seed();Map(false);Button(0,action,true);const bool original=NativeBack(false,action);
+        static auto bytes=memory;bytes=memory;
+        Seed();Map(true);Button(0,action,true);assert(NativeBack(true,action)==original&&memory==bytes);
+    }
+    puts("Controller help: original P1-only negative witness, owner Back, isolation and unowned action parity passed");
+}
 int main(){
+    NativeHelpTests();
     PauseTests();
     for(int port=-2;port<6;++port){
         assert(trial_coop::PhysicalPort(port,false)==(port>=0&&port<4?port:-1));

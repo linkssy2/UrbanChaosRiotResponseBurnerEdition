@@ -22,9 +22,9 @@ int main(int argc,char** argv){
     for(unsigned character=0;character<5;++character){
         Model model;std::string error;const unsigned fp=_mm_getcsr();
         if(!Load(game,character,model,error)){std::cerr<<error<<"\n";return 1;}CHECK(error.empty()&&_mm_getcsr()==fp);
-        CHECK(model.triangles.size()==expected_triangles[character]);
+        CHECK(model.triangles.size()==expected_triangles[character]+2422);
         CHECK(model.vertices.size()==model.triangles.size()*3);
-        CHECK(model.images.size()==expected_images[character]);
+        CHECK(model.images.size()==expected_images[character]+1);
         std::vector<size_t> material_triangles(model.images.size());
         size_t alpha_low=0,alpha_high=0,colors=0,pixels=0;float low[3]{INFINITY,INFINITY,INFINITY},high[3]{-INFINITY,-INFINITY,-INFINITY};
         for(const auto& v:model.vertices){
@@ -34,11 +34,22 @@ int main(int argc,char** argv){
         }
         // The combined standing/lowered idle must not retain the bind T-pose.
         CHECK(high[1]-low[1]>(high[0]-low[0])*1.4f);
+        // The original pistol belongs beside the raised hands, muzzle up;
+        // omitting 21B0D0's basis conversion points it back through the face.
+        float gun_low[3]{INFINITY,INFINITY,INFINITY},gun_high[3]{-INFINITY,-INFINITY,-INFINITY};
+        for(size_t i=expected_triangles[character]*3;i<model.vertices.size();++i)
+            for(unsigned k=0;k<3;++k){const auto p=model.vertices[i].position[k];gun_low[k]=std::min(gun_low[k],p);gun_high[k]=std::max(gun_high[k],p);}
+        CHECK(gun_high[1]-gun_low[1]>gun_high[0]-gun_low[0]);
+        CHECK(gun_high[1]-gun_low[1]>gun_high[2]-gun_low[2]);
+        CHECK(gun_low[1]>low[1]+(high[1]-low[1])*.65f&&gun_high[1]<high[1]);
         for(const auto& t:model.triangles){
             CHECK(t.image<model.images.size());++material_triangles[t.image];
             for(auto i:t.indices)CHECK(i<model.vertices.size());
         }
         for(auto count:material_triangles)CHECK(count>0);
+        CHECK(material_triangles.back()==2422);
+        for(size_t i=expected_triangles[character];i<model.triangles.size();++i)CHECK(model.triangles[i].image==model.images.size()-1);
+        for(size_t i=3;i<model.images.back().rgba.size();i+=4)CHECK(model.images.back().rgba[i]==255);
         for(const auto& image:model.images){
             CHECK(image.width&&image.height&&image.width<=MaxImageDimension&&image.height<=MaxImageDimension);
             CHECK(image.rgba.size()==size_t(image.width)*image.height*4);pixels+=image.rgba.size();
@@ -56,5 +67,5 @@ int main(int argc,char** argv){
         std::cout<<"character="<<character<<" vertices="<<model.vertices.size()<<" triangles="<<model.triangles.size()
                  <<" fractional_alpha_low="<<alpha_low<<" fractional_alpha_high="<<alpha_high<<" image_bytes="<<pixels<<" extent="<<high[0]-low[0]<<","<<high[1]-low[1]<<","<<high[2]-low[2]<<"\n";
     }
-    CHECK(total_bytes<8*1024*1024*4);std::cout<<"PASS all five original bodies; normalized wrapped UVs; exact-key Stand; total_image_bytes="<<total_bytes<<"\n";
+    CHECK(total_bytes<8*1024*1024*4);std::cout<<"PASS all five original bodies with attached pistols; normalized wrapped UVs; exact-key Stand; total_image_bytes="<<total_bytes<<"\n";
 }

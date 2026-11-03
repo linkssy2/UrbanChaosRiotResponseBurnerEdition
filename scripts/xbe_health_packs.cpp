@@ -25,19 +25,23 @@
 
 namespace health_packs {
 constexpr unsigned capacity=3;
-struct Player {uint32_t actor=0,id=0xffffffffu;unsigned count=1;bool hud=false;};
+struct Player {uint32_t actor=0,id=0xffffffffu;unsigned count=1;bool hud=false;float hud_opacity=0,maximum=0;};
 Player players[2];
 struct Injection {
     uint32_t owner_id=0xffffffffu,target=0,target_id=0xffffffffu,clip=0;
     uint64_t generation=0;
     bool started=false,selected=false,cancelled=false,contact=false;
+    bool reviving=true;
 };
 Injection injections[2];
 uint32_t world=0;
 std::atomic<uint64_t> generation{1},pending[2]{};
 std::atomic<uint64_t> published[2]{};
 std::atomic<bool> held[2]{};
-struct Medic {uint32_t actor,id,owner,owner_id;};
+struct Medic {
+    uint32_t actor,id,owner,owner_id,request_client=0,request_id=0xffffffffu;
+    uint32_t dialogue=0,dialogue_id=0xffffffffu;
+};
 std::vector<Medic> medics;
 std::filesystem::path storage;
 constexpr size_t checkpoint_size=0x1b8,profile_size=24,level_size=12;
@@ -66,9 +70,28 @@ bool InjectionOwner(const uint8_t* b,unsigned slot){
     return a.target&&a.generation==generation.load()&&Slot(b,players[slot].actor)==int(slot)&&
         a.owner_id==players[slot].id;
 }
-bool PartnerInFront(const uint8_t* b,uint32_t owner,uint32_t partner,bool prompt=false){
+uint32_t NearbyInjuredPartner(const uint8_t* b,uint32_t owner){
+    const int slot=Slot(b,owner);
+    if(slot<0||!trial_coop::Active()||!Alive(b,owner))return 0;
+    const auto& p=players[1-slot];const uint32_t partner=p.actor;
+    if(!Alive(b,partner)||!p.hud||!std::isfinite(p.maximum)||Real(b,partner+0x9c)>=p.maximum||
+       Real(b,partner+0x46c)!=0||b[partner+0x470])return 0;
+    double distance=0;
+    for(unsigned axis=0;axis<3;++axis){
+        const double delta=double(Real(b,owner+0x40+axis*4))-Real(b,partner+0x40+axis*4);
+        if(!std::isfinite(delta))return 0;distance+=delta*delta;
+    }
+    return distance<=200.0*200.0?partner:0;
+}
+bool PartnerInFront(const uint8_t* b,uint32_t owner,uint32_t partner,bool prompt=false,bool living=false){
     HostRestore host;
-    float target[3];if(!TrialCoopDownedPosition(b,partner,target))return false;
+    float target[3];
+    if(!living){if(!TrialCoopDownedPosition(b,partner,target))return false;}
+    else{
+        if(!Alive(b,partner))return false;
+        for(unsigned axis=0;axis<3;++axis)
+            target[axis]=(Real(b,partner+0x40+axis*4)+Real(b,partner+0x6e0+axis*4))*.5f;
+    }
     // C7894..C79E3 constructs the native aim ray from eye +6E0 along
     // normalized +6D0, multiplied by +15000. Use that verified direction;
     // model-space hypospray axes are different. The existing nearby query
@@ -86,8 +109,8 @@ bool PartnerInFront(const uint8_t* b,uint32_t owner,uint32_t partner,bool prompt
 bool InjectionTarget(const uint8_t* b,unsigned slot){
     const auto& a=injections[slot];
     return Slot(b,a.target)==int(1-slot)&&Read(b,a.target+0x54)==a.target_id&&
-        TrialCoopNearbyDownedPlayer(b,players[slot].actor)==a.target&&
-        PartnerInFront(b,players[slot].actor,a.target);
+        (a.reviving?TrialCoopNearbyDownedPlayer(b,players[slot].actor):NearbyInjuredPartner(b,players[slot].actor))==a.target&&
+        PartnerInFront(b,players[slot].actor,a.target,false,!a.reviving);
 }
 bool CanInject(const uint8_t* b,uint32_t owner){
     const uint32_t state=Read(b,owner+0x170);
@@ -99,6 +122,12 @@ struct Scratch {
     ~Scratch(){std::memcpy(b+address,saved.data(),256);}
 };
 bool Stack(const X86Context& c){return c.esp>=0x10100&&TrialGuestReadable(c.esp-256,256);}
+float Maximum(const X86Context& c,uint8_t* b,uint32_t owner){
+    if(!Stack(c))return 0;
+    Scratch scratch(b,c.esp);X86Context temp=c;temp.ecx=owner;temp.esp=c.esp-64;
+    kernel::CallGuest(temp,0xbdab0,{});const float value=float(temp.st[temp.top&7]);
+    return std::isfinite(value)&&value>0?value:0;
+}
 uint32_t PartnerClip(const X86Context& c,uint8_t* b){
     if(!Stack(c)||!TrialGuestReadable(Read(b,0x51ca80),12))return 0;
     // 22B930/22B8D0 look up this name in the preloaded animation registry;
@@ -185,7 +214,50 @@ uint32_t MedicActor(const uint8_t* b,uint32_t behavior){
     return TrialGuestReadable(actor,0x160)&&!(Read(b,actor+0x5c)&1)&&Read(b,actor+0x54)!=0xffffffffu?actor:0;
 }
 uint32_t Stock(const uint8_t* b,uint32_t medic){
-    return TrialGuestReadable(world,0xf7c)?world+(Read(b,medic+0x15c)==4?0xf78:0xf74):0;
+    return TrialGuestReadable(medic,0x160)&&TrialGuestReadable(world,0xf7c)?world+(Read(b,medic+0x15c)==4?0xf78:0xf74):0;
+}
+uint32_t Entity(const uint8_t* b,uint32_t id){
+    if(!b||id==0xffffffffu||!world||!TrialGuestReadable(0x51c4dc,4)||Read(b,0x51c4dc)!=world||
+       !TrialGuestReadable(world,8))return 0;
+    const uint32_t state=Read(b,world+4);
+    if(!TrialGuestReadable(state,0x203c))return 0;
+    const uint32_t entry=state+0x3c+(id&1023)*8,p=Read(b,entry+4);
+    return Read(b,entry)==id&&TrialGuestReadable(p,0x60)&&Read(b,p+0x54)==id&&!(Read(b,p+0x5c)&1)?p:0;
+}
+bool LiveMedic(const uint8_t* b,uint32_t actor){
+    return b&&TrialGuestReadable(actor,0x160)&&Entity(b,Read(b,actor+0x54))==actor;
+}
+bool StockRoot(const uint8_t* b,uint32_t root,uint32_t actor){
+    return TrialGuestReadable(root,0x140)&&(Read(b,root)==0x46eef0||Read(b,root)==0x46f8e8)&&
+        Read(b,root+0x88)==actor&&LiveMedic(b,actor);
+}
+uint32_t ClientMedic(const uint8_t* b,uint32_t client,bool offer){
+    if(!b||!TrialGuestReadable(client,0xc0)||Read(b,client)!=(offer?0x4727a0u:0x46e960u)||
+       Entity(b,Read(b,client+0x54))!=client)return 0;
+    const uint32_t parent=Entity(b,Read(b,client+0x58));
+    if(!offer){
+        if(!TrialGuestReadable(parent,0x8c))return 0;
+        const uint32_t actor=Read(b,parent+0x88);
+        return StockRoot(b,parent,actor)?actor:0;
+    }
+    // 168D58..168D69 creates HealOrderClient under this MedicHealPlayer
+    // behavior and records its ID. The generic factory sets entity parent +58.
+    if(!TrialGuestReadable(parent,0x108)||Read(b,parent)!=0x46e9d8||
+       Read(b,parent+0x100)!=Read(b,client+0x54))return 0;
+    const uint32_t controller=Read(b,parent+0xd0),actor=Read(b,parent+0xd4);
+    if(!TrialGuestReadable(controller,0x20))return 0;
+    return StockRoot(b,Entity(b,Read(b,controller+0x1c)),actor)?actor:0;
+}
+Medic* Retained(const uint8_t* b,uint32_t actor){
+    for(auto& m:medics)if(m.actor==actor&&m.id==Read(b,actor+0x54))return &m;
+    return nullptr;
+}
+bool DialogueActive(const uint8_t* b,const Medic& m){
+    return m.dialogue&&Entity(b,m.dialogue_id)==m.dialogue;
+}
+bool CanCollect(const uint8_t* b,uint32_t owner,uint32_t actor){
+    const int slot=Slot(b,owner);const uint32_t stock=Stock(b,actor);
+    return slot>=0&&Alive(b,owner)&&players[slot].count<capacity&&stock&&Read(b,stock)>0&&Read(b,stock)<=0x7fffffffu;
 }
 bool HudAllowed(const X86Context& c,uint8_t* b,uint32_t owner){
     // The original 73D80 HUD wrapper uses the world hide flag and
@@ -205,6 +277,22 @@ bool HudAllowed(const X86Context& c,uint8_t* b,uint32_t owner){
     temp.esp=c.esp-64;temp.ecx=controller;
     return uint8_t(kernel::CallGuest(temp,0x4af40,{1}))!=0;
 }
+float HudOpacity(const X86Context& c,uint8_t* b,uint32_t owner){
+    // 73E32..73E57 applies the owner's category-0 fade to the native HUD.
+    // Keep this visual query separate from input/injection admission.
+    const uint32_t state=Read(b,world+4);
+    if(!TrialGuestReadable(state,0x14))return 0;
+    const uint32_t fades=Read(b,state+0x10);
+    if(!TrialGuestReadable(fades,0x10)||Read(b,fades)!=0x48154c||
+       !TrialGuestReadable(0x481568,4)||Read(b,0x481568)!=0x2223d0)return 0;
+    const uint32_t head=Read(b,fades+8);
+    if(!TrialGuestReadable(head,0x1a)||!b[head+0x19]||!TrialGuestReadable(Read(b,head),0x1a))return 0;
+    HostRestore host;Scratch scratch(b,c.esp);X86Context temp=c;
+    temp.esp=c.esp-64;temp.ecx=fades;
+    kernel::CallGuest(temp,0x2223d0,{Read(b,owner+0x54),0});
+    const float alpha=Real(b,Read(b,owner+0x300)+0x14)*(1.f-float(temp.st[temp.top&7]));
+    return std::isfinite(alpha)&&alpha>0?(alpha<1?alpha:1):0;
+}
 float BarExtent(const uint8_t* b,uint32_t owner){
     HostRestore host;
     const uint32_t hud=Read(b,owner+0x300);
@@ -222,15 +310,19 @@ float BarExtent(const uint8_t* b,uint32_t owner){
     return std::isfinite(extent)&&extent>=20&&extent<=2580?extent:0;
 }
 void Publish(const uint8_t* b,unsigned slot){
+    HostRestore host;
     const uint32_t owner=players[slot].actor;
     const bool valid=Slot(b,owner)==int(slot);
-    const float extent=valid&&players[slot].hud?BarExtent(b,owner):0;
+    const unsigned opacity=valid?unsigned(players[slot].hud_opacity*255.f+.5f):0;
+    const float extent=opacity?BarExtent(b,owner):0;
     const bool visible=extent>0;
     const uint32_t partner=visible?TrialCoopNearbyDownedPlayer(b,owner):0;
     const bool revive=partner&&Slot(b,partner)==int(1-slot)&&players[slot].count&&Alive(b,owner)&&
         CanInject(b,owner)&&!injections[slot].target&&PartnerInFront(b,owner,partner,true);
+    const uint32_t injured=visible?NearbyInjuredPartner(b,owner):0;
+    const bool heal=injured&&players[slot].count&&CanInject(b,owner)&&!injections[slot].target&&PartnerInFront(b,owner,injured,true,true);
     uint32_t bits;std::memcpy(&bits,&extent,4);
-    published[slot].store(valid?(uint64_t(bits)<<32)|players[slot].count|(visible?0x100u:0)|(revive?0x200u:0):0);
+    published[slot].store(valid?(uint64_t(bits)<<32)|(uint64_t(visible?opacity:0)<<16)|players[slot].count|(visible?0x100u:0)|(revive?0x200u:0)|(heal?0x400u:0):0);
 }
 uint32_t Choose(const uint8_t* b,uint32_t medic){
     HostRestore host;
@@ -255,17 +347,27 @@ uint32_t Select(X86Context& c,uint8_t* b,bool choosing){
     if(!actor||!Root(c,b,c.ecx))return 0;
     auto found=medics.end();
     for(auto it=medics.begin();it!=medics.end();++it)if(it->actor==actor){found=it;break;}
-    if(found!=medics.end()&&(found->id!=Read(b,actor+0x54)||Slot(b,found->owner)<0||
-       Read(b,found->owner+0x54)!=found->owner_id)){medics.erase(found);found=medics.end();}
+    if(found!=medics.end()&&found->id!=Read(b,actor+0x54)){medics.erase(found);found=medics.end();}
     const bool choose=choosing&&TrialGuestReadable(c.ecx,0xfc)&&Read(b,c.ecx+0xf0)==0&&Read(b,c.ecx+0xf8)==0xffffffffu;
     if(found==medics.end()){
-        if(medics.size()>=128)return 0;
-        const uint32_t owner=Choose(b,actor);if(!owner)return 0;
+        if(medics.size()>=128)return 0xffffffffu;
+        const uint32_t owner=Choose(b,actor);if(!owner)return 0xffffffffu;
         medics.push_back({actor,Read(b,actor+0x54),owner,Read(b,owner+0x54)});
-        return owner;
+        found=medics.end()-1;
     }
-    if(choose){const uint32_t owner=Choose(b,actor);if(owner){found->owner=owner;found->owner_id=Read(b,owner+0x54);}}
-    return found->owner;
+    if(Read(b,c.ecx)==0x46e9d8&&Entity(b,Read(b,c.ecx+0x54))==c.ecx){
+        found->dialogue=c.ecx;found->dialogue_id=Read(b,c.ecx+0x54);
+    }
+    // A manual command keeps its real requester until the native order is
+    // completed/cancelled. Queries and nearby partners cannot steal a handoff.
+    if(choose&&!DialogueActive(b,*found)&&found->request_client&&Entity(b,found->request_id)==found->request_client&&
+       TrialGuestReadable(found->request_client,0xb8)&&Read(b,found->request_client+0xb4)!=4){
+        found->request_client=0;found->request_id=0xffffffffu;
+    }
+    if(choose&&!DialogueActive(b,*found)&&!found->request_client){const uint32_t owner=Choose(b,actor);if(owner){found->owner=owner;found->owner_id=Read(b,owner+0x54);}}
+    // Keep a scoped rejection for invalid recipients; falling through would
+    // let the game's singleton player lookup deliver to the other player.
+    return Slot(b,found->owner)>=0&&Read(b,found->owner+0x54)==found->owner_id?found->owner:0xffffffffu;
 }
 }
 
@@ -273,12 +375,17 @@ void TrialHealthPackInput(unsigned slot,bool down,bool allowed){
     using namespace health_packs;if(slot>1)return;
     const bool previous=held[slot].exchange(down);
     if(!allowed){pending[slot]=0;return;}
-    if(down&&!previous)pending[slot]=generation.load();
+    if(down&&!previous)TrialHealthPackRequest(slot,TrialHealthPackUse::Context);
+}
+void TrialHealthPackRequest(unsigned slot,TrialHealthPackUse use){
+    if(slot<2&&use>=TrialHealthPackUse::Context&&use<=TrialHealthPackUse::Partner)
+        health_packs::pending[slot]=(health_packs::generation.load()<<2)|unsigned(use);
 }
 TrialHealthPackStatus TrialHealthPackSnapshot(unsigned slot){
+    health_packs::HostRestore host;
     const uint64_t v=slot<2?health_packs::published[slot].load():0;
     const uint32_t bits=uint32_t(v>>32);float extent;std::memcpy(&extent,&bits,4);
-    return {unsigned(v)&0xffu,health_packs::capacity,(v&0x100)!=0,(v&0x200)!=0,extent};
+    return {unsigned(v)&0xffu,health_packs::capacity,(v&0x100)!=0,(v&0x200)!=0,extent,float((v>>16)&0xffu)/255.f,(v&0x400)!=0};
 }
 void TrialHealthPackStorage(const std::filesystem::path& directory){
     health_packs::storage=directory;health_packs::checkpoints.clear();
@@ -331,6 +438,8 @@ void TrialHealthPackUpdate(X86Context& c,uint8_t* b){
     if(slot<0){for(unsigned i=0;i<2;++i)if(players[i].actor==c.ecx){published[i]=0;pending[i]=0;}return;}
     const uint32_t owner=c.ecx;auto& p=players[slot];
     p.hud=HudAllowed(c,b,owner);
+    p.hud_opacity=p.hud?HudOpacity(c,b,owner):0;
+    p.maximum=trial_coop::Active()&&p.hud&&Alive(b,owner)?Maximum(c,b,owner):0;
     auto& injection=injections[slot];
     if(injection.target){
         if(!InjectionOwner(b,unsigned(slot)))injection={};
@@ -348,19 +457,22 @@ void TrialHealthPackUpdate(X86Context& c,uint8_t* b){
         }
     }
     const uint64_t request=pending[slot].exchange(0);
-    if(request&&request==generation.load()&&p.count&&p.hud&&Alive(b,owner)&&Stack(c)&&!injection.target){
-        const uint32_t partner=TrialCoopNearbyDownedPlayer(b,owner);
+    const auto use=TrialHealthPackUse(request&3);
+    if(request&&(request>>2)==generation.load()&&p.count&&p.hud&&Alive(b,owner)&&Stack(c)&&!injection.target){
+        const uint32_t downed=use==TrialHealthPackUse::Self?0:TrialCoopNearbyDownedPlayer(b,owner);
+        const uint32_t partner=downed?downed:use==TrialHealthPackUse::Partner?NearbyInjuredPartner(b,owner):0;
         if(partner){
-            if(Slot(b,partner)==1-slot&&CanInject(b,owner)&&PartnerInFront(b,owner,partner)){
+            if(Slot(b,partner)==1-slot&&CanInject(b,owner)&&PartnerInFront(b,owner,partner,false,!downed)){
                 const uint32_t clip=PartnerClip(c,b);if(!clip){Publish(b,unsigned(slot));return;}
                 Scratch scratch(b,c.esp);X86Context temp=c;temp.esp=c.esp-64;
                 injection={p.id,partner,Read(b,partner+0x54),clip,generation.load()};
+                injection.reviving=downed!=0;
                 try{kernel::CallGuest(temp,0xbd650,{0,0});}
                 catch(...){injection={};throw;}
                 if(!b[owner+0x470])injection={};
             }
         }
-        else{
+        else if(use!=TrialHealthPackUse::Partner){
             Scratch scratch(b,c.esp);X86Context temp=c;temp.esp=c.esp-64;
             kernel::CallGuest(temp,0xbdab0,{});
             const float maximum=float(temp.st[temp.top&7]);
@@ -400,10 +512,19 @@ bool TrialHealthPackInjectionContact(X86Context& c,uint8_t* b){
     if(a.cancelled||!Alive(b,owner)||!players[slot].count||!InjectionTarget(b,unsigned(slot))||
        !HudAllowed(c,b,owner))return true;
     HostRestore host;
-    if(TrialCoopRevivePlayer(c,b,a.target)){
+    bool healed=false;
+    if(a.reviving)healed=TrialCoopRevivePlayer(c,b,a.target);
+    else{
+        const float maximum=Maximum(c,b,a.target);
+        if(maximum>Real(b,a.target+0x9c)){
+            // CD9D3 supplies this refill; D2BB9 applies it gradually and clamps native health.
+            std::memcpy(b+a.target+0x46c,&maximum,4);healed=true;
+        }
+    }
+    if(healed){
         --players[slot].count;
         // Retain the original injection sound, without its self-heal screen
-        // pulse or pending refill. Stock is spent only after a successful revive.
+        // pulse or pending refill. Stock is spent only after successful treatment.
         if(Stack(c)){
             Scratch scratch(b,c.esp);X86Context temp=c;temp.ecx=owner;temp.esp=c.esp-64;
             kernel::CallGuest(temp,0x216bd0,{Read(b,owner+0x2d4),0x458a98,0});
@@ -417,12 +538,47 @@ TrialHealthPackMedicScope::TrialHealthPackMedicScope(X86Context& c,uint8_t* b,bo
 }
 TrialHealthPackMedicScope::~TrialHealthPackMedicScope(){health_packs::medic_owner=previous;}
 void TrialHealthPackMedicPlayer(X86Context& c,const uint8_t* b,bool pointer){
-    using namespace health_packs;if(Slot(b,medic_owner)<0)return;
-    if(pointer)c.ecx=Read(b,medic_owner+0x54);else c.eax=Read(b,medic_owner+0x54);
+    using namespace health_packs;if(!medic_owner)return;
+    const uint32_t id=Slot(b,medic_owner)<0?0xffffffffu:Read(b,medic_owner+0x54);
+    if(pointer)c.ecx=id;else c.eax=id;
 }
 bool TrialHealthPackMedicNeeds(const uint8_t* b,bool original){
     using namespace health_packs;const int slot=Slot(b,medic_owner);
-    return slot<0?original:Alive(b,medic_owner)&&players[slot].count<capacity;
+    return !medic_owner?original:slot>=0&&Alive(b,medic_owner)&&players[slot].count<capacity;
+}
+bool TrialHealthPackMedicOfferOwner(const uint8_t* b,uint32_t owner,uint32_t client,uint32_t target){
+    using namespace health_packs;const uint32_t actor=ClientMedic(b,client,true);
+    if(!actor||(target&&target!=actor)||!Alive(b,owner))return false;
+    const auto* m=Retained(b,actor);
+    return m&&m->owner==owner&&m->owner_id==Read(b,owner+0x54)&&
+        m->dialogue_id==Read(b,client+0x58)&&Entity(b,m->dialogue_id)==m->dialogue;
+}
+bool TrialHealthPackMedicPrompt(const uint8_t* b,uint32_t owner,uint32_t client,uint32_t target,bool offer){
+    using namespace health_packs;const uint32_t actor=ClientMedic(b,client,offer);
+    const auto* m=actor?Retained(b,actor):nullptr;
+    return actor&&actor==target&&CanCollect(b,owner,actor)&&
+        (offer?TrialHealthPackMedicOfferOwner(b,owner,client):Read(b,client+0xb4)!=4&&(!m||!DialogueActive(b,*m)));
+}
+bool TrialHealthPackMedicClaim(const uint8_t* b,uint32_t owner,uint32_t client,uint32_t target){
+    using namespace health_packs;
+    if(!TrialHealthPackMedicPrompt(b,owner,client,target,false))return false;
+    auto* m=Retained(b,target);
+    // Recycle the address record, not a second entry behind the stale ID:
+    // Select must find this claim before considering a nearest-player offer.
+    if(!m)for(auto& previous:medics)if(previous.actor==target){
+        previous={target,Read(b,target+0x54),owner,Read(b,owner+0x54)};m=&previous;break;
+    }
+    if(!m){if(medics.size()>=128)return false;medics.push_back({target,Read(b,target+0x54),owner,Read(b,owner+0x54)});m=&medics.back();}
+    // Even a second client must not replace a still-pending command.
+    if(m->request_client&&Entity(b,m->request_id)==m->request_client&&
+       (!TrialGuestReadable(m->request_client,0xb8)||Read(b,m->request_client+0xb4)==4))return false;
+    m->owner=owner;m->owner_id=Read(b,owner+0x54);m->request_client=client;m->request_id=Read(b,client+0x54);
+    return true;
+}
+void TrialHealthPackMedicEnd(const X86Context& c,const uint8_t* b){
+    using namespace health_packs;const uint32_t actor=MedicActor(b,c.ecx);if(!actor)return;
+    auto* m=Retained(b,actor);
+    if(m&&m->dialogue==c.ecx&&m->dialogue_id==Read(b,c.ecx+0x54)){m->dialogue=0;m->dialogue_id=0xffffffffu;}
 }
 TrialHealthPackDeliveryScope::TrialHealthPackDeliveryScope(X86Context& c,uint8_t* b){
     using namespace health_packs;previous=medic_owner;owner=Select(c,b,false);base=b;

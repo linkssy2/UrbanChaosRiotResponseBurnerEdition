@@ -89,26 +89,41 @@ static void Corners(float x0,float x1,float y0,float y1){
 int main(int argc,char**){
     Open("intro_1");const auto original=Draw(true);const auto original_calls=calls;
     Corners(0,640,0,480);assert(!clears);
-    // This independent source rectangle is the released Black Fill behavior at16:9.
-    Draw(argc>1);Corners(0,640,-80,560);assert(!clears&&calls==original_calls);
-    assert(Near(480*(0-points[0].y)/(points[2].y-points[0].y),60));
-    assert(Near(480*(480-points[0].y)/(points[2].y-points[0].y),420));
+    // Full-frame Fill retains top/bottom titles and news tickers, including in startup logos.
+    Draw(argc>1);Corners(0,640,0,480);assert(!clears&&calls==original_calls);
+    assert(Near(480*(0-points[0].y)/(points[2].y-points[0].y),0));
+    assert(Near(480*(480-points[0].y)/(points[2].y-points[0].y),480));
     for(auto size: {std::array<float,2>{1280,720}, {1920,1080}, {2560,1440}}){
-        assert(Near((points[0].x-points[1].x)*size[0]/640/640,
-                    (points[2].y-points[1].y)*size[1]/480/480));
+        assert(Near((points[0].x-points[1].x)*size[0]/640,size[0]));
+        assert(Near((points[2].y-points[1].y)*size[1]/480,size[1]));
     }
     trial_graphics::mode=1;const auto fitted=Draw();Corners(80,560,0,480);
     assert(clears==1&&std::memcmp(&original,&fitted,sizeof(original))==0);
     assert(calls.size()==original_calls.size()+1&&calls.back()==0x3e4270);
-    trial_graphics::mode=0;
-    for(const char* name: {"EidosLogo","rocklogo","dolby","unknown"}){
-        Open(name);Draw();Corners(80,560,0,480);assert(clears==1);
+    for(auto size: {std::array<float,2>{1280,720}, {1920,1080}, {2560,1440}}){
+        assert(Near((points[0].x-points[1].x)*size[0]/640/640,
+                    (points[2].y-points[1].y)*size[1]/480/480));
     }
+    trial_graphics::mode=0;
+    // Startup logos obey the saved choice too; Fill must not force 4:3 side bands.
+    for(const char* name: {"EidosLogo","rocklogo","dolby","PAL_DOLBY"}){
+        Open(name);
+        for(auto size: {std::array<float,2>{1280,720}, {1920,1080}, {2560,1440}}){
+            trial_graphics::mode=0;Draw();Corners(0,640,0,480);assert(!clears);
+            assert(Near((points[0].x-points[1].x)*size[0]/640,size[0]));
+            assert(Near((points[2].y-points[1].y)*size[1]/480,size[1]));
+        }
+        trial_graphics::mode=1;Draw();Corners(80,560,0,480);assert(clears==1);
+        trial_graphics::wide=false;
+        for(unsigned mode: {0u,1u}){trial_graphics::mode=mode;Draw();Corners(0,640,0,480);assert(!clears);}
+        trial_graphics::wide=true;trial_graphics::mode=0;
+    }
+    Open("unknown");Draw();Corners(80,560,0,480);assert(clears==1);
     for(const char* name: {"fe_bk1","fe_mp","gamelogo","splash"}){
         Open(name);Draw();Corners(0,640,0,480);assert(!clears);
     }
     for(const char* name: {"intro_12_edit","outro_13","PAL_INTRO_1","intro_26","credits","reward","attract","complete"}){
-        Open(name);Draw();Corners(0,640,-80,560);assert(!clears);
+        Open(name);Draw();Corners(0,640,0,480);assert(!clears);
     }
     trial_graphics::wide=false;
     for(unsigned mode: {0u,1u}){trial_graphics::mode=mode;Draw();Corners(0,640,0,480);assert(!clears);}
@@ -124,6 +139,7 @@ int main(int argc,char**){
     TrialFmvOpen(c,g_base);mem::denied=0xffffffff;Draw();Corners(80,560,0,480);
     // Native math must not leak changed floating-point flags back into guest code.
     Open("intro_1");const unsigned previous=_mm_getcsr();_mm_setcsr(0x7f80);
-    Draw();assert(_mm_getcsr()==0x7f80);_mm_setcsr(previous);Corners(0,640,-80,560);
-    std::puts("FMV: retail quad, Fill crop, 4:3 bands, UV/ABI preservation, logos, backgrounds, invalid names and lifecycle passed");
+    Draw();assert(_mm_getcsr()==0x7f80);_mm_setcsr(previous);Corners(0,640,0,480);
+    trial_graphics::mode=1;_mm_setcsr(0x7f80);Draw();assert(_mm_getcsr()==0x7f80);_mm_setcsr(previous);
+    std::puts("FMV: uncropped full-frame Fill, proportional 4:3, 720p/1080p/1440p, UV/ABI preservation, backgrounds, invalid names and lifecycle passed");
 }

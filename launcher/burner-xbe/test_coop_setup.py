@@ -15,8 +15,7 @@ from unittest.mock import patch
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 sys.dont_write_bytecode = True
-sys.path[:0] = [str(HERE), str(REPO / 'scripts'),
-               str(REPO / 'third_party/xboxrecomp/tools/xiso')]
+sys.path[:0] = [str(HERE), str(REPO / 'scripts')]
 import import_game as worker
 import package as packager
 import coop_assets
@@ -73,7 +72,7 @@ class CoopSetup(unittest.TestCase):
         for name, content in self.files.items():
             (self.game / name).write_bytes(content)
         (self.game.parent / 'installed.json').write_text(json.dumps({
-            'disc_manifest': worker.sha(self.tools / 'disc-manifest.json')}))
+            'version': 1, 'disc_manifest': worker.sha(self.tools / 'disc-manifest.json')}))
         self.dest = self.game / 'coopcharacters.lst'
         for name, content in {'settings.toml': b'language = 0\nfps_cap = 120\n',
                               'xboxrecomp.ini': b'custom bindings', 'hdd/profile': b'saved progress',
@@ -228,7 +227,7 @@ class CoopSetup(unittest.TestCase):
             'size': len(self.files[source.name]), 'sha256': digest(self.files[source.name])}
         (self.tools / 'disc-manifest.json').write_text(json.dumps(self.manifest))
         (self.game.parent / 'installed.json').write_text(json.dumps({
-            'disc_manifest': worker.sha(self.tools / 'disc-manifest.json')}))
+            'version': 1, 'disc_manifest': worker.sha(self.tools / 'disc-manifest.json')}))
         expected = self.base / 'injection.lst'
         report = coop_injection_assets.build_archive(self.game, expected)
         recipe = dict(version=1, size=report['size'], sha256=report['sha256'])

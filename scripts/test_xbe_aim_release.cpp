@@ -25,10 +25,11 @@ int main(){
     const auto saved=context;const auto csr=_mm_getcsr();
     const auto* invalid=reinterpret_cast<const uint8_t*>(1);
     for(unsigned iteration=0;iteration<2;++iteration){
+        TrialAimTargetScope target(context,invalid);target.Shake(context,invalid);target.After(invalid);
         TrialAimFireScope fire(context,invalid,iteration!=0);
         TrialAimShotScope shot(context,invalid);
         TrialAimReticleScope reticle(context,invalid);
-        TrialAimImpact(context,invalid);TrialAimBullet(context,invalid);
+        TrialAimImpactScope impact(context,invalid);TrialAimDecalPublish(context,invalid);TrialAimBullet(context,invalid);
         TrialAimRender(context,invalid);TrialAimQuad(context,invalid);
     }
     assert(!std::memcmp(&context,&saved,sizeof context)&&_mm_getcsr()==csr);

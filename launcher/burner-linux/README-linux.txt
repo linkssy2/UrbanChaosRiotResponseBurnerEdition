@@ -1,172 +1,233 @@
-Urban Chaos: Riot Response - Burner Edition 0.08
+Urban Chaos: Riot Response - Burner Edition 0.09
 EXPERIMENTAL LINUX / PROTON PACKAGE
 
 This runs the same Windows x64 game through Proton; this is not a native port.
-A Linux tester confirmed setup and gameplay with the earlier compatibility
-build. That does not verify 0.08's new features, co-op, every GPU or Steam Deck.
-The Windows and Proton packages share the same game runtime and asset recipes.
+Windows and Linux/Proton use the same runtime, installation recipes and optional
+HD texture pack. These setup changes have automated checks; live Linux testing
+of this build remains pending.
 
-SET UP THROUGH STEAM (RECOMMENDED)
-Use Steam for both setup and play so it supplies Proton's Linux runtime.
-You need Linux x86-64, Steam with Proton Experimental installed, working Vulkan
-drivers for your GPU, and your supported original Xbox ISO or portable GameData.
-On Steam Deck, do the setup in Desktop Mode.
+QUICK START THROUGH STEAM (RECOMMENDED)
+You need Linux x86-64, Steam, an installed Proton version, working Vulkan drivers
+and your supported original Xbox disc image. On Steam Deck, use Desktop Mode.
 
-1. Extract the complete Linux archive to a writable folder. Keep tools, runtime
-   and licenses together. Do not run from inside the archive.
-2. If you already imported the game, COPY your GameData folder into this folder
-   and skip step 5. Keep a backup of the original.
-   Otherwise, place your ISO in this folder and name it game.iso. Both supported
-   full-disc ISO and extracted XISO layouts are accepted; renaming does not
-   change the disc layout or make an unsupported disc compatible.
-3. In Steam, choose Games > Add a Non-Steam Game > Browse. Select the extracted
-   tools/python/python.exe (show all files if necessary), then add it. Rename
-   the shortcut to Urban Chaos - Burner Edition.
-4. Open that shortcut's Properties. Set Start In to the extracted package folder
-   containing tools and runtime, enclosed in double quotes. Under Compatibility,
-   enable "Force the use of a specific Steam Play compatibility tool" and choose
-   Proton Experimental. Keep this same shortcut for setup and play.
-5. For the first import, set Launch Options to this exact line:
-
-   -B "tools/import_game.py" import --iso "game.iso" --cancel ".cancel-import" --interactive
-
-   Press Play. A message confirms that import is about to start; press OK and
-   wait for the completion or error dialog. Import can take several minutes;
-   there is no progress window. A successful import also creates
-   GameData/installed/installed.json. If no dialog appears or import fails,
-   see IF SETUP OR PLAY FAILS below.
-6. Set Launch Options to the normal play command:
+1. Extract the complete Linux package into a writable folder. Keep tools,
+   runtime, assets and licenses together. Do not run from inside the archive.
+2. For automatic first-time setup, put ONE supported Xbox ISO/XISO in assets/.
+   Keep the ISO in that location: this mode reads original files from the disc
+   image during play. Setup still verifies it and prepares the required files.
+3. Add tools/python/python.exe as a Non-Steam Game. Show all files if necessary.
+   Name the shortcut Urban Chaos - Burner Edition. Set its Start In field to
+   the extracted package folder, enclosed in double quotes.
+4. In Properties > Compatibility, enable the compatibility-tool override and
+   choose your installed Proton version. Experimental is optional, not required.
+5. Set Launch Options to:
 
    -B "tools/import_game.py" launch --interactive
 
-   Press Play. Keep these launch options for future runs. The first launch can
-   take longer while it prepares game files and known shaders. The ISO is no
-   longer required after a successful import.
+6. Press Play. A first-time preparation message appears; acknowledge it and
+   leave Steam running. The game starts after successful preparation. Errors
+   are shown in a dialog and saved when possible. Keep the same shortcut and
+   Launch Options for later sessions.
 
-Steam/Flatpak must have access to the extracted folder and its files. This path
-uses the bundled Python worker; the Windows .NET setup window is not required.
-Our package does not install Proton, Wine or GPU drivers. Keep launching through
-the worker above so runtime updates and bundled translations are applied.
+An existing installation takes priority over assets/. Dropping in an ISO does
+not replace it. If there is more than one image in assets/, choose explicitly
+using the commands below. Both supported whole-disc and XISO layouts work;
+renaming an unsupported image does not make it compatible.
 
-SINGLE-PLAYER AND EXPERIMENTAL CO-OP
-Keep the normal play command from step 6 for either mode. Choose Single player
-or Co-op in the game's main menu; no separate co-op launcher or launch flag is
-needed. Co-op currently uses keyboard/mouse for Player 1 (upper view) and one
-controller for Player 2 (lower view). Select characters, mark both Ready, then
-choose a campaign level. Both players pause together; the player who pauses
-edits their own Controls and world/weapon FOV. Other graphics settings are shared.
-Assign Use health pack for Player 2 in Controls before relying on partner revival.
-Co-op campaign coverage and its reported aiming offset remain under investigation.
-Live Proton co-op acceptance is still pending.
+SELECT GAME: THREE SETUP CHOICES
+Temporarily replace Launch Options with ONE command below, press Play and wait
+for completion. Then restore the normal launch command from step 5.
+Paths are relative to the package folder unless an absolute path is supplied.
+Always put paths containing spaces in double quotes.
+
+Use ISO directly:
+  -B "tools/import_game.py" use-iso --iso "assets/game.iso" --cancel ".cancel-use-iso" --interactive
+
+The ISO stays required for play and future preparation. If it moves, repeat this
+command with its new location. Your source ISO is never modified.
+
+Import once:
+  -B "tools/import_game.py" import --iso "assets/game.iso" --cancel ".cancel-import" --interactive
+
+Copies the original game files into the installation. You may remove the ISO
+after successful setup. Existing saves, settings and compatible add-ons remain.
+
+Use Existing Install:
+  -B "tools/import_game.py" use-installation --installation "../Previous Burner Edition" --interactive
+
+Select the old package folder or its GameData folder. Its files, saves and
+add-ons stay there and are reused without copying. Keep that folder available.
+The selected installation is shared by subsequent play, language, texture and
+voice operations. Do not manually add --data unless intentionally overriding
+that selection for one command.
+
+OPTIONAL DIAGNOSTIC LOGGING
+Logging is off by default. Before reproducing a problem, temporarily set the
+same Steam shortcut's Launch Options to:
+  -B "tools/import_game.py" diagnostics --logging on --interactive
+
+Press Play and acknowledge the message, then restore the normal launch command.
+Use off instead of on to disable it. Files stay in this launcher's GameData/logs,
+including when another installation is selected. Share relevant logs manually;
+nothing is uploaded. They may include local paths, device names and settings.
+The terminal alternative is ./burner.sh diagnostics on (or off).
+Game logs are capped at 64 MiB; setup/terminal Proton logs at 8 MiB each, retaining
+30 files per category. Turn logging off afterward; logging can affect timing.
+It does not enable heavy GPU captures, input/audio recordings or memory dumps.
+Steam/Proton failures before the Python worker starts cannot be logged by it.
+The advanced wrapper additionally records output from its Proton worker launch.
+A read-only/full disk can prevent logging. Existing logs remain after disabling.
+
+VERIFY OR REPAIR
+To verify the selected installation without starting the game:
+  -B "tools/import_game.py" verify --interactive
+
+For a missing or moved direct-mode ISO, choose its new location with use-iso.
+For a damaged extracted installation, repeat import with the supported ISO.
+A broken installation is not silently replaced by a different image in assets/.
 
 OPTIONAL HD GAME TEXTURES
-Place the separate HD texture ZIP in the extracted package folder and name it
-HD-Game-Textures.zip. Do not extract it. Temporarily use these Launch Options:
-
+Download the separate compatible HD texture ZIP; do not extract it. Temporarily
+use, for example:
   -B "tools/import_game.py" textures --pack "HD-Game-Textures.zip" --cancel ".cancel-textures" --interactive
 
-Press Play, acknowledge the start message and wait for the result, then restore
-the normal play command from step 6. In the game, enable
-Graphics > HD game textures > Apply.
-If the option remains gray, installation did not complete; use the failure
-instructions below with the texture command. The same HD ZIP works on Windows
-and Linux. The unchanged 0.06 pack remains compatible with 0.08; existing users
-do not need to reinstall it. HD HUD is included in the main package and still
-has known prompt issues.
+Restore the normal launch command after success, then enable Graphics > HD game
+textures > Apply. The separate 0.09 HD pack adds 565 mappings, for 1,803 total.
+Install the new ZIP to receive those additions; updating the game alone keeps
+your existing pack. The 0.06 pack remains compatible. HD HUD artwork stays in
+the main package. Expanded texture coverage still needs in-game visual testing.
 
-LANGUAGE
-Choose Options > Language in the game, then restart. To select Spanish before
-playing, temporarily use these Launch Options and press Play once:
-
+LANGUAGE AND OPTIONAL SPANISH VOICES
+Bundled Spanish text is included; no translation download is needed. Set language
+in the game and restart, or temporarily run this command before playing:
   -B "tools/import_game.py" language --language 4 --interactive
 
-Restore the normal play command afterward. Values are 0 English, 1 French,
-2 Italian, 3 German and 4 Spanish. Changing language keeps your other settings.
-ZARF's Spanish text and supplemental translations are included in this package.
-The first Play after import or upgrade prepares them from your imported game;
-the Spanish language command also prepares them. No separate Spanish download
-is needed. Spanish uses English voices until you import the Spanish audio from
-your European multilingual PS2 ISO (En/Fr/De/Es/It, SLES-53991). Import your Xbox
-game first; the PS2 ISO supplies voices, not the base game. If your PS2 disc image
-is in a ZIP, extract the ISO first. Place the ISO in the package folder, name it
-ps2-europe.iso, and temporarily use these Launch Options:
+Language values: 0 English, 1 French, 2 Italian, 3 German, 4 Spanish. Changing
+language preserves other settings. Restore the normal launch command afterward.
 
+Optional Spanish voices come from YOUR European multilingual PS2 ISO,
+SLES-53991 (En/Fr/De/Es/It). Set up the Xbox game first. Extract the PS2 ISO from
+its ZIP if necessary, then temporarily use:
   -B "tools/import_game.py" voices --iso "ps2-europe.iso" --cancel ".cancel-voices" --interactive
 
-Press Play and acknowledge the start message. The bundled Windows Python and
-FFmpeg tools convert the audio locally through Proton; this can take several
-minutes. Wait for the completion dialog, select Spanish with the language
-command above, then restore the normal play command. The PS2 ISO is no longer
-required after a successful voice import. Dialogue and cutscene voices change
-only when Spanish is selected; your original imported game files, other
-languages and saves stay intact.
+The bundled converters prepare dialogue and matched movie audio locally. Wait
+for completion, select Spanish and restore the normal launch command. You may
+remove the PS2 ISO after successful voice import. Original Xbox files, other
+languages and saves stay intact. No original recordings are included here.
 
-IF SETUP OR PLAY FAILS
-For a black screen with audio or an FPS counter, record which of those appears.
-To collect a Proton log, temporarily replace the normal Launch Options with:
-
-  PROTON_LOG=1 %command% -B "tools/import_game.py" launch --interactive
-
-Reproduce the problem, then close the game. Open your Linux home folder and find
-the newest steam-*.log file (the * is the shortcut's numeric ID). Proton writes
-logs there by default; if you set PROTON_LOG_DIR yourself, check that folder.
-For an import or HD-pack failure, instead put PROTON_LOG=1 %command% before that
-command's existing -B arguments, run it once, and collect the same log.
-
-Send the log, exact error text, release version, Linux distribution, GPU/driver,
-Proton version and the step that failed. Setup errors are shown in a dialog and
-saved as last-setup-error.txt beside tools and runtime when that folder is
-writable. Include that file and GameData/last-error.txt if they exist. If Python
-cannot start at all, collect the Proton log instead. Restore the normal Launch
-Options after collecting the log. Logging is optional troubleshooting, not a
-required setting or a rendering fix.
+SINGLE-PLAYER AND CO-OP
+Use the same play command for both modes; choose Single player or Co-op from
+the main menu. Co-op uses keyboard/mouse for Player 1 and a controller for
+Player 2. Both players pause together and edit their own Controls and FOV.
+Controller users double-tap D-pad Down to heal themselves, or hold it while
+facing a nearby injured/downed partner to heal or revive them. Keyboard/mouse
+uses Use health pack for self-healing and the separate Heal Partner binding
+(default U unless already assigned). Treatment spends the giver's pack.
+Live Proton co-op acceptance for this build remains pending.
 
 UPDATES AND SAVES
-Extract the new release and COPY your GameData folder beside tools and runtime.
-Keep a backup. Update the existing Steam shortcut's Target and Start In paths
-if the package moved. The next Play updates the runtime, restored UI, shader
-seed and bundled Spanish text without replacing saves, settings or HD textures.
+From 0.09 onward, close the game and stop the Steam setup/play shortcut. Open
+a terminal IN the extracted package folder, then run:
+  ./burner.sh check-updates
+  ./burner.sh update
 
-Saves: GameData/xbe-runtime/hdd
-Settings: GameData/xbe-runtime/settings.toml
-Game content: GameData/installed/game_files
+Updates require native Python 3.10 or newer (separate from bundled Windows
+Python). No Proton environment or new Steam shortcut is needed for these two
+commands. The updater downloads the official Linux package, verifies it, keeps
+a rollback copy and replaces only managed package files, preserving executable
+permissions. When it prints success, press Play using your SAME Steam shortcut.
+Play refreshes the selected installation's managed runtime and bundled content.
+Saves, settings, installed add-ons, ISO, installation.json and prefixes stay put.
 
-Never delete GameData to troubleshoot a Proton prefix. Steam manages its own
-prefix for this shortcut. No cache or save folders are removed automatically.
-Keep filenames and capitalization as extracted.
+If interrupted, run ./burner.sh recover-update before playing again. Keep the
+.launcher-update folder until recovery finishes. Do not update while the game
+or Steam setup worker is open. Linux updates that change the bundled Windows
+Python require a manual complete-package update, to keep Steam recovery safe.
+Older launchers need this complete package installed once to gain the updater.
 
-ADVANCED ONLY: DIRECT COMMAND-LINE WRAPPER
-burner.sh invokes Proton directly. It does NOT set up the Steam Linux Runtime
-container, so it may fail on host libraries even when the Steam route works.
-Use the Steam instructions above for the recommended setup and for reports.
-For users who already have a compatible host environment, run from the package:
+For an in-place update, close the game and extract the COMPLETE new package
+over the existing package, replacing package files. Keep GameData/, assets/,
+installation.json if present, and any externally selected installation folder.
+Do not delete an ISO used directly. Keep the same Steam shortcut.
 
-  bash burner.sh import "/absolute/path/to/your game.iso"
+If using a new package folder instead, choose Use Existing Install and point to
+the old folder. There is no need to duplicate its GameData. Play refreshes the
+managed runtime and bundled content without replacing saves or settings.
+
+Default locations (inside the selected installation):
+  Saves: GameData/xbe-runtime/hdd
+  Settings: GameData/xbe-runtime/settings.toml
+  Prepared/original content: GameData/installed/game_files
+If GameData itself was selected, these paths start directly at that folder.
+
+Never delete GameData to troubleshoot Proton. Steam manages the prefix for its
+shortcut. The optional terminal wrapper uses a separate .proton folder. Keep
+managed files/folders as real files rather than symlinks; ordinary host path
+mapping used by Proton is supported.
+Keep the same Steam shortcut when updating; if the package moves, edit its Target
+and Start In together. Recreating the shortcut can select a different prefix.
+The terminal wrapper resolves a symlink to burner.sh back to its real package.
+Do not replace package files while its embedded Python or the game is running.
+
+IF SETUP OR PLAY FAILS
+Steam/Flatpak must have access to the package, the selected installation and any
+ISO used directly. Our package does not install Proton, Wine or graphics drivers.
+The recommended route uses the bundled worker; the Windows .NET Setup window is
+not needed under Proton.
+
+Setup errors appear in a dialog and, when writable, last-setup-error.txt beside
+tools and runtime. Game failures may also write last-error.txt inside the
+selected GameData folder. Include the exact error, version, Linux distribution,
+GPU/driver, Proton version and failing step in a report.
+
+If no dialog appears, or video is black while audio/FPS remain, enable a Proton
+log temporarily:
+  PROTON_LOG=1 %command% -B "tools/import_game.py" launch --interactive
+
+Close the game after reproducing the issue and look for the newest steam-*.log
+in your home folder, or PROTON_LOG_DIR if you set one. For setup errors, put
+PROTON_LOG=1 %command% before that setup command's -B arguments instead.
+Restore the normal command afterward. Logging is optional troubleshooting,
+not a required setting or rendering fix. Explicit environment options are kept.
+
+OPTIONAL ADVANCED TERMINAL WRAPPER
+The wrapper invokes Proton directly; it does not configure the Steam Linux
+Runtime container. Prefer the Steam route above if host libraries cause errors.
+From the extracted package folder:
+
   bash burner.sh play
-  bash burner.sh textures "/absolute/path/to/HD-Game-Textures.zip"
-  bash burner.sh voices "/absolute/path/to/Urban Chaos PS2 Europe.iso"
+  bash burner.sh use-iso "/path/to/game.iso"
+  bash burner.sh import "/path/to/game.iso"
+  bash burner.sh use-installation "/path/to/previous package or GameData"
+  bash burner.sh verify
+  bash burner.sh auto-setup
+  bash burner.sh textures "/path/to/HD-Game-Textures.zip"
+  bash burner.sh voices "/path/to/European PS2.iso"
   bash burner.sh language spanish
-  bash burner.sh language
   bash burner.sh status
   bash burner.sh --help
 
-Language names: english, french, italian, german, spanish. Status does not launch
-the game; exit 0 means imported data is ready, 2 means missing or incompatible.
-The wrapper uses .proton beside burner.sh, separate from Steam's prefix. Both
-routes use the same portable GameData. The wrapper finds Proton Experimental
-in the main Steam library; for another installed version or Steam location:
+Play has the same first-run assets/ discovery as Steam. Status does not start
+the game: exit 0 means ready, 2 means not ready. Language names are english,
+french, italian, german and spanish. With no language argument it shows the
+current selection.
 
-  BURNER_STEAM="/path/to/Steam" BURNER_PROTON="/path/to/Proton/proton" bash burner.sh play
+Choose a Proton version explicitly if needed:
+  BURNER_PROTON="/path/to/Chosen Proton/proton" bash burner.sh play
+For a nonstandard Steam folder, also set BURNER_STEAM="/path/to/Steam".
+The wrapper uses Experimental if installed; otherwise it accepts a sole Proton
+in the main Steam library. With several choices, set BURNER_PROTON explicitly.
+Explicit Proton and driver environment options are preserved.
 
 VERIFICATION LIMITS
-Automated checks cover wrapper dispatch, quoting and failure handling. They do
-not establish Linux graphics, frame pacing, audio, FMVs or controller support.
-Prior-version user feedback confirms one working Linux setup/gameplay session;
-0.08's new features, full-campaign behavior and co-op require separate testing.
-The shader seed is portable shader data, not a Linux GPU driver cache. No Steam
-Deck verification or confirmed fix for every black-screen report is claimed.
+Automated tests cover command routing, file/path quoting, installed-Proton
+selection, preserved environment/state and failure handling. They do not prove
+Linux video, audio, frame pacing, FMVs, controllers or Steam Deck compatibility.
+Earlier user feedback confirmed a working Linux setup/gameplay session; it does
+not replace testing this build. The shader seed is portable shader data, not a
+Linux GPU driver cache.
 
 Release details and credits: README.txt and licenses/
-Proton and logging: https://github.com/ValveSoftware/Proton#runtime-config-options
+Proton: https://github.com/ValveSoftware/Proton#runtime-config-options
 Steam Linux Runtime: https://github.com/ValveSoftware/steam-runtime
 Direct3D 12 translation: https://github.com/HansKristian-Work/vkd3d-proton

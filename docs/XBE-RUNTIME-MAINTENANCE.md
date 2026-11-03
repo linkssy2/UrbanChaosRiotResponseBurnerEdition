@@ -1,5 +1,579 @@
 # Burner Edition: current runtime
 
+## Per-player reticle colors (November 3)
+
+Graphics > Reticle settings contains size plus separate normal, enemy, friendly
+NPC and pistol-spin colors. Each offers Original and nine named colors with a
+preview. Color choices follow the existing pause/settings owner, persist as eight
+GameInfo options, and publish only after a successful Apply. Invalid optional
+values reset only that color; a failed save rolls both players back. Size remains
+the existing shared setting. English and Spanish labels are included.
+
+The pinned 738D0 native update still chooses target priority and each owner's
+spin state. The new hook at 739F9 replaces only its selected RGB, before the
+existing sprite/fade update. Alpha, targeting, spin rewards, geometry, reticle
+alignment and shot direction are unchanged. Original bypasses the replacement.
+Evidence, prior runtime/symbols and checks are in `build/reticle-colors-20261103`.
+Live color acceptance on Windows and Proton remains pending.
+
+The user confirmed the co-op medic prompt works on the November 2 logging
+candidate (runtime `4ebc5d7e694cc6b03242c33cc520987996e1a6b07e313509ab388cb79756297e`)
+after the November 3 launch. This is Windows user acceptance of that encounter,
+not a whole-campaign or Proton verification.
+
+## Opt-in support logs (November 2)
+
+Darkwatch's current `docs/DIAGNOSTICS.md`, launcher worker and release notes were
+reviewed read-only. Urban Chaos now follows the same default-off, local-only
+toggle/Open Logs pattern, with bounded files and no automatic upload. Windows
+Manage, the Steam Python shortcut and the terminal Proton wrapper all use the
+launcher's `GameData/.diagnostic-logging` choice, independently of selected game
+data. Logs live in that launcher's `GameData/logs`. See `docs/DIAGNOSTICS.md` for
+exact scope and Linux commands; this does not claim every Darkwatch probe exists.
+
+The launcher strips inherited developer flags and enables `UCRR_SESSION_LOG=1`
+only after opening the opted-in game log. Release Report/Info/Warn and limited
+reports then pass through a serialized 64-MiB stderr logger; disabled log macros
+do not evaluate their arguments or touch rate-limit counters. Debug, GPU/frame,
+heap and audio captures remain compiled out. Startup uses the existing system
+and settings report; existing half-second FPS calculation supplies a log sample
+every ten intervals. No extra per-draw clocks or readbacks were added. Errors
+still reach the existing bounded failure report with support logs off.
+
+Setup actions and the terminal wrapper's Proton output have separate 8-MiB caps
+and 30-file retention. Runtime logs retain 30 sessions. Managed paths reject
+links and shared file leaves while accepting Proton-mapped host ancestors.
+Log-write failures never authorize changing installation state or failing play.
+No input/desktop text, screenshots, audio recordings or memory dumps are added.
+
+Evidence and prior source/runtime/PDB are in `build/opt-in-logging-20261102`.
+Default-off/opt-in/cap checks execute the production release logger and heavy
+capture guards. Worker tests exercise real setup and mocked child output, not
+gameplay; launcher tests and Linux wrapper fixtures record their own platform
+coverage. Paired packaging retains the same runtime and shared assets. Live
+Windows diagnostic-session and Proton gameplay acceptance remain unverified.
+
+## Health-pack input symbols (November 2)
+
+The stored-pack HUD now draws the controller direction-pad icon with its lower
+arm highlighted and a compact multiplication-sign/2 badge. Keyboard/mouse uses
+the current primary or secondary healing binding in a keycap (or existing mouse
+artwork); rebound controller face buttons use the detected controller family.
+The shared UI path covers single-player and both co-op view owners, preserving
+the native health-bar fade and conversation/menu hiding. Gameplay inputs are
+unchanged. Wheel Down is deliberately excluded from menu-icon code lookup:
+its keyboard source 257 otherwise collides with the menu's A-button code.
+
+The production ImGui fixture checks actual glyph/atlas UVs for both owners,
+primary/secondary rebinding, unbound input, mouse, wheel, controller/default
+gesture, original/HD HUD and three output sizes. Existing menu/input/fade checks
+also pass. Runtime SHA-256 is
+`01e467beed3c0059aca44ad15e05dd245151e22a15456049c6b8b8f7d18c0312`.
+Evidence and the prior runtime/PDB are in `build/health-binding-icons-20261102`.
+This is offline UI verification; live Windows/Proton visual acceptance of the
+new symbols remains pending. Paired 0.09 release preparation includes this change.
+
+## Persistent medic collection prompt (November 2)
+
+The user reported no pack-request prompt for either player at the first medic
+in the first mission, before either player collected any stock. Full health was
+already admitted by the inventory helper. A saved tutorial-seen flag at profile
++128 still prevented native help routine 140FB0 from publishing its medic hint
+after the original timer expired. A negative control reproduces that suppression
+with stock available and both owners eligible; the user's actual profile flag
+has not been confirmed in a live run.
+
+The pinned branch at 14110E now reaches the existing HealPlayer eligibility query
+regardless of tutorial history. Native text, animation and per-player look/range,
+inventory capacity, medic stock and busy checks remain in place. Tutorial history
+is preserved; other tutorial hints retain their original behavior. The fix also
+applies to single-player collection.
+
+Regression coverage includes both view owners and update orders, an already-seen
+tutorial, repeated updates, looking away, full inventory, empty medic stock and
+the single-player singleton. All eight targeted suites and 56 existing WARP
+screen-sampling comparisons pass. The fixture exercises the native medic help
+body and real inventory helper; scene queries and text resources are boundaries,
+so it does not establish live visibility at the reported first-medic encounter.
+
+Normal runtime SHA-256:
+`29f89d268187fbad0f9c0209d003c17f7a616e78b5c809a6a721c7fddc3f3cff`.
+Prior source/runtime/PDB, the failing-before regression, successful checks and
+paired package receipts are under `build/medic-repeat-prompt-20261102`.
+Windows and Linux/Proton use the same runtime and shared assets. The existing HD
+pack remains compatible. This is an unpublished test correction; Windows
+first-medic gameplay acceptance and live Proton verification remain pending.
+
+## Controller menus and partner healing (November 2)
+
+The user accepted the previous pickup notice and pause-navigation changes, then
+reported getting trapped on the original Controller reference page. That widget
+calls 2745F0 directly instead of the shared 4C3F0 reader. Its three hardcoded
+player-zero query arguments now use the accepted pause owner. Pinned original
+query/jump-table replay reproduces the old P2 Back failure and confirms P2 Back,
+other-player isolation, and unowned single-player behavior.
+
+Holding X was also opening ImGui's built-in gamepad window switcher, whose windows
+are not a game menu. The host already provides explicit controller navigation;
+disable only ImGui's generic gamepad navigation. A real-ImGui negative-control
+fixture reproduces the old hold-X window target and verifies its absence during
+gameplay and both pause owners. Original gameplay X remains mapped normally.
+Health overlays also hide for an owned pause when Controller help has no host
+menu context. Cheats is now a main-menu-only entry, with no pause entry or Y
+shortcut; its native toggle authorization follows the exact main-menu epoch.
+
+Controller health gestures use the physical D-pad Down for that controller's
+player only. A double tap within 300 ms requests self-healing. Holding for 650 ms
+while facing a nearby injured/downed partner requests a partner injection.
+A cancelled or completed hold stays consumed until release. Focus, menus,
+cutscenes, capture and disconnection reset the gesture; existing keyboard health
+behavior remains unchanged. Keyboard/mouse has a separate Heal Partner control,
+default U (unbound on upgrade if U is already claimed), with two rebindable slots
+saved as HealthPacks Partner0/Partner1. P2 controller saves cannot overwrite it.
+
+Living-partner treatment reuses the existing partner injection animation. Native
+BDAB0 supplies maximum health; the Heal contact queues the recipient's +46C refill,
+as CD9D3/CD9D8 do, and D2BB9 applies/clamps it. The giver spends one pack only at a
+successful contact. Identity, range, facing, health and pending treatment are
+revalidated; cancelled injections do not heal self, consume stock or turn into a
+revive. Living partners deliberately show no healing prompt. The existing downed
+Revive Partner prompt remains. The native full-health query runs for this feature
+only in co-op.
+
+Offline checks cover both giver/recipient directions, original self/refill and
+revive paths, animation event exactly-once spending, cancellation, native HUD fade,
+checkpoint stock, binding persistence/failure/conflicts, real input ownership,
+physical gesture timing/handoff, and menus in English/Spanish at three sizes.
+The accepted pickup and aiming tests still pass, including all 56 WARP
+screen-sampling comparisons. The PC prompt input preparation is now a reusable
+portion of the existing preparer; both full builds and this incremental build
+retain the identical prompt/device handoff transformations.
+
+Normal runtime SHA-256:
+`940b20209cb9fb148a05b73f4419b600692a6236cf8f90e50eef1d341b8ba171`.
+Source pins, prior runtime/PDB, checks and matched Windows/Proton test inventories
+are in `build/coop-controller-health-20261101`. Both archives have identical shared
+files, verified member hashes and no personal state. Existing HD textures remain
+compatible. The private test installation was updated with both runtime copies and
+its manifest; its ten saved-state/config/texture-manifest files remained unchanged.
+No release was published. See live acceptance records in that evidence directory;
+automated checks do not establish live controller timing or Proton compatibility.
+Windows launch displayed intro video, and a later agent observation showed both
+co-op views and the separate H / Down x2 health HUD labels. Gameplay had advanced
+without agent navigation, so no further input was sent. This is boot/render
+evidence only: the new healing gestures and menu fixes still need live acceptance;
+Proton remains untested live. Details are in `live-acceptance.json`.
+
+## Co-op pickup notices and Player 2 pause (November 1)
+
+After accepting the co-op aiming correction, the user reported that Player 2's
+weapon/ammunition pickup displayed the larger text popup on Player 1, and that
+Player 2's controller could open Pause but could not navigate it.
+
+The inventory grant and small ammo indicator already belong to the collecting
+actor. The larger notice instead goes through C51D3, the global type-15 channel
+query (4AB90), and the five-row native FIFO (4A290/4A3A0/4BA80). Collector ownership
+is now scoped only around that producer call. A five-row sidecar follows native
+insertion, overwrite and expiry. The original renderer temporarily receives the
+owning player's Y anchor, restored after drawing; text, animation, lifetime and
+inventory remain native. Unrelated checkpoint messages retain their behavior.
+Stale actor/world identities and cinematic presentation suppress personal notices.
+
+The host frontend previously admitted an owned controller Options screen but not
+the rest of its Pause flow. It now admits the owner's Pause, confirmations and
+Objectives, retaining native callbacks and separate Controls/FOV settings. Native
+foreground suppression is gated on the accepted host screen, preventing duplicate
+menu labels and prompts. The controller Y shortcut continues to open Cheats.
+
+Offline tests exercise the original pickup producer/query/FIFO/draw path, including
+a negative control reproducing Player 2's old placement, both owners, FIFO shifts,
+overwrite/dedup/full queue, stale identities, cinematics and single-player isolation.
+Frontend tests cover Player 2 navigation and restart/checkpoint/quit confirmations,
+Objectives, Controls and Graphics at three resolutions in English and Spanish.
+Input ownership, reward routing, view layout, release exclusions and all 56 existing
+screen-sampling pixel comparisons pass. Pickup text fixtures replace font metrics
+and draw submission; they do not verify rendered glyph pixels.
+
+Normal runtime SHA-256 is
+`ddac219536ddb328e334ecdeb3d86068be61ef1aae6ce7912118181c395ba956`.
+Backups, checks and paired package manifests are in
+`build/coop-pickup-pause-20261101`. Windows and Linux/Proton test packages share
+the same runtime and 323 shared files; launcher/setup checks and archive member
+hashes pass. Packages contain no personal state and remain unpublished. No new HD
+texture pack is required. Live Windows acceptance of these two fixes and live
+Proton verification are still pending.
+
+## Scene-copy alignment and co-op candidate (November 1)
+
+The successful private capture in
+`build/reticle-sight-20261101/live/20261101-210214` separates the remaining aiming
+offset from ballistics. The uploaded camera projects the actual decal geometry
+at the logged CPU position. Four later one-to-one screen passes each subtract
+half a guest texel from their texture coordinates, shifting the scene two guest
+pixels right/down before the HUD is drawn. At 2560x1440 that is 8x6 display
+pixels. The decal artwork and its normal offset explain smaller differences;
+they do not explain this cumulative scene displacement.
+
+`prepare_xbe_screen_sampling.py` now admits the actual three-MOV passthrough
+program, matching float position/UV geometry and same-sized rectangular render
+textures. Only those stages omit the extra half-texel bias. Authored filtering,
+downsampling, transformed UVs, depth aliases, and extension-owned draws retain
+their existing behavior. Bullet direction, spread, weapon pose, and the earlier
+reticle centering are unchanged. The user confirmed the single-player correction
+on diagnostic runtime `fe7687bb787558c3a1f4b3d0b0e0f1bfcadc7d643ff33a2201c140cc8756f75c`;
+its two saved frames show four admitted passes each. Evidence and feedback are
+under `build/reticle-sight-20261101/live/20261101-212837`.
+
+The co-op follow-up removes the unnecessary full-guest-viewport restriction.
+The host viewport already covers the target; the guest viewport controls its
+scissor. A copy may therefore cover the full target clipped to one player, or
+use that player's exact rectangle with absolute framebuffer UVs. Both forms
+are admitted without changing viewport/scissor state. Shifted, malformed or
+local-zero UVs in the lower view remain rejected.
+
+The production-derived test uses the captured shader's exact translated HLSL,
+actual constant generation, and WARP sampled pixels. Forty four-pass comparisons
+cover full screen, both clipped halves and both local quads at 0.5x, 1x, 1.5x and
+3.75x scales. Corrected samples retain the original image; the other viewport
+is byte-identical. Negative controls reproduce the old two-guest-pixel shift.
+Co-op viewport/effect/cinematic, fog, depth-alias, HUD, reticle and release checks
+also pass. All generated game logic remains byte-identical to the accepted
+single-player candidate. Production runtime is
+`f5b09484e43bee017bbcd3ac9bb3c5c42574ed07fef7b864cb9b738f2f72e652`.
+See `build/coop-screen-sampling-20261101` for source/runtime backups and checks.
+The GPU fixture does not establish live co-op or Proton acceptance; record those
+separately. These candidates are unpublished.
+
+The user rejected that first co-op candidate as "still off by a bit". Both saved
+frames in `build/reticle-sight-20261101/live/20261101-214209` show two corrected
+copies followed by two missed copies per player. The latter reset the guest
+viewport to full screen while retaining absolute upper/lower-half geometry.
+Their remaining half-texel biases sum to one guest pixel right/down (4x3 display
+pixels at 2560x1440). Both players fired in the log; the automatic impact/settled
+captures belong to the first player's shot and contain both views' rendering.
+
+The follow-up admits either exact half-target quad independently of the guest
+viewport, retaining the original shader/format/UV/resource guards. A malformed
+quad spanning mixed corners remains rejected. The production-derived WARP test
+now includes the captured two-half-viewport/two-reset-viewport sequence for both
+players at four scales. All 56 comparisons pass: the previous candidate's
+negative control reproduces the residual shift, corrected copies retain the
+original pixels, and the untouched half remains byte-identical. The 59 rejection
+cases and existing scoped renderer/co-op/release checks pass. These pixel tests
+exercise identity sampling, not the full authored tone/history color blend.
+Generated game logic remains unchanged. Runtime is
+`7121a5504210eebe63c7a7867a6df6b0b12300709d18e0fa5b028caeca2842cd`;
+backups, captured-state analysis and checks are in
+`build/coop-screen-sampling-reset-20261101`.
+The user confirmed "yeah that fixed it" on the Windows co-op diagnostic runtime
+`a0cd1f08b628584ccc2865f3edffc132ee0ca89299ac341d62e433db2e94e5ca`.
+Both saved impact/settled frames show all eight identity copies aligned, including
+the four previously missed draws and both history-texture stages. Evidence and
+scoped user acceptance are in
+`build/reticle-sight-20261101/live/20261101-215600/user-acceptance.json`.
+This accepts the reported co-op alignment issue, not every weapon or campaign.
+The maintained correction is shared by Windows and Proton; Proton has not been
+tested live here. Do not treat older paired reticle ZIPs as this runtime.
+
+## Single-player reticle comparison candidate (November 1)
+
+The user reports the aiming mismatch in single-player and asks whether the
+reticle, rather than the bullet, is misplaced. Source replay of the original
+pistol sprite, widescreen layout, 80% size and signed-sixteenth queue places its
+aiming texel at X319.269043 instead of X320: about 2.924 pixels left at 2560 wide.
+This is source analysis, not a new live GPU measurement. The already-qualified
+co-op reticle centering did not apply to single-player.
+
+The comparison candidate admits the validated single-player HUD owner
+to the same horizontal centering path. It retains native vertical placement,
+scope masks and unrelated HUD layout. It also removes the two compensating
+co-op bullet-bias calls, restoring original directions for this comparison.
+This supersedes the nine-pixel calibration only in candidate source; that
+calibration's historical user acceptance below remains valid evidence. The
+larger discrepancy and zoomed iron-sight alignment are not yet explained: weapon
+geometry uses an independent projection and Weapon FOV. Do not call the whole
+reported aiming issue fixed from the small reticle error alone.
+
+The production-derived fixture passed 1,680 placement cases, including both
+co-op owners, single-player, original/HD aiming texels, unrelated owners and
+unchanged vertical/cinematic placement. Its SP pistol replay reduces the 2560-wide
+horizontal error from -2.923828 to -0.050781 pixels after native queue conversion.
+The existing 1,208 reticle-scale checks and weapon/ladder/taser/projected-HUD
+checks also pass. Diagnostic-enabled/disabled and release-exclusion checks pass.
+Generated firing code differs only by removal of the two calibration calls and
+their unused header; other generated units and the accepted recoil are unchanged.
+
+Source backups, replay, matching prior executable/PDB and verification records
+are under `build/single-player-reticle-20261101`. Candidate runtime SHA256 is
+`c6b9308da398cb90f465aa5a43c49db2bbaf10e78700dde08492d91e53d9cf02`.
+Windows and Proton use that same comparison runtime. Earlier menu/FMV packages
+remain available. Live aiming, zoomed pistol sights and Proton gameplay still
+need acceptance; these source/fixture checks do not establish GPU pixel alignment.
+
+## Main menu and full-frame FMV candidate (November 1)
+
+The main menu hides the original Xbox Live row by its byte-pinned localization
+key and inserts Co-op directly below Single Player. A visible-to-native row map
+preserves original callback identities and disabled rows. Both keyboard/mouse
+and controller use this main-menu list; original profile and campaign screens
+still retain their existing input ownership. Other menus are unchanged.
+
+The user explicitly chose full-width stretching over cropping or side bars for
+4:3 FMVs. Fill now presents the complete original movie quad, including titles
+and news tickers; 4:3 retains original proportions. Baked-in movie borders remain.
+English and Spanish settings descriptions explain this distinction. This
+supersedes the earlier proportional zoom behavior described in the old evidence.
+
+The production ImGui fixture covers removal/reordering, native action identity,
+disabled entries, controller navigation and co-op entry at three resolutions in
+English and Spanish. The actual generated movie-draw fixture checks full source
+coverage, proportional 4:3, UVs, border clears, guest state and lifecycle. Recoil,
+frontend, co-op menu, graphics settings, language, intro-skip and release checks
+also passed. The accepted high-FPS recoil implementation remains unchanged.
+Evidence and matched unpublished Windows/Proton packages are under
+`build/menu-fmv-20261101`. Offline checks do not establish live movie or Proton
+acceptance; consult that directory's verification records for observed coverage.
+
+## High-FPS recoil correction candidate (issue 19)
+
+The user resumed issue 19 after observing excessive firing shake in the November 1
+test. The connected CameraPush integrator at 45C00 restored/damped velocity with
+elapsed time but added that velocity to position once per update. The maintained
+`prepare_xbe_camera_push.py` now applies a fractional step of the original 30 Hz
+spring response before the unchanged angle bend and Euler-matrix publication.
+At exactly 30 Hz the original routine is untouched. Each call uses the current
+component's state; there is no shared co-op history or recycled-pointer cache.
+Shot impulses, pulse lifetime/fade, ammunition, bullet alignment and firing rate
+are unchanged. This is a title timing correction in the XboxXBERecomp path, not
+a reintroduction of the retired native CameraPush implementation.
+
+`test_xbe_camera_push.cpp` executes the byte-pinned original and actual patched
+generated integrators and their original matrix builder. It passed 4,780
+comparisons, including 1,000 bit-identical 30 Hz states, repeated impulses at
+30/60/120/144/240/360/1000 FPS, stack/register and surrounding-memory guards,
+independent owners, zero delta, hitches and settling. Maximum aligned state or
+matrix difference from the 30 Hz reference was 2.38418579e-7. The sample angular
+impulse peaked at 0.14 radians at 30 FPS, 0.302226 uncorrected at 120 FPS, and
+0.142403 corrected at 120 FPS; the small peak difference is finer time sampling.
+The original nonlinear soft limiter is interpolated for extreme pushes; its
+cross-rate trajectory is not proven identical. Sustained non-weapon effect
+forces and live feel across all weapons remain outside this scoped comparison.
+
+Evidence, preserved previous executable/symbols, runtime and paired package
+identities are under `build/issue-19-camera-shake`. Windows and Linux/Proton test
+packages use the same corrected runtime and shared assets. This candidate is
+unpublished. On November 1, 2026, the user confirmed "yep that fixed the recoil"
+after the Windows test of runtime
+`3825d26425cd89c0f586f2cab8808f133cd40a1990e93c235051bb9114eca509`.
+This accepts the reported firing-shake fix; the feedback does not specify every
+tested frame rate, weapon or co-op player. See `user-acceptance.json` in the
+evidence directory. Proton live validation remains pending.
+
+## HD game texture coverage audit
+
+The separate unpublished 0.09 release download is
+`UrbanChaos-BurnerEdition-0.09-HD-Game-Textures.zip`. It promotes all reviewed
+Coverage Test 3 texture payloads unchanged, with updated credits/install notes.
+Fresh installation and upgrades from 0.06 pass with both packaged workers on
+Windows; this does not establish live Proton or in-game texture acceptance.
+See `build/release-0.09/hd-pack-20261103` for the archive/installer receipts.
+The published 0.06 pack has 1,238 exact GPU mappings; the first coverage test has
+1,402; the second has 1,653; the third has 1,803. All mappings and payloads from
+all earlier ZIPs remain byte-identical. The third sweep adds 150 GPU identities,
+204 distinct Xbox texture records and 708 archive/name references. Totals are
+1,800 payloads, 2,178 texture records and 6,931 references. This covers 78.73% of
+the 2,290 supported gameplay-only GPU identities, not 78.73% of visible pixels.
+Shared UI resources and 34 unsupported-format records are outside that count.
+Both Windows and Linux/Proton use this same optional ZIP and manifest; no
+executable, launcher, game archive or installed user assets were changed.
+
+The audit scanned all 133 original ENT/GEO/LST archives, which still match the
+supported disc manifest, and verified all 2,435 DDS files against the original
+xXthe.RockoXx RAR extraction. The old download contained every previously
+accepted replacement; missing coverage came from selection, not lost packaging.
+The complete Xbox inventory has 3,139 texture records / 12,037 references.
+It adds tiny images, `.tga=...` suffixes, and the two legacy archive directories
+missed by the earlier scan. Bump maps and two uncompressed, opaque sight
+reflection textures stay outside the ordinary compressed-color replacement path.
+
+`convert_ps2_world_pack.py` now distinguishes UI path components from gameplay
+names such as `sis_button` or `map_41_menu`, removes byte-identical PS2 candidates
+before testing ambiguity, and compares RGB independently of PS2 alpha. New
+images resize RGB first, then attach the Xbox alpha, retaining complete BC3
+mipmaps, matching aspect ratio and the existing 4x / 2048-pixel size bounds.
+A separate visible-alpha comparison prevents hidden RGB from qualifying a wrong
+visible detail. The whole-inventory GPU identity deny set protects shared UI
+resources across different archive headers, including `font_untextured` and
+world `white`/`untextured` aliases. Never replace that fence with per-name checks.
+
+The first candidate contained 145 automatic additions plus 34 source-hash-pinned pairs
+in `scripts/ps2_world_pack_reviewed.json`, inspected against the original image
+with Xbox alpha. Those pairs bypass only the coarse 16x16 selection threshold;
+fine RGB, visible-alpha, size, aspect, original-source and UI checks still apply.
+The near-black candidate and cross-aspect hypotheses remain unresolved. Fourteen
+previously accepted records fail the newly stricter image checks; this additive
+candidate deliberately retains their existing approved payloads. A future full
+regeneration must review those records rather than silently removing them.
+
+The second sweep tests all eight image orientations, exact fine-resolution
+comparisons over all eligible source files, alpha-only hypotheses, identical-RGB
+Xbox variants and nine standard atlas crops. It also resolves all 1,998 animated
+texture references and verifies current generated co-op assets introduce no
+unlisted texture identity. The decisive omission was PS2 images with swapped
+axes: 245 GPU identities (300 archive-header variants) pass the original coarse
+ambiguity and detailed fidelity checks after Pillow `TRANSPOSE`. Six additional
+8-pixel-high strips pass a stronger fine comparison; resizing them to a square
+16x16 descriptor had rejected them. Every added pair was visually compared.
+The maintained review manifest pins original and source hashes and an explicit
+optional `transpose`; transformations occur before fidelity/aspect checks.
+
+After the second sweep, 637 supported gameplay identities lacked an approved mapping:
+536 diffuse/color-effect images, 24 alpha-shape or near-uniform images, 53 tiny
+strips, 22 solid helpers, one transparent helper and one legacy candidate.
+These are unresolved matches, not proof that their source art is absent.
+Alpha-only PS2 candidates often have different alpha amplitude; copying that
+channel can weaken effects, while retaining Xbox alpha adds no new mask detail.
+Three weapon/hand variants with covered base RGB fail the visible-alpha guard.
+No atlas crop was accepted: apparent matches were unrelated gradients or blood
+colors whose shapes came entirely from the retained Xbox alpha. Do not bypass
+these material checks to increase coverage counts.
+
+Evidence and reproduction scripts are under `build/hd-texture-coverage-audit`:
+`inventory/`, `candidates/`, `runtime/`, `convert_additions.py`,
+`convert_manual.py`, `package_test.py`, and `package-verification.json`.
+Second-sweep evidence is under `second-sweep/{orientation,alpha,atlas,catalog}`,
+with conversion/package scripts, `package-verification.json` and
+`final-coverage.json`. `releases/HD-Texture-Coverage-Comparison.csv` compares
+published/first/second coverage; `HD-Texture-Coverage-Remaining.csv` lists each
+remaining identity, names, archives and review status. Category counts can
+overlap where identical GPU data has names in multiple categories.
+The converter regression, installer rejection/rollback regression, existing
+native world-texture fixture and real published-pack-to-new-pack installation
+passed. Contact sheets were visually inspected. Neither Windows nor Proton
+in-game visual acceptance of the additions has been performed; the published
+pack is unchanged. Issue 19 was subsequently resumed; see the recoil candidate above.
+The second sweep's independent check reconstructed all 251 new payloads from pinned DDS
+artwork, explicit orientation and Xbox alpha with byte-exact results, and checked
+both earlier packs for unchanged mappings and payloads; see
+`second-sweep/independent-review.json`.
+
+The third sweep accounts for every one of those 637 identities. It decodes
+original texture objects from all 130 ENT/GEO/LST archives on the supplied PAL
+PS2 disc: 6,265 objects, 3,216 distinct RGBA images. Named resources and nameless
+geometry-bank objects are included. The audit reconstructs GS-block XXH3 texture
+and palette hashes, cumulative mip chains and individual mip levels, normalizes
+leading-zero hashes, and handles both indexed three-field and direct-color
+two-field PCSX2 filenames. This resolves 2,337 of the pack's 2,435 DDS filenames
+to original PS2 data. The remaining 98 have 80 palette-only links and 18 without
+a source fingerprint; PAL/US differences mean this is not proof of absent art.
+The PCSX2 reference tables and audit-only xxhash wheel stay private under
+`third-sweep/vendor`; neither is shipped in the pack or linked into the runtime.
+
+An exhaustive fine comparison tests all eligible byte-distinct DDS sources in
+all eight orientations: 5,387,664 source/orientation comparisons. Only 162 of
+the 637 groups pass the unchanged RGB/visible-alpha/resolution/aspect guards.
+Visual review accepts 150. Twelve are deferred: differing face/hair, blood
+colors, lighting colors, fire-frame patterns, tiny material ambiguity, and one
+identified but dormant legacy shield archive outside the normal converter.
+No threshold, alpha contract, runtime behavior or UI exclusion was relaxed.
+Of the 150 additions, 149 have exact PS2 original texture AND palette hash proof;
+the concrete texture `04-01\\map_04_conc1lr.tga` has one passing fine candidate,
+palette agreement and visual pattern agreement, but its texture hash differs.
+Do not describe that last pair as an exact original-source hash match.
+
+There are now 487 unresolved supported gameplay identities: 407 diffuse/color
+effects, 23 alpha-shape/near-uniform images, 33 tiny strips, 22 solid helpers,
+one transparent helper and one dormant legacy candidate. The detailed audit
+separates 169 close original counterparts whose HD sources fail fidelity/size,
+43 named PS2 sources needing layout verification, 159 close originals without
+an exact HD link, nine named originals without an HD link, 45 material helpers,
+12 visually deferred candidates and 50 without a qualified counterpart. These
+categories are review outcomes, not claims that every image needs an HD asset.
+Five remaining groups share PS2 pixel indices with another palette; this does
+not make a lit/off or differently colored material interchangeable. Ten arm
+identities remain, including bloody variants missing from their apparent HD
+counterparts. No guessed remapping was added for them.
+
+Third-sweep scripts and evidence are in `build/hd-texture-coverage-audit/third-sweep`:
+`decode_named_ps2.py`, `source_hash.py`, `find_via_disc.py`, `exhaustive_fine.py`,
+`convert_verified.py`, `convert_final.py`, `package_verified.py`, `verify_final.py`,
+`classify_all.py`, and `check_variant_links.py`. `remaining-before.csv` preserves
+the exact 637-gameplay-identity input; do not rerun against the reduced report.
+Approved contact sheets and source pins remain the conversion inputs; rerunning
+the candidate ranking is not permission to overwrite the inspected choices.
+The package hash is
+`7f4e9481d20fb0f12a8fcb2bd9280ce984ce26961f7ec9d4285efcc1a1f6f8b4`
+(207,635,772 bytes). `package-verification.json`, `independent-review.json`,
+`source-fingerprint-summary.json`, `variant-summary.json` and `final-coverage.json`
+record the checks. All 150 additions reconstruct byte-exactly; all 204 new source
+pins validate, and all 340 earlier reviewed pins remain unchanged. Converter,
+installer rejection/rollback and native world-texture fixtures pass, as does a
+real Test-2-to-Test-3 installation in an isolated audit directory. The installer
+test's duplicate-entry warning is intentional malformed-input coverage.
+
+`releases/HD-Texture-637-Deep-Audit.csv` records every investigated identity and
+source/proof status. `HD-Texture-Coverage-Comparison.csv` now compares all three
+sweeps, and `HD-Texture-Coverage-Remaining.csv` contains 487 gameplay identities
+plus the 35 previously excluded format/shared-UI records. The same optional
+Test 3 ZIP and manifest serve Windows and Linux/Proton. No installed user assets
+or published download were changed. Both platforms still require in-game
+visual acceptance of these additions; offline source checks cannot establish it.
+
+## Setup candidate
+
+The October 30 setup candidate follows Darkwatch 0.7's source-selection flow:
+Home offers Play/Select Game and Manage; Select Game offers direct ISO, import
+once, and reuse of an existing installation. This does not add Darkwatch's
+online updater. `installation.json` stores the selected GameData location;
+neither Windows executable nor the Proton wrapper may force the default path.
+Keep that record, GameData and directly used ISOs during package replacement.
+Exactly one ISO/XISO under package `assets/` can prepare a first installation.
+An existing or broken selection must never be silently replaced by discovery.
+
+`prepare_xbe_release_assets.py` supplies the explicit `UCRR_GAME_ASSETS` /
+optional `UCRR_GAME_ISO` runtime contract. Direct ISO mode verifies the disc and
+retains only the Xbox executable and 27 ENT sources needed for Spanish and
+co-op preparation. Original files remain in the unmodified ISO. The runtime's
+derived `disc.cpp` supports the same five partition offsets as the importer.
+Keep `prepare_xbe_release_assets` after the file/language preparers: Spanish
+overrides must precede mounted-disc resolution, and the four generated co-op
+LST additions must work through guest opens, host reads, metadata and directory
+listing. All mounted DVD content remains read-only; save partitions stay writable.
+Temporary originals required for optional PS2 voice conversion are removed when
+conversion finishes or fails. The ISO remains required for direct-mode play.
+
+Setup holds shared package/installation locks through mutations and gameplay.
+The Windows UI must retain its busy guard through the final asynchronous status
+and language refresh, otherwise an earlier operation can erase a newer cancel
+token. Existing import repair retains `.previous-*` backups deliberately;
+switching an already extracted install to direct ISO does not reclaim them.
+
+Evidence is in `build/launcher-setup-20261030`: six linked runtime fixtures,
+all 13 Python setup suites, 15 Bash wrapper tests, real Windows argv/UI worker
+checks, and a real 190-file ISO verification passed. All four co-op derivatives
+and 27 translated archives matched their expected hashes. The paired unpublished
+0.08 Setup Test archives share 323 byte-identical files and contain no original
+disc payloads or personal state. Rendered launcher previews were inspected.
+A live launcher attempt hit a Computer Use approval timeout; direct-ISO gameplay
+and live Proton acceptance remain unverified. Keep these distinct from the
+successful offline runtime and real-disc setup checks.
+
+The issues 17/18 candidate adds Pause > Cheats for keyboard/mouse and a Y
+shortcut on the original controller pause screen. Main-menu Y is left to the
+game so the original cheat-unlock sequence is no longer intercepted by Quit.
+Only the ten codes present in this Xbox executable are exposed; ISEEYOU is
+absent. Cheats retain the original shared profile semantics, including co-op,
+and native weapon effects may require re-equipping or a mission restart.
+Host clicks must pass through a copied state and a guest-thread update with
+pause/profile identity checks; the UI must never mutate guest memory directly.
+
+Controls has a separate Invert mouse look choice, default Off. Its saved
+InvertMouseLook value only reverses the consumed vertical mouse-look delta.
+Preserve independent stick inversion, mouse order gestures, pistol-spin input,
+and Player 2's controller profile. Validate configuration rollback, actual
+raw-input-to-camera flow and the real menu input fixture. Both paired packages
+use the same code; offline tests do not establish live Proton compatibility.
+
 The current candidate uses the pinned XboxXBERecomp runtime in
 `build/upstream-review-xboxxbe-20261014`. The earlier `src/` runtime remains for
 historical builds; it is not the current D3D12 executable.
@@ -17,8 +591,117 @@ negative witnesses; live Windows and Proton acceptance remains separate.
 Upstream changes are adopted by active-path compatibility, not by replacing the
 SDK wholesale. Preserve the packed-depth sampling exception, local audio routes,
 generated title hooks, and existing input/import formats. The newer first-run
-DLL compiler does not apply these title preparers. Some sp00nznet configuration
-and ISO-import helpers remain active; its historical renderer is not used.
+DLL compiler does not apply these title preparers. XboxXBERecomp is the sole
+Xbox runtime dependency. The October 26 candidate replaces the remaining legacy
+input/profile and ISO-import dependency with maintained title adapters. Controller
+profiles consume XboxXBERecomp's input::Pad directly; the bounded ISO reader follows
+its XDVDFS format contract. Existing save/binding formats remain unchanged.
+
+Project-authored coroutine, prompt-art and shader-cache helpers now live under
+scripts rather than being read from the retired runtime tree. Their staged bytes
+are unchanged. Historical builds stay archived, but future source exports start
+from the active source closure and must not inherit old runtime overlays. Root
+CMake invokes the guarded current builder; it no longer builds the retired port.
+Validate the dependency boundary along with the runtime and both package plans.
+This dependency cleanup alone is not evidence of a frame-rate improvement.
+
+The headroom candidate backports unchanged constant-upload reuse from upstream
+`908dc53a` and redundant D3D12 binding suppression from `0fd00442`, through
+`prepare_xbe_draw_bindings.py`. Keep it after the state-cost, draw-batch and
+device-busy preparers. It must retain title constant extensions, command-list invalidation,
+special-pass state changes and the existing descriptor/resource lifetime rules.
+It does not adopt the unrelated upstream depth or GPU-pacing changes. Regression
+checks establish rendering-state equivalence and reduced repeated work; live
+Canals timing and image acceptance are separate evidence.
+
+`prepare_xbe_file_query_efficiency.py` runs after language preparation, which
+regenerates `files.cpp`. File-position and mode queries avoid unrelated flushes
+and size lookups; metadata queries retain buffered-write visibility and the
+existing Xbox status, output and completion contracts. Preserve this title's
+mode response rather than copying a different runtime's semantics. Both paired
+packages use these same runtime changes; Windows tests do not establish Proton
+acceptance or an improvement on other hardware.
+
+The lighting/particle CPU candidate keeps the recorded-index decoder's validated
+output buffer at its high-water size. Warm draws use its existing validation and
+decode passes without a separate caller count pass; growth still queries and
+resizes, and malformed packets still trap before submission. No packet contents
+are cached. The original XG compiler fixture now also invokes the maintained
+caller, checking scratch reuse and copied index ownership.
+
+The subsequent co-op CPU candidate uses the same full packet validator before
+copying packed 16-bit indices directly into the retained renderer scratch.
+Count-only validation can skip reading packed values when the permitted vertex
+range is the complete 16-bit range; smaller bounds and odd 32-bit indices retain
+their checks. This removes the intermediate 32-bit output and narrowing pass.
+The original 32-bit and expanded-strip APIs remain available. Input stays immutable
+and separate from output for each call, and the render queue owns its copy before
+scratch reuse. Malformed packets and insufficient capacity publish no output.
+The optimization uses the supported Windows/Proton x64 little-endian format;
+it does not cache packet contents or change topology, degenerate indices, draws,
+lighting or particle quality. Validate the original compiler, actual caller and
+queued ownership together; isolated parser timings are not a gameplay FPS claim.
+
+`prepare_xbe_inline_draws.py` bulk-copies validated non-incrementing INLINE_ARRAY
+payloads during an active primitive. Other packets, visibility reports, state
+changes and DrawUp ordering stay on the existing path. Its fixture executes the
+prepared parser against the pre-optimization parser and original particle
+producer. These changes reduce CPU submission work without changing lights,
+effects, shaders or graphics quality; microbenchmarks are not gameplay FPS.
+The proposed whole-range state-equality shortcut was rejected because changing
+state regressed. The subsequent submission candidate preserves the existing
+state deltas, but handles constant-sized 64-byte blocks before each range's
+short tail. This lets the compiler specialize full copies without adding another
+comparison, dirty flag or state cache. Queued bytes, field order, shader ownership
+and delayed replay must remain identical. Explicit 12-byte and 20-byte resource
+header copies preserve the original type selection, zero-filled tail and ring
+snapshot lifetime; short headers must remain safe at a readable-page boundary.
+
+The same candidate fills quad-list indices after one resize instead of inserting
+six entries per quad. It preserves winding, index order, existing prefixes and
+incomplete-quad discard. The original particle producer's 52-byte declaration
+is included in the assembler fixture, alongside sparse, converted, unaligned
+and exact-end index inputs. No geometry reuse or topology change is introduced.
+Both changes are maintained by the existing state-cost and vertex-cost preparers;
+their isolated CPU timings do not establish a Canals FPS gain.
+
+The draw-reuse preparer also specializes the hash's four-byte remainder without
+changing any hash result or seed. This retains existing shader, pipeline and
+texture keys and the portable shader seed. Original and prepared hash fixtures
+cover fixed vectors, mutation, length, alignment and readable-page boundaries.
+The proposed last-pixel-key hash cache was rejected because misses regressed;
+no new key cache or invalidation policy is introduced.
+
+The October 29 CPU follow-up moves the converted index source choice outside
+`ListIndices` through `prepare_xbe_vertex_costs.py`. Indexed ranged draws read
+each authored 16-bit index with the same two-byte `memcpy` and subtract the lowest
+index; the original base-vertex terms cancel under unsigned 32-bit arithmetic.
+Other converted draws use their existing sequential order. Preserve topology,
+winding, degenerates, list prefixes, incomplete primitives and raw/native paths.
+The assembler fixture passed 11,482 cases, including wrapped bases, unaligned
+and page-end reads. Its `dispatch` benchmark compares the immediately preceding
+production assembler and measured roughly 10–25% less synthetic assembly time;
+this is not a game FPS gain.
+
+The next constant-upload candidate in `prepare_xbe_draw_bindings.py` assigns a
+consumer-owned revision to replayed VSC bytes. Advance it for every copied state
+interval overlapping the constants; never transport it from the producer.
+An unchanged revision can skip comparison only for the same consumer state and
+a still-valid GPU upload. Direct draws and uncertain ownership retain full byte
+comparison, extensions retain fresh writable uploads, and revision overflow
+permanently selects the comparison fallback. Keep upload invalidation at command
+submission, frame reuse and settings reload, independently of content identity.
+Final DrawConstants still compare their fully populated bytes.
+
+The device-busy preparer creates `backend.h` from the SDK, so it must run before
+the revision-aware Draw interface is installed. Verify the final header, replay
+and renderer together after downstream preparation, including diagnostic call
+sites. Evidence is retained in `build/performance-headroom-20261029`. The compiled
+constant/replay fixture passed 1,554 delayed draws and 39 command-state snapshots;
+its mock upload arena cannot establish real GPU fence/spill lifetime. Windows
+single-player Canals rendering was observed, but repeated performance comparisons,
+co-op acceptance and Linux/Proton acceptance remain pending. Both packages must
+use the same adopted shared-runtime changes.
 
 ## Where to edit
 
@@ -148,6 +831,19 @@ Native selection fixtures cover separate look rays, looking away and occlusion;
 queue, medic and layout fixtures cover the other stages. Physical two-player
 gameplay and Proton acceptance remain separate checks.
 
+Medic eligibility must use stored-pack capacity and the medic's finite stock,
+not just the original injured-player health check. The transient HealOrderClient
+is distinct from MedicOrderClient: its original yes/no/force-menu properties
+unconditionally advertise an offer. Mirroring that client to both Orders managers
+can therefore duplicate the Choose Heal wheel even with correctly owned HUD queues.
+Scope offer eligibility to the validated recipient and that viewer's own target.
+Only a real command may change delivery ownership; looking at a medic must not
+redirect an in-flight handoff. Preserve the recipient's entity generation through
+completion, and retain the existing receipt plus single-stock-decrement transaction.
+Native patient healing, inventory limits and original stock initialization remain
+separate contracts. Current video/source evidence and candidate qualification are
+recorded under `build/medic-prompts-20261026`; live acceptance remains required.
+
 First-person arm corrections validate original position, UV and skin streams
 together after native skin loading. Bare, sleeved and Burner shoulder edges use
 the original UpperArm influence instead of extending ForeTwist movement. Keep
@@ -166,8 +862,61 @@ admitted actors, native input publication slots and render-layer ownership.
 Reconcile those identities with the tester's input before assigning a capture to
 a player. Compare the reticle's authored aiming texel rather than assuming its
 geometric quad midpoint is the visible aiming point.
-The aiming investigation is on hold at the user's request pending other gameplay
-reports; no gameplay aim compensation has been applied.
+The temporal aiming experiment is deferred and is not in maintained gameplay.
+CAB20 uses the previous target at `actor+460` for an unselected surface and the
+current target at `actor+454` for a selected entity. A controlled C77D0/CAB20
+regression demonstrates a turn-dependent difference, but that original behavior
+also exists in single-player. The latest four live unselected-surface baseline
+shots had equal current/previous targets and centered base rays; they do not
+establish the history branch as the cause of the reported co-op offset. The
+candidate source, fixture and hashes are retained privately under
+`build/aim-correction-20261026/temporal-experiment`; its four maintained files were
+restored exactly to the frozen baseline hashes. Earlier eight selected-entity
+shots and the controlled proof remain under `build/medic-prompts-20261026/aim`.
+
+The separate co-op reticle-alignment candidate centers the crosshair horizontally
+within its player's viewport. Preserve the authored vertical placement,
+single-player layout and all native trajectories, aim timing, spread and recoil.
+The production-derived fixture covers 1,680 placement cases and rejects foreign
+HUD owners, cropped or aliased sprite data and unsupported artwork. The private
+Windows candidate loaded Canals and rendered both views during four upper-player
+pistol shots; its capture is under
+`build/aim-correction-20261026/candidate/sessions/20261027-005001-493013`.
+This is a presentation correction. Sustained mouse movement, physical Player 2
+controller firing and Proton gameplay still need acceptance; do not describe the
+capture as a confirmed ballistic fix for the reported moving-shot problem.
+
+The October 27 follow-up remains unresolved: the user still sees a right/down
+offset. The verified private runtime captured 15 upper-player pistol shots in
+`build/aim-followup-20261027/live/20261027-203007`. All shots have matched hit,
+decal-publication and owner-camera records. The authored one-unit surface-normal
+offset moves these marks only about half a display pixel down; CPU projection
+does not explain the larger offset measured in the earlier video. This evidence
+does not establish a root cause for a compensating shot-direction bias.
+The packaged launcher repairs its managed runtime from `runtime/` using
+`tools/runtime-manifest.json`; verify the executable hash after launch when
+testing a private diagnostic, not just before starting the launcher.
+
+The user subsequently requested a fixed three-display-pixel left calibration,
+then confirmed it improved alignment but still fell right of center. The accepted
+candidate uses nine display pixels total left (six more), based on the earlier
+video's approximately 8.4-9.7 pixel horizontal offset at 2560x1440. This does not
+establish exact centering for every weapon, view or resolution.
+`TrialCoopShotOffset` applies it to each admitted co-op player's ordinary bullet
+request immediately before CB3C8, after native spread. It uses that player's eye
+basis, live camera FOV, viewport pixel aspect and the actual client presentation
+width. Direction length and vertical projection are retained; impact marks still
+come from the actual corrected collision. Single-player, other actors, electrical
+beams and the separate projectile branch are excluded. This is an explicit
+calibration, not a confirmed diagnosis of the original rendering discrepancy.
+Offline checks cover both players, zoom/FOV, output widths, rotated views, native
+spread and invalid identities. On October 27 the user confirmed "yep that fixed
+the issue" after testing the nine-pixel Windows candidate (runtime SHA256
+`017ca678338188fcc1a59cd54b1e24ac7b886026bf61b907142b41c87b507b81`).
+Record this as user visual acceptance of the reported co-op aiming offset, not
+an exhaustive weapon/resolution or independent physical Player 2 test. The paired
+Proton package contains the same correction; live Proton gameplay remains untested.
+Build and acceptance evidence: `build/aim-left-9px-20261027/verification.json`.
 
 The first private gameplay test reached character selection but rendered a black
 world. A dynamically created Mainplayer does not receive the campaign's authored
@@ -436,13 +1185,27 @@ clip; a regular menu window can clip its edges even when the quad spans the
 screen. Offline draw-data checks cover width, seam coverage and visibility gates.
 
 The stored health-pack icon is a small upright green square with a white plus,
-drawn beside each health bar with square pixel proportions. It replaces the
+and now follows the original owner's category-0 HUD fade during NPC dialogue.
+The native fade query supplies icon/count opacity separately from health-pack
+input admission, so a visual transition cannot cancel an injection. Test the
+native query, both owners and partial fades alongside the production UI geometry.
+
+The icon is drawn beside each health bar with square pixel proportions. It replaces the
 earlier tilted model-referenced artwork, which is retained in `artwork/hud` as
 source history but is no longer embedded in the font atlas. Each player's own
 count and binding remain beside it. The guest update publishes the validated
 native fill extent with the inventory snapshot so upgrades move the icon without
 render-thread guest reads. No optional HD pack update is needed.
 Live placement and readability on Windows and Proton remain separate checks.
+
+Optional per-player Hold aiming is maintained in `prepare_xbe_aim_mode.py`
+and `xbe_aim_mode.cpp`. Toggle remains the saved-profile default and original
+query/cycle path. Hold reads the original remapped Zoom input as a held action,
+uses the native zoom transition on a fresh press, and clears that request on
+release. A separately assigned Cycle scope zoom input changes rifle magnification
+while held; it starts unbound. Menu, focus, weapon and actor changes revoke a
+stale hold. Keep raw input ownership, native query/transition fixtures, atomic
+per-player profiles and the production Controls UI checks in the same build.
 
 The aimed, nearby downed-partner prompt uses each player's binding and shows
 “Revive Partner” with an independent short slide. Unbound controls show an
@@ -513,6 +1276,13 @@ Keep live menu, language/audio, gameplay and performance acceptance separate in
 the candidate's verification notes.
 
 ### Optional Spanish voices
+
+The paired packages also include the manual online updater described in
+`docs/LAUNCHER-UPDATES.md`. Regenerate `package-manifest.json` after compiling the
+launchers, audit it with the full package allowlist, and retain identical shared
+manifests for Windows and Proton. Test archive validation, rollback and user-state
+preservation on both platforms when changing the updater. Linux applies updates
+through native Python to retain shell permissions; gameplay still uses Proton.
 
 Spanish text remains in the main build. Optional Spanish voices are extracted
 locally from the user's European multilingual PS2 ISO (SLES-53991) through the
@@ -594,6 +1364,22 @@ recipes are admitted, including visor/sunglasses/blade alpha surfaces. Wrapped
 UVs are tiled into bounded images, not clamped. T-Zero uses representative texture
 variation zero; gameplay can select its own original variation.
 
+All five previews also hold the original third-person T-Zero pistol. FD530
+selects `gundummy`; FD7F0 composes the 21B0D0 Y/Z basis conversion before that
+posed bone and the body world. Keep that conversion: using the bone directly
+turns the barrel through the character's face. The existing `coopcharacters.lst`
+already contains the pistol and its texture, so no import/pack update is needed.
+Its additional exact material recipe uses white texture alpha; all other recipe
+admission, alpha surfaces and bounded atlas ownership remain unchanged. This is
+cached selector geometry only, with no guest weapon or inventory mutation.
+
+November 3 evidence is in `build/coop-preview-pistols-20261103`: all five bodies
+with 2,422 additional pistol triangles each; upper-body attachment/orientation,
+opaque pistol texture, malformed pistol/material/missing-socket rejection, and
+original archive preservation. The production ImGui montage was visually checked
+at front and 45 degrees for every character. This is offline visual evidence;
+this candidate's live Windows and Proton acceptance remains separate.
+
 `TrialGraphicsFonts` makes co-op available before input startup and reserves the
 preview cells before the original font loader builds its atlas. Finalization
 fills only those padded cells after font pixels are restored. Drawing rotates,
@@ -671,6 +1457,14 @@ The temporary coordinates are restored after drawing; 100% uses the previous pat
 `xbe_prompt_context.cpp` tags each original queued glyph by its authored text key.
 Interaction/Skip uses the configured secondary A key; `HUD-Help-40` uses the
 Orders binding for its D-pad glyph. Keep generic menu-navigation symbols separate.
+`HUD-Help-57` (Choose Heal) uses the same mouse Orders gesture with horizontal
+chevrons. The exact Context order hints `HUD-Help-48/102/106/107/108` use their
+separate action12 binding, not the mouse gesture binding. These authored strings
+use atlas rows14 and19, previously left as controller symbols even with correct
+co-op ownership. Variant3 has its own GPU cache slot, separate from Orders,
+interaction and controller artwork. Resource/producer evidence is retained under
+`build/medic-glyphs-20261027/analysis`. Cover HD toggles, remapping, unbound keys,
+both queued HUD owners and untouched menu/controller cells in the regression checks.
 The tag travels with the renderer's copied state, so delayed draws cannot borrow
 another prompt's binding. Each atlas variant has its own cached GPU resource.
 HD artwork is applied before generated keycaps; it must not restore a replaced
@@ -678,22 +1472,25 @@ controller symbol. Controller mode retains its original/remapped symbols.
 
 ## FMV framing
 
-Graphics `fmv_scale` defaults to Fill (0); 4:3 (1) preserves the complete movie.
-The shared Windows/Proton runtime follows Black V2's proportional framing:
-https://github.com/TGP482/BLACK-XBERecomp/blob/ac615d8d080cf5ca8789f805535b488267cb9728/src/game/hud.cpp
+Graphics `fmv_scale` defaults to Fill (0); 4:3 (1) preserves the original
+proportions. Both now preserve the complete movie. The user requested this
+change on November 1 after the earlier Black-style zoom cropped visible content.
 
 `prepare_xbe_fmv_layout.py` pins the original open, close and movie-draw routines.
-In the widescreen game viewport, Fill expands movie geometry vertically about
-its center by 4/3, leaving UVs unchanged. This crops the top and bottom without
-stretching the picture. 4:3 narrows the picture horizontally and clears the side
+In the widescreen game viewport, Fill retains the full 640x480 movie quad and
+unchanged UVs, stretching 4:3 footage to the output viewport without cropping.
+4:3 narrows the picture horizontally and clears the side
 bands after the movie draw, since movie playback skips the normal color clear.
-Logos and unrecognized movie names preserve their complete picture; menu
-background movies keep their original layout. The authored alternate 448-line
+Startup Dolby, Eidos and Rocksteady films obey the same Fill/4:3 selection as
+campaign movies. Previously classifying these as Preserve forced 4:3 even in
+Fill, producing a 960-pixel-wide image on a 1280x720 output. Unrecognized movie
+names preserve their complete picture; menu background movies keep their
+original layout. The authored alternate 448-line
 draw and a 4:3 game viewport remain unchanged.
 
-This matches Black's framing rather than detecting black bars: bars baked into
-wider cinema footage can remain, and Fill can crop titles or news tickers.
-Use 4:3 to retain all source content. This does not add an ultrawide game viewport.
+This does not detect or remove encoded black bars: borders baked into footage
+remain. Fill retains titles and news tickers but changes 4:3 proportions; use
+4:3 for the original shape. This does not add an ultrawide game viewport.
 
 The draw fixture executes the original and patched guest routines and verifies
 positions, UVs, clear ordering, guest state and movie lifecycle. Settings, menu,

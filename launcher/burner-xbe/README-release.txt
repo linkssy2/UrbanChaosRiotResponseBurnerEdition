@@ -1,4 +1,4 @@
-Urban Chaos: Riot Response - Burner Edition 0.08
+Urban Chaos: Riot Response - Burner Edition 0.09
 
 HD HUD is still a work in progress and has known prompt/display issues.
 Turn HD UI Off to use the original HUD, which works normally.
@@ -8,42 +8,58 @@ Windows x64 PC port using XboxXBERecomp by TGP482, with native Direct3D12 render
 PC controls and menus. Original gameplay is statically recompiled from Xbox code.
 XboxXBERecomp: https://github.com/TGP482/XboxXBERecomp
 
-NEW IN 0.08 (SINCE 0.07)
-- Experimental local split-screen co-op from the normal main menu, with rotating character previews and character-specific bodies and first-person arms.
-- Independent player controls and world/weapon FOV. The player who pauses owns the settings screen; both players pause together.
-- Stored health packs in single-player and co-op, medic resupply, partner revival and a ten-second downed timer with pulsing red edges and blurred vision.
-- Co-op HUD/prompt ownership, shared objective notifications, personal headshot/stun/spin rewards, pickups, scripted progression and shared cinematic presentation.
-- Co-op fixes for revival crashes and hidden weapons, missing sounds/props, shield and weapon animations, and effects crossing between views.
-- More natural elbow/shoulder behavior for T-Zero and Burner first-person arms at wider FOV, preserving texture density.
-- Less added darkening on Mission Failed so the original death scene is easier to see.
-- Proportional FMV framing: Fill crops to fill the widescreen view; 4:3 preserves the complete image.
-- Optional Spanish voices imported locally from your European PS2 ISO. Spanish text remains included; no game-audio download is distributed.
-- Carries forward the Linux setup/symlink fixes and clearer Steam instructions from the 0.07.5 compatibility work.
-- Selected XboxXBERecomp fixes for missing-texture behavior and consistent stereo audio configuration.
+NEW IN 0.09 (SINCE 0.08)
+- Reduced repeated CPU work in lighting/particle submission, index assembly, render-state copies, constant uploads and file queries, preserving effects and visual quality.
+- Current input/import adapters replace the remaining retired runtime dependency; selected XboxXBERecomp rendering optimizations are integrated.
+- Corrected reticle/scene alignment in single-player and both co-op views, and excessive firing shake at high frame rates.
+- Fixed co-op pickup notices, per-player NPC/medic prompts, Player 2 pause navigation and the Controller reference screen's Back action.
+- Health-pack HUD hides during conversations and menus. Medic collection stays available at full health while inventory has room and supplies remain; saved tutorial history no longer hides its hint.
+- Controller: double-tap D-pad Down to heal yourself; hold near an injured/downed partner to heal/revive them. Keyboard/mouse: separate rebindable Heal Partner control, default U.
+- Removed the invisible hold-X window switcher. Cheats stay in the main menu, with the game's original unlock behavior; added separate mouse-look inversion.
+- Main menu puts Co-op below Single Player and removes Xbox Live.
+- FMV Fill shows the complete movie across the screen, stretching 4:3 sources; 4:3 mode preserves original proportions. Source-encoded black bars may remain.
+- New launcher Play/Manage layout and direct ISO, import-once or existing-install setup choices. Existing data, saves, settings and add-ons can be reused without duplication.
+- Download verified official updates from MANAGE > CHECK FOR UPDATES. The launcher restarts itself; installed game data and add-ons stay in place.
 
 Co-op is experimental. Full-campaign progression, all character/action combinations,
-helicopter sections and Proton co-op still need gameplay testing. Investigation of
-a reported co-op aiming offset remains open.
+helicopter sections and Proton co-op still need gameplay testing. The reported
+co-op aiming offset was corrected and confirmed in the user's test.
 
 INSTALL
 Linux package users: follow README-linux.txt and its recommended Steam setup.
 The steps below apply to the Windows package.
 1. Extract the entire ZIP to a writable folder (not Program Files or inside ZIP).
-2. Run Burner Edition Setup.exe and choose your supported original Xbox ISO.
-   Both the verified full-disc ISO and extracted .xiso.iso layouts are accepted.
-3. Once imported, use Play Burner Edition.exe to play without opening setup.
-   Keep the EXEs, tools, runtime and cover.png together.
-GameData is created locally; keep it with the launchers when moving the game.
-The original ISO is not needed after a successful import. No original disc
-payloads, Xbox executable, ISO, videos, saves or diagnostic logs are included.
-The original textures, fonts, levels and audio still require your imported ISO.
+2. For automatic first-time setup, put ONE supported Xbox ISO/XISO in assets/
+   and open Burner Edition Setup.exe. It verifies the disc and prepares required
+   files without copying the complete game. Keep that ISO for play and updates.
+   An existing installation takes priority; dropping in an ISO does not replace it.
+3. Alternatively, open Setup > SELECT GAME and choose one of these options:
+   USE ISO DIRECTLY: select the image and keep it in place for future launches.
+   IMPORT ONCE: copy and prepare the game locally; remove the ISO after success.
+   USE EXISTING INSTALL: select a previous package or its GameData folder. Files,
+   saves and add-ons stay there and are reused without being copied.
+4. When ready, choose PLAY. Play Burner Edition.exe starts the same selected
+   installation without opening Setup. Both single-player and co-op are included.
+
+Both supported whole-disc ISO and XISO layouts are accepted. With multiple images
+in assets/, use SELECT GAME to choose one. If an ISO used directly moves, select
+its new location with USE ISO DIRECTLY. Setup never changes the source image.
+Keep the EXEs, tools, runtime, assets and cover.png together. The default local
+data folder is GameData; an external installation stays at its selected location.
+No original disc payloads, Xbox executable, ISO, videos, saves or diagnostic logs
+are included. Original textures, fonts, levels and audio come from your disc.
+
+The ready home screen centers on PLAY. MANAGE contains SELECT GAME / REPAIR FROM
+ISO, VERIFY FILES, GAME FOLDER, SAVES, optional HD textures, Spanish voice import
+and Language. Close the game before setup or verification. If setup fails, read
+the displayed message and last-setup-error.txt beside the launcher when present.
 Spanish translation data is included in the main download. The first Play
 after import prepares it from your game automatically; no separate Spanish
 download is needed.
 Only translation data is bundled, not complete translated game archives.
 Single-player and Co-op use this same launcher and main menu. No separate co-op
 executable or private launch flag is needed. First Play may take longer while
-preparing character and animation resources locally from your imported game.
+preparing character and animation resources locally from your selected game.
 Approved restored HD UI PNGs are bundled in runtime/hd-ui. They replace only
 matching original UI textures when HD UI is enabled; other UI art is prepared
 locally from your game. Missing or invalid restored images keep the source art.
@@ -64,21 +80,39 @@ Character collision with ragdoll bodies is restored. Ragdoll amount controls
 body retention independently: Default, More or Forever.
 Settings: GameData\xbe-runtime\settings.toml
 Saves: GameData\xbe-runtime\hdd
-Imported assets: GameData\installed\game_files
+Prepared game assets: GameData\installed\game_files
 Shader cache: GameData\xbe-runtime\shader-cache
-To update, extract the new release into a new folder and COPY your GameData
-folder beside the new launchers. Keep a backup before deleting an old copy.
+These paths are relative to the selected installation, which defaults to this
+package. If GameData itself was selected, start directly at that folder.
+From 0.09 onward, close the game and choose MANAGE > CHECK FOR UPDATES in Setup.
+If a newer official Windows release is available, confirm its installation.
+The launcher downloads and checks it, keeps a rollback copy, closes briefly and
+reopens. Press PLAY to refresh the selected installation's managed runtime.
+Saves, settings, installed add-ons, your source ISO and installation.json stay
+in place. Update checks are manual; being offline does not prevent normal play.
+If interrupted, reopen Setup to recover. Keep .launcher-update until recovery
+finishes; it contains the rollback copy. Free disk space is needed for staging.
+Older launchers need this complete package installed once to gain this feature.
+
+For a manual update, close the game and Setup, then extract the COMPLETE new
+package over the old one, replacing package files. Keep GameData, assets,
+installation.json if present, and any externally selected installation folder.
+Keep the ISO if using it directly. For a separate new package folder, choose
+MANAGE > SELECT GAME / REPAIR FROM ISO > USE EXISTING INSTALL and select the
+previous package or GameData. There is no need to copy or duplicate GameData.
+Keep a backup of your saves before removing an old installation.
 On the first ISO import, matching saves, settings and cache from the older
 %LOCALAPPDATA%\UrbanChaosBurnerEdition installation are copied automatically.
 The old installation is left untouched. Existing portable saves take priority.
-Play always uses this folder's GameData, never the older AppData installation.
+Play uses the selected portable installation, never the older AppData installation.
 Saves from the earlier pre-XBE port stay separate and are not migrated.
-The launcher has an Open Saves button.
+MANAGE > SAVES opens the selected installation's save folder.
 Choose the original game language in Options > Language, then restart the game.
 The supported disc supplies English, French, Italian and German. Spanish is not
 present in this disc's text/voice banks, regardless of some ISO filenames.
 The bundled community translation adds Spanish game text, PC settings and
-control descriptions. Select Spanish in Setup or Options > Language (see below).
+control descriptions. Select Spanish in Setup > MANAGE > Language or in
+Options > Language (see below).
 
 LOCAL CO-OP AND HEALTH PACKS
 Connect one controller, start normally, then choose Co-op on the main menu.
@@ -91,18 +125,25 @@ Shared objectives appear in both views. Personal combat and interaction prompts
 follow their player. Authored in-game cutscenes use one fullscreen view.
 
 Each fresh level starts each player with one stored health pack, up to three.
-Get more from a medic while their original supplies last. Assign Use health pack
-in Controls (keyboard default H; set a controller binding for Player 2).
-Use a pack to heal yourself or revive a nearby downed partner. A downed player
+Get more from a medic while their original supplies last, including at full
+health when your pack inventory has room. Look at the medic within range.
+Assign Use health pack in Controls (keyboard default H). Keyboard/mouse also
+has a separate Heal Partner control, default U unless that key is already used.
+Controller users double-tap D-pad Down to heal themselves, or hold it while
+facing a nearby injured/downed partner to heal/revive them. The giver spends
+their own pack. Living partners have no healing prompt; downed partners retain
+the Revive Partner prompt. These gestures affect only the controller's player.
+A downed player
 has ten seconds to be revived; expiry or both players falling fails the mission.
 The downed view pulses red and blurs; shared audio stays clear for the partner.
 Stored packs also work in single-player. Existing checkpoints without stored-pack
 data restore zero packs; they do not grant another free pack on every reload.
 
 MOVIES
-Graphics > FMV scaling has Fill and 4:3 modes. Fill keeps picture proportions
-and crops the top and bottom to fill the widescreen view. 4:3 keeps the complete
-picture with side bars. Bars already present in the source movie may remain.
+Graphics > FMV scaling has Fill and 4:3 modes. Fill shows the complete movie
+across the screen and stretches 4:3 sources to full width, without cropping.
+4:3 preserves original proportions with side bars on wider displays.
+Bars already present in the source movie may remain in either mode.
 
 NOTES
 Switch 2 USB support is experimental: the native SDL USB driver and libusb DLL
@@ -121,19 +162,21 @@ bounded last-error.txt beside the imported data to explain the failure.
 
 OPTIONAL HD GAME TEXTURES
 Download the separate Burner Edition HD texture pack ZIP. In Burner Edition
-Setup, choose Install HD Texture Pack and select that ZIP (do not extract it).
+Setup, choose MANAGE > INSTALL HD TEXTURE PACK and select that ZIP (do not extract it).
 Then start the game and enable Graphics > HD game textures > Apply.
 The option is grayed out when the pack is not installed or is incomplete.
 The pack stays in portable GameData and is separate from HD HUD and menus.
 HD textures use more video memory. Original textures remain available with Off.
-The unchanged 0.06 HD game texture pack is compatible with 0.08 on both platforms.
-Existing installations do not need to reinstall it for this update.
+The separate 0.09 HD pack adds 565 texture mappings, for 1,803 total, on both
+platforms. Install that ZIP to receive the new coverage; updating the game does
+not automatically replace the optional pack. The older 0.06 pack still works.
+The expanded coverage has offline checks but still needs in-game visual testing.
 HD game texture artwork: xXthe.RockoXx; converted from the PS2 HD texture pack.
 
 OPTIONAL SPANISH VOICES
 Spanish text and PC-menu translations remain included in the main build.
-Import your Xbox ISO first and close the game. In Burner Edition Setup choose
-IMPORT SPANISH VOICES (PS2 ISO) and select your own European multilingual PS2
+Set up your Xbox game first and close the game. In Burner Edition Setup choose
+MANAGE > IMPORT SPANISH VOICES (PS2 ISO) and select your European multilingual PS2
 Urban Chaos ISO (SLES-53991). If it is in a ZIP or RAR, extract the ISO first.
 Setup verifies the disc and converts its Spanish dialogue and cutscene audio
 locally. Allow at least 8.4 GiB of free space for conversion. This can take a
@@ -152,7 +195,6 @@ original recording. In-game audio and lip synchronization need testing.
 KNOWN ISSUES
 HD HUD still has prompt/display issues; the original HUD remains available.
 Co-op is experimental, with incomplete campaign/character/turret gameplay coverage.
-A reported co-op aiming offset remains under investigation.
 The intermittent missing injured officer in Angel Heights remains under investigation.
 The targeted stone-ledge mapping repair still needs confirmation at the reporter's exact wall.
 Spanish text and imported voice synchronization need community review.
@@ -160,7 +202,7 @@ A Linux tester confirmed setup and gameplay in the earlier compatibility build;
 that does not verify this release's new features or co-op under Proton.
 
 CREDITS
-XboxXBERecomp: TGP482. Earlier xboxrecomp work and retained helpers: sp00nz.
+XboxXBERecomp runtime: TGP482. Urban Chaos adapters: Burner Edition project.
 Additional dependency notices are in licenses/. This is an unofficial fan port.
 Original game content belongs to its respective owners and must be supplied
 locally by the user.
@@ -168,11 +210,23 @@ locally by the user.
 INTEGRATED COMMUNITY SPANISH TEXT
 The ZARF beta translation and supplemental translations are included as text
 data. On the first Play after import or upgrade, the launcher builds the
-translated files locally from your imported game in
+translated files locally from your selected game in
 GameData/xbe-runtime/translations/es-zarf. English voices are retained unless
 Spanish voices have been imported from your European PS2 ISO.
 Choose Espanol (ZARF beta) in Options > Language, Apply, then restart. You can
-also select Spanish in Burner Edition Setup before pressing PLAY.
+also select Spanish in Burner Edition Setup > MANAGE > Language before PLAY.
 The translation fills remaining English messages and includes Spanish PC menus
 and control descriptions. Additional translations still need community review.
+
+OPTIONAL DIAGNOSTIC LOGGING
+Open Setup > Manage > Diagnostic Logging before reproducing a problem, then
+use Open Logs. Off by default; applies to the next game session. Files stay in
+this launcher's GameData/logs even if you selected another installation.
+Nothing is uploaded. Logs include setup errors/progress, runtime/system/device
+details, settings, existing runtime warnings/reports, FPS samples and exit code.
+They may include local paths and device names. Review before sharing.
+Turn logging off afterward; it can affect timing. Runtime logs are capped at
+64 MiB, setup logs at 8 MiB, with 30 files per category. Old logs are kept after
+disabling. A full/read-only disk can prevent recording. No heavy GPU captures,
+desktop typing or audio recordings are enabled.
 

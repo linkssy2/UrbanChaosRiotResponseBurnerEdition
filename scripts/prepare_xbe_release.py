@@ -1,4 +1,4 @@
-"""Stage release-only diagnostics removal without changing gameplay or GPU policy."""
+"""Stage default-off support logging and exclude heavy developer diagnostics."""
 from pathlib import Path
 
 
@@ -46,13 +46,14 @@ def prepare(sdk, area):
     core.mkdir(exist_ok=True)
     original = (sdk / 'runtime/core/log.h').read_text()
     start = original.index('#define LOGD(')
-    quiet = '''// Release removes arguments and rate-limit atomics as well as file writes.
+    quiet = '''// Default-off support logging; developer captures remain compiled out.
 #ifdef UC_BURNER_RELEASE
+namespace logx { bool SessionEnabled(); void SessionFrame(double fps); }
 #define LOGD(...) ((void)0)
-#define LOGI(...) ((void)0)
-#define LOGW(...) ((void)0)
-#define LOGR(...) ((void)0)
-#define LOG_FIRST(...) ((void)0)
+#define LOGI(...) do { if (::logx::SessionEnabled()) ::logx::Write(::logx::Level::Info, __VA_ARGS__); } while (0)
+#define LOGW(...) do { if (::logx::SessionEnabled()) ::logx::Write(::logx::Level::Warn, __VA_ARGS__); } while (0)
+#define LOGR(...) do { if (::logx::SessionEnabled()) ::logx::Write(::logx::Level::Report, __VA_ARGS__); } while (0)
+#define LOG_FIRST(n, ...) do { if (::logx::SessionEnabled()) { static std::atomic<int> _c{0}; if (_c.fetch_add(1, std::memory_order_relaxed) < (n)) LOGI(__VA_ARGS__); } } while (0)
 #define LOGE(...) ::logx::Write(::logx::Level::Error, __VA_ARGS__)
 #else
 '''
@@ -73,24 +74,8 @@ inline const std::filesystem::path& CaptureDir() {
     (core / 'diag.h').write_text(quiet_diag + diag + '\n#endif\n')
 
     log = (sdk / 'runtime/core/log.cpp').read_text()
-    # Errors still reach the launcher's bounded failure report, but normal play
-    # never creates logs, captures, or memory dumps.
-    release_log = r'''#include "core/log.h"
-#include <cstdio>
-#ifdef UC_BURNER_RELEASE
-namespace logx {
-void Init(const std::string&, const std::string&, bool) {}
-const std::string& Path() { static const std::string empty; return empty; }
-void Flush() { std::fflush(stderr); }
-void Write(Level level, const char* format, ...) {
-    if (level != Level::Error) return;
-    va_list args; va_start(args, format);
-    std::vfprintf(stderr, format, args); va_end(args);
-    std::fputc('\n', stderr);
-}
-}
-#else
-'''
+    # Errors still reach the bounded failure report; support logs require opt-in.
+    release_log = '#ifdef UC_BURNER_RELEASE\n' + Path(__file__).with_name('xbe_release_log.cpp').read_text() + '\n#else\n'
     (area / 'src/compat/log.cpp').write_text(release_log + log + '\n#endif\n')
 
     render = (sdk / 'runtime/gpu/render_thread.cpp').read_text()
@@ -118,7 +103,7 @@ void Write(Level level, const char* format, ...) {
     main = once(main, '            if (wp == VK_F3) DumpThreads();',
                 '#ifndef UC_BURNER_RELEASE\n            if (wp == VK_F3) DumpThreads();\n#endif')
     main = once(main, '    if (relaunched && !logx::kVerbose) LOGR("Relaunched: %s", IMAGE_XBE);\n    else app::LogSystem();',
-                '#ifndef UC_BURNER_RELEASE\n    if (relaunched && !logx::kVerbose) LOGR("Relaunched: %s", IMAGE_XBE);\n    else app::LogSystem();\n#endif')
+                '#ifdef UC_BURNER_RELEASE\n    if (logx::SessionEnabled()) app::LogSystem();\n#else\n    if (relaunched && !logx::kVerbose) LOGR("Relaunched: %s", IMAGE_XBE);\n    else app::LogSystem();\n#endif')
     main = main.replace('The game failed to start, see the log in the logs folder.',
                         'The game failed to start. Run Burner Edition Setup to verify your imported game files.')
     main_path.write_text(main)
@@ -145,4 +130,7 @@ void Write(Level level, const char* format, ...) {
     (area / 'src/compat/test_release.cpp').write_text(fixture)
     from prepare_xbe_release_gpu import prepare as prepare_gpu
     prepare_gpu(area)
+    gpu = area / 'src/compat/d3d12.cpp'
+    gpu.write_text(once(gpu.read_text(), '        fps_ = fps_n_ / el;\n',
+        '        fps_ = fps_n_ / el;\n#ifdef UC_BURNER_RELEASE\n        logx::SessionFrame(fps_);\n#endif\n'))
     quiet_environment_probes(area)

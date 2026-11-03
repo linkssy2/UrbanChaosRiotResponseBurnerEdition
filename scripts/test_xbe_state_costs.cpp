@@ -1,4 +1,4 @@
-// Actual queue/delta/replay code before and after the bounded comparison change.
+// Actual queue/delta/replay code before and after the bounded full-block changes.
 #undef NDEBUG
 #include <algorithm>
 #include <array>
@@ -10,6 +10,16 @@
 #include <cstring>
 #include <memory>
 #include <tuple>
+#include <unordered_map>
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
 #include <vector>
 #include <smmintrin.h>
 #include "gpu/state.h"
@@ -98,13 +108,20 @@ static void Equivalent() {
     std::printf("state queue: %u states with identical delta bytes, command fields, shader ownership and delayed replay pass\n", checked);
 }
 
-enum Mode { Unchanged, SparseOne, SparseFour, RepeatFour, AllChanging, Modes };
-static const char* names[] = {"unchanged","one-block-change","four-block-change","repeat-four-draws","all-blocks-change"};
+enum Mode { Unchanged, SparseOne, SparseFour, RepeatFour, AllChanging, EarlyChanged, MiddleChanged, LateChanged, Modes };
+static const char* names[] = {"unchanged","one-block-change","four-block-change","repeat-four-draws","all-blocks-change",
+                              "early-block-change","middle-block-change","late-block-change"};
 __declspec(noinline) static void Mutate(State& s, Mode mode, unsigned i) {
     if (mode == Unchanged || (mode == RepeatFour && i%4)) return;
     if (mode == AllChanging) {
         auto* p = reinterpret_cast<uint8_t*>(&s);
         for (auto range : ranges) for (size_t j = 0; j < range.len; j += 64) p[range.off+j] ^= 0x81;
+        return;
+    }
+    if (mode == EarlyChanged || mode == MiddleChanged || mode == LateChanged) {
+        const auto r = mode == EarlyChanged ? ranges.front() : mode == MiddleChanged ? ranges[2] : ranges.back();
+        const size_t at = r.off + (mode == EarlyChanged ? 0 : mode == MiddleChanged ? r.len/2 : r.len-1);
+        reinterpret_cast<uint8_t*>(&s)[at] ^= 0x81;
         return;
     }
     s.vsc[104][0] = std::bit_cast<float>(0x3f000000u + i);
@@ -137,7 +154,89 @@ static void Benchmark() {
                     names[mode],Median(times[0]),Median(times[1]),100*(Median(times[1])/Median(times[0])-1));
     }
 }
+// Production-derived header snapshots complement the state replay fixture.
+namespace header_test {
+/* HEADER_CONSTANTS */
+constexpr uint32_t kRingBase=0x20000000,kGuardBase=0x10000000;
+struct Memory {
+    std::vector<uint8_t> source=std::vector<uint8_t>(65536), ring=std::vector<uint8_t>(kHeaderRing);
+    uint8_t* guard=nullptr;
+};
+namespace kernel {
+static Memory* memory;
+void* HostPtr(uint32_t address) {
+    if (address>=kRingBase) {assert(address-kRingBase<kHeaderRing);return memory->ring.data()+address-kRingBase;}
+    if (address==kGuardBase) {assert(memory->guard);return memory->guard;}
+    assert(address<memory->source.size());return memory->source.data()+address;
+}
+uint32_t R32(uint32_t address) {uint32_t out;std::memcpy(&out,HostPtr(address),4);return out;}
+}
+namespace baseline {struct Pipeline {/* BASELINE_HEADER */};}
+namespace candidate {struct Pipeline {/* OPTIMIZED_HEADER */};}
+static void Fill(Memory& m,uint32_t at,uint32_t type) {
+    auto* bytes=at==kGuardBase?m.guard:m.source.data()+at;
+    const unsigned n=type<0x20000||type==0x30000?12:20;
+    for(unsigned i=0;i<n;++i)bytes[i]=uint8_t(13*i+at);
+    std::memcpy(bytes,&type,4);
+}
+static unsigned checks=0;
+template<class A,class B>
+static void Equal(const A& a,const B& b,const Memory& x,const Memory& y) {
+    assert(a.ring_pos_==b.ring_pos_ && a.headers_.size()==b.headers_.size() && x.ring==y.ring);
+    for (const auto& [key,v]:a.headers_) {
+        const auto& w=b.headers_.at(key);
+        assert(v.at==w.at&&v.made==w.made&&!std::memcmp(v.bytes,w.bytes,kHeaderBytes));
+    }
+    for(size_t i=0;i<64;++i) {
+        assert(a.recent_headers_[i].key==b.recent_headers_[i].key);
+        if(a.recent_headers_[i].key) assert(a.recent_headers_[i].value->at==b.recent_headers_[i].value->at);
+    }
+}
+static void Equivalent() {
+    Memory x,y; baseline::Pipeline a;candidate::Pipeline b;
+    a.ring_=b.ring_=kRingBase;
+    auto step=[&](uint32_t h) {
+        kernel::memory=&x;const auto u=a.Header(h);
+        kernel::memory=&y;const auto v=b.Header(h);
+        assert(u==v);Equal(a,b,x,y);++checks;return u;
+    };
+    step(0); a.ring_=b.ring_=0;step(0xffffffff);a.ring_=b.ring_=kRingBase;
+    for(unsigned type=0;type<8;++type) for(unsigned alignment=0;alignment<32;++alignment) {
+        const unsigned at=256+alignment;
+        Fill(x,at,type<<16);y.source=x.source;
+        const auto copy=step(at);const auto made=a.ring_pos_;assert(step(at)==copy&&a.ring_pos_==made);
+        if(type<2||type==3)for(unsigned i=12;i<20;++i)assert(x.ring[copy-kRingBase+i]==0);
+        for(unsigned i=0;i<20;++i) {
+            x.source[at+i]^=0x81;y.source=x.source;step(at);
+            x.source[at+i]^=0x81;y.source=x.source;step(at);
+        }
+    }
+    for(unsigned i=0;i<128;++i) {const auto at=1024+(i%2)*512;Fill(x,at,0x40000);y.source=x.source;step(at);}
+    Fill(x,8192,0x40000);y.source=x.source;const auto old=step(8192);
+    std::array<uint8_t,20> snapshot{};std::memcpy(snapshot.data(),x.ring.data()+old-kRingBase,20);
+    x.source[8192+8]^=0x81;y.source=x.source;step(8192);
+    assert(!std::memcmp(snapshot.data(),x.ring.data()+old-kRingBase,20));
+    a.ring_pos_+=kHeaderRing/2;b.ring_pos_=a.ring_pos_;step(8192);
+    a.ring_pos_=3*kHeaderRing-16;b.ring_pos_=a.ring_pos_;step(8192);
+    assert(a.ring_pos_==3*kHeaderRing+32);
+#ifdef _WIN32
+    SYSTEM_INFO si;GetSystemInfo(&si);
+    void* gx=VirtualAlloc(nullptr,2*si.dwPageSize,MEM_RESERVE,PAGE_NOACCESS);
+    void* gy=VirtualAlloc(nullptr,2*si.dwPageSize,MEM_RESERVE,PAGE_NOACCESS);
+    assert(gx&&gy&&VirtualAlloc(gx,si.dwPageSize,MEM_COMMIT,PAGE_READWRITE)&&VirtualAlloc(gy,si.dwPageSize,MEM_COMMIT,PAGE_READWRITE));
+    for(unsigned type=0;type<=0x70000;type+=0x10000) {
+        const unsigned bytes=type<0x20000||type==0x30000?12:20;
+        x.guard=static_cast<uint8_t*>(gx)+si.dwPageSize-bytes;y.guard=static_cast<uint8_t*>(gy)+si.dwPageSize-bytes;
+        Fill(x,kGuardBase,type);Fill(y,kGuardBase,type);step(kGuardBase);
+        for(unsigned i=4;i<bytes;++i){x.guard[i]^=0x80;y.guard[i]^=0x80;step(kGuardBase);}
+    }
+    assert(VirtualFree(gx,0,MEM_RELEASE)&&VirtualFree(gy,0,MEM_RELEASE));
+#endif
+    std::printf("Header equivalence: %u snapshots, all types/alignments, every source byte, zero tails, recent collisions, ring expiry/wrap, delayed bytes, 12/20-byte guard-page boundaries pass\n",checks);
+}
+}
+
 int main(int argc, char** argv) {
-    ComparisonEdges(); Equivalent();
+    ComparisonEdges(); Equivalent(); header_test::Equivalent();
     if (argc > 1 && !std::strcmp(argv[1],"--bench")) Benchmark();
 }

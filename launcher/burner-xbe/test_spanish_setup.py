@@ -7,7 +7,7 @@ import tempfile
 from unittest.mock import patch
 
 HERE = Path(__file__).resolve().parent
-sys.path[:0] = [str(HERE), str(HERE.parents[1] / 'third_party/xboxrecomp/tools/xiso')]
+sys.path.insert(0, str(HERE))
 import import_game as worker
 
 

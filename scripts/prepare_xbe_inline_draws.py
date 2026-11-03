@@ -27,6 +27,28 @@ def replace_once(text, old, new):
     return text.replace(old, new, 1)
 
 
+def bulk_inline_packets(source):
+    """Preserve packet validation and ordering; append only an opaque inline run."""
+    begin = 'HLE_STDCALL(D3DDevice_EndPush, 1) {'
+    old = between(source, begin, '// frame buffer compression tiles')
+    assert 'UC_BULK_INLINE_ARRAY' not in old, 'Inline packet optimization already applied'
+    anchor = '        for (uint32_t i = 0; i < n; i++, p += 4) {'
+    fast = '''        // UC_BULK_INLINE_ARRAY: this method has no state/visibility side effects.
+        if ((head & 0x40000000) && method == kInlineArray) {
+            if (prim && n) {
+                size_t first = vertices.size();
+                vertices.resize(first + n);
+                std::memcpy(vertices.data() + first, HostPtr(p), size_t(n) * 4);
+            }
+            p += n * 4;
+            continue;
+        }
+'''
+    changed = replace_once(old, anchor, fast + anchor)
+    assert changed.index('n * 4 > end - p') < changed.index('UC_BULK_INLINE_ARRAY')
+    return replace_once(source, old, changed)
+
+
 def prepare(sdk, area):
     """Run after the graphics/visibility preparation; only touches trial outputs."""
     sdk, area = Path(sdk), Path(area)
@@ -35,6 +57,8 @@ def prepare(sdk, area):
     d3d = path.read_text()
     assert '// 9A225 and 9B4D1 emit' not in d3d
     d3d = replace_once(d3d, '#include "xdk/hle.h"', '#include "xdk/hle.h"\n' + SYMBOLS)
+    reference_push = between(d3d, 'HLE_STDCALL(D3DDevice_EndPush, 1)', '// frame buffer compression tiles')
+    d3d = bulk_inline_packets(d3d)
     path.write_text(d3d)
 
     # The shader selected by both producers is initialized from this XBE table.
@@ -60,7 +84,8 @@ def prepare(sdk, area):
     emitter = between(title, '\t// 0009B4C4 mov esi, edi', '\t// 0009B688 mov ecx, [esp+0x18]')
     emitter = 'static void EmitOriginal(X86Context& ctx, uint8_t* base) {\nX86_LOAD_FLAGS();\nuint32_t ca=0, cb=0;\n' + emitter + '\n}\n'
 
-    source = (sdk / 'runtime/xdk/d3d8.cpp').read_text()
+    # Exercise the prepared production implementation, not a fresh SDK parser.
+    source = d3d
     texture = (sdk / 'runtime/gpu/texture.cpp').read_text()
     vertex = (sdk / 'runtime/gpu/vertex.cpp').read_text()
     pieces = {
@@ -71,7 +96,10 @@ def prepare(sdk, area):
         '// GENERATED_SCRATCH': between(source, 'uint32_t ScratchPush(', '\ngpu::Surface SurfaceOf('),
         '// GENERATED_SYNC': between(source, 'void SyncDeferred() {', '\nfloat ZScale('),
         '// GENERATED_DRAWUP': between(source, 'void DrawUp(', '\nuint32_t g_push_begin'),
+        '// GENERATED_VISIBILITY': between(source, 'void ApplyVisibilityMethod(', '// draws the open primitive:'),
         '// GENERATED_PUSH': between(source, 'HLE_STDCALL(D3DDevice_BeginPush, 1)', '// frame buffer compression tiles'),
+        '// GENERATED_REFERENCE_PUSH': reference_push.replace('HLE_STDCALL(D3DDevice_EndPush, 1)',
+            'static uint32_t ReferenceEndPush(X86Context& ctx, const hle_args_D3DDevice_EndPush& a)'),
         '// GENERATED_ORIGINAL': helpers + emitter,
     }
     test = Path(__file__).with_name('test_xbe_inline_draws.cpp').read_text()

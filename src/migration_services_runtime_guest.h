@@ -1,4 +1,0 @@
-#ifndef UC_MIGRATION_SERVICES_RUNTIME_GUEST_H
-#define UC_MIGRATION_SERVICES_RUNTIME_GUEST_H
-int uc_migration_services_runtime(unsigned entry);
-#endif

@@ -12,6 +12,7 @@ def prepare(area):
     count,table=struct.unpack_from('<II',xbe,0x11c)
     sections=[struct.unpack_from('<6I',xbe,table-base+i*56) for i in range(count)]
     for va,size,digest in [
+        (0x738d0,384,'b597664a720e41d60024d10f799fac58ab278a09980a1428d440363fbb9b2837'),
         (0x70d90,455,'879111defca52dd723604dadc820a063cf5705351be989ed3f38d58867be6671'),
         (0x72b50,60,'afadb1353b883d95b024a9df1eab40feb131e45afdf63c01826869ce55784691'),
         (0x4e868c,24,'17230f1c400f9d998fcc6aac9d66bb6c733ab04249dde4d579d05c56ebaa1048'),
@@ -43,6 +44,12 @@ def prepare(area):
         (0x73790, 320, 'f764c442d01e431bea7a4735171d0965691a0dcba6e83c18d09c28894ee01d69'),
         (0x73aa0, 11, '69755aea4ac89db056f26c0af2f1d87a52e7a908fb954ca90a67eaec9497b342'),
         (0x7afe0, 371, '517e9dca46baffbb224e329285e4e1995aedec6dbebcbf9d6b9b1ab4470195c1'),
+        (0x9d7e0, 43, 'cb99388a8b0a8473975114b301d43cb32e09b03ab259493d4313d659b6924bb8'),
+        (0x7b340, 18, '32d7b61190624b4bdc34f730974edbfd8b92aef2782a50f9ed1811a739eec315'),
+        (0x7a690, 223, '28680f763bc8c3ff3418dd9ea79925ce6eb17c6958ad3c5b0df62f3e1e197778'),
+        (0x442d0, 16, '3d7245716e4be8e627b5de93ab9fe45899b9060cf2303a95c4c416a7842b437f'),
+        (0x4e55d0, 6480, '4bae31a042b3806974a3374d99fe3167e3585e07777d172932ee3a9065b44fb5'),
+        (0x77ec0, 5364, '8cb125d3a1d50ebf9f0d00b579326950486e725ea73a1ec13df7e920647a6ee2'),
         (0xbac10, 836, '82e28ff7598be95e3df73f3eb8656fda5760b933767e8ea43b4349cf8598602a'),
         (0x175820, 985, '86e1a44738234d4780eca40a498427fc55370048bebe9319ebb567102f31ab87'),
         (0xc8cfd, 226, '4eb6854b09988e1eb8982c7a2bdee850533952eb9471c8dfc7eb61d23d3c7ea9'),
@@ -54,6 +61,11 @@ def prepare(area):
         (0x47610, 960, 'e0940fb3d30dd20c96ea8fe011d9090e0aa0a19aa5c655776f6529e24cdaf011'),
         (0x215060, 794, 'a3710b17e87403e3138092af5081882c84c6af71c03b249ee4122961d611167d'),
         (0xd4804, 6, '92a53488b5553b4b1eed596a34ebb8b57a00374deda019427b8e68acb5ebf3a0'),
+        (0xcb3c8,5,'771c91743733499569b23b81b7ef7e6d709fb0fa836991c36c0d73410674ed88'),
+        (0xcab20,3829,'3c0dd657f8d424b1a3ec478d42922bc0f149fe3985b26d965e7f9b93ac79c4a7'),
+        (0xa5c30,30,'69622ece3ece926676dfa7fe6355ae5a83fc98a4141ee47d8eab3c22326e7021'),
+        (0x21e260,387,'85172910b4bfb17d15716e3825c3af773009572efff63f6cd5e4babe8138f1d6'),
+        (0x21e3f0,117,'7a76c30e24977cfa92c8003e7b0c7d1b3bf53e6db44d9c6418c75d56c532daa5'),
     ]:
         section=next(s for s in sections if s[1]<=va and va+size<=s[1]+s[4])
         offset=section[3]+va-section[1]
@@ -100,11 +112,27 @@ def prepare(area):
             body=body.replace(changed,load);assert body.count(load)==1;body=body.replace(load,changed,1)
             s=s[:first]+body+s[last:]
         if chunk==11:
+            # Apply color after the native target/spin decision, before the fade tree update.
+            hook='\tTrialReticleColor(ctx,base);\n'
+            s=s.replace(hook,'')
+            anchor='\t// 000739F9 lea edi, [esi+0x20]\n'
+            assert s.count(anchor)==1
+            s=s.replace(anchor,anchor+hook,1)
             original='\t// 00076862 push 0x43A00000\n\t{ uint32_t v = (uint32_t)(0x43A00000u); X86_PUSH32(v); }'
             changed='\t// 00076862 push 0x43A00000\n\t{ uint32_t v = TrialHudCenterBits(); X86_PUSH32(v); }'
             s=s.replace(changed,original);assert s.count(original)==1;s=s.replace(original,changed,1)
         s=s.replace('#include "x86_recomp_shared.h"\n','#include "x86_recomp_shared.h"\n'+include,1)
         p.write_text(s)
+    # Retire the old compensating bullet bias; alignment belongs to the reticle.
+    p=area/'generated/game/x86_recomp.20.cpp'
+    hook='\tTrialCoopShotOffset(ctx,base);\n'
+    s=p.read_text()
+    assert s.count(hook) in (0,2)
+    s=s.replace(include,'').replace(hook,'')
+    anchor='\t// 000CB3C8 call 0x000EBF10'
+    assert s.count(anchor)==2
+    assert hook not in s
+    p.write_text(s)
     source=(area/'generated/game/x86_recomp.19.cpp').read_text()
     first=source.index('X86_FUNC(__imp__sub_000BAC10) {')
     last=source.index('\nX86_WEAK_FUNC(sub_000BAC10',first)
@@ -123,6 +151,9 @@ def prepare(area):
                                 (11,'00077450','// GENERATED_REWARD_DRAW'),(11,'00072200','// GENERATED_OBJECTIVE_DRAW'),
                                 (11,'00077570','// GENERATED_HELP_DRAW'),(65,'00273860','// GENERATED_HELP_TEXT_DRAW'),
                                 (65,'002739A0','// GENERATED_NOTICE_TWEEN_DRAW'),
+                                (12,'0007AFE0','// GENERATED_RETICLE_SPRITE'),
+                                (12,'0007B340','// GENERATED_RETICLE_SIZE'),
+                                (16,'0009D7E0','// GENERATED_RETICLE_QUEUE'),
                                 (11,'0007AAE0','// GENERATED_CENTERED_SCOPE_CHILD')):
         source=(area/f'generated/game/x86_recomp.{chunk}.cpp').read_text()
         first=source.index('X86_FUNC(__imp__sub_'+address+') {')
@@ -143,4 +174,11 @@ def prepare(area):
     queue=queue.replace('TrialLevelDetailTarget(ctx, base, X86_MEM32((uint32_t)(ctx.edx + 0x4u)))',
                         'X86_MEM32((uint32_t)(ctx.edx + 0x4u))')
     test=test.replace('// GENERATED_HELP_QUEUE_DRAW',queue)
+    a=(area/'generated/game/x86_recomp.11.cpp').read_text()
+    start=a.index('\t// 00073925 mov eax, [0x0051C4DC]')
+    end=a.index('\t// 000739FC mov ebx, 0x1B',start)
+    part=a[start:end].replace('ctx.eax=(ctx.eax&0xffffff00u)|TrialCoopSpinHud(base,ctx.esi);',
+        '{ uint32_t ea = 0x51BDF4u; ctx.eax = (ctx.eax & 0xFFFFFF00u) | X86_MEM8(ea); }')
+    test=test.replace('// GENERATED_RETICLE_COLOR',
+        'X86_FUNC(NativeReticleColor) { X86_LOAD_FLAGS(); uint32_t ca=0,cb=0;\n'+part+'\n}\n')
     (area/'src/compat/test_view_layout.cpp').write_text(test)

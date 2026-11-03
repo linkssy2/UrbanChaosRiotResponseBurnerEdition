@@ -39,8 +39,8 @@ bool TrialPromptSnapshot(unsigned id,TrialPromptInput& out,unsigned variant,unsi
         }
         return changed;
     }
-    unsigned first=id==1?0:12,last=id==1&&variant!=2?12:13;
-    for(unsigned i=first;i<last;++i){unsigned action=i==12?24:i;
+    unsigned first=id==1?0:12,last=id==1&&variant<2?12:13;
+    for(unsigned i=first;i<last;++i){unsigned action=i==12?(id==1&&variant==3?12:24):i;
         out.bindings[i]=xbox_KeyboardBinding(action,0);
         if(action!=0&&!out.bindings[i])out.bindings[i]=xbox_KeyboardBinding(action,1);
         xbox_KeyboardActionLabel(action,out.labels[i],sizeof(out.labels[i]));
@@ -67,9 +67,9 @@ bool TrialPromptSnapshot(unsigned id,TrialPromptInput& out,unsigned variant,unsi
 METHOD=r'''
 ID3D12Resource* D3D12Backend::BindPcPrompt(unsigned id,unsigned variant,unsigned player,const TextureDesc& original,DrawTextures& stages,int stage) {
     TrialPromptInput input;
-    if(id!=1||variant>2)variant=0;
+    if(id!=1||variant>3)variant=0;
     if(!TrialPromptSnapshot(id,input,variant,player))return nullptr;
-    auto& slot=pc_prompts_[input.controller?3:variant==2?4:variant?variant+1:id-1];
+    auto& slot=pc_prompts_[input.controller?3:variant>=2?variant+2:variant?2:id-1];
     const ULONGLONG now=GetTickCount64();
     bool changed=!slot.texture.res||!uc_pc_prompts::Equal(slot.input,input);
     // Bindings change immediately; only the moving Orders cue is rate limited.
@@ -133,37 +133,7 @@ bool TrialPromptArtwork(unsigned id,const uint8_t* source,const TrialPromptInput
 }
 '''
 
-def prepare(input_source,graphics_source,area):
-    area=Path(area);out=area/'src/compat';local=Path(__file__).parent
-    (out/'xbe_pc_prompts.h').write_text((local/'xbe_pc_prompts.h').read_text())
-    for name in ('xbe_prompt_context.h','xbe_prompt_context.cpp'):
-        (area/'src/common'/name).write_text((local/name).read_text())
-    state_path=area/'src/gpu/state.h';state=state_path.read_text()
-    field='    unsigned uc_prompt_variant = 0; // original queued text identity\n'
-    player_field='    unsigned uc_prompt_player = 0; // queued HUD owner, independent of global input mode\n'
-    # StateRanges starts at simple, so metadata before that member is never
-    # transmitted to the renderer. Keep this POD in its material-to-end range,
-    # alongside fog metadata. Remove the old placement on repeated preparation.
-    state=state.replace(field,'').replace(player_field,'')
-    state=once(state,'    uint32_t light_enable = 0;                         // bit per light\n',
-                     '    uint32_t light_enable = 0;                         // bit per light\n'+field+player_field)
-    state_path.write_text(state)
-    art=(ROOT/'third_party/xboxrecomp/src/nv2a/nv2a_pc_hud_art.h').read_text()
-    art=once(art,'#include "../../include/host_controller.h"','')
-    art=once(art,'#include "nv2a_pc_hud_assets.h"','''#include <cstdio>
-#include <cstdlib>
-#include "xbe_pc_prompts.h"
-static uint32_t pc_hud_buttons_pixels[32*1024];
-static bool pc_hud_supplied=false;
-static int pc_hud_load_pixels(){return pc_hud_supplied;}''')
-    art=once(art,'uint32_t*copy=malloc((size_t)*w**h*4);','uint32_t*copy=static_cast<uint32_t*>(malloc((size_t)*w**h*4));')
-    # Glyph0x15 is also used for menu navigation; replace it only in the Orders hint.
-    art=once(art,'int a=pc_hud_actions[row];if(a<0)continue;',
-             'int a=row==20&&labels[12][0]?12:pc_hud_actions[row];if(a<0)continue;')
-    # Reuse the accepted standalone keycap rasterizer for native menu hints.
-    keycap=(ROOT/'native/runtime/hud_keys.c').read_text()
-    keycap=keycap[keycap.index('int native_hud_keycap('):]
-    (out/'xbe_pc_prompt_art.cpp').write_text(art+ART_TAIL+'\n'+keycap)
+def prepare_input(input_source):
     input_source=once(input_source,'#include "core/input.h"','#include "core/input.h"\n#include "xbe_pc_prompts.h"')
     at=input_source.index('void xbox_KeyboardSourceEvent(')
     input_source=input_source[:at]+INPUT+'\n'+input_source[at:]
@@ -184,6 +154,38 @@ static int pc_hud_load_pixels(){return pc_hud_supplied;}''')
     }else if(msg==WM_LBUTTONDOWN||msg==WM_RBUTTONDOWN||msg==WM_MBUTTONDOWN||
              msg==WM_XBUTTONDOWN||msg==WM_MOUSEWHEEL||msg==WM_MOUSEHWHEEL)note_pointer_input();
     if(TrialGraphicsMessage(msg,wp,lp)){''')
+    return input_source
+
+def prepare(input_source,graphics_source,area):
+    area=Path(area);out=area/'src/compat';local=Path(__file__).parent
+    (out/'xbe_pc_prompts.h').write_text((local/'xbe_pc_prompts.h').read_text())
+    for name in ('xbe_prompt_context.h','xbe_prompt_context.cpp'):
+        (area/'src/common'/name).write_text((local/name).read_text())
+    state_path=area/'src/gpu/state.h';state=state_path.read_text()
+    field='    unsigned uc_prompt_variant = 0; // original queued text identity\n'
+    player_field='    unsigned uc_prompt_player = 0; // queued HUD owner, independent of global input mode\n'
+    # StateRanges starts at simple, so metadata before that member is never
+    # transmitted to the renderer. Keep this POD in its material-to-end range,
+    # alongside fog metadata. Remove the old placement on repeated preparation.
+    state=state.replace(field,'').replace(player_field,'')
+    state=once(state,'    uint32_t light_enable = 0;                         // bit per light\n',
+                     '    uint32_t light_enable = 0;                         // bit per light\n'+field+player_field)
+    state_path.write_text(state)
+    art=(ROOT/'scripts/xbe_pc_hud_art.h').read_text()
+    art=once(art,'#include "nv2a_pc_hud_assets.h"','''#include <cstdio>
+#include <cstdlib>
+#include "xbe_pc_prompts.h"
+static uint32_t pc_hud_buttons_pixels[32*1024];
+static bool pc_hud_supplied=false;
+static int pc_hud_load_pixels(){return pc_hud_supplied;}''')
+    art=once(art,'uint32_t*copy=malloc((size_t)*w**h*4);','uint32_t*copy=static_cast<uint32_t*>(malloc((size_t)*w**h*4));')
+    # Direction glyphs also appear in menus; only tagged gameplay hints supply label12.
+    art=once(art,'int a=pc_hud_actions[row];if(a<0)continue;',
+             'int a=(row==14||row==19||row==20)&&labels[12][0]?12:pc_hud_actions[row];if(a<0)continue;')
+    # Reuse the accepted standalone keycap rasterizer for native menu hints.
+    keycap=(local/'xbe_hud_keycap.inc').read_text()
+    (out/'xbe_pc_prompt_art.cpp').write_text(art+ART_TAIL+'\n'+keycap)
+    input_source=prepare_input(input_source)
     graphics_source=once(graphics_source,'#include "gpu/texture.h"','#include "gpu/texture.h"\n#include "xbe_pc_prompts.h"')
     graphics_source=once(graphics_source,'    uint32_t levels = 1;\n', '    uint32_t levels = 1;\n    unsigned pc_prompt_id = 0;\n')
     graphics_source=once(graphics_source,'    ID3D12Resource* BindTexture(const State& s, int stage, DrawTextures& stages);',
@@ -191,7 +193,7 @@ static int pc_hud_load_pixels(){return pc_hud_supplied;}''')
         '    ID3D12Resource* BindPcPrompt(unsigned,unsigned,unsigned,const TextureDesc&,DrawTextures&,int);')
     field='''    struct PcPromptSlot { Tex texture;TrialPromptInput input;ULONGLONG updated=0;
         D3D12_RESOURCE_STATES state=D3D12_RESOURCE_STATE_COPY_DEST; };
-    PcPromptSlot pc_prompts_[5];
+    PcPromptSlot pc_prompts_[6];
 '''
     graphics_source=once(graphics_source,'    std::unordered_map<uc_xbe_signed::TextureKey, Tex, uc_xbe_signed::TextureKeyHash> textures_;',
         field+'    std::unordered_map<uc_xbe_signed::TextureKey, Tex, uc_xbe_signed::TextureKeyHash> textures_;')
@@ -365,7 +367,7 @@ def stage_tests(area,art):
     assert orders and hashlib.sha256(orders).hexdigest()=='fc5540f5ea1823c7fb81e94079f8b6119a8380ce25fa45eb851c574bcbe07a8b'
     (out/'test_pc_prompts_orders.bin').write_bytes(orders)
     fixture=fixture.replace('/* INPUT_IMPLEMENTATION */',INPUT)
-    keyboard=(ROOT/'third_party/xboxrecomp/src/input/host_keyboard_config.h').read_text()
+    keyboard=(ROOT/'scripts/xbe_keyboard_bindings.inc').read_text()
     begin=keyboard.index('static void keyboard_apply_bindings(')
     fixture=fixture.replace('/* ACTUAL_KEYBOARD_APPLY */',keyboard[begin:keyboard.index('\n}',begin)+2])
     source=strip_guest((area/'generated/game/x86_recomp.34.cpp').read_text())

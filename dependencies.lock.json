@@ -1,23 +1,8 @@
 {
-  "xboxrecomp": {
-    "url": "https://github.com/sp00nznet/xboxrecomp.git",
-    "commit": "14522228d296a7004adb02d6aec8335eee268cae",
-    "patch": "dependency-patches/xboxrecomp.patch",
-    "overrides": "dependency-overrides/xboxrecomp",
-    "isolated_files_verified": 242,
-    "line_endings": "CRLF normalized to LF for text comparison",
-    "role": "Historical runtime; current port reuses selected input, prompt-art and shader-cache helpers plus XDVDFS import."
-  },
-  "JoltPhysics": {
-    "url": "https://github.com/jrouwe/JoltPhysics",
-    "version": "5.6.0",
-    "note": "Version read from local CMake project; exact commit not recorded.",
-    "role": "Historical standalone-native work, not the current D3D12 release runtime."
-  },
   "XboxXBERecomp": {
     "url": "https://github.com/TGP482/XboxXBERecomp.git",
     "commit": "c1f7d60c8728c6151bcfbb1d05e397eaf0618dc7",
-    "role": "Current 0.08 static recompiler and Direct3D12 host runtime",
+    "role": "Current 0.09 static recompiler and Direct3D12 host runtime",
     "checkout": "build/upstream-review-xboxxbe-20261014",
     "local_changes": "scripts/prepare_xbe_*.py stage reviewed overlays; the pinned SDK checkout is unmodified.",
     "entry": "scripts/build_xbe_game_trial.py",
@@ -44,6 +29,16 @@
         "commit": "5f760a2714cb1abe11b8620354246d0a659ac132",
         "scope": "Consistent stereo audio configuration in the direct query and EEPROM reporting paths.",
         "integration": "scripts/prepare_xbe_audio_config.py"
+      },
+      {
+        "commit": "908dc53a40d4544ab8900d3d9eb3bda174daf846",
+        "scope": "Reuse unchanged shader constant uploads with title ownership and invalidation preserved.",
+        "integration": "scripts/prepare_xbe_draw_bindings.py"
+      },
+      {
+        "commit": "0fd00442660573dc342b41c11c6574318f0e8698",
+        "scope": "Suppress redundant D3D12 bindings with title pass transitions preserved.",
+        "integration": "scripts/prepare_xbe_draw_bindings.py"
       }
     ]
   },

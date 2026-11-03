@@ -6,6 +6,7 @@ import struct
 
 ROOT=Path(__file__).resolve().parents[1]
 PINS={
+    0x2745f0:(65,288,'34d711df21256d52f86845e83839352198daf20ab81e798a264837b0310409c5','5e2be0a7497919951741d921efacb8db6b5b6930a845bfb6287b02214a3b0bd4'),
     0x4c3f0:(6,529,'fe3fd4ab16ab596ba6980e27cd3498562ed16fceaf0eca5722f582684184d340','7ca677d139b6d9e474e1c0b5ef38d54168952fcbcdfa8cea34362f1823c8372e'),
     0x4c610:(6,438,'79bb2f32bf8f9c3331a2acd40efa74e692b892f8ba011d581fcb5be630d5cdee','2ecf0e6af3e6ed7083357e912231154ac7c1867b8887c9a27579d62dd644eb46'),
     0x2670f0:(64,109,'33205ff4b707579f055927e06491963510d1bdff3829d3367a4a95fd47b627f5','743ce7bcdf345744f57d6a73b37436a072e4e03fd39828f80a1ac69e6271b962'),
@@ -23,6 +24,9 @@ ENTRIES={0x5aa00:HOOK,0x4c3f0:'\ttrial_coop::PauseFrontendBegin();\n',
     0x267160:'\ttrial_coop::PauseMenuExitScope coop_pause_exit(ctx,base);\n'}
 SAMPLE='\ttrial_coop::PauseFrontendSample(ctx,base);\n'
 PLAYERS=('0004C41B','0004C45A','0004C46F')
+DIRECT_PLAYERS=('00274626','002746B1','002746E2')
+PATCHED=set(ENTRIES)|{0x2745f0}
+CURSOR_HOOK='\tif (TrialGuestHook(ctx, base, 9)) { ctx.eax = (ctx.eax & ~255u) | 1; ctx.esp += 4; return; }\n'
 APP_INCLUDE='#include "xbe_coop_pause.h"\n'
 HOST_DECL='extern void TrialCoopPauseImGuiInput();\n'
 HOST_CALL='    TrialCoopPauseImGuiInput();\n'
@@ -31,18 +35,19 @@ APP_GATE='    if (trial_coop::PauseBlocksMessage(msg)) return msg == WM_INPUT ? 
 def clean(source):
     source=source.replace(INCLUDE,'').replace(SAMPLE,'')
     for line in ENTRIES.values():source=source.replace(line,'')
-    for address in PLAYERS:
+    for address in PLAYERS+DIRECT_PLAYERS:
         old=f'// {address} push 0x00\n\t{{ uint32_t v = (uint32_t)(trial_coop::PauseInputPlayer()); X86_PUSH32(v); }}'
         source=source.replace(old,old.replace('trial_coop::PauseInputPlayer()','0x0u'))
     return source
 
 def patch(body,address):
     if address in ENTRIES:body=body.replace('{\n','{\n'+ENTRIES[address],1)
-    if address==0x4c3f0:
-        for instruction in PLAYERS:
+    if address in (0x4c3f0,0x2745f0):
+        for instruction in PLAYERS if address==0x4c3f0 else DIRECT_PLAYERS:
             old=f'// {instruction} push 0x00\n\t{{ uint32_t v = (uint32_t)(0x0u); X86_PUSH32(v); }}'
             assert body.count(old)==1
             body=body.replace(old,old.replace('0x0u','trial_coop::PauseInputPlayer()'))
+    if address==0x4c3f0:
         assert body.count('\t// 0004C420 fld')==1
         body=body.replace('\t// 0004C420 fld',SAMPLE+'\t// 0004C420 fld')
     return body
@@ -100,29 +105,30 @@ def prepare(area):
     for address,(unit,size,raw_hash,body_hash)in PINS.items():
         assert hashlib.sha256(raw(address,size)).hexdigest()==raw_hash,hex(address)
         body=re.search(rf'X86_FUNC\(__imp__sub_{address:08X}\) \{{.*?^\}}',originals[unit],re.S|re.M)[0]
-        assert hashlib.sha256(body.encode()).hexdigest()==body_hash,hex(address)
+        assert hashlib.sha256(body.replace(CURSOR_HOOK,'').encode()).hexdigest()==body_hash,hex(address)
         bodies[address]=body
     staged=dict(originals)
     for address,body in bodies.items():
-        if address in ENTRIES:staged[PINS[address][0]]=staged[PINS[address][0]].replace(body,patch(body,address),1)
-    for unit in {PINS[address][0]for address in ENTRIES}:
+        if address in PATCHED:staged[PINS[address][0]]=staged[PINS[address][0]].replace(body,patch(body,address),1)
+    for unit in {PINS[address][0]for address in PATCHED}:
         staged[unit]=staged[unit].replace('#include "x86_recomp_shared.h"\n','#include "x86_recomp_shared.h"\n'+INCLUDE,1)
     common=area/'src/common';compat=area/'src/compat'
     common.mkdir(parents=True,exist_ok=True);compat.mkdir(parents=True,exist_ok=True)
     for name in ('xbe_coop.h','xbe_coop_input.h','xbe_coop_guest_input.h','xbe_coop_pause.h','xbe_input_memory.h'):
         (common/name).write_text((ROOT/'scripts'/name).read_text())
-    leaves=[body.replace('X86_FUNC(__imp__sub_','X86_FUNC(sub_',1) for address,body in bodies.items()if address not in ENTRIES]
-    declarations='\n'.join(f'X86_EXTERN_FUNC(sub_{address:08X});'for address in bodies if address not in ENTRIES)
+    leaves=[body.replace('X86_FUNC(__imp__sub_','X86_FUNC(sub_',1) for address,body in bodies.items()if address not in PATCHED]
+    declarations='\n'.join(f'X86_EXTERN_FUNC(sub_{address:08X});'for address in bodies if address not in PATCHED)
     fixture=(ROOT/'scripts/test_xbe_coop_input.cpp').read_text()
-    names={0x5aa00:'Mapping',0x4c3f0:'Frontend',0x4c610:'Consume',0x2670f0:'Enter',0x267160:'Exit'}
+    names={0x5aa00:'Mapping',0x4c3f0:'Frontend',0x4c610:'Consume',0x2670f0:'Enter',0x267160:'Exit',0x2745f0:'NativeQuery'}
     code=declarations+'\n'+'\n'.join(leaves)+'\n'
     for address,name in names.items():
+        bodies[address]=bodies[address].replace(CURSOR_HOOK,'')
         code+=bodies[address].replace(f'__imp__sub_{address:08X}','Original'+name)+'\n'
         code+=patch(bodies[address],address).replace(f'__imp__sub_{address:08X}','Candidate'+name)+'\n'
     assert fixture.count('// RETAIL_INPUT_FUNCTIONS')==1
     fixture=fixture.replace('// RETAIL_INPUT_FUNCTIONS',code)
     constants=[]
-    for address,size in ((0x44c174,4),(0x44bf94,4),(0x44c538,4),(0x44c5f0,4),(0x55d98,64),(0x56cc8,80)):
+    for address,size in ((0x44c174,4),(0x44bf94,4),(0x44c538,4),(0x44c5f0,4),(0x55d98,64),(0x56cc8,80),(0x274710,48)):
         data=raw(address,size)
         constants.append('{const uint8_t data[]={'+','.join(str(v)for v in data)+f'}};std::memcpy(g_base+0x{address:x},data,sizeof(data));}}')
     assert fixture.count('// RETAIL_INPUT_CONSTANTS')==1

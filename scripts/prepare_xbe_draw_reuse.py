@@ -1,6 +1,28 @@
-"""Reuse exact texture views and sampler inputs within their descriptor lifetimes."""
+"""Reuse exact descriptors and preserve shader hashes with cheaper four-byte tails."""
 from pathlib import Path
 from prepare_xbe_perf import once, function
+
+_HASH_SIGNATURE = 'uint64_t Hash(const void* p, size_t n, uint64_t h) {'
+_HASH_TAIL = '''        } else {
+            std::memcpy(&x, b + i, r);
+        }'''
+_HASH_TAIL_FAST = '''        } else if (r == 4) {
+            // Keep the existing hash bytes; avoid a variable-size copy for shader keys.
+            uint32_t tail;
+            std::memcpy(&tail, b + i, 4);
+            x = tail;
+        } else {
+            std::memcpy(&x, b + i, r);
+        }'''
+
+
+def hash_tail_transform(source):
+    old = function(source, _HASH_SIGNATURE)
+    if _HASH_TAIL_FAST in old:
+        assert old.count(_HASH_TAIL_FAST) == 1
+        return source
+    assert 'else if (r == 4)' not in old, 'partial hash-tail preparation'
+    return once(source, old, once(old, _HASH_TAIL, _HASH_TAIL_FAST))
 
 _MARKER = 'UC_SRV_TUPLE_CACHE'
 _RESET = '\n    texture_view_cache_.Reset(); // UC_SRV_TUPLE_CACHE'
@@ -213,9 +235,14 @@ uint32_t D3D12Backend::TextureViewSlots(const DrawTextures& stages) {
         methods = '\n\n'.join(function(version, name) for name in (
             'uint32_t D3D12Backend::TextureViewSlots(', 'uint32_t D3D12Backend::AllocSrvSlots('))
         fixture = once(fixture, '/* ' + label + ' */', methods)
-    shaders = (area / 'src/compat/shaders.cpp').read_text()
+    shader_path = area / 'src/compat/shaders.cpp'
+    shaders = hash_tail_transform(shader_path.read_text())
+    assert hash_tail_transform(shaders) == shaders
+    shader_path.write_text(shaders)
     (area / 'src/compat/test_sampler_inputs.cpp').write_text(sampler_fixture(source, shaders))
-    hash_impl = function(shaders, 'uint64_t Hash(const void* p, size_t n, uint64_t h) {')
+    hash_impl = function(shaders, _HASH_SIGNATURE)
+    oracle = once(hash_impl, _HASH_TAIL_FAST, _HASH_TAIL).replace('uint64_t Hash(', 'uint64_t OriginalHash(', 1)
+    fixture = once(fixture, '/* ORIGINAL_HASH_IMPLEMENTATION */', oracle)
     hash_impl = hash_impl.replace('uint64_t Hash(', 'uint64_t ProductionHash(', 1)
     fixture = once(fixture, '/* HASH_IMPLEMENTATION */', hash_impl)
     (area / 'src/compat/test_draw_reuse.cpp').write_text(fixture)

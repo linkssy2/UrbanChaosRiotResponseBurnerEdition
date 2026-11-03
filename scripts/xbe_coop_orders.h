@@ -24,4 +24,5 @@ void TrialCoopOrdersControl(X86Context&,const uint8_t*);
 void TrialCoopOrdersPlayer(X86Context&,const uint8_t*);
 bool TrialCoopOrdersRegister(X86Context&,uint8_t*);
 void TrialCoopOrdersEvent(X86Context&,uint8_t*,uint32_t callback);
-void TrialCoopOrdersChoose(X86Context&,uint8_t*);
+bool TrialCoopOrdersChoose(X86Context&,uint8_t*);
+bool TrialCoopMedicPrompt(const X86Context&,const uint8_t*,bool offer=false,bool decline=false);

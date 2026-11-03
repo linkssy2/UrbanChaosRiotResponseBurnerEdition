@@ -57,6 +57,7 @@ struct TrialHudHelpScope {
 };
 void TrialHudLayout(const X86Context&,uint8_t*);
 uint32_t TrialHudCenterBits();
+void TrialReticleColor(const X86Context&,uint8_t*);
 // Projected brackets and the scope tint already use viewport coordinates.
 struct TrialProjectedHudScope {
     TrialHudLayoutScope* previous_;
@@ -67,6 +68,7 @@ struct TrialProjectedHudScope {
 // Active only while the retail weapon-crosshair subtree is drawing.
 struct TrialReticleScope {
     TrialReticleScope* previous_;float scale_=1;
+    uint32_t root_=0;
     TrialReticleScope(const X86Context&,const uint8_t*);
     ~TrialReticleScope();
 };
