@@ -1,4 +1,4 @@
-Urban Chaos: Riot Response - Burner Edition 0.09
+Urban Chaos: Riot Response - Burner Edition 0.10
 
 HD HUD is still a work in progress and has known prompt/display issues.
 Turn HD UI Off to use the original HUD, which works normally.
@@ -8,18 +8,15 @@ Windows x64 PC port using XboxXBERecomp by TGP482, with native Direct3D12 render
 PC controls and menus. Original gameplay is statically recompiled from Xbox code.
 XboxXBERecomp: https://github.com/TGP482/XboxXBERecomp
 
-NEW IN 0.09 (SINCE 0.08)
-- Reduced repeated CPU work in lighting/particle submission, index assembly, render-state copies, constant uploads and file queries, preserving effects and visual quality.
-- Current input/import adapters replace the remaining retired runtime dependency; selected XboxXBERecomp rendering optimizations are integrated.
-- Corrected reticle/scene alignment in single-player and both co-op views, and excessive firing shake at high frame rates.
-- Fixed co-op pickup notices, per-player NPC/medic prompts, Player 2 pause navigation and the Controller reference screen's Back action.
-- Health-pack HUD hides during conversations and menus. Medic collection stays available at full health while inventory has room and supplies remain; saved tutorial history no longer hides its hint.
-- Controller: double-tap D-pad Down to heal yourself; hold near an injured/downed partner to heal/revive them. Keyboard/mouse: separate rebindable Heal Partner control, default U.
-- Removed the invisible hold-X window switcher. Cheats stay in the main menu, with the game's original unlock behavior; added separate mouse-look inversion.
-- Main menu puts Co-op below Single Player and removes Xbox Live.
-- FMV Fill shows the complete movie across the screen, stretching 4:3 sources; 4:3 mode preserves original proportions. Source-encoded black bars may remain.
-- New launcher Play/Manage layout and direct ISO, import-once or existing-install setup choices. Existing data, saves, settings and add-ons can be reused without duplication.
-- Download verified official updates from MANAGE > CHECK FOR UPDATES. The launcher restarts itself; installed game data and add-ons stay in place.
+NEW IN 0.10 (SINCE 0.09)
+- Audio: choose Stereo, 5.1 Surround or 7.1 Surround. The saved choice falls back to the available speaker layout. Configure the output device first; restart after changing its speaker layout.
+- Controls: separate zoom sensitivity for each player, with regular and zoom sensitivity shown as percentages and their defaults at 100%.
+- Added assignable Walk (Hold or Toggle) and Toggle HUD actions for single-player and co-op. Both start unbound; set them in Controls. Subtitles, menus and downed warnings remain visible.
+- Holding Aim now stays active when firing.
+- Fixed the first medic's missing health-pack collection prompt when inventory has room and she has supplies, including both co-op players.
+- Corrected rapid NPC blinking and exaggerated ragdoll launches at high frame rates, including deaths caused by police gunfire.
+- Fixed Officer Daniels spawning outside the corridor floor in Angel Heights, which could leave him missing and block the rescue.
+- The separate 0.09 HD game texture pack remains compatible; no reinstall is needed.
 
 Co-op is experimental. Full-campaign progression, all character/action combinations,
 helicopter sections and Proton co-op still need gameplay testing. The reported
@@ -195,7 +192,7 @@ original recording. In-game audio and lip synchronization need testing.
 KNOWN ISSUES
 HD HUD still has prompt/display issues; the original HUD remains available.
 Co-op is experimental, with incomplete campaign/character/turret gameplay coverage.
-The intermittent missing injured officer in Angel Heights remains under investigation.
+The Angel Heights officer placement fix was confirmed in a high-FPS Windows rescue test; full-campaign and Proton testing remain separate.
 The targeted stone-ledge mapping repair still needs confirmation at the reporter's exact wall.
 Spanish text and imported voice synchronization need community review.
 A Linux tester confirmed setup and gameplay in the earlier compatibility build;

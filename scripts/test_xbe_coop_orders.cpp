@@ -443,6 +443,46 @@ static void MedicRepeatHint(){
     assert(HelpCount(1)>0&&Read(HELP[0]+0x80)==0x18); // Native SP singleton.
     std::puts("medic hints: saved tutorial history, repeated requests, both viewers, looking away, full inventory, empty stock and SP passed");
 }
+static void PreTeamMedicOffer(){
+    for(bool coop:{false,true})for(unsigned requester=0;requester<(coop?2u:1u);++requester){
+        MedicSeed();trial_coop::SetActive(coop);
+        health_packs::medics.push_back({MEDIC,301,P[requester],100+requester,0,0xffffffffu,DIALOGUE,601});
+        Put(OFFER+0x98,200+requester);
+        for(unsigned slot=0;slot<2;++slot){
+            const auto node=Allocate(0x20),head=Read(M[slot]+0xac);
+            Put(node,Read(head));Put(node+4,head);Put(Read(head)+4,node);Put(head,node);Put(node+8,602);
+            Put(M[slot]+0xe8,0);Put(M[slot]+0xec,0xffffffffu);
+            Put(P[slot]+0x38c,2);Put(P[slot]+0x388,301);
+        }
+        // Captured first-medic state: offer exists, stock is three, native
+        // friendly ray hits her, but SELECTABLEITEMS has no order target.
+        assert(OfferProperty(requester,0x47278c));
+        assert(OfferProperty(requester,0x46a894));
+        if(coop)assert(!OfferProperty(1-requester,0x47278c));
+        assert(!HealPlayer(requester)); // No manual-command eligibility invented.
+        Put(P[requester]+0x388,0xffffffffu);assert(!OfferProperty(requester,0x47278c));
+        Put(P[requester]+0x388,300);assert(!OfferProperty(requester,0x47278c));
+        Put(P[requester]+0x388,301);Put(P[requester]+0x38c,0);assert(!OfferProperty(requester,0x47278c));
+        Put(P[requester]+0x38c,2);Float(P[requester]+0x40,1000);assert(!OfferProperty(requester,0x47278c));
+        Float(P[requester]+0x40,0);health_packs::players[requester].count=3;assert(!OfferProperty(requester,0x47278c));
+        health_packs::players[requester].count=1;Put(W+0xf74,0);assert(!OfferProperty(requester,0x47278c));Put(W+0xf74,3);
+        Command(requester,OFFER,5);assert(Read(OFFER+0xb4)==5&&Read(OFFER+0x98)==200+requester);
+    }
+    std::puts("first-medic offers: native friendly hit without orders membership, both owners, look-away/wrong target, range/capacity/stock and actual accept callback passed");
+}
+static void HudVisibility(){
+    Seed();
+    for(bool coop:{false,true}){
+        trial_coop::SetActive(coop);
+        for(unsigned slot=0;slot<2;++slot){
+            trial_player_actions::hidden[slot]=true;
+            auto mine=Context(H[slot]),other=Context(H[1-slot]);
+            assert(!TrialPlayerHudVisible(mine,B())&&TrialPlayerHudVisible(other,B()));
+            trial_player_actions::hidden[slot]=false;assert(TrialPlayerHudVisible(mine,B()));
+        }
+    }
+    auto unknown=Context(0);assert(TrialPlayerHudVisible(unknown,B()));
+}
 static void HelpRouting(){
     // The native constructor leaves the global pointing to the second HUD.
     // Original P1 publication goes to P2, and P2's no-help update erases it.
@@ -488,7 +528,7 @@ static void HelpRouting(){
     std::puts("help prompts: native singleton regression, own publication/event/clear, native look-away/medic eligibility, stale ownership, nested unwind and SP fallback passed (text resources are boundary stubs)");
 }
 int main(){
-    NativeLookSelection();HelpRouting();MedicCollection();MedicRepeatHint();
+    NativeLookSelection();HelpRouting();MedicCollection();MedicRepeatHint();PreTeamMedicOffer();HudVisibility();
     // Negative witness: P1 registers commands, but both HUDs dispatch P2's
     // last-constructed empty list. Merely replacing key glyphs cannot fix it.
     Seed();candidate=false;Register(0);assert(attached==1&&Find(M[0],300)&&!Find(M[1],300));Hud(0,false);Hud(1,false);assert(drawn[0]==0&&drawn[1]==0);

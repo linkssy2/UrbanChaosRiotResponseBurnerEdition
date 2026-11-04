@@ -1,4 +1,5 @@
 #include "xbe_coop_orders.h"
+#include "xbe_player_actions.h"
 #include "xbe_coop.h"
 #include "xbe_coop_guest.h"
 #include "xbe_health_packs.h"
@@ -47,10 +48,13 @@ uint32_t QueryManager(const uint8_t* b,uint32_t client){
     return TrialGuestReadable(actor,0x7f0)&&Word(b,actor)==0x46fbe8&&
         Word(b,actor+0x7ec)==Word(b,manager+0x54)?manager:0;
 }
-uint32_t AimedMedic(const uint8_t* b,uint32_t manager,uint32_t owner){
+uint32_t AimedMedic(const uint8_t* b,uint32_t manager,uint32_t owner,bool offer=false){
     struct Restore {unsigned csr=_mm_getcsr();~Restore(){_mm_setcsr(csr);}} restore;
-    if(!TrialGuestReadable(manager,0x10c)||!TrialGuestReadable(owner,0x4c)||Word(b,manager+0xe8)!=4)return 0;
-    const uint32_t target=Entity(b,Word(b,manager+0xec));
+    if(!TrialGuestReadable(manager,0x10c)||!TrialGuestReadable(owner,0x390))return 0;
+    // Team medics offering before joining SELECTABLEITEMS have no orders hit;
+    // C1020's independent, occlusion-tested friendly reticle hit still identifies them.
+    const uint32_t target=Entity(b,Word(b,manager+0xe8)==4?Word(b,manager+0xec):
+        offer&&Word(b,owner+0x38c)==2?Word(b,owner+0x388):0xffffffffu);
     if(!TrialGuestReadable(target,0x4c))return 0;
     // The manager's native look ray already checked facing and occlusion.
     // Keep the original dialogue's 300-unit reach for each viewer separately.
@@ -176,7 +180,7 @@ void TrialCoopOrdersEvent(X86Context& c,uint8_t* b,uint32_t callback){
 bool TrialCoopMedicPrompt(const X86Context& c,const uint8_t* b,bool offer,bool decline){
     const uint32_t manager=QueryManager(b,c.esi);
     if(!manager)return false;
-    const uint32_t owner=Entity(b,Word(b,manager+0x58)),target=AimedMedic(b,manager,owner);
+    const uint32_t owner=Entity(b,Word(b,manager+0x58)),target=AimedMedic(b,manager,owner,offer);
     if(!target)return false;
     return decline?TrialHealthPackMedicOfferOwner(b,owner,c.esi,target):
         TrialHealthPackMedicPrompt(b,owner,c.esi,target,offer);
@@ -198,11 +202,18 @@ bool TrialCoopOrdersChoose(X86Context& c,uint8_t* b){
     }
     if(kind==0x4727a0&&(command==5||command==6)){
         if(!TrialHealthPackMedicOfferOwner(b,owner,c.ecx))return false;
-        if(command==5){const uint32_t target=AimedMedic(b,manager,owner);
+        if(command==5){const uint32_t target=AimedMedic(b,manager,owner,true);
             if(!target||!TrialHealthPackMedicPrompt(b,owner,c.ecx,target,true))return false;}
     }
     // An actual selected command, unlike a look query, has one initiator;
     // preserve that native owner for asynchronous completion and feedback.
     if(trial_coop::Active()||medic)Put(b,c.ecx+0x98,Word(b,manager+0x54));
     return true;
+}
+
+bool TrialPlayerHudVisible(const X86Context& c,const uint8_t* b){
+    if(!b||!TrialGuestReadable(c.ecx,8)||Word(b,c.ecx)!=0x4531a0)return true;
+    const uint32_t actor=Word(b,c.ecx+4);
+    return !TrialGuestReadable(actor,0x36c)||Word(b,actor)!=0x46fbe8||
+        trial_player_actions::HudVisible(Word(b,actor+0x368));
 }

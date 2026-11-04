@@ -6,6 +6,8 @@ struct X86Context;
 // The guest still reads the player's ordinary remapped Zoom action itself.
 void TrialAimInput(unsigned slot,bool cycle_down,bool allowed);
 void TrialAimUpdate(const X86Context&,uint8_t*);
+double TrialAimZoomScale(const uint8_t*,uint32_t owner);
+void TrialAimScaleStick(const X86Context&,uint8_t*);
 struct TrialAimModeScope {
     TrialAimModeScope(const X86Context&,uint8_t*);
     ~TrialAimModeScope();

@@ -28,6 +28,7 @@ static bool FrontendGuestOwns(uint32_t owner,uint32_t kind);
 #include "xbe_input_memory.h"
 #include "menu_pointer_guest.h"
 #include "pc_mouse_rotation.h"
+#include "xbe_aim_mode.h"
 extern int TrialMouseActive();
 extern void TrialGameplay();
 extern void TrialMouseTake(long*,long*,unsigned*);
@@ -83,7 +84,7 @@ int TrialGuestHook(X86Context& ctx,uint8_t* base,unsigned op){
             if(TrialMouseActive()){
                 long dx,dy;unsigned sensitivity;TrialMouseTake(&dx,&dy,&sensitivity);
                 float pitch=MEMF(object+0x688),yaw=MEMF(object+0x68c);
-                if(ucrr_pc_rotate(&pitch,&yaw,MEMF(object+0x37c),dx,dy,sensitivity)){
+                if(ucrr_pc_rotate(&pitch,&yaw,MEMF(object+0x37c),dx,dy,sensitivity*TrialAimZoomScale(base,object))){
                     MEMF(object+0x688)=pitch;MEMF(object+0x68c)=yaw;
                 }
             }

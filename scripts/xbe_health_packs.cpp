@@ -1,4 +1,5 @@
 #include "xbe_health_packs.h"
+#include "xbe_player_actions.h"
 #include "xbe_coop.h"
 #include "xbe_coop_death.h"
 #include "xbe_coop_cinematics.h"
@@ -416,6 +417,7 @@ void TrialHealthPackCreated(const X86Context& c,const uint8_t* b){
     using namespace health_packs;if(!Actor(b,c.eax))return;
     const unsigned slot=Read(b,c.eax+0x368);if(slot>1)return;
     if(slot==0){
+        for(unsigned i=0;i<2;++i)trial_player_actions::Reset(i);
         world=Read(b,0x51c4dc);players[0]={};players[1]={};medics.clear();++generation;
         restored[1]={};
         for(unsigned i=0;i<2;++i){pending[i]=0;published[i]=0;injections[i]={};}

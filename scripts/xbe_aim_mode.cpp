@@ -3,6 +3,7 @@
 #include "xbe_coop.h"
 #include "xbe_coop_guest.h"
 #include "cpu/x86_ops.h"
+#include "kernel/kernel.h"
 #include "kernel/memory.h"
 #include "xbe_input_memory.h"
 #include <atomic>
@@ -41,7 +42,7 @@ bool Available(const uint8_t* b,uint32_t owner,uint32_t world){
     // D25B0 gates BE870; D2D5D bypasses it for authored camera state 13.
     // D2AD8 checks the native pause bit. Retain a live-player check as well.
     const uint32_t state=Read(b,owner+0x170),health=Read(b,owner+0x9c);
-    return health>0&&health<0x7f800000u&&state!=3&&state!=4&&state!=7&&state!=8&&
+    return health>0&&health<0x7f800000u&&state!=3&&state!=7&&
         state!=11&&state!=12&&state!=13&&!(Read(b,world+0x10)&0x800u);
 }
 Player* Sync(uint8_t* b,uint32_t owner,Identity* result=nullptr,uint64_t* input_snapshot=nullptr){
@@ -77,7 +78,40 @@ void TrialAimInput(unsigned slot,bool down,bool allowed){
         next=(uint64_t(epoch)<<32)|(edge<<2)|(down?2u:0u)|(allowed?1u:0u);
     }while(!aim_mode::input[slot].compare_exchange_weak(old,next));
 }
-void TrialAimUpdate(const X86Context& c,uint8_t* b){aim_mode::Sync(b,c.ecx);}
+void TrialAimUpdate(const X86Context& c,uint8_t* b){
+    using namespace aim_mode;
+    Identity identity;uint64_t host=0;auto* p=Sync(b,c.ecx,&identity,&host);
+    if(!p||p->mode!=1||!(host&1)||!Available(b,c.ecx,identity.world))return;
+    const uint32_t state=Read(b,c.ecx+0x170);
+    // D25B0 skips the zoom controller during these weapon states, retaining zoom.
+    // Still observe release so a held trigger cannot keep a released Aim latched.
+    if((state!=4&&state!=8)||c.esp<0x10100||!TrialGuestReadable(c.esp-256,256))return;
+    struct Restore {
+        uint8_t* b;uint32_t at;uint8_t saved[256];unsigned csr=_mm_getcsr();
+        Restore(uint8_t* base,uint32_t sp):b(base),at(sp-256){std::memcpy(saved,b+at,sizeof saved);}
+        ~Restore(){std::memcpy(b+at,saved,sizeof saved);_mm_setcsr(csr);}
+    } restore(b,c.esp);
+    X86Context query=c;query.ecx=identity.world;query.esp=c.esp-64;
+    kernel::CallGuest(query,0x567f0,{uint32_t(identity.slot),0x10,0});
+    const double value=double(query.st[query.top&7]);
+    if(!std::isfinite(value)||value<=0){Clear(b,c.ecx);p->held=false;p->blocked=false;}
+}
+double TrialAimZoomScale(const uint8_t* b,uint32_t owner){
+    const auto identity=aim_mode::Identify(b,owner);
+    if(identity.slot<0||!aim_mode::Available(b,owner,identity.world))return 1.0;
+    const auto zoom=aim_mode::Read(b,owner+0x438);
+    if(zoom!=1&&zoom!=2)return 1.0;
+    return trial_controls::ZoomSensitivity(unsigned(identity.slot))/100.0;
+}
+void TrialAimScaleStick(const X86Context& c,uint8_t* b){
+    const double scale=TrialAimZoomScale(b,c.edi);
+    if(scale==1.0||!TrialGuestReadable(c.esp,0x40))return;
+    // Scale the finished look deltas, after native acceleration and before pitch clamping.
+    for(unsigned offset:{0x30u,0x3cu}){
+        float value;std::memcpy(&value,b+c.esp+offset,4);
+        value=float(value*scale);std::memcpy(b+c.esp+offset,&value,4);
+    }
+}
 TrialAimModeScope::TrialAimModeScope(const X86Context& c,uint8_t* b):base(b),owner(c.ecx){
     aim_mode::Identity identity;auto* p=aim_mode::Sync(b,owner,&identity);
     if(!p)return;

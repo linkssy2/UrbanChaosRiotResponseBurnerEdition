@@ -1,5 +1,402 @@
 # Burner Edition: current runtime
 
+## Stereo / surround output (November 3, 0.10 preparation)
+
+The Audio menu now saves `sound_output`: Stereo (default), 5.1 Surround or
+7.1 Surround. This is shared output for single-player and co-op; individual
+players do not have independent physical audio devices. The existing volume
+rows keep their original callbacks. Mouse, keyboard and controller navigation
+reach the added row; English and Spanish strings are included.
+
+The implementation traces Darkwatch's maintained XboxXBERecomp `audio.h`,
+`xaudio2.cpp` and `dsound.cpp`, plus its October 31 surround/guest-route audit.
+It reuses endpoint capacity detection, fixed-width floating-point output,
+requested-versus-active mode fallback, and power-preserving front/rear and
+7.1 side/rear distribution. Darkwatch's native XACT addresses and DSP-state
+patches do not apply to Urban Chaos and were not copied. Urban Chaos retains
+its coordinate-based DirectSound attenuation, cones, pitch and owned MIXIN
+chains. Direct speaker bins can address centre/LFE; positional enhancement
+does not invent centre/LFE content. Stereo movies are not synthesized into
+surround. This is host surround output, not a claim of original Dolby encoding.
+
+The XAudio2 master channel mask determines startup capacity, with source-voice
+fallback 8 -> 6 -> 2. The requested mode remains saved independently. Mode
+changes reroute the existing output without restarting voices or losing queued
+audio. Changing the operating system's device speaker layout requires a game
+restart. Unsupported layouts safely fall back; the Audio menu shows active
+output as well as the selected preference.
+
+Maintained preparation is `scripts/prepare_xbe_audio_surround.py`, after audio
+loop tracing/decode caching. Fixtures execute the production mixer/output worker
+and real ImGui menu: exact stereo PCM/ADPCM parity, frame bounds, stream timing,
+361 directions, routing energy, centre/LFE bins, nested MIXINs, save rollback,
+14 endpoint/failure cases, queue lifetime, and mouse/controller mode changes.
+Existing pitch, stream, loop, routing, decode-cache, cone, factor, rolloff and
+configuration checks also passed. These are not physical speaker measurements.
+
+Private runtime `1a053b76a74451a5702eefd7c30a7d728d0dbdfaa9ff972c7d3d6f5c58980bce`
+was staged with matching symbols and validated launcher manifests; all 16
+save/config files retained their hashes. The user's subsequent "okay it all
+works" accepts this test build. No speaker layout was specified, so do not
+infer physical six/eight-channel validation. The independent visual check was
+stopped with Escape and was not completed. Records are under
+`build/audio-surround-20261103`; final release checks under `build/release-0.10`.
+Windows user acceptance, offline checks and untested Proton gameplay remain
+separate. Both packages use the same runtime and existing 0.09 HD pack.
+
+## Angel Heights / NPC ragdoll follow-up (November 3; Daniels user-confirmed)
+
+### Daniels: captured out-of-bounds death and spawn correction
+
+The user reached the missing officer with private runtime `8fda4bab...`, then
+restarted at 60 FPS and confirmed he appeared. Read-only captures in
+`build/ragdoll-recovery-20261103` establish actual actor creation in both failed
+runs (`daniels-live-150910.json`, `daniels-live-151228.json`): template 153 had
+health zero, X=4654.6675 cm, Y about -100068 cm, and death reason +150=`0xb`.
+The original 38C42–38C66 branch kills an actor below Y=-100000 and sets exactly
+that reason. This is a fallen/dead officer, not merely invisible rendering.
+
+The successful 60-FPS comparison (`daniels-watch-151652.json`, 2687 samples,
+60 seconds, no read errors) kept him at X=4563.7065, Y=99.99854 with positive
+health. `daniels-live-151755.json` subsequently shows higher health and a new
+position, consistent with healing and resumed movement. This does not establish
+whole-mission completion. The failed samples were roughly 175/209 FPS; the
+successful median world delta was 16.98 ms. No settings or live guest state were
+written by the observer.
+
+`scripts/verify_daniels_spawn.py` checks the exact ENT/GEO hashes and original
+collision triangles. Daniels' authored X=46.094282m lies between two wall layers
+at X≈46.086950 and 46.099998m. His original .35m capsule intersects both;
+the corridor floor ends at X=46.099998m. The failed X=46.546675m is beyond that
+floor, whereas the successful X=45.637065m is inside it. The first transient
+collision step has not been recorded; the intersecting start, opposite-side
+outcomes and out-of-bounds death are established separately.
+
+The correction changes only this unique CharacterCivilian starting position to
+X=4558cm before original initializer DE380 passes the actor transform to
+2B15D0 for animation/collision creation. Y/Z, orientation, health, behaviors,
+medic interactions and mission conditions remain original. The guard requires
+the original character vtable and all three exact authored position words;
+a census of all 27 level ENT files finds only this character match. The new
+position clears both wall layers by over .50m and retains floor support.
+It is a targeted placement repair, not a general change to character physics.
+
+The maintained preparer pins original and generated initializer code, transform
+access/copy and capsule dimensions. Its fixture executes the original initializer
+up to the real transform handoff (collision construction is an explicit stub),
+with guard, idempotence, memory, CPU, MXCSR and invalid-span checks. Those tests,
+the 864-pair ragdoll recovery fixture and force-integration fixture all passed.
+The compiled normal runtime is
+`4d2a582217c64a223cae29281169e8ac225ef3ad128b59a79b2e801ed5055b16`,
+with matching PDB
+`e2f4cfe4a79c5c00481888b3e3220695b7520abb74feccaf469c0592facd12d0`.
+`build/angel-heights-20261103/spawn-build.json` records source hashes and checks;
+`spawn-staged.json` records both matching executable copies and successful
+launcher manifest validation in the existing November 1 private test package.
+All 16 save/config files retained their hashes. Previous runtime/symbols and
+manifests are preserved under `spawn-before` and `spawn-install-before`.
+The user confirmed "yep it works" after the high-FPS Angel Heights rescue test
+requested for PID 38480 on this exact runtime. Record this as user acceptance
+of the encounter, not an independently captured post-fix physics trace. The
+requested range was 120–240 FPS; achieved FPS during the rescue was not sampled.
+`spawn-user-acceptance.json` retains the report and links the launch identity.
+Co-op, whole-mission completion and Proton verification remain untested.
+The same source correction is in the shared Windows/Proton runtime pipeline;
+no release has been published for this correction.
+
+### Earlier investigation and ragdoll evidence
+
+GitHub issue #21 reports the injured officer missing above 60 FPS in Angel
+Heights and appearing when capped at 60, with progression blocked. It was read
+through the GitHub API on November 3; there were no comments. The user also
+relayed that the mission fails when the medic reaches the missing officer.
+Keep these as reporter evidence: the earlier 0.06 report also described missing
+Daniels at 60 FPS, so the cap is not an established universal workaround.
+
+`build/angel-heights-20261103` retains the issue and a repeatable read-only asset /
+instruction audit. In `9-01.ent`, ordinal 153 is `z1 Cop Rescued Curtis`, a
+CharacterCivilian using the cop model. Its 197 -> 196 -> 195 -> 194 behavior
+chain includes DisallowDeactivation, scripted setup, heartbeat and InjuredBehaviour.
+The corresponding text bank identifies Curtis Daniels / Daniels P.D.; the
+internal Curtis name is not a different officer. Injury update 17DDF0 already
+multiplies its configured health-loss rate by elapsed world time from 1F9010.
+Original/prepared bytes match for the inspected routines and active generated
+arithmetic was inspected. The authored injury payload has **zero** passive health
+loss; heartbeat init 116B00 only lowers health to 40% if it was higher. These
+authored settings do not explain disappearance through a draining injury timer.
+Friendly wave 233 creates actor 153 after nearby trigger 0; absence at the level
+spawn is therefore not evidence of a failed officer spawn. The audit retains
+the explicit later retirement commands separately in
+`build/angel-heights-20261103/daniels-script-references.json`.
+At that stage no failed encounter had been captured. The later live comparison
+and placement candidate above supersede that uncertainty; no forced spawn or
+mission-success override has been introduced.
+
+The user also rejected the finite-force candidate as a complete fix for excessive
+ragdoll launch height, specifically observing it when NPCs kill other characters.
+Retain the earlier force-integration tests; that candidate alone did not resolve
+the symptom. The later recovery correction and user acceptance are recorded below.
+The November 3 comparison below now separates initial velocity from the combined
+physics response. Original NPC update 2AB250 computes the velocity supplied at death as
+the final position change divided by frame delta, including collision correction.
+NPC ragdoll transition 2AC0D0 passes that velocity to 2A6790 and destroys the old
+character collision proxy. The inspected NPC hit-force call sites install their
+forces once; force application already multiplies by elapsed time and inverse
+mass. Contact recovery and joint recovery are not yet individually isolated.
+There is no evidence that this and missing Daniels share a cause.
+
+Private runtime ed6bb412... initially encountered an Escape stop (PID 16476).
+The user subsequently authorized resumed control. PID 25024 reached Angel
+Heights gameplay at roughly 206–220 FPS, but not Daniels' corridor. The snapshot
+`daniels-live-130124.json` records the start area; it is not a failed rescue
+capture. The user is unavailable to navigate the corridor.
+
+Private PID 19932 (born 2026-11-03 13:17:11 -08:00) then ran two recorded
+Canals restarts: the existing 240 cap achieved roughly 120 FPS, followed by an
+observed 60 FPS cap with all other graphics options retained. The bounded
+read-only sampler captured two newly created opening-combat bodies in each
+restart, with no read errors. Median world deltas were about 8.2 ms and 16.6 ms.
+Their maximum sampled speeds were 3.07/3.09 m/s at the higher rate and
+3.64/2.66 m/s at 60. Rise above the first sampled body position was at most
+0.039 m at the higher rate and zero at 60; the reported large upward launch was
+not reproduced in this scene. RNG, death poses and exact initial impulses were
+not pinned; these 20-Hz observations do not prove frame-rate equivalence or
+exclude a different NPC-hit/explosion failure. The prior interval captured only
+already settled corpses and is not used as a motion comparison.
+
+`build/angel-heights-20261103/canals-motion-comparison.json` names and hashes the
+two raw captures and records those limits. The test game was closed normally;
+its 12 private save files and two configs were restored to their pre-comparison
+hashes, with post-test state archived under `live-compare/hdd-after-1339`.
+No runtime was replaced, rebuilt, or published and no Proton gameplay was tested.
+
+The user then prioritized ragdoll verification before the Daniels script. A
+private observation build is recorded in
+`build/angel-heights-20261103/probe-build.json` (runtime `6be70c3e...`). It observes
+the original 2A5F00 activation and both sides of 2ED370's world step, preserving
+guest memory, CPU context and host MXCSR. The fixed recorder holds 65,536
+80-byte rows, at most 16 tracked bodies and eight simulation seconds per body;
+it records overflow and foreign-thread rejection. There is no file I/O or
+allocation on the observation path. The helper fixture checks unchanged CPU,
+RAM and MXCSR, invalid spans, owner mismatch, zero delta, capacity and thread
+rejection. This qualifies the observer, not a physics correction.
+
+`read_probe.py` checks the private executable, PDB, process path and creation
+time before reading only the published immutable row prefix. `analyze_probe.py`
+separates inherited velocity, changes between physics steps, and changes during
+world simulation. The latter still combines gravity, contacts and constraints;
+it is not an isolated contact impulse. Prepared generated sources and the main
+build output executable/symbols were restored after compiling. The private
+installation's prior executable, symbols, settings and saves are backed up under
+`probe-install-before`. No release package or maintained physics behavior was
+changed by this diagnostic.
+
+The first private launch was rejected because its executable had been replaced
+without updating `tools/runtime-manifest.json`. The private manifest is now
+backed up and updated as part of staging; the real launcher validator passes.
+Directly launching the game without the launcher's asset environment instead
+hit the normal setup check. Neither failure was a ragdoll crash.
+
+After the fix, launcher-started PID 30028 (November 3, 14:16:30 -08:00) displayed
+the level-selection screen. The user took over testing. Read-only capture
+`probe-startup-141804.json` contains 1,162 rows and two body activations with no
+overflow or foreign-thread rejection. Initial velocities match the original
+game-to-physics axis/scale conversion; the observed physics deltas are roughly
+5.4 ms. This is a recorder activation check, not a confirmed reproduction of the
+police-gunfire launch symptom. The user has specifically identified police
+gunfire rather than firefighter axe attacks. Leave this active user test alone
+until they finish; read the recorder before closing it.
+
+The completed comparison uses `probe-clearer-run-142009.json` (51,786 rows,
+22 bodies, PID 30028) and the fresh-process `probe-sixty-complete-142941.json`
+(8,533 rows, nine bodies, PID 2224). Both have zero dropped rows and foreign-thread
+rejections. The intervening `probe-sixty-pass-one-142702.json` filled the recorder
+and is **not** valid 60 FPS comparison evidence; the user then restarted the game.
+The fresh process had a verified 60 FPS setting and approximately 16.67 ms world
+steps. Both used observation-only runtime `6be70c3e...`.
+
+Bodies 19/7 begin at nearly identical physics positions (32.02, 42.94, 0.51 m),
+with zero inherited velocity and two finite forces. At high FPS the root rises
+2.60 m with peak upward velocity 9.35 m/s; at 60 FPS it rises 0.60 m with peak
+1.92 m/s. Net changes during physics steps up to the peak contribute 7.73 versus
+0.09 m/s; between-step changes contribute 1.62 versus 1.82 m/s. Bodies 5/3 give
+another similar-location contrast (1.82 versus 0.62 m rise). These are separately
+played encounters, not identical poses/RNG/contact histories. They implicate the
+combined physics response, not a larger inherited death velocity or finite-force
+impulse in those examples. Gravity, contacts and joints still share that measurement.
+
+The opening scripted throw adds approximately 6.67 m/s between steps at both
+rates and rises similarly; preserve it. The largest late limb speeds in some
+records are bodies falling below the world, **not** upward launch evidence.
+Original constraint builders multiply positional/angular error by inverse
+substep time (contact 34A677; joint kernels including 3464C6). A ragdoll-only
+60 Hz recovery-rate ceiling was investigated next; acceptance is recorded below.
+
+After the user closed the game, `restore_probe.py` restored the private runtime,
+matching symbols, manifest, settings and saves with hashes checked. Receipt:
+`probe-restored.json`; post-test state: `probe-install-after-143139`. The public
+release remains unchanged. Proton gameplay remains untested.
+
+### Ragdoll recovery correction and Windows acceptance
+
+`scripts/xbe_ragdoll_recovery.h` and `prepare_xbe_ragdoll_recovery.py` now bound
+the inverse-time recovery factor at its 60-Hz value while building ragdoll contact
+and joint rows above 60 FPS. Hooks cover limited hinge 2F4AF0, ragdoll joint
+31E840 and contact builder 34A3C0. Original body property key 1 / value 4 identifies
+ragdolls in either contact order. The helper temporarily replaces context +4,
+using 60 divided by the inverse iteration count at +16, then restores its exact
+bits. Actual elapsed time, initial death velocity, finite hit forces and gravity
+remain unchanged. Non-ragdoll bodies and rates at or below 60 retain their path.
+
+The maintained `test_xbe_ragdoll_recovery.cpp` fixture compares full guest RAM
+and CPU state for 864 cases across all eleven authored joints, six frame rates,
+four iteration counts and both ragdoll body orders. It checks invalid inputs,
+restoration and MXCSR. The original contact solver also reproduces the concrete
+failure: identical penetration produces 0.9 m/s upward recovery at 60 FPS but
+3.6 m/s at 240; corrected recovery stays at 0.9 m/s across tested rates. This
+isolated solver fixture is not a whole-scene simulation. Existing force,
+contact-filter (763 cases) and retention/settings checks pass.
+
+`build/angel-heights-20261103/recovery-build.json` identifies the normal maintained
+runtime `06f1da739f797d31d658f4788d72077f01bfd10fefeca24f0f21f55e4091774d`.
+The observation-enabled private candidate is
+`8fda4bab8624973e4d0de028a96e57e4c7c128fcc8cb3f6b906f523b520cf627`, staged with
+matching launcher/package manifests under `build/ragdoll-recovery-20261103`.
+It records at most three simulation seconds per body into 131,072 rows without
+requiring F9. Launcher validation and package file hashes pass. Normal generated
+sources and build output were restored after producing the observer candidate.
+
+On November 3, the launcher started PID 28216, born 14:58:19 -08:00, and video
+was visually confirmed. Settings retained a 240 FPS cap and disabled VSync.
+The user tested police gunfire and reported "it worked", then proceeded to
+Angel Heights. `probe-confirmed-highfps-150052.json` preserves 7,603 rows for
+nine bodies, with zero dropped rows or foreign-thread rejections; its SHA-256 is
+`d6984247a021c29d99262153bf3d132f8bd7962c312184aa8d2f3c5c08dcfede`.
+The sibling summary records per-body median world deltas around 6.2-6.8 ms.
+The scripted throw retained an approximately 6.65 m/s between-step impulse and
+0.82 m rise. The other eight recorded bodies rose at most 0.57 m, with peak
+upward speeds no greater than 2.17 m/s. Encounters are not identical RNG/contact
+replays, and the final body's three-second observation was not yet complete.
+This is user acceptance of the reported Windows police-gunfire symptom, not
+full-campaign, co-op or Proton acceptance. The shared maintained correction is
+used for both Windows and Proton; no release has been published. Daniels'
+scripted rescue remains unverified and is not claimed fixed by this change.
+
+## Medic targeting, blinking and gameplay controls (November 3, unpublished test)
+
+The user's failed first-medic encounter was captured read-only in
+`build/gameplay-controls-20261103/medic-live-111119.json`, against runtime
+`41fb724c39a0ff9a0bec7fa904c46da8231f489ba1619844f912826e60ae6662`
+and its matching PDB. The medic had all three supplies and an active
+HealOrderClient. The player's native friendly reticle hit identified that exact
+medic, but the orders manager had type zero / no target. The team-medic init
+170E80 does not join SELECTABLEITEMS like the ordinary medic init 169700.
+Our shared per-player offer guard therefore rejected a valid native offer.
+
+For this active-offer path only, absent orders targets now fall back to C1020's
+native friendly camera hit. Exact medic identity, the retained offer recipient,
+300-unit distance, available stock and inventory capacity remain required.
+Manual orders and scripted treatment locks are unchanged. Both the offer query
+and its actual acceptance callback use the same target check. The native
+property/command fixture reproduces the captured state for single-player and
+each co-op owner, rejects look-away/wrong targets, and checks range, stock and
+capacity. Scene collision and text resources remain fixture boundaries; this
+is supplemented by the user's November 3 confirmation that the corrected
+medic health-pack prompt works in the Windows test.
+
+The same clip showed fast eyelid blinking. Retail modifier 2B7F10 increments
+its counter on every pose application, including repeated view passes. The
+correction advances only that counter at the original 30-Hz cadence using
+animation delta forwarded by 21C34C -> B9830 -> the modifier. The world +8
+update stamp deduplicates repeated passes. Existing five-step eyelid poses,
+forced-closed eyes, original RNG and matrix calls remain; every fresh pose still
+receives the current eyelid state. Destructor 2B5BD0 retires the host fractional
+clock. The emitted native-body fixture checks 30/60/120/144/240/360 FPS, two
+actors, repeated views, zero delta, forced closure, bounded hitches and reuse.
+Matrix math is a fixture boundary. The user also confirmed on November 3 that
+the fast blinking is fixed in the Windows test.
+
+This candidate also retains the preceding changes: continuous Hold Aim through
+fire/recoil states, an assignable Walk action with Hold/Toggle behavior and
+35% movement, and an assignable Toggle HUD action. New bindings start unbound;
+their controls and saved settings are separate for each player. Menus, focus
+loss, captures and cinematics cancel walking safely. Hidden HUDs keep updating
+their game state; subtitles, menus and downed warnings are retained. English
+and Spanish menu strings and the production input/UI fixtures are included.
+
+Normal candidate runtime SHA-256:
+`ed6bb412d9040e6b35036bde6f9457037fcc7e0c6c2cbeb079c5415042751a73`.
+Source/backups, clip frames, original instruction witnesses, build/test logs,
+source identities and paired package receipts are in
+`build/gameplay-controls-20261103`. Windows and Linux/Proton share this runtime
+and shared asset inventory; platform setup is checked separately. No release
+was published. The existing 0.09 HD pack remains compatible. Live Windows
+acceptance of the medic prompt and blinking is recorded above; the remaining
+gameplay changes and Proton gameplay still need separate acceptance. Neither
+confirmation resolves the outstanding Daniels or excessive ragdoll reports.
+
+## High-FPS ragdoll report (November 3, candidate implemented)
+
+The user reports bodies travelling farther when shot or caught in explosions.
+The camera-push/recoil correction does not change ragdoll forces. The initial
+report was against zoom-sensitivity runtime
+`953737f282c2d9de6ba3f1c2c3484732db5cf88741b302faefe3ba72c25baa39`.
+
+The active generated path contains a frame-rate-sensitive finite force:
+`2A3590` / `2A3760` install the force table `48D9EC`; its update `2A33A0`
+subtracts the frame delta before computing remaining/duration. The ragdoll
+loop `2A5DA0` updates the force before `2A5C60` applies it. Motion slot +6C
+(`2F4FF0` for the witnessed motion table) already multiplies by elapsed time
+and inverse mass. This is an end-of-step force sample, not a missing dt factor.
+The actor update at E7262–E728F supplies the gameplay delta; physics time is
+published by `29E5B0`, with the caller `2145D0` capping hitches at 1/15 second.
+
+`build/ragdoll-fps-audit-20261103/results.json` records original byte witnesses,
+active generated function hashes and an isolated binary32 equation replay at
+30/60/120/144/240 FPS. Relevant original and prepared-XBE byte ranges match.
+For the default 0.6-second directional / 0.4-second upward force durations,
+the replay gives +1.43% / +2.17% integrated force at 120 versus 60 FPS and
++2.14% / +3.26% at 240 versus 60 FPS, at a fixed spatial sample and unit mass.
+These are force-equation results, not measured body travel distances or execution
+of the generated C++. A paired live shot/explosion capture, collision response,
+initial velocities and moving force-radius samples remain unverified. Do not
+claim this modest difference explains the whole symptom or mark it live-fixed.
+
+The gameplay-controls candidate now integrates the finite force over the
+existing 60-Hz envelope and retains its final partial impulse once before
+removal. Permanent forces and unsupported inputs keep their original path.
+The generated update/removal/application/motion fixture checks four durations
+at 30/60/120/144/240/360 FPS against retail 60-Hz integrated impulse. Spatial
+falloff and collision stepping are boundaries; actual body travel still needs
+the user's in-game comparison. Evidence is in the gameplay-controls directory
+above. This is not a global physics or all-frame-rate equivalence claim.
+
+## Weapon zoom sensitivity (November 3, unpublished follow-up)
+
+Controls has a Zoom sensitivity slider (1–200%, default 100%) for each player.
+It multiplies that player's existing zoomed mouse/stick look speed only while
+the native weapon zoom state is active, including both rifle magnifications
+and Hold/Toggle aiming. Unzoomed look, movement, physical pistol-spin/order
+gestures, recoil and shot/reticle alignment retain their existing paths.
+The native controller delta hook at BFD86 runs after acceleration and before
+the original pitch clamp. Actor identity and live gameplay are validated by
+the existing aim-mode helper; no global camera-FOV heuristic is used.
+
+Regular sensitivity also displays 100% at its original default: the existing
+MouseSensitivity value 400 is shown as 100%, with its full 0.25–400% range;
+native stick sensitivity 50 is shown as 100%. Stored values are unchanged, so
+existing profiles retain their exact turning speed. ZoomSensitivity is saved
+atomically in Aim / AimPlayer2; absent or invalid values use 100%. P2 cannot
+overwrite P1's settings. English and Spanish labels are included.
+
+Evidence, source/runtime/symbol backups and matched Windows/Proton test packages
+are under `build/zoom-sensitivity-20261103`. Runtime/input fixtures check native
+zoom state, both players, 100% parity, fractional low sensitivity, pitch clamps,
+menu/save failures and invalid settings. Real-ImGui menu tests cover slider
+dragging, keyboard editing, defaults, discard and player isolation. These are
+offline checks; live Windows aiming feel and Proton gameplay remain unverified.
+The published 0.09 release and HD texture pack are unchanged.
+
 ## Per-player reticle colors (November 3)
 
 Graphics > Reticle settings contains size plus separate normal, enemy, friendly

@@ -12,7 +12,23 @@ static unsigned health_binding[2][2][2]{};
 static bool partner_loaded=false;
 static unsigned partner_binding[2]{};
 static bool aim_loaded[2]{};
-static unsigned aim_mode[2]{},scope_zoom[2][2][2]{};
+static unsigned aim_mode[2]{},scope_zoom[2][2][2]{},zoom_sensitivity[2]{100,100};
+static bool actions_loaded[2]{};
+static unsigned walk_mode[2]{},walk_binding[2][2][2]{},hud_binding[2][2][2]{};
+static void LoadActions(unsigned player){
+    if(actions_loaded[player])return;actions_loaded[player]=true;
+    wchar_t path[MAX_PATH];if(!controller_path(path))return;
+    const wchar_t* section=player?L"PlayerActions2":L"PlayerActions";
+    walk_mode[player]=trial_input_profile::Read(path,section,L"WalkMode",0,1);
+    for(unsigned device=player;device<2;++device)for(unsigned slot=0;slot<2;++slot){
+        wchar_t key[32];
+        for(unsigned action=0;action<2;++action){
+            swprintf(key,32,L"%s%u_%u",action?L"Hud":L"Walk",device,slot);
+            const unsigned source=trial_input_profile::Read(path,section,key,0,device?24:UCRR_KEYBOARD_WHEEL_DOWN);
+            (action?hud_binding:walk_binding)[player][device][slot]=(device?source<=24:keyboard_valid(source))?source:0;
+        }
+    }
+}
 static bool second_loaded=false;
 static UCRRControllerConfig second_controller{};
 static unsigned second_spin_mode=0,second_spin_binding[2]{};
@@ -109,10 +125,13 @@ unsigned SpinMode(unsigned player){
 }
 static void LoadAim(unsigned player){
     if(aim_loaded[player])return;aim_loaded[player]=true;
+    zoom_sensitivity[player]=100;
     aim_mode[player]=0;std::memset(scope_zoom[player],0,sizeof(scope_zoom[player]));
     wchar_t path[MAX_PATH];if(!controller_path(path))return;
     const wchar_t* section=player?L"AimPlayer2":L"Aim";
     aim_mode[player]=trial_input_profile::Read(path,section,L"Mode",0,1);
+    const unsigned zoom=trial_input_profile::Read(path,section,L"ZoomSensitivity",100,200);
+    zoom_sensitivity[player]=zoom?zoom:100;
     for(unsigned device=player;device<2;++device)for(unsigned slot=0;slot<2;++slot){
         wchar_t key[32];swprintf(key,32,L"ScopeZoom%u_%u",device,slot);
         const unsigned source=trial_input_profile::Read(path,section,key,0,device?24:UCRR_KEYBOARD_WHEEL_DOWN);
@@ -122,6 +141,10 @@ static void LoadAim(unsigned player){
 unsigned AimMode(unsigned player){
     if(player>1)return 0;
     std::lock_guard guard(input_lock);LoadAim(player);return aim_mode[player];
+}
+unsigned ZoomSensitivity(unsigned player){
+    if(player>1)return 100;
+    std::lock_guard guard(input_lock);LoadAim(player);return zoom_sensitivity[player];
 }
 static void LoadPartner(){
     if(partner_loaded)return;partner_loaded=true;
@@ -156,9 +179,11 @@ Draft Defaults(){
 Draft Snapshot(unsigned player){
     if(player>1)return {};
     std::lock_guard guard(input_lock);
+    LoadActions(player);
     if(player){
         LoadSecond();LoadHealth(1);LoadAim(1);auto d=Defaults();
-        d.aim_mode=aim_mode[1];std::memcpy(d.scope_zoom[1],scope_zoom[1][1],sizeof(d.scope_zoom[1]));
+        d.walk_mode=walk_mode[player];std::memcpy(d.walk_binding,walk_binding[player],sizeof(d.walk_binding));std::memcpy(d.hud_binding,hud_binding[player],sizeof(d.hud_binding));
+        d.zoom_sensitivity=zoom_sensitivity[1];d.aim_mode=aim_mode[1];std::memcpy(d.scope_zoom[1],scope_zoom[1][1],sizeof(d.scope_zoom[1]));
         std::memcpy(d.health_pack[1],health_binding[1][1],sizeof(d.health_pack[1]));
         std::memcpy(d.controller,second_controller.binding,sizeof(d.controller));
         std::memcpy(d.deadzone,second_controller.deadzone,sizeof(d.deadzone));
@@ -166,7 +191,8 @@ Draft Snapshot(unsigned player){
         d.spin_mode=second_spin_mode;std::memcpy(d.spin_binding[1],second_spin_binding,sizeof(second_spin_binding));return d;
     }
     keyboard_init();controller_init();Draft d;LoadAim(0);
-    d.aim_mode=aim_mode[0];std::memcpy(d.scope_zoom,scope_zoom[0],sizeof(d.scope_zoom));
+    d.walk_mode=walk_mode[player];std::memcpy(d.walk_binding,walk_binding[player],sizeof(d.walk_binding));std::memcpy(d.hud_binding,hud_binding[player],sizeof(d.hud_binding));
+    d.zoom_sensitivity=zoom_sensitivity[0];d.aim_mode=aim_mode[0];std::memcpy(d.scope_zoom,scope_zoom[0],sizeof(d.scope_zoom));
     LoadSpin();LoadFirearm();LoadHealth(0);d.spin_mode=spin_mode;std::memcpy(d.spin_binding,spin_binding,sizeof(spin_binding));
     std::memcpy(d.health_pack,health_binding[0],sizeof(d.health_pack));
     LoadPartner();std::memcpy(d.heal_partner,partner_binding,sizeof(d.heal_partner));
@@ -232,9 +258,17 @@ static bool Save(const Draft& d,unsigned player){
     }
     const wchar_t* aim_section=player?L"AimPlayer2":L"Aim";
     swprintf(value,32,L"%u",d.aim_mode);ok=ok&&WritePrivateProfileStringW(aim_section,L"Mode",value,temp);
+    swprintf(value,32,L"%u",d.zoom_sensitivity);ok=ok&&WritePrivateProfileStringW(aim_section,L"ZoomSensitivity",value,temp);
     for(unsigned device=player;device<2;++device)for(unsigned slot=0;slot<2;++slot){
         wchar_t key[32];swprintf(key,32,L"ScopeZoom%u_%u",device,slot);swprintf(value,32,L"%u",d.scope_zoom[device][slot]);
         ok=ok&&WritePrivateProfileStringW(aim_section,key,value,temp);
+    }
+    const wchar_t* actions_section=player?L"PlayerActions2":L"PlayerActions";
+    swprintf(value,32,L"%u",d.walk_mode);ok=ok&&WritePrivateProfileStringW(actions_section,L"WalkMode",value,temp);
+    for(unsigned device=player;device<2;++device)for(unsigned slot=0;slot<2;++slot)for(unsigned action=0;action<2;++action){
+        wchar_t key[32];swprintf(key,32,L"%s%u_%u",action?L"Hud":L"Walk",device,slot);
+        swprintf(value,32,L"%u",(action?d.hud_binding:d.walk_binding)[device][slot]);
+        ok=ok&&WritePrivateProfileStringW(actions_section,key,value,temp);
     }
     if(ok)WritePrivateProfileStringW(nullptr,nullptr,nullptr,temp);
     ok=ok&&MoveFileExW(temp,path,MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH);
@@ -246,6 +280,12 @@ bool Apply(const Draft& d,std::string& error,unsigned player){
     if(player)for(unsigned i=0;i<7;++i)if(d.native_profile[i]>(i<5?1u:100u)){error="Invalid controller option.";return false;}
     if(d.spin_mode>1){error="Invalid pistol spin mode.";return false;}
     if(d.aim_mode>1){error="Invalid aiming mode.";return false;}
+    if(d.walk_mode>1){error="Invalid walking mode.";return false;}
+    for(unsigned action=0;action<2;++action)for(unsigned slot=0;slot<2;++slot){
+        const auto& binding=action?d.hud_binding:d.walk_binding;
+        if((!player&&!keyboard_valid(binding[0][slot]))||binding[1][slot]>24){error="Invalid walk or HUD binding.";return false;}
+    }
+    if(d.zoom_sensitivity<1||d.zoom_sensitivity>200){error="Invalid zoom sensitivity.";return false;}
     if(!player&&d.invert_mouse>1){error="Invalid mouse look inversion.";return false;}
     for(unsigned slot=0;slot<2;++slot)if((!player&&!keyboard_valid(d.scope_zoom[0][slot]))||d.scope_zoom[1][slot]>24){error="Invalid scope zoom binding.";return false;}
     for(unsigned slot=0;slot<2;++slot)if((!player&&!keyboard_valid(d.health_pack[0][slot]))||d.health_pack[1][slot]>24){error="Invalid health pack binding.";return false;}
@@ -261,9 +301,14 @@ bool Apply(const Draft& d,std::string& error,unsigned player){
     std::lock_guard guard(input_lock);
     if(!player){keyboard_init();controller_init();}
     if(!Save(d,player)){error="Could not save controls. Your previous bindings are unchanged.";return false;}
+    actions_loaded[player]=true;walk_mode[player]=d.walk_mode;
+    for(unsigned device=player;device<2;++device){
+        std::memcpy(walk_binding[player][device],d.walk_binding[device],sizeof(d.walk_binding[device]));
+        std::memcpy(hud_binding[player][device],d.hud_binding[device],sizeof(d.hud_binding[device]));
+    }
     health_loaded[player]=true;std::memcpy(health_binding[player],d.health_pack,sizeof(d.health_pack));
     if(!player){partner_loaded=true;std::memcpy(partner_binding,d.heal_partner,sizeof(d.heal_partner));}
-    aim_loaded[player]=true;aim_mode[player]=d.aim_mode;
+    aim_loaded[player]=true;aim_mode[player]=d.aim_mode;zoom_sensitivity[player]=d.zoom_sensitivity;
     for(unsigned device=player;device<2;++device)std::memcpy(scope_zoom[player][device],d.scope_zoom[device],sizeof(d.scope_zoom[device]));
     if(player){
         second_loaded=true;std::memcpy(second_controller.binding,d.controller,sizeof(d.controller));
@@ -305,6 +350,20 @@ bool ScopeZoomDown(bool keyboard,const input::Pad& p,unsigned player,bool mouse_
     if(player>1||(player&&keyboard))return false;
     std::lock_guard guard(input_lock);LoadAim(player);
     return BindingDown(scope_zoom[player][keyboard?0:1],keyboard,p,mouse_active);
+}
+unsigned WalkMode(unsigned player){
+    if(player>1)return 0;
+    std::lock_guard guard(input_lock);LoadActions(player);return walk_mode[player];
+}
+bool WalkDown(bool keyboard,const input::Pad& p,unsigned player,bool mouse_active){
+    if(player>1||(player&&keyboard))return false;
+    std::lock_guard guard(input_lock);LoadActions(player);
+    return BindingDown(walk_binding[player][keyboard?0:1],keyboard,p,mouse_active);
+}
+bool HudToggleDown(bool keyboard,const input::Pad& p,unsigned player,bool mouse_active){
+    if(player>1||(player&&keyboard))return false;
+    std::lock_guard guard(input_lock);LoadActions(player);
+    return BindingDown(hud_binding[player][keyboard?0:1],keyboard,p,mouse_active);
 }
 bool SpinButtonDown(bool keyboard,const input::Pad& p,unsigned player){
     if(player>1||(player&&keyboard))return false;

@@ -14,6 +14,7 @@
 #include "xbe_audio_loop.h"
 #include "xbe_conversation_skip.h"
 #include "xbe_controls.h"
+#include "xbe_player_actions.h"
 #include "xbe_controls_capture.h"
 #include "xbe_coop.h"
 #include "xbe_coop_pause.h"
@@ -167,7 +168,7 @@ void TrialGraphicsInputChanged(){
     for(unsigned port=0;port<4;++port)release_pad[port]=last_pad[port];
     click_pending=false;dx=dy=0;
     spin_dx=spin_dy=0;spin_tick=0;spin_button_held[0]=spin_button_held[1]=true;
-    for(unsigned slot=0;slot<2;++slot){health_gesture[slot].Reset();TrialHealthPackInput(slot,false,false);TrialAimInput(slot,false,false);}
+    for(unsigned slot=0;slot<2;++slot){health_gesture[slot].Reset();TrialHealthPackInput(slot,false,false);TrialAimInput(slot,false,false);trial_player_actions::Cancel(slot);}
     firearm_direction=0;
     partner_key_held=false;
     order_phase=order_buttons=0;order_held=false;keyboard_wheel_clear();
@@ -305,7 +306,7 @@ bool TrialInputMessage(void*,uint32_t msg,uintptr_t wp,intptr_t lp,intptr_t* res
         intro_gate.FocusLost();
         title_gate.Context(false);
         spin_dx=spin_dy=0;spin_tick=0;spin_button_held[0]=spin_button_held[1]=true;
-        for(unsigned slot=0;slot<2;++slot){TrialHealthPackInput(slot,false,false);TrialAimInput(slot,false,false);}
+        for(unsigned slot=0;slot<2;++slot){TrialHealthPackInput(slot,false,false);TrialAimInput(slot,false,false);trial_player_actions::Cancel(slot);}
         menu_right_pending=menu_right_down=false;menu_right_consumed=(GetAsyncKeyState(VK_RBUTTON)&0x8000)!=0;
         captured=false;dx=dy=0;order_phase=order_buttons=0;order_held=false;click_pending=false;keyboard_wheel_clear();ClipCursor(nullptr);
     }
@@ -376,7 +377,7 @@ void TrialInputPad(int port,input::Pad& pad){
         health_use=health_gesture[port].Update((pad.buttons&2)!=0,allowed,status.visible&&(status.can_revive||status.can_heal_partner),GetTickCount64());
     }
     if(!trial_coop::PauseAllowsPlayer(unsigned(port))){
-        if(port<2){TrialHealthPackInput(port,false,false);TrialAimInput(port,false,false);}
+        if(port<2){TrialHealthPackInput(port,false,false);TrialAimInput(port,false,false);trial_player_actions::Cancel(port);}
         const bool connected=pad.connected||port==0;pad={};pad.connected=connected;return;
     }
     if(port==0)for(unsigned key=1;key<256;++key)
@@ -409,7 +410,7 @@ void TrialInputPad(int port,input::Pad& pad){
     const int menu_port=trial_coop::PauseOwner()==1?1:0;
     if(port==menu_port&&focused())TrialCoopMenuPad(controller_connected,pad.buttons|(pad.analog[2]>30?0x100u:0u)|(pad.analog[3]>30?0x200u:0u),pad.analog[0],pad.analog[1],pad.lx,pad.ly);
     if(TrialGraphicsOpen()){
-        if(port<2){TrialHealthPackInput(port,false,false);TrialAimInput(port,false,false);}
+        if(port<2){TrialHealthPackInput(port,false,false);TrialAimInput(port,false,false);trial_player_actions::Cancel(port);}
         bool connected=pad.connected;pad={};pad.connected=connected;return;
     }
     // Consume only controls held across the handoff; drift must not lock other inputs.
@@ -426,14 +427,14 @@ void TrialInputPad(int port,input::Pad& pad){
     axis(pad.lx,held.lx,7849);axis(pad.ly,held.ly,7849);
     axis(pad.rx,held.rx,8689);axis(pad.ry,held.ry,8689);
     if(intro_gate.OwnsPad(port)){
-        if(port<2){TrialHealthPackInput(port,false,false);TrialAimInput(port,false,false);}
+        if(port<2){TrialHealthPackInput(port,false,false);TrialAimInput(port,false,false);trial_player_actions::Cancel(port);}
         bool connected=pad.connected;pad={};pad.connected=connected;return;
     }
     if(port==1&&trial_coop::Active()&&gameplay&&!menu_mode&&TrialCoopPresentation()==2){
         // The original cinematic controls P1. P2 shares that camera and must
         // not move or fire unseen, but its configured Pause still works.
         TrialHealthPackInput(1,false,false);
-        TrialAimInput(1,false,false);
+        TrialAimInput(1,false,false);trial_player_actions::Cancel(1);
         auto pause=pad;trial_controls::Remap(pause,1);
         release_pad[1]=last_pad[1];
         spin_button_held[1]=trial_controls::SpinButtonDown(false,last_pad[1],1);
@@ -457,6 +458,9 @@ void TrialInputPad(int port,input::Pad& pad){
         const bool cycle=trial_controls::ScopeZoomDown(false,pad,port)||
             (!port&&trial_controls::ScopeZoomDown(true,pad,0,captured));
         TrialAimInput(port,cycle,allowed&&TrialCoopPresentation()!=2);
+        const bool walk=trial_controls::WalkDown(false,pad,port)||(!port&&trial_controls::WalkDown(true,pad,0,captured));
+        const bool hud=trial_controls::HudToggleDown(false,pad,port)||(!port&&trial_controls::HudToggleDown(true,pad,0,captured));
+        trial_player_actions::Update(port,walk,hud,trial_controls::WalkMode(port),allowed&&TrialCoopPresentation()!=2);
     }
     // Keep menu navigation on the physical controller; remaps apply to the
     // original gameplay slots before keyboard/mouse contributions are merged.

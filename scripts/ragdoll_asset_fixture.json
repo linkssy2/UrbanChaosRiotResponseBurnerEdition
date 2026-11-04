@@ -1,0 +1,16 @@
+{
+  "scope": "Retained reader/asset identities from the passed October 7 authored ragdoll audit; fixture input only, not runtime code.",
+  "original_evidence": "build/native-ragdoll-20261007/asset-checks/20261007-221531-467643/results.json",
+  "passed": true,
+  "sources": {
+    "scripts/native_ragdoll_asset_checks/run.py": "cf695983d0570a577c00db9b56c1564985d6083a74a13ae44fd418ef8606c4be",
+    "scripts/analyze_frontend.py": "2f7300742b206989b1f65a50b17a9571f77cd6703858d3d5ac135e1759aeb83d"
+  },
+  "assets": [
+    {
+      "archive": "1-01.ent",
+      "name": "ragdoll_havoc3.xml",
+      "sha256": "79d6ae7cc5750c322e5e0b971869212da6d86ef9b4d064e52adb9acab6178946"
+    }
+  ]
+}

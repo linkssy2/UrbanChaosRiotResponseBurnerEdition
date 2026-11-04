@@ -7,7 +7,7 @@ import struct
 INCLUDE='#include "xbe_coop_orders.h"\n'
 ENTRIES={
  0x40d60:'\tif(!TrialCoopOrdersChoose(ctx,base)){ctx.esp+=12;return;}\n',
- 0x73d80:'\tTrialCoopOrdersHudScope coop_orders_hud(ctx,base);\n',
+ 0x73d80:'\tif(!TrialPlayerHudVisible(ctx,base)){ctx.esp+=8;return;}\n\tTrialCoopOrdersHudScope coop_orders_hud(ctx,base);\n',
  0x73fa0:'\tTrialCoopOrdersHudScope coop_orders_hud(ctx,base);\n',
  0x140e10:'\tTrialCoopHelpScope coop_help(ctx,base);\n',
  0x1407f0:'\tTrialCoopHelpScope coop_help(ctx,base);\n',
@@ -78,6 +78,7 @@ def clean(source):
     source=source.replace('\tTrialCoopOrdersChoose(ctx,base);\n','')
     for original,fixed in MEDIC_REPLACEMENTS.items():source=source.replace(fixed,original)
     for hook in set(ENTRIES.values())|{h for _,h in SEAMS.values()}:source=source.replace(hook,'')
+    source=source.replace('\tif(!TrialPlayerHudVisible(ctx,base)){ctx.esp+=8;return;}\n','').replace('\tTrialCoopOrdersHudScope coop_orders_hud(ctx,base);\n','')
     source=source.replace('TrialCoopOrdersHud(base,X86_MEM32(ea))','X86_MEM32(ea)').replace('TrialCoopHelpHud(base,X86_MEM32(ea))','X86_MEM32(ea)')
     return source.replace('loc_00159219:\n','')
 
@@ -96,6 +97,11 @@ def prepare(area):
     def raw(va,size):
         s=next(s for s in sections if s[1]<=va and va+size<=s[1]+s[4]);o=s[3]+va-s[1]
         return xbe[o:o+size]
+    # Independent camera hit/classification used by pre-team medic offers.
+    for va,size,digest in [(0xc1020,588,'fc356426d979f685c20191a30cb96aecd0a9cd51b85edaa833d8c4a007a6953c'),
+                           (0xbd060,7,'b38e8a3fee005f0f3220888844b90a41e682e307f40b768e684159ef35fa4ccb'),
+                           (0xc7c69,70,'c1cc6ebd5547152f56429a95d08fe39804a700f4469525479eb6427398b91ca3')]:
+        assert hashlib.sha256(raw(va,size)).hexdigest()==digest,hex(va)
     assert struct.unpack('<I',raw(0x46caa8+8,4))[0]==0x156c50
     assert struct.unpack('<I',raw(0x4727a0+8,4))[0]==0x1842f0
     assert struct.unpack('<II',raw(0x4727a0+0x64,8))==(0x184230,0x184200)

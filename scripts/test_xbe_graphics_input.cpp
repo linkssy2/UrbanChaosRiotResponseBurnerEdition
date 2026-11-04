@@ -1,3 +1,4 @@
+#include "xbe_player_actions.h"
 // Actual staged pad adapter plus the existing keyboard binding implementation.
 // Only physical input/focus/window messaging are substituted; no ImGui mock.
 #undef NDEBUG
@@ -84,6 +85,8 @@ static UINT TestRawInput(HRAWINPUT handle,UINT command,void* data,UINT* size,UIN
 // GENERATED_MOUSE_HOST
 #undef GetRawInputData
 static uint8_t mouse_guest[0x12000]{};
+static double zoom_scale=1;
+static double TrialAimZoomScale(const uint8_t*,uint32_t){return zoom_scale;}
 static bool menu_pointer_readable(uint32_t at,uint32_t bytes){return at>=0x10000&&at<=sizeof mouse_guest&&bytes<=sizeof mouse_guest-at;}
 #define MEM32(a) (*reinterpret_cast<uint32_t*>(mouse_guest+uint32_t(a)))
 #define MEMF(a) (*reinterpret_cast<float*>(mouse_guest+uint32_t(a)))
@@ -91,6 +94,7 @@ using std::isfinite;
 #include "pc_mouse_rotation.h"
 // GENERATED_MOUSE_OWNER
 static void TestGuestMouse(uint32_t object){
+    auto* base=mouse_guest;
     const uint32_t g_ebx=object;
     switch(26){
 // GENERATED_MOUSE_GUEST
@@ -138,7 +142,8 @@ static void CheckMouseLook(){
     constexpr uint32_t first=0x10000,second=0x11000;
     RAWINPUT raw{};raw.header.dwType=RIM_TYPEMOUSE;
     raw.data.mouse.lLastX=100;raw.data.mouse.lLastY=50;
-    for(bool coop:{false,true})for(unsigned invert:{0u,1u}){
+    for(bool coop:{false,true})for(unsigned invert:{0u,1u})for(double scale:{.01,.5,1.0,2.0}){
+        zoom_scale=scale;
         ReleaseAll();trial_coop::Reset();trial_coop::SetActive(coop);
         std::memset(mouse_guest,0,sizeof mouse_guest);
         MEM32(second+0x368)=1;
@@ -151,8 +156,8 @@ static void CheckMouseLook(){
         TestGuestMouse(second);assert(dx==100&&dy==50); // P2 cannot consume P1's mouse.
         assert(MEMF(second+0x688)==0&&MEMF(second+0x68c)==0);
         TestGuestMouse(first);
-        assert(std::fabs(MEMF(first+0x688)-(invert?.05f:-.05f))<.000001f);
-        assert(std::fabs(MEMF(first+0x68c)+.1f)<.000001f&&MEMF(first+0x690)==.7f);
+        assert(std::fabs(MEMF(first+0x688)-(invert?.05f:-.05f)*scale)<.000001f);
+        assert(std::fabs(MEMF(first+0x68c)+.1f*scale)<.000001f&&MEMF(first+0x690)==.7f);
         assert(!dx&&!dy&&spin_dx==100&&spin_dy==50); // Spin keeps physical direction.
         const float pitch=MEMF(first+0x688),yaw=MEMF(first+0x68c);
         TestGuestMouse(first);assert(MEMF(first+0x688)==pitch&&MEMF(first+0x68c)==yaw);
@@ -171,7 +176,7 @@ static void CheckMouseLook(){
         order_held=false;raw.data.mouse.lLastX=100;raw.data.mouse.lLastY=50;
         captured=false;TestMouseMessage(WM_INPUT,reinterpret_cast<intptr_t>(&raw));assert(!dx&&!dy);
     }
-    mouse_invert=0;trial_coop::Reset();order_held=false;order_x=order_y=spin_dx=spin_dy=0;ReleaseAll();
+    zoom_scale=1;mouse_invert=0;trial_coop::Reset();order_held=false;order_x=order_y=spin_dx=spin_dy=0;ReleaseAll();
     gameplay=false;menu_mode=true;captured=false;
 }
 #undef MEM32
@@ -197,6 +202,39 @@ static void CheckNativeMenuY(){
     Close();assert(Neutral(Poll(0,raw)));assert(Neutral(Poll(0,raw)));
     assert(Neutral(Poll(0)));assert(Poll(0,raw).analog[3]==255);
     ReleaseAll();xbox_KeyboardNoteInput();
+}
+static void CheckPlayerActions(){
+    trial_coop::Reset();trial_coop::SetActive(true);ReleaseAll();
+    gameplay=true;menu_mode=false;captured=true;
+    for(unsigned slot=0;slot<2;++slot){
+        trial_controls::LoadActions(slot);
+        trial_controls::walk_mode[slot]=1;
+        trial_controls::walk_binding[slot][slot?1:0][0]=slot?1:'J';
+        trial_controls::hud_binding[slot][slot?1:0][0]=slot?2:'K';
+        trial_player_actions::Reset(slot);
+    }
+    input::Pad pad;pad.connected=true;
+    Poll(0);Poll(1,pad);
+    physical_keys['J']=true;physical_keys['K']=true;Poll(0);Poll(1,pad);
+    assert(trial_player_actions::MovementScale(0)==.35f&&!trial_player_actions::HudVisible(0));
+    assert(trial_player_actions::MovementScale(1)==1&&trial_player_actions::HudVisible(1));
+    physical_keys['J']=physical_keys['K']=false;Poll(0);
+    pad.analog[0]=pad.analog[1]=255;Poll(1,pad);
+    assert(trial_player_actions::MovementScale(1)==.35f&&!trial_player_actions::HudVisible(1));
+    test_open=true;Poll(0);Poll(1,pad);
+    assert(trial_player_actions::MovementScale(0)==1&&trial_player_actions::MovementScale(1)==1);
+    test_open=false;Poll(1,pad);assert(trial_player_actions::MovementScale(1)==1);
+    pad.analog[0]=pad.analog[1]=0;Poll(1,pad);
+    pad.analog[0]=255;Poll(1,pad);assert(trial_player_actions::MovementScale(1)==.35f);
+    trial_player_actions::Reset(1);Poll(1,pad);
+    assert(trial_player_actions::MovementScale(1)==1&&trial_player_actions::HudVisible(1));
+    for(unsigned slot=0;slot<2;++slot){
+        trial_player_actions::Reset(slot);
+        std::memset(trial_controls::walk_binding[slot],0,sizeof trial_controls::walk_binding[slot]);
+        std::memset(trial_controls::hud_binding[slot],0,sizeof trial_controls::hud_binding[slot]);
+        trial_controls::walk_mode[slot]=0;
+    }
+    trial_coop::Reset();ReleaseAll();
 }
 static void HealthGestures(){
     using Use=TrialHealthPackUse;
@@ -695,4 +733,5 @@ int main(){
     }
     std::puts("graphics input: actual pad/keyboard ownership, focus, all ports, held keys/clicks/sticks and release handoff passed");
     HealthGestures();
+    CheckPlayerActions();
 }

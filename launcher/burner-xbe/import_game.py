@@ -358,7 +358,7 @@ def import_iso(iso_path, data, cancel, *, direct=False):
             raise ValueError('Keep the source ISO outside the managed installed folder before selecting it.')
         source = iso_path.stat()
         marker = {'version': 1, 'disc_manifest': sha(ROOT / 'tools/disc-manifest.json'),
-                  'files': len(required), 'importer': 'burner-xbe-0.09',
+                  'files': len(required), 'importer': 'burner-xbe-0.10',
                   'source_mode': 'iso' if direct else 'extracted'}
         if direct:
             marker.update(iso_path=str(iso_path), iso_size=source.st_size,

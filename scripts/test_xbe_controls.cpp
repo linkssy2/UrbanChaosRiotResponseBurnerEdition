@@ -43,7 +43,8 @@ int main(){
     assert(defaults.health_pack[0][0]=='H'&&!defaults.health_pack[1][0]);
     assert(defaults.heal_partner[0]=='U'&&!defaults.heal_partner[1]);
     assert(!defaults.aim_mode&&!defaults.scope_zoom[0][0]&&!defaults.scope_zoom[1][0]);
-    assert(!defaults.invert_mouse);
+    assert(!defaults.invert_mouse&&defaults.zoom_sensitivity==100);
+    assert(trial_controls::ZoomSensitivity()==100&&trial_controls::ZoomSensitivity(1)==100);
     assert(GetFileAttributesW(profile)==INVALID_FILE_ATTRIBUTES);
     assert(trial_controls::Apply(defaults,error));
     assert(WritePrivateProfileStringW(L"Other",L"Unrelated",L"keep",profile));
@@ -56,8 +57,8 @@ int main(){
     changed.spin_mode=1;changed.spin_binding[0][0]='J';changed.spin_binding[1][0]=10;
     changed.previous_firearm[0]=VK_XBUTTON2;changed.previous_firearm[1]='B';
     changed.health_pack[0][0]='K';changed.health_pack[1][0]=10;
-    changed.heal_partner[0]='L';
-    changed.aim_mode=1;changed.scope_zoom[0][0]='T';changed.scope_zoom[0][1]=256;changed.scope_zoom[1][0]=11;
+    changed.heal_partner[0]='L';changed.walk_mode=1;changed.walk_binding[0][0]='Z';changed.hud_binding[0][0]='I';
+    changed.zoom_sensitivity=45;changed.aim_mode=1;changed.scope_zoom[0][0]='T';changed.scope_zoom[0][1]=256;changed.scope_zoom[1][0]=11;
     assert(trial_controls::Apply(changed,error));
     assert(Same(changed,trial_controls::Snapshot()));
     assert(GetPrivateProfileIntW(L"KeyboardMouse",L"Binding4_0",0,profile)=='G');
@@ -75,9 +76,12 @@ int main(){
     trial_controls::firearm_loaded=false;
     trial_controls::health_loaded[0]=false;
     trial_controls::aim_loaded[0]=false;
-    trial_controls::partner_loaded=false;
+    trial_controls::partner_loaded=false;trial_controls::actions_loaded[0]=false;
     assert(Same(changed,trial_controls::Snapshot()));
-    assert(trial_controls::AimMode()==1);
+    keys['Z']=true;assert(trial_controls::WalkMode()==1&&trial_controls::WalkDown(true,input::Pad{})&&!trial_controls::WalkDown(true,input::Pad{},1));keys['Z']=false;
+    keys['I']=true;assert(trial_controls::HudToggleDown(true,input::Pad{})&&!trial_controls::HudToggleDown(true,input::Pad{},1));keys['I']=false;
+    assert(trial_controls::AimMode()==1&&trial_controls::ZoomSensitivity()==45);
+    assert(GetPrivateProfileIntW(L"Aim",L"ZoomSensitivity",0,profile)==45);
     assert(GetPrivateProfileIntW(L"Aim",L"Mode",0,profile)==1);
     assert(GetPrivateProfileIntW(L"Aim",L"ScopeZoom0_1",0,profile)==256);
     assert(GetPrivateProfileIntW(L"HealthPacks",L"Partner0",0,profile)=='L');
@@ -88,6 +92,7 @@ int main(){
     assert(GetPrivateProfileIntW(L"Controller",L"Binding0_0",0,profile)==4);
     fail_replace=false;
     {auto bad=changed;bad.spin_mode=2;assert(!trial_controls::Apply(bad,error));
+     for(unsigned zoom:{0u,201u}){bad=changed;bad.zoom_sensitivity=zoom;assert(!trial_controls::Apply(bad,error));}
      bad=changed;bad.aim_mode=2;assert(!trial_controls::Apply(bad,error));
      bad=changed;bad.invert_mouse=2;assert(!trial_controls::Apply(bad,error));
      for(unsigned source:{unsigned(VK_ESCAPE),unsigned(VK_LWIN),258u}){
@@ -141,7 +146,7 @@ int main(){
     auto second=defaults;second.controller[0][0]=2;second.controller[1][0]=1;
     second.deadzone[0]=20;second.spin_mode=1;second.spin_binding[1][0]=9;
     second.health_pack[1][0]=12;
-    second.scope_zoom[1][0]=10;
+    second.scope_zoom[1][0]=10;second.zoom_sensitivity=130;
     const unsigned native_options[]={0,1,0,0,0,15,85};
     std::memcpy(second.native_profile,native_options,sizeof(native_options));
     auto submitted=second;submitted.keyboard[0][0]=VK_ESCAPE;submitted.sensitivity=0;submitted.invert_mouse=99;
@@ -167,6 +172,8 @@ int main(){
     trial_controls::aim_loaded[1]=false;assert(Same(second,trial_controls::Snapshot(1)));
     assert(trial_controls::AimMode(1)==0&&trial_controls::AimMode()==1);
     assert(GetPrivateProfileIntW(L"AimPlayer2",L"ScopeZoom1_0",0,profile)==10);
+    assert(GetPrivateProfileIntW(L"AimPlayer2",L"ZoomSensitivity",0,profile)==130);
+    assert(trial_controls::ZoomSensitivity(1)==130&&trial_controls::ZoomSensitivity()==first.zoom_sensitivity);
     p={};p.connected=true;p.analog[1]=255;auto first_pad=p;trial_controls::Remap(first_pad);
     trial_controls::Remap(p,1);assert(p.analog[0]==255&&!p.analog[1]);
     assert(!first_pad.analog[0]&&first_pad.analog[1]==255);
@@ -198,12 +205,15 @@ int main(){
     assert(!trial_controls::SpinMode(2)&&!trial_controls::SpinButtonDown(false,p,2));
     assert(!trial_controls::AimMode(2)&&!trial_controls::ScopeZoomDown(false,p,2));
     const trial_controls::Draft empty{};assert(Same(empty,trial_controls::Snapshot(2)));
-    for(unsigned bad=0;bad<4;++bad){
+    for(unsigned bad=0;bad<7;++bad){
         auto d=second;
         if(bad==0)d.controller[0][0]=25;
         if(bad==1)d.deadzone[0]=31;
         if(bad==2)d.spin_mode=2;
         if(bad==3)d.spin_binding[1][0]=25;
+        if(bad==4)d.walk_mode=2;
+        if(bad==5)d.walk_binding[1][0]=25;
+        if(bad==6)d.hud_binding[1][0]=25;
         assert(!trial_controls::Apply(d,error,1)&&Same(second,trial_controls::Snapshot(1)));
     }
     for(unsigned i=0;i<7;++i){
@@ -222,6 +232,10 @@ int main(){
     assert(safe.controller[0][0]==1&&!safe.deadzone[0]&&!safe.spin_mode&&!safe.spin_binding[1][0]);
     assert(!std::memcmp(safe.native_profile,defaults.native_profile,sizeof(safe.native_profile)));
     assert(trial_controls::Apply(defaults,error,1));
+    for(const wchar_t* invalid:{L"0",L"201",L"-1",L"25junk",L"999999999999999999999999999999999999"}){
+        assert(WritePrivateProfileStringW(L"AimPlayer2",L"ZoomSensitivity",invalid,profile));
+        trial_controls::aim_loaded[1]=false;assert(trial_controls::Snapshot(1).zoom_sensitivity==100);
+    }
     for(const wchar_t* malformed:{L"2",L"1junk",L"-1",L"999999999999999999999999999999999999"}){
         assert(WritePrivateProfileStringW(L"Graphics",L"InvertMouseLook",malformed,profile));
         assert(!trial_input_profile::Read(profile,L"Graphics",L"InvertMouseLook",0,1));

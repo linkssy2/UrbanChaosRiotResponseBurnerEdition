@@ -1,3 +1,4 @@
+#include "xbe_player_actions.h"
 #define NOMINMAX
 #include <windows.h>
 #include <algorithm>
@@ -10,6 +11,7 @@
 #include <vector>
 #include "imgui.h"
 #include "xbe_graphics_settings.h"
+#include "xbe_audio_output.h"
 #include "xbe_trial_graphics_ui.h"
 #include "xbe_frontend.h"
 #include "xbe_intro_skip.h"
@@ -56,6 +58,7 @@ TrialFrontendPresentation frontend_presentation;
 UcHybridFrontendAction frontend_action{};
 TrialFrontendNameActionData frontend_name_action{};
 std::atomic<bool> frontend_active=false;
+std::atomic<bool> frontend_audio=false;
 std::atomic<unsigned> frontend_events=0;
 std::atomic<uint64_t> navigation_generation=1;
 // ImGui may spread rapid taps over several frames. Confirm belongs to the
@@ -769,24 +772,26 @@ int SettingRow(MenuCanvas& c,const char* label,const char* value,unsigned index,
 
 void OriginalSettingsUi(const TrialFrontendFrame& f,const ImGuiViewport* view,bool interactive=true){
     const auto& src=f.source;
+    const bool audio=f.list_kind==4;
+    const unsigned count=src.count+(audio?1u:0u);
     static uint32_t owner=0;static unsigned focus=0;static TrialFrontendReleaseGate gate;
     if(owner!=src.owner){owner=src.owner;focus=src.selected;}
-    focus=std::min(focus,src.count);
+    focus=std::min(focus,count);
     const bool ready=interactive&&gate.Accept(navigation_generation.load(),UiHeld());
     const unsigned events=interactive?frontend_events.exchange(0):0;
-    const bool confirm=TakeNativeConfirm(ready);
+    const bool confirm=TakeNativeConfirm(ready)||(ready&&(events&4));
     if(ready){
-        if(ImGui::IsKeyPressed(ImGuiKey_UpArrow))focus=(focus+src.count)%(src.count+1);
-        if(ImGui::IsKeyPressed(ImGuiKey_DownArrow)||ImGui::IsKeyPressed(ImGuiKey_Tab))focus=(focus+1)%(src.count+1);
+        if((events&1)||ImGui::IsKeyPressed(ImGuiKey_UpArrow))focus=(focus+count)%(count+1);
+        if((events&2)||ImGui::IsKeyPressed(ImGuiKey_DownArrow)||ImGui::IsKeyPressed(ImGuiKey_Tab))focus=(focus+1)%(count+1);
         if((events&8)||ImGui::IsMouseClicked(1,false)||ImGui::IsKeyPressed(ImGuiKey_Q,false)||ImGui::IsKeyPressed(ImGuiKey_Escape,false))FrontendAction(f,UC_HF_BACK);
-        if(focus==src.count&&confirm)FrontendAction(f,UC_HF_BACK);
+        if(focus==count&&confirm)FrontendAction(f,UC_HF_BACK);
     }
-    const int direction=ready?(ImGui::IsKeyPressed(ImGuiKey_LeftArrow)?-1:
-        ImGui::IsKeyPressed(ImGuiKey_RightArrow)?1:0):0;
+    const int direction=ready?((events&16)||ImGui::IsKeyPressed(ImGuiKey_LeftArrow)?-1:
+        (events&32)||ImGui::IsKeyPressed(ImGuiKey_RightArrow)||confirm?1:0):0;
     BeginMenu("Original settings",view);MenuCanvas canvas(view);
     canvas.SettingsFrame((src.source_kind&0x80000000u)!=0,f.list_kind==4?"AUDIO":f.list_kind==6?"GAME OPTIONS":"GENERAL");
     ImGui::BeginDisabled(!ready);
-    const float step=std::min(26.f,260.f/std::max(1u,src.count));
+    const float step=std::min(26.f,240.f/std::max(1u,count));
     for(unsigned i=0;i<src.count;++i){
         ImGui::BeginDisabled(!src.rows[i].enabled);
         const int delta=SettingRow(canvas,f.labels[i],f.values[i],i,focus,direction,step,103);
@@ -795,10 +800,19 @@ void OriginalSettingsUi(const TrialFrontendFrame& f,const ImGuiViewport* view,bo
         if(ready&&delta&&src.rows[i].enabled&&(src.rows[i].actions&mask))FrontendAction(f,action,i);
         ImGui::EndDisabled();
     }
+    if(audio){
+        const auto mode=trial_audio::requested.load();
+        const int delta=SettingRow(canvas,"Speaker output",trial_audio::Name(mode),src.count,focus,direction,step,103);
+        if(ready&&delta)trial_audio::Apply((mode+(delta>0?1u:2u))%3,message);
+        char status[160];std::snprintf(status,sizeof(status),"%s: %s",trial_language::Ui("Active output"),trial_language::Ui(trial_audio::Name(trial_audio::Active())));
+        canvas.Text(status,61,350,12,white,520,false,false);
+        canvas.Text(message.empty()?"Configure your device speakers first. Restart after changing the device layout.":message.c_str(),61,370,11,muted,520);
+    }
     const char* labels[]={"Back"};const bool enabled[]={true};
-    RowStrip(canvas,labels,enabled,1,398,focus==src.count?0:1,
-        [&](unsigned){focus=src.count;},[&](unsigned){if(ready)FrontendAction(f,UC_HF_BACK);});
-    FooterPrompts(canvas,{{VK_LEFT,"Change"},{VK_RIGHT,"Change"},{VK_RBUTTON,"Back"}});
+    RowStrip(canvas,labels,enabled,1,398,focus==count?0:1,
+        [&](unsigned){focus=count;},[&](unsigned){if(ready)FrontendAction(f,UC_HF_BACK);});
+    if(xbox_KeyboardMode())FooterPrompts(canvas,{{VK_LEFT,"Change"},{VK_RIGHT,"Change"},{VK_RBUTTON,"Back"}});
+    else FooterPrompts(canvas,{{0x103,"Navigate"},{0x101,"Change"},{0x102,"Back"}});
     ImGui::EndDisabled();EndMenu();
 }
 
@@ -812,8 +826,8 @@ void SettingChoice(MenuCanvas& c,const char* label,T& value,const T(&values)[N],
 
 // Sliders share the menu's row hit target and controller/key navigation.
 void SettingSlider(MenuCanvas& c,const char* label,uint32_t& value,int low,int high,int increment,
-                   const char* suffix,unsigned index,unsigned& focus,int key_delta,float top,float step=16){
-    char text[32];std::snprintf(text,sizeof(text),"%u%s",value,trial_language::Ui(suffix));
+                   const char* suffix,unsigned index,unsigned& focus,int key_delta,float top,float step=16,float display_scale=1){
+    char text[32];std::snprintf(text,sizeof(text),"%g%s",double(value)*display_scale,trial_language::Ui(suffix));
     const int delta=SettingRow(c,label,text,index,focus,key_delta,step,top);
     const float grab_x=(ImGui::GetIO().MouseClickedPos[0].x-c.view->Pos.x)/c.sx;
     const bool track_grab=grab_x>=410&&grab_x<=548;
@@ -1017,7 +1031,8 @@ void TrialFrontendPublish(const TrialFrontendFrame& frame){
     // desktop actions reachable in the shared main, pause and options lists.
     const bool owned_pause=trial_coop::PauseOwner()>=0&&
         ((frame.source.source_kind&0x80000000u)||(frame.source.kind==UC_HF_LIST&&frame.list_kind==3));
-    const bool native=xbox_KeyboardMode()||IsMainMenu(frame)||frame.delete_dialog||coop_open.load()||owned_pause;
+    const bool audio=frame.source.kind==UC_HF_LIST&&frame.list_kind==4;
+    const bool native=xbox_KeyboardMode()||IsMainMenu(frame)||frame.delete_dialog||coop_open.load()||owned_pause||audio;
     const bool active=TrialFrontendSupported(frame)&&native;bool changed;
     {std::lock_guard lock(context_lock);
         coop_menu.Observe(frame);
@@ -1028,7 +1043,7 @@ void TrialFrontendPublish(const TrialFrontendFrame& frame){
             frontend_action={};frontend_name_action={};frontend_events=0;++navigation_generation;
             native_confirm_generation=0;
         }
-        frontend=frame;frontend_active=active;
+        frontend=frame;frontend_active=active;frontend_audio=active&&audio;
         frontend_text_entry=active&&frame.source.kind==TRIAL_HF_NAME;
         frontend_transition=native&&(frame.source.source_kind&UC_HF_TRANSITION);
         if(!native)frontend_presentation={};
@@ -1069,7 +1084,7 @@ static bool ControllerSupplement(){
         context.screen==frontend.source.screen&&(context.kind==2||context.kind==3);
 }
 void TrialFrontendPad(uint32_t buttons,uint8_t confirm,uint8_t back,int16_t x,int16_t y){
-    const bool controls=PanelOpen();
+    const bool controls=PanelOpen()||frontend_audio.load();
     const unsigned mask=(controls?((buttons&1)||y>16000?1:0)|((buttons&2)||y<-16000?2:0)|
         ((buttons&4)||x<-16000?16:0)|((buttons&8)||x>16000?32:0):
         ((buttons&5)||x<-16000||y>16000?1:0)|((buttons&10)||x>16000||y<-16000?2:0))|
@@ -1078,7 +1093,7 @@ void TrialFrontendPad(uint32_t buttons,uint8_t confirm,uint8_t back,int16_t x,in
     std::lock_guard lock(context_lock);
     const bool supplement=ControllerSupplement();
     if(!frontend_active&&!supplement&&!PanelOpen()){epoch=0;released=false;previous=mask;frontend_events=0;return;}
-    const bool panel=PanelOpen();
+    const bool panel=controls;
     if(epoch!=navigation_generation||panel_mode!=panel){
         epoch=navigation_generation;panel_mode=panel;released=false;previous=mask;frontend_events=0;
     }
@@ -1217,7 +1232,7 @@ void TrialGraphicsUi() {
                     }
                 }
                 const auto status=TrialHealthPackSnapshot(slot);
-                if(!status.visible||!(status.opacity>0)){revive_slide[slot]=0;continue;}
+                if(!trial_player_actions::HudVisible(slot)||!status.visible||!(status.opacity>0)){revive_slide[slot]=0;continue;}
                 const unsigned alpha=unsigned(std::clamp(status.opacity,0.f,1.f)*255.f+.5f);
                 auto faded=[&](ImU32 color){return (color&~IM_COL32_A_MASK)|(((color>>IM_COL32_A_SHIFT)*alpha/255)<<IM_COL32_A_SHIFT);};
                 const auto profile=trial_controls::Snapshot(slot);

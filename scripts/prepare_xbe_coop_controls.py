@@ -27,8 +27,10 @@ PINS=(
 def body(source,address):
     return re.search(rf'X86_FUNC\(__imp__sub_{address:08X}\) \{{.*?^\}}',source,re.M|re.S).group()
 
+WALK='\t{ const unsigned csr=_mm_getcsr(); const float speed=trial_player_actions::MovementScale(ctx.esi); ctx.xmm[1].f[0]*=speed; ctx.xmm[0].f[0]*=speed; _mm_setcsr(csr); }\n'
+
 def clean(source):
-    source=source.replace(INCLUDE,'')
+    source=source.replace(INCLUDE,'').replace('#include "xbe_player_actions.h"\n','').replace(WALK,'').replace(WALK.replace('ctx.xmm[1].f','ctx.xmm1.f').replace('ctx.xmm[0].f','ctx.xmm0.f'),'')
     for _,_,original,fixed in READS:source=source.replace(fixed,original)
     return source
 
@@ -62,9 +64,12 @@ def prepare(area):
         instruction=match[2];assert instruction.count(original)==1,hex(address)
         source=source[:match.start(2)]+instruction.replace(original,fixed)+source[match.end(2):]
         sources[unit]=source
+    for address in (0xbc52d,0xbc549):
+        anchor=f'\t// {address:08X} ';assert sources[19].count(anchor)==1
+        sources[19]=sources[19].replace(anchor,WALK+anchor,1)
     for unit,source in sources.items():
         path=area/f'generated/game/x86_recomp.{unit}.cpp'
-        path.write_text(source.replace('#include "x86_recomp_shared.h"\n','#include "x86_recomp_shared.h"\n'+INCLUDE,1))
+        path.write_text(source.replace('#include "x86_recomp_shared.h"\n','#include "x86_recomp_shared.h"\n'+INCLUDE+'#include "xbe_player_actions.h"\n',1))
     fixtures=[]
     for unit,address,*_ in PINS:
         if address==0xbef80:continue

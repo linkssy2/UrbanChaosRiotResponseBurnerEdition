@@ -1,3 +1,4 @@
+#include "xbe_player_actions.h"
 // Retail defaults, stick layout, crouch and feedback predicates execute whole
 // original bodies. Look inversion/centering/sensitivity execute pinned excerpts.
 // Device samples, crouch animation and feedback amplitude are explicit boundaries.
@@ -54,6 +55,7 @@ static void Seed(){
 }
 static void Layout(){
     Seed();options[4]=0;
+    for(unsigned slot=0;slot<2;++slot)trial_player_actions::walking[slot]=false;
     for(unsigned slot=0;slot<2;++slot)for(bool fixed:{false,true}){
         auto c=Context();c.esi=slot;Put(SP+4,DATA);Put(SP+8,DATA+4);queries=0;
         (fixed?Coop_000BC4B0:Original_000BC4B0)(c,B());
@@ -62,6 +64,28 @@ static void Layout(){
         c=Context();c.edi=P[slot];c.eax=PROFILE;queries=0;
         (fixed?Coop_Layout:Original_Layout)(c,B());
         assert(queries==1&&query_slot==slot&&query_action[0]==(fixed&&slot?0:2)&&query_mode==3);
+    }
+}
+static void Walking(){
+    Seed();
+    for(unsigned slot=0;slot<2;++slot)for(unsigned mode=0;mode<2;++mode){
+        trial_player_actions::Cancel(slot);
+        trial_player_actions::Update(slot,false,false,mode,true);
+        trial_player_actions::Update(slot,true,false,mode,true);
+        for(unsigned player=0;player<2;++player)for(float strength:{-2.f,-.5f,0.f,.5f,2.f}){
+            auto c=Context();c.esi=player;sample=strength;Put(SP+4,DATA);Put(SP+8,DATA+4);
+            Coop_000BC4B0(c,B());
+            const float expected=std::fmax(-1.f,std::fmin(1.f,strength))*(player==slot?.35f:1.f);
+            assert(std::fabs(Real(DATA)-expected)<.00001f&&std::fabs(Real(DATA+4)-expected)<.00001f);
+        }
+        trial_player_actions::Update(slot,false,true,mode,true);
+        assert(trial_player_actions::walking[slot]==bool(mode)&&!trial_player_actions::HudVisible(slot));
+        trial_player_actions::Update(slot,false,true,mode,true);assert(!trial_player_actions::HudVisible(slot));
+        trial_player_actions::Cancel(slot);assert(!trial_player_actions::walking[slot]);
+        trial_player_actions::Update(slot,true,true,mode,true);assert(!trial_player_actions::walking[slot]);
+        trial_player_actions::Update(slot,false,false,mode,true);
+        trial_player_actions::Update(slot,false,true,mode,true);assert(trial_player_actions::HudVisible(slot));
+        trial_player_actions::Cancel(slot);
     }
 }
 static void Crouch(){
@@ -122,4 +146,4 @@ static void Ownership(){
     assert(!TrialCoopControlSlotValue(B(),2,1,0));
     options[0]=0;assert(TrialCoopVibrationValue(B(),M+4,1,1)==1);
 }
-int main(){Layout();Crouch();Look();Feedback();Ownership();puts("Co-op native controls: retail defaults/layout/crouch/vibration, look excerpts and owner isolation passed.");}
+int main(){Layout();Walking();Crouch();Look();Feedback();Ownership();puts("Co-op native controls: retail defaults/layout/crouch/vibration, look excerpts and owner isolation passed.");}

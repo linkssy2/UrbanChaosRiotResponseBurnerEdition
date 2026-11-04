@@ -294,7 +294,7 @@ namespace controller_fixture {
 // The production pad function runs unchanged. Only its shared UI state and
 // the panel-state query are supplied by this fixture; no ImGui input is mocked.
 static std::mutex context_lock;
-static std::atomic<bool> frontend_active=false;
+static std::atomic<bool> frontend_active=false,frontend_audio=false;
 static std::atomic<unsigned> frontend_events=0;
 static std::atomic<unsigned> settings_page=0;
 static std::atomic<uint64_t> navigation_generation=1;

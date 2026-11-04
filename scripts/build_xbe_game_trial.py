@@ -37,6 +37,14 @@ try:
  unprepare_aim_mode(AREA)
  from prepare_xbe_camera_push import unprepare as unprepare_camera_push
  unprepare_camera_push(AREA)
+ from prepare_xbe_ragdoll_force import unprepare as unprepare_ragdoll_force
+ unprepare_ragdoll_force(AREA)
+ from prepare_xbe_ragdoll_recovery import unprepare as unprepare_ragdoll_recovery
+ unprepare_ragdoll_recovery(AREA)
+ from prepare_xbe_daniels_spawn import unprepare as unprepare_daniels_spawn
+ unprepare_daniels_spawn(AREA)
+ from prepare_xbe_blink import unprepare as unprepare_blink
+ unprepare_blink(AREA)
  from prepare_xbe_coop_cinematics import unprepare as unprepare_coop_cinematics
  from prepare_xbe_coop_spin import unprepare as unprepare_coop_spin
  from prepare_xbe_coop_pickups import unprepare as unprepare_coop_pickups
@@ -181,6 +189,14 @@ try:
  prepare_event_callback(SDK, AREA)
  from prepare_xbe_effect_settings import prepare as prepare_effect_settings
  prepare_effect_settings(AREA)
+ from prepare_xbe_ragdoll_force import prepare as prepare_ragdoll_force
+ prepare_ragdoll_force(AREA)
+ from prepare_xbe_ragdoll_recovery import prepare as prepare_ragdoll_recovery
+ prepare_ragdoll_recovery(AREA)
+ from prepare_xbe_daniels_spawn import prepare as prepare_daniels_spawn
+ prepare_daniels_spawn(AREA)
+ from prepare_xbe_blink import prepare as prepare_blink
+ prepare_blink(AREA)
  from prepare_xbe_ragdoll_settings import prepare as prepare_ragdoll_settings
  prepare_ragdoll_settings(AREA)
  from prepare_xbe_ragdoll_contacts import prepare as prepare_ragdoll_contacts
@@ -189,8 +205,6 @@ try:
  prepare_coop_death(AREA)
  from prepare_xbe_health_packs import prepare as prepare_health_packs
  prepare_health_packs(AREA)
- from prepare_xbe_aim_mode import prepare as prepare_aim_mode
- prepare_aim_mode(AREA)
  from prepare_xbe_camera_push import prepare as prepare_camera_push
  prepare_camera_push(AREA)
  from prepare_xbe_intro_skip import prepare as prepare_intro_skip
@@ -356,6 +370,8 @@ HLE_STDCALL(UrbanChaos_StreamPitch, 2) { return VoicePitch(a); }
  ds,audio_output=prepare_audio_loop(ds,(SDK/'runtime/audio/xaudio2.cpp').read_text(),AREA)
  from prepare_xbe_audio_decode_cache import prepare as prepare_audio_decode_cache
  ds=prepare_audio_decode_cache(ds,AREA)
+ from prepare_xbe_audio_surround import prepare as prepare_audio_surround
+ ds,audio_output=prepare_audio_surround(ds,audio_output,AREA)
  (AREA/'src/compat/xaudio2.cpp').write_text(audio_output)
  (AREA/'src/compat/dsound.cpp').write_text(ds)
  (AREA/'src/compat/test_device_refs.cpp').write_text('''#include "device_refs.h"
@@ -366,7 +382,7 @@ int main(){uint32_t r=0;if(uc_ds_ref(r,false)!=0||uc_ds_ref(r,true)!=1||uc_ds_re
  from prepare_xbe_cursor import prepare as prepare_cursor
  from prepare_xbe_graphics_input import prepare as prepare_graphics_input
  for name in ('xbe_trial_menu_input.cpp','xbe_trial_hud.cpp','xbe_trial_graphics_ui.cpp','xbe_trial_graphics_ui.h',
-              'xbe_coop_controls.cpp','xbe_coop_controls.h',
+              'xbe_coop_controls.cpp','xbe_coop_controls.h','xbe_player_actions.h',
               'xbe_coop_preview.h','xbe_coop_preview.cpp','xbe_coop_preview_assets.h','xbe_coop_preview_assets.cpp',
               'xbe_window_keys.h','xbe_menu_key_taps.h','xbe_controls.h','xbe_controls_backend.inc','xbe_controls_capture.h','xbe_controls_ui.inc','xbe_language_ui.inc','xbe_cheats_ui.inc',
               'xbe_host_input.h','xbe_keyboard_bindings.inc','xbe_controller_bindings.inc'):
@@ -385,6 +401,8 @@ int main(){uint32_t r=0;if(uc_ds_ref(r,false)!=0||uc_ds_ref(r,true)!=1||uc_ds_re
  prepare_coop_interactions(AREA)
  from prepare_xbe_coop_controls import prepare as prepare_coop_controls
  prepare_coop_controls(AREA)
+ from prepare_xbe_aim_mode import prepare as prepare_aim_mode
+ prepare_aim_mode(AREA)
  info=(SDK/'templates/game/src/common/game_info.cpp').read_text()
  info=info.replace('#include "app/app.h"','#include "app/app.h"\n#include "xbe_graphics_settings.h"\nextern bool TrialInputMessage(void*, uint32_t, uintptr_t, intptr_t, intptr_t*);\nextern void TrialInputWindow(void*);\nextern void TrialInputPad(int, input::Pad&);\nextern void TrialHudUi(double);\nextern bool TrialShowFps;\nextern bool TrialSmoothFog;\nextern bool TrialDistanceFog;\nextern uint32_t TrialFogDistanceMode;')
  info=info.replace('.window = nullptr,','.window = TrialInputWindow,')
@@ -396,8 +414,10 @@ int main(){uint32_t r=0;if(uc_ds_ref(r,false)!=0||uc_ds_ref(r,true)!=1||uc_ds_re
  info=info.replace('#include "xbe_graphics_settings.h"','#include "xbe_graphics_settings.h"\n#include "xbe_language.h"')
  info=info.replace('{"ragdoll_amount", nullptr, &TrialRagdollMode}',
                    '{"ragdoll_amount", nullptr, &TrialRagdollMode}, {"language", nullptr, &TrialLanguage}, {"world_textures", &TrialWorldTextures, nullptr}, {"hd_ui", &TrialHdUi, nullptr}, {"reticle_scale", nullptr, &TrialReticleScale}, {"reticle_normal_color", nullptr, &TrialReticleColors[0][0]}, {"reticle_enemy_color", nullptr, &TrialReticleColors[0][1]}, {"reticle_friendly_color", nullptr, &TrialReticleColors[0][2]}, {"reticle_spin_color", nullptr, &TrialReticleColors[0][3]}, {"player2_reticle_normal_color", nullptr, &TrialReticleColors[1][0]}, {"player2_reticle_enemy_color", nullptr, &TrialReticleColors[1][1]}, {"player2_reticle_friendly_color", nullptr, &TrialReticleColors[1][2]}, {"player2_reticle_spin_color", nullptr, &TrialReticleColors[1][3]}, {"weapon_fov_scale", nullptr, &TrialWeaponFovScale}, {"player2_field_of_view", nullptr, &TrialPlayer2FieldOfView}, {"player2_weapon_fov_scale", nullptr, &TrialPlayer2WeaponFovScale}, {"fmv_scale", nullptr, &TrialFmvScale}')
+ info=info.replace('#include "xbe_graphics_settings.h"','#include "xbe_graphics_settings.h"\n#include "xbe_audio_output.h"')
+ info=info.replace('{"fmv_scale", nullptr, &TrialFmvScale}', '{"fmv_scale", nullptr, &TrialFmvScale}, {"sound_output", nullptr, &TrialSoundOutput}')
  info=info.replace('.init = trial_graphics::Initialize,',
-                   '.init = []{trial_graphics::Initialize();trial_language::Initialize();},')
+                   '.init = []{trial_graphics::Initialize();trial_language::Initialize();trial_audio::Initialize();},')
  info=info.replace('Game Title','Urban Chaos XboxXBERecomp Integration').replace('L"Game"','L"UrbanChaosXbeTrial"').replace('"game",','"urban_chaos_xbe_trial",').replace('"Game"}}','"UrbanChaosXbeTrial"}}')
  if RELEASE:
   info=info.replace('L"Urban Chaos XboxXBERecomp Integration"','L"Urban Chaos: Riot Response - Burner Edition"')
@@ -506,6 +526,7 @@ list(APPEND XBE_HOST_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/compat/texture.cpp
 list(APPEND XBE_HOST_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/compat/shaders.cpp")
 list(APPEND XBE_HOST_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/compat/dsound.cpp")
 list(APPEND XBE_HOST_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/compat/xaudio2.cpp" "${CMAKE_CURRENT_SOURCE_DIR}/src/compat/xbe_audio_loop.cpp")
+list(APPEND XBE_HOST_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/compat/xbe_audio_settings.cpp")
 list(APPEND XBE_HOST_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/compat/d3d8.cpp" "${CMAKE_CURRENT_SOURCE_DIR}/src/compat/d3d12.cpp")
 add_executable(test_controller_device "'''+(ROOT/'scripts/test_xbe_controller_device.cpp').as_posix()+'''" src/compat/input.cpp "'''+(SDK/'runtime/core/log.cpp').as_posix()+'''")
 target_include_directories(test_controller_device PRIVATE "'''+(SDK/'runtime').as_posix()+'''")
@@ -575,6 +596,14 @@ target_include_directories(test_shader_cache PRIVATE src/compat "'''+(SDK/'runti
 target_link_libraries(test_shader_cache PRIVATE bcrypt d3d12 dxgi d3dcompiler)
 add_executable(test_effect_settings src/compat/test_effect_settings.cpp)
 target_include_directories(test_effect_settings PRIVATE src/common src/compat "'''+(SDK/'runtime').as_posix()+'''")
+add_executable(test_ragdoll_force src/compat/test_ragdoll_force.cpp)
+target_include_directories(test_ragdoll_force PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
+add_executable(test_ragdoll_recovery src/compat/test_ragdoll_recovery.cpp)
+target_include_directories(test_ragdoll_recovery PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
+add_executable(test_daniels_spawn src/compat/test_daniels_spawn.cpp)
+target_include_directories(test_daniels_spawn PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
+add_executable(test_blink src/compat/test_blink.cpp)
+target_include_directories(test_blink PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
 add_executable(test_ragdoll_settings src/compat/test_ragdoll_settings.cpp)
 target_include_directories(test_ragdoll_settings PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
 add_executable(test_ragdoll_contacts src/compat/test_ragdoll_contacts.cpp)
@@ -591,6 +620,9 @@ add_executable(test_stream_status src/compat/test_stream_status.cpp)
 add_executable(test_audio_loop src/compat/test_audio_loop.cpp src/compat/xbe_audio_loop.cpp)
 add_executable(test_audio_routing src/compat/test_audio_routing.cpp)
 add_executable(test_audio_decode_cache src/compat/test_audio_decode_cache.cpp)
+add_executable(test_audio_surround src/compat/test_audio_surround.cpp src/compat/xbe_audio_settings.cpp)
+target_include_directories(test_audio_surround PRIVATE "'''+(SDK/'runtime').as_posix()+'''" generated/game)
+add_executable(test_audio_output src/compat/test_audio_output.cpp)
 target_include_directories(test_audio_routing PRIVATE "'''+ROOT.as_posix()+'''" "'''+(SDK/'runtime').as_posix()+'''" generated/game)
 target_compile_definitions(test_audio_loop PRIVATE XBE_AUDIO_TRACE_TEST=1)
 target_include_directories(test_stream_status PRIVATE "'''+ROOT.as_posix()+'''" "'''+(SDK/'runtime').as_posix()+'''" generated/game)
@@ -745,7 +777,7 @@ add_executable(test_frontend_fonts src/compat/test_frontend_fonts.cpp src/compat
     ${imgui_SOURCE_DIR}/imgui.cpp ${imgui_SOURCE_DIR}/imgui_draw.cpp ${imgui_SOURCE_DIR}/imgui_tables.cpp ${imgui_SOURCE_DIR}/imgui_widgets.cpp)
 target_include_directories(test_frontend_fonts PRIVATE src/compat "'''+ROOT.as_posix()+'''" "'''+(SDK/'runtime').as_posix()+'''" ${imgui_SOURCE_DIR})
 target_link_libraries(test_frontend_fonts PRIVATE uc_native_texture gdi32 windowscodecs ole32 bcrypt)
-add_executable(test_menu_style src/compat/test_menu_style.cpp src/compat/xbe_frontend_fonts.cpp src/compat/xbe_hd_ui.cpp src/compat/xbe_pc_prompt_art.cpp "'''+(ROOT/'native/font.c').as_posix()+'''"
+add_executable(test_menu_style src/compat/test_menu_style.cpp src/compat/xbe_audio_settings.cpp src/compat/xbe_frontend_fonts.cpp src/compat/xbe_hd_ui.cpp src/compat/xbe_pc_prompt_art.cpp "'''+(ROOT/'native/font.c').as_posix()+'''"
     ${imgui_SOURCE_DIR}/imgui.cpp ${imgui_SOURCE_DIR}/imgui_draw.cpp ${imgui_SOURCE_DIR}/imgui_tables.cpp ${imgui_SOURCE_DIR}/imgui_widgets.cpp)
 target_include_directories(test_menu_style PRIVATE src/common src/compat "'''+ROOT.as_posix()+'''" "'''+(SDK/'runtime').as_posix()+'''" ${imgui_SOURCE_DIR})
 target_link_libraries(test_menu_style PRIVATE uc_native_texture gdi32 user32 windowscodecs ole32 bcrypt)
@@ -793,7 +825,7 @@ target_include_directories(UrbanChaosXbeTrial PRIVATE "'''+ROOT.as_posix()+'''" 
  config=(AREA/'out-msvc/_deps/sdl3-build/include-config-relwithdebinfo/build_config/SDL_build_config.h').read_text()
  assert '#define HAVE_LIBUSB 1' in config,'Switch 2 USB driver would be silently omitted'
  run('build-game-msvc',['cmake','--build',AREA/'out-msvc','--target','UrbanChaosXbeTrial','test_device_refs','test_pc_keyboard','test_pc_camera','test_pc_memory','test_coroutines','test_voice_mode','test_stream_factory','test_io_apc','test_recorded_draws','test_visibility','test_query_resolves','test_query_resolves_gpu','test_inline_draws','test_resource_refs','test_shader_state','test_cursor','test_target60','test_signed_lighting','test_depth_alias','test_audio_rolloff','test_audio_cone','test_audio_factors','test_audio_pitch','test_stream_status','test_audio_loop','test_audio_routing','test_heap_probe','test_graphics_menu_context','test_graphics_input','test_graphics_settings','test_target_resize','test_smooth_fog','-j','4'])
- run('build-interface-fixtures',['cmake','--build',AREA/'out-msvc','--target','test_world_textures','test_pistol_spin','test_firearm_cycle','test_release_assets','test_disc_files','test_language','test_audio_config','test_missing_texture','test_release','test_prompt_handoff','test_state_costs','test_event_callback','test_shader_cache','test_perf','test_controls','test_msaa','test_effect_settings','test_ragdoll_settings','test_ragdoll_contacts','test_filter','test_intro_skip','test_conversation_skip','test_health_pulse','test_view_layout','test_coop_input','test_coop_controls','test_pause_imgui','test_coop_guest','test_coop_resources','test_coop_body','test_coop_effects','test_coop_cinematics','test_coop_death','test_coop_downed_blur','test_coop_shields','test_coop_progression','test_coop_interactions','test_coop_rewards','test_coop_collectibles','test_coop_ko_rewards','test_coop_turrets','test_coop_turret_assets','test_coop_turret_view','test_health_packs','test_aim_mode','test_coop_menu','test_pc_prompts','test_hd_ui_renderer','test_hd_ui_prompts','test_hd_ui_gpu','test_coop_blur_gpu','test_hd_ui','test_hd_ui_restored','test_hd_ui_reconstruct','test_frontend','test_cheats','test_level_details','test_frontend_fonts','test_menu_style','-j','4'])
+ run('build-interface-fixtures',['cmake','--build',AREA/'out-msvc','--target','test_world_textures','test_pistol_spin','test_firearm_cycle','test_release_assets','test_disc_files','test_language','test_audio_config','test_missing_texture','test_release','test_prompt_handoff','test_state_costs','test_event_callback','test_shader_cache','test_perf','test_controls','test_msaa','test_effect_settings','test_ragdoll_force','test_ragdoll_settings','test_ragdoll_contacts','test_filter','test_intro_skip','test_conversation_skip','test_health_pulse','test_view_layout','test_coop_input','test_coop_controls','test_pause_imgui','test_coop_guest','test_coop_resources','test_coop_body','test_coop_effects','test_coop_cinematics','test_coop_death','test_coop_downed_blur','test_coop_shields','test_coop_progression','test_coop_interactions','test_coop_rewards','test_coop_collectibles','test_coop_ko_rewards','test_coop_turrets','test_coop_turret_assets','test_coop_turret_view','test_health_packs','test_aim_mode','test_coop_menu','test_pc_prompts','test_hd_ui_renderer','test_hd_ui_prompts','test_hd_ui_gpu','test_coop_blur_gpu','test_hd_ui','test_hd_ui_restored','test_hd_ui_reconstruct','test_frontend','test_cheats','test_level_details','test_frontend_fonts','test_menu_style','-j','4'])
  run('build-controller-device',['cmake','--build',AREA/'out-msvc','--target','test_controller_device','-j','4'])
  run('test-controller-device',[AREA/'out-msvc/test_controller_device.exe'])
  run('test-language',[AREA/'out-msvc/test_language.exe'])
@@ -833,6 +865,13 @@ target_include_directories(UrbanChaosXbeTrial PRIVATE "'''+ROOT.as_posix()+'''" 
  run('test-msaa',[AREA/'out-msvc/test_msaa.exe'])
  run('test-msaa-hardware',[AREA/'out-msvc/test_msaa.exe','hardware'])
  run('test-effect-settings',[AREA/'out-msvc/test_effect_settings.exe'])
+ run('test-ragdoll-force',[AREA/'out-msvc/test_ragdoll_force.exe'])
+ run('build-ragdoll-recovery',['cmake','--build',AREA/'out-msvc','--target','test_ragdoll_recovery','-j','4'])
+ run('test-ragdoll-recovery',[AREA/'out-msvc/test_ragdoll_recovery.exe',AREA/'assets/Default.xbe',AREA/'assets/ragdoll-recovery/authored.bin'])
+ run('build-daniels-spawn',['cmake','--build',AREA/'out-msvc','--target','test_daniels_spawn','-j','4'])
+ run('test-daniels-spawn',[AREA/'out-msvc/test_daniels_spawn.exe'])
+ run('build-blink',['cmake','--build',AREA/'out-msvc','--target','test_blink','-j','4'])
+ run('test-blink',[AREA/'out-msvc/test_blink.exe'])
  run('test-ragdoll-settings',[AREA/'out-msvc/test_ragdoll_settings.exe'])
  run('test-ragdoll-contacts',[AREA/'out-msvc/test_ragdoll_contacts.exe'])
  run('test-filter',[AREA/'out-msvc/test_filter.exe'])
@@ -932,6 +971,9 @@ target_include_directories(UrbanChaosXbeTrial PRIVATE "'''+ROOT.as_posix()+'''" 
  run('test-audio-routing',[AREA/'out-msvc/test_audio_routing.exe'])
  run('build-audio-decode-cache',['cmake','--build',AREA/'out-msvc','--target','test_audio_decode_cache','-j','4'])
  run('test-audio-decode-cache',[AREA/'out-msvc/test_audio_decode_cache.exe'])
+ run('build-audio-surround',['cmake','--build',AREA/'out-msvc','--target','test_audio_surround','test_audio_output','-j','4'])
+ run('test-audio-surround',[AREA/'out-msvc/test_audio_surround.exe'])
+ run('test-audio-output',[AREA/'out-msvc/test_audio_output.exe'])
  run('test-audio-cone',[AREA/'out-msvc/test_audio_cone.exe'])
  run('test-audio-factors',[AREA/'out-msvc/test_audio_factors.exe'])
  run('test-resource-refs',[AREA/'out-msvc/test_resource_refs.exe'])

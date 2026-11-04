@@ -21,6 +21,7 @@
 #include "xbe_coop_preview.h"
 #include "xbe_coop_pause.h"
 #include "xbe_cheats.h"
+#include "xbe_audio_output.h"
 #define CHECK(x) do{if(!(x)){std::fprintf(stderr,"FAIL %d: %s\n",__LINE__,#x);std::exit(1);}}while(0)
 
 struct HitRecord {std::string name;ImGuiID id;ImVec2 a,b;};
@@ -84,6 +85,9 @@ void TrialGraphicsInputChanged(){++input_changes;}
 namespace app {
 void* Window(){return nullptr;}
 Mode Output(){return output;}
+static unsigned audio_saves=0;
+std::recursive_mutex& UiLock(){static std::recursive_mutex lock;return lock;}
+void Save(){++audio_saves;}
 }
 namespace trial_graphics {
 static bool hud_widescreen=true;
@@ -953,7 +957,7 @@ static void CheckControls(const TrialFrontendFrame& options){
     CHECK(&ControlsBinding(2,0)!=&ControlsBinding(29,0));
     CHECK(&ControlsBinding(29,1)==&controls_draft.previous_firearm[1]);
     CHECK(std::strcmp(ControlsGroup(16),"COMBAT / INTERACTION")==0&&std::strcmp(ControlsGroup(17),"MOVEMENT / AIMING")==0);
-    CHECK(std::strcmp(ControlsGroup(28),"TEAMMATE ORDERS")==0&&std::strcmp(ControlsGroup(33),"MENU CONTROLS")==0);
+    CHECK(std::strcmp(ControlsGroup(31),"TEAMMATE ORDERS")==0&&std::strcmp(ControlsGroup(36),"MENU CONTROLS")==0);
     CHECK(ControlsAction(7)==30&&ControlsHealthPack(30));
     CHECK(&ControlsBinding(30,0)==&controls_draft.health_pack[0][0]);
     CHECK(ControlsAction(8)==34&&ControlsHealPartner(34)&&ControlsSlots(34)==2);
@@ -964,7 +968,7 @@ static void CheckControls(const TrialFrontendFrame& options){
         if(device)CHECK(std::strcmp(ControlsName(2),"Firearms")==0&&!ControlsPreviousFirearm(29));
     }
     controls_device=0;CHECK(ControlsAction(0)==0&&ControlsAction(1)==28);
-    CHECK(ControlsAction(23)==33&&ControlsMouseInvert(33)&&ControlsSlots(33)==1);
+    CHECK(ControlsAction(25)==33&&ControlsMouseInvert(33)&&ControlsSlots(33)==1);
     CHECK(std::strcmp(ControlsName(33),"Invert mouse look")==0);
 
     CHECK(!ControlsDirty());
@@ -1017,7 +1021,7 @@ static void CheckControls(const TrialFrontendFrame& options){
     // actions but not the hold-and-drag orders action.
     Click(1);trial_controls::capture.Sample(0,0,true);trial_controls::capture.Wheel(256);DrawFrame();Settle();
     CHECK(controls_draft.keyboard[0][0]==256&&ControlsDirty());footer(1);CHECK(!ControlsDirty());
-    controls_scroll=28;Settle();
+    controls_scroll=31;Settle();
     CHECK(ControlsAction(controls_scroll)==24);Click(1);CHECK(controls_capture_action==24);
     trial_controls::capture.Sample(0,0,true);trial_controls::capture.Wheel(257);DrawFrame();Settle();
     CHECK(controls_capture_action==24&&trial_controls::CaptureWaiting()&&!ControlsDirty());
@@ -1032,7 +1036,7 @@ static void CheckControls(const TrialFrontendFrame& options){
     Click(3);CHECK(controls_capture_action==26);source('P');
     CHECK(controls_draft.spin_binding[0][0]=='P');
     footer(1);CHECK(!ControlsDirty()); // Discard restores mode and button together.
-    controls_scroll=22;Settle();
+    controls_scroll=24;Settle();
     CHECK(controls_draft.sensitivity==400);
     const auto slider=hits[1];const float slider_y=(slider.a.y+slider.b.y)*.5f;
     Move(418*output.width/640.f,slider_y);ImGui::GetIO().AddMouseButtonEvent(0,true);DrawFrame();
@@ -1042,7 +1046,7 @@ static void CheckControls(const TrialFrontendFrame& options){
     CHECK(controls_draft.sensitivity==1);Key(ImGuiKey_LeftArrow);CHECK(controls_draft.sensitivity==1);
     Key(ImGuiKey_RightArrow);CHECK(controls_draft.sensitivity==2);
     Key(ImGuiKey_Tab);Key(ImGuiKey_Enter);CHECK(trial_controls::live_controls.sensitivity==2&&!ControlsDirty());
-    controls_scroll=23;Settle();const unsigned stick_invert=profile_draft[1];
+    controls_scroll=25;Settle();const unsigned stick_invert=profile_draft[1];
     CHECK(!controls_draft.invert_mouse);Click(1);
     CHECK(!controls_draft.invert_mouse&&controls_capture_action<0); // Label click selects; arrows/value edit.
     auto toggle_mouse=[&](){const auto row=hits[1];ClickPoint(row.b.x-35*float(output.width)/640,(row.a.y+row.b.y)/2);};
@@ -1052,7 +1056,19 @@ static void CheckControls(const TrialFrontendFrame& options){
     footer(0);CHECK(trial_controls::live_controls.invert_mouse==1&&!ControlsDirty());
     footer(2);CHECK(!controls_draft.invert_mouse&&ControlsDirty());
     footer(1);CHECK(controls_draft.invert_mouse==1&&!ControlsDirty());
-    controls_scroll=23;Settle();toggle_mouse();footer(0);CHECK(!trial_controls::live_controls.invert_mouse&&!ControlsDirty());
+    controls_scroll=25;Settle();toggle_mouse();footer(0);CHECK(!trial_controls::live_controls.invert_mouse&&!ControlsDirty());
+    controls_scroll=26;Settle();CHECK(ControlsZoomSensitivity(ControlsAction(26)));
+    CHECK(controls_draft.zoom_sensitivity==100);
+    auto zoom_slider=hits[1];const float zoom_y=(zoom_slider.a.y+zoom_slider.b.y)/2;
+    Move(418*output.width/640.f,zoom_y);ImGui::GetIO().AddMouseButtonEvent(0,true);DrawFrame();
+    CHECK(controls_draft.zoom_sensitivity==1&&controls_capture_action<0);
+    Move(542*output.width/640.f,zoom_y);DrawFrame();CHECK(controls_draft.zoom_sensitivity==200);
+    ImGui::GetIO().AddMouseButtonEvent(0,false);Settle();Key(ImGuiKey_LeftArrow);
+    CHECK(controls_draft.zoom_sensitivity==199);
+    frontend_events=64;DrawFrame();CHECK(controls_draft.zoom_sensitivity==199);
+    footer(0);CHECK(trial_controls::live_controls.zoom_sensitivity==199&&!ControlsDirty());
+    footer(2);CHECK(controls_draft.zoom_sensitivity==100);footer(1);
+    CHECK(controls_draft.zoom_sensitivity==199&&!ControlsDirty());
     // Device selection returns to the top. Controller sources are raw, and
     // Replace clears an overlapping source instead of silently invoking both.
     auto device=hits[0];ClickPoint(device.b.x-15*float(output.width)/640,(device.a.y+device.b.y)/2);
@@ -1095,8 +1111,16 @@ static void CheckControls(const TrialFrontendFrame& options){
     CHECK(!TrialControlsProfile(stale,true)&&stale[5]==75); // A changed profile rejects a queued write.
     TrialControlsProfile(snapshot,true);ControlsReadDraft();Close();Settle();
     open();controls_device=1;controls_player=1;ControlsReadDraft();Settle();
-    CHECK(ControlsCount()==36&&ControlsProfileStart()==29&&ControlsHealthPack(26));
+    CHECK(ControlsCount()==40&&ControlsProfileStart()==33&&ControlsHealthPack(26));
     const auto first_profile=trial_controls::live_controls;
+    CHECK(ControlsWalk(30)&&ControlsWalkMode(31)&&ControlsHud(32));
+    ControlsBegin(31,1);CHECK(controls_draft.walk_mode==1&&controls_capture_action<0);
+    ControlsBegin(30,0);DrawFrame();Settle();
+    trial_controls::second_capture.Sample(0,0,true);trial_controls::second_capture.Sample(0,9,true);
+    DrawFrame();Settle();if(controls_conflict_action>=0)Click(0);
+    CHECK(controls_draft.walk_binding[1][0]==9);
+    footer(1);CHECK(!controls_draft.walk_mode&&!controls_draft.walk_binding[1][0]);
+    ControlsBegin(29,0);CHECK(controls_draft.zoom_sensitivity==99&&controls_capture_action<0);
     ControlsBegin(27,0);CHECK(controls_draft.aim_mode==1&&controls_capture_action<0);
     ControlsBegin(28,0);DrawFrame();Settle();
     trial_controls::second_capture.Sample(0,0,true);trial_controls::second_capture.Sample(0,12,true);
@@ -1107,6 +1131,7 @@ static void CheckControls(const TrialFrontendFrame& options){
     DrawFrame();Settle();CHECK(controls_conflict_action==7);Click(0);
     CHECK(controls_draft.health_pack[1][0]==8&&!controls_draft.controller[7][0]);
     footer(0);CHECK(trial_controls::second_controls.health_pack[1][0]==8);
+    CHECK(trial_controls::second_controls.zoom_sensitivity==99);
     CHECK(trial_controls::second_controls.aim_mode==1&&trial_controls::second_controls.scope_zoom[1][0]==12);
     CHECK(!std::memcmp(&first_profile,&trial_controls::live_controls,sizeof(first_profile)));
     Close();controls_player=controls_device=0;Settle();
@@ -1146,7 +1171,7 @@ static void CheckPerPlayerSettings(){
             const bool apply_before=profile_apply;
             const unsigned binding=controls_draft.controller[0][0]==22?23:22;
             controls_draft.controller[0][0]=binding;
-            if(player){CHECK(ControlsCount()==36);profile_draft[1]^=1;profile_draft[5]=23;}
+            if(player){CHECK(ControlsCount()==40);profile_draft[1]^=1;profile_draft[5]=23;}
             CHECK(ControlsDirty());fail_apply=true;CHECK(!ControlsApply());fail_apply=false;CHECK(ControlsDirty());
             CHECK(ControlsApply());
             if(player)CHECK(profile_apply==apply_before&&!std::memcmp(native_before,profile_live,sizeof(native_before))&&!std::memcmp(pending_before,profile_pending,sizeof(pending_before)));
@@ -1645,7 +1670,7 @@ int main(){
     for(unsigned kind:{4u,5u,6u}){
         auto page=MakeList(kind);
         for(unsigned i=0;i<page.source.count;++i){page.source.rows[i].actions=UC_HF_ROW_LEFT|UC_HF_ROW_RIGHT;std::strcpy(page.values[i],"16");}
-        keyboard_mode=1;Publish(page);CHECK(hits.size()==page.source.count+1);
+        keyboard_mode=1;Publish(page);CHECK(hits.size()==page.source.count+(kind==4?2:1));
         auto r=hits[0];ClickPoint(r.a.x+345*output.width/640.f,(r.a.y+r.b.y)/2);
         auto action=Take();CHECK(action.kind==UC_HF_LEFT&&action.index==0);
         Key(ImGuiKey_RightArrow);action=Take();CHECK(action.kind==UC_HF_RIGHT&&action.index==0);
@@ -1653,7 +1678,22 @@ int main(){
         auto transition=page;transition.source.source_kind|=UC_HF_TRANSITION;
         TrialFrontendPublish(transition);DrawFrame();CHECK(!TrialFrontendOwns(page.source.owner,UC_HF_LIST));
         Key(ImGuiKey_RightArrow);EmptyAction();
-        keyboard_mode=0;Publish(page);CHECK(hits.empty()&&!TrialGraphicsOpen());
+        keyboard_mode=0;Publish(page);
+        if(kind==4){
+            CHECK(hits.size()==page.source.count+2&&TrialGraphicsOpen());
+            trial_audio::output_channels=8;TrialSoundOutput=0;trial_audio::Initialize();
+            for(unsigned m=1;m<=3;++m){
+                auto row=hits[page.source.count];
+                ClickPoint(row.b.x-10*output.width/640.f,(row.a.y+row.b.y)/2);
+                CHECK(trial_audio::requested==m%3&&TrialSoundOutput==m%3);EmptyAction();
+            }
+            TrialFrontendPad(0,0,0,0,0);Settle();TrialFrontendPad(8,0,0,0,0);Settle();
+            CHECK(trial_audio::requested==1);EmptyAction();
+            TrialFrontendPad(0,0,0,0,0);Settle();TrialFrontendPad(0,0,255,0,0);Settle();
+            action=Take();CHECK(action.kind==UC_HF_BACK);
+            TrialFrontendPad(0,0,0,0,0);Settle();
+            CHECK(app::audio_saves==4);trial_audio::output_channels=2;
+        }else CHECK(hits.empty()&&!TrialGraphicsOpen());
         keyboard_mode=1;
     }
     std::printf("UI totals: input changes=%u, applies=%u, frames=%u\n",input_changes,applied-before_ui,frames);

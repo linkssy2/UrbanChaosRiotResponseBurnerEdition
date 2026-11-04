@@ -3,9 +3,11 @@ from pathlib import Path
 import hashlib
 import re
 import struct
+from prepare_xbe_coop_interactions import runtime_call_guest
 
 INCLUDE='#include "xbe_aim_mode.h"\n'
 PINS=(
+    (0xbfd5d,0x8b,'35876d969f2f82dcb45641b54fa9af0fe831f6eee0746f1a8db85c8d2724f486'),
     (0xbe700,0xc4,'4d527175b19d80a7d759efd7d2a268bd38e8ac451efd01c9a87f54a19deafa66'),
     (0xbe870,0xbf,'8d0b0c5f5087b5efbb82d123a981aa71ce8fc262b1a8a1c948b6b222224a2071'),
     (0xbee50,0x123,'849366b75b9097a70968abe48c201db58b865896c977535d7e5e9902fd223e18'),
@@ -23,7 +25,9 @@ HOOKS={
         ('\t// 000BE8A6 push 0x01\n\t{ uint32_t v = (uint32_t)(0x1u); X86_PUSH32(v); }',
          '\t// 000BE8A6 push 0x01\n\t{ uint32_t v = trial_aim_mode.QueryMode(); X86_PUSH32(v); }'),
         ('\t// 000BE8AE fld [0x0044C174]',
-         '\ttrial_aim_mode.Filter(ctx);\n\t// 000BE8AE fld [0x0044C174]')),
+         '\ttrial_aim_mode.Filter(ctx);\n\t// 000BE8AE fld [0x0044C174]'),
+        ('\t// 000BFD86 movss xmm0, dword ptr [esp+0x3C]',
+         '\tTrialAimScaleStick(ctx,base);\n\t// 000BFD86 movss xmm0, dword ptr [esp+0x3C]')),
     21:(('X86_FUNC(__imp__sub_000D2AB0) {',
          'X86_FUNC(__imp__sub_000D2AB0) {\n\tTrialAimUpdate(ctx,base);'),),
 }
@@ -75,8 +79,15 @@ def prepare(area):
            native.replace('__imp__sub_000BE870','OriginalZoom',1),
            function(patched[19],'000BE870').replace('__imp__sub_000BE870','HeldZoom',1),
            derived.replace('__imp__sub_000BEE50','NativeCameraZoom',1))
+    # Replay the actual final angular integration and native pitch clamp.
+    look=function(originals[19],'000BEF80')
+    tail=look[look.index('\t// 000BFD86 '):look.index('\t// 000BFDE8 ')]
+    parts+=tuple('X86_FUNC('+name+') {\nX86_LOAD_FLAGS();\n'+hook+tail+'}\n'
+                 for name,hook in (('OriginalLook',''),('ZoomLook','TrialAimScaleStick(ctx,base);\n')))
     fixture=(local/'test_xbe_aim_mode.cpp').read_text();marker='// NATIVE_AIM_CONTRACTS'
     assert fixture.count(marker)==1
+    assert fixture.count('// PRODUCTION_CALL_GUEST')==1
+    fixture=fixture.replace('// PRODUCTION_CALL_GUEST',runtime_call_guest())
     for unit,s in patched.items():(area/f'generated/game/x86_recomp.{unit}.cpp').write_text(INCLUDE+s)
     for name in ('xbe_aim_mode.cpp','xbe_aim_mode.h'):(area/'src/common'/name).write_text((local/name).read_text())
     (area/'src/compat/test_aim_mode.cpp').write_text(fixture.replace(marker,'\n'.join(parts)))

@@ -2,6 +2,7 @@
 // Only inventory lookup, physical button bytes and sound/effect sinks are stubs.
 #undef NDEBUG
 #include <array>
+#include <algorithm>
 #include <cassert>
 #include <cstdio>
 #include <cstdlib>
@@ -9,7 +10,7 @@
 #include <vector>
 namespace aim_test {
 std::array<uint8_t,0x800000> memory{};
-unsigned modes[2]{};
+unsigned modes[2]{},sensitivity[2]{100,100};
 constexpr uint32_t P=0x600000,Q=0x602000,W=0x610000,L=0x620000,V=0x630000;
 constexpr uint32_t M=0x640000,PORTS=0x641000,BUTTONS=0x642000,I=0x650000,D=0x660000,S=0x7f0000;
 bool committed=true;
@@ -21,9 +22,15 @@ std::vector<uint32_t> events;
 unsigned queries[2]{},query_modes[2]{};
 }
 namespace mem {bool IsCommitted(uint32_t page){return aim_test::committed&&page<aim_test::memory.size();}}
-namespace trial_controls {unsigned AimMode(unsigned slot){assert(slot<2);return aim_test::modes[slot];}}
+namespace kernel {uint8_t* g_base=aim_test::Data();}
+namespace trial_controls {
+unsigned AimMode(unsigned slot){assert(slot<2);return aim_test::modes[slot];}
+unsigned ZoomSensitivity(unsigned slot){assert(slot<2);return aim_test::sensitivity[slot];}
+}
 uint32_t TrialCoopPlayer(unsigned slot){return slot<2?(slot?aim_test::Q:aim_test::P):0;}
 #include "../common/xbe_aim_mode.cpp"
+using std::isfinite;
+#include "../common/pc_mouse_rotation.h"
 [[noreturn]] void x86_trap(X86Context&,uint32_t,const char*){std::abort();}
 X86_FUNC(NativeQuery);
 X86_FUNC(sub_00041F80){
@@ -56,10 +63,14 @@ void x86_icall(X86Context& c,uint8_t* base,uint32_t target){
     ++queries[slot];query_modes[slot]=mode;NativeQuery(c,base);
 }
 // NATIVE_AIM_CONTRACTS
+namespace kernel {
+// PRODUCTION_CALL_GUEST
+}
 namespace aim_test {
 X86Context Context(uint32_t owner=P){X86Context c{};c.ecx=owner;c.esp=S;c.ebx=17;c.esi=19;c.edi=23;c.top=0;Put(S,0x123456);return c;}
 void Seed(bool coop=true){
     memory.fill(0);events.clear();committed=true;
+    sensitivity[0]=sensitivity[1]=100;
     modes[0]=modes[1]=0;queries[0]=queries[1]=query_modes[0]=query_modes[1]=0;
     trial_coop::SetActive(coop);
     for(unsigned slot=0;slot<2;++slot){
@@ -81,7 +92,8 @@ void Weapon(unsigned slot,unsigned weapon){const uint32_t owner=slot?Q:P;Put(own
 void Step(unsigned slot,bool down,bool edge=false,bool cycle=false,bool allowed=true){
     const auto owner=slot?Q:P;Data()[BUTTONS+slot]=uint8_t((down?1:0)|(edge?2:0));
     TrialAimInput(slot,cycle,allowed);auto c=Context(owner);TrialAimUpdate(c,Data());
-    HeldZoom(c,Data());assert(c.esp==S+4);
+    const auto state=Word(owner+0x170);
+    if(state!=4&&state!=8){HeldZoom(c,Data());assert(c.esp==S+4);}
     c=Context(owner);NativeCameraZoom(c,Data());assert(c.esp==S+4);
 }
 void ToggleParity(){
@@ -128,6 +140,49 @@ void Holds(){
     Seed();modes[0]=1;Weapon(0,26);Step(0,false);Step(0,true);Step(0,true,false,true);
     assert(Word(P+0x438)==0&&Word(P+0x1cc)==0);
 }
+float Float(uint32_t at){float v;std::memcpy(&v,Data()+at,4);return v;}
+void ZoomSensitivity(){
+    // Native hold/toggle and both scope levels choose the multiplier, never the physical key.
+    for(bool coop:{false,true})for(unsigned slot=0;slot<(coop?2u:1u);++slot)
+    for(unsigned mode:{0u,1u})for(unsigned zoom:{0u,1u,2u})for(unsigned percent:{1u,25u,100u,200u}){
+        Seed(coop);modes[slot]=mode;sensitivity[slot]=percent;sensitivity[1-slot]=173;
+        const uint32_t owner=slot?Q:P;Put(owner+0x438,zoom);
+        const double scale=TrialAimZoomScale(Data(),owner),expected=zoom?percent/100.0:1.0;
+        assert(scale==expected);
+        for(float delta:{-.3f,-.001f,0.f,.001f,.3f}){
+            auto c=Context(owner);c.edi=owner;c.xmm[1].f[0]=-1.5f;
+            Real(owner+0x37c,1.5f);Real(owner+0x688,1.4f);Real(owner+0x68c,.2f);Real(owner+0x690,.7f);
+            Real(S+0x30,delta);Real(S+0x3c,delta);
+            const auto saved=c;const unsigned top=c.top;TrialAimScaleStick(c,Data());
+            assert(!std::memcmp(&c,&saved,sizeof c)&&c.top==top);
+            Real(S+0x30,delta);Real(S+0x3c,delta);ZoomLook(c,Data());
+            const float pitch=Float(owner+0x688),yaw=Float(owner+0x68c);
+            assert(std::fabs(pitch-std::clamp(1.4f+float(delta*expected),-1.5f,1.5f))<1e-6f);
+            assert(std::fabs(yaw-(.2f+float(delta*expected)))<1e-6f&&Float(owner+0x690)==.7f);
+            if(percent==100||!zoom){
+                c=saved;Real(owner+0x688,1.4f);Real(owner+0x68c,.2f);
+                Real(S+0x30,delta);Real(S+0x3c,delta);OriginalLook(c,Data());
+                assert(Float(owner+0x688)==pitch&&Float(owner+0x68c)==yaw);
+            }
+        }
+        // Fractional effective sensitivity must not round to zero at the low end.
+        for(unsigned regular:{1u,400u,1600u}){
+            float pitch=0,yaw=0;
+            assert(ucrr_pc_rotate(&pitch,&yaw,1.5f,10,5,regular*scale));
+            assert(std::fabs(yaw-(-.0025*(regular/100.0)*expected))<1e-6);
+            assert(yaw<0&&pitch<0);
+        }
+        Put(owner+0x438,0);assert(TrialAimZoomScale(Data(),owner)==1);
+    }
+    Seed();sensitivity[0]=25;Put(P+0x438,1);
+    for(unsigned state:{3u,7u,11u,12u,13u}){Put(P+0x170,state);assert(TrialAimZoomScale(Data(),P)==1);}
+    for(unsigned state:{4u,8u}){Put(P+0x170,state);assert(TrialAimZoomScale(Data(),P)==.25);}
+    Put(P+0x170,0);Put(W+0x10,0x800);assert(TrialAimZoomScale(Data(),P)==1);
+    Put(W+0x10,0);Real(P+0x9c,0);assert(TrialAimZoomScale(Data(),P)==1);
+    Real(P+0x9c,100);Put(P+0x54,0xffffffff);assert(TrialAimZoomScale(Data(),P)==1);
+    assert(TrialAimZoomScale(nullptr,P)==1);Seed(false);Put(Q+0x438,1);sensitivity[1]=25;
+    assert(TrialAimZoomScale(Data(),Q)==1);
+}
 void CancelAndIdentity(){
     for(unsigned reason=0;reason<14;++reason){
         Seed();modes[0]=1;Step(0,false);Step(0,true);assert(Word(P+0x438)==1);
@@ -165,8 +220,22 @@ void CancelAndIdentity(){
     }
     Seed(false);modes[1]=1;auto c=Context(Q);TrialAimModeScope unrelated(c,Data());assert(unrelated.QueryMode()==1);
 }
+void FiringHold(){
+    for(bool coop:{false,true})for(unsigned slot=0;slot<(coop?2u:1u);++slot)
+    for(unsigned state:{4u,8u}){
+        Seed(coop);modes[slot]=1;Step(slot,false);Step(slot,true);
+        const auto owner=slot?Q:P,other=slot?P:Q;Put(owner+0x170,state);
+        const auto sounds=events.size();
+        for(unsigned tick=0;tick<120;++tick)Step(slot,true);
+        assert(Word(owner+0x438)==1&&Word(other+0x438)==0&&events.size()==sounds);
+        auto c=Context(owner);const auto saved=c;uint8_t stack[256];std::memcpy(stack,Data()+S-256,256);
+        TrialAimUpdate(c,Data());assert(!std::memcmp(&saved,&c,sizeof c)&&!std::memcmp(stack,Data()+S-256,256));
+        Step(slot,false);assert(Word(owner+0x438)==0);
+        Put(owner+0x170,0);Step(slot,false);Step(slot,true);assert(Word(owner+0x438)==1);
+    }
+}
 }
 int main(){
-    aim_test::ToggleParity();aim_test::Holds();aim_test::CancelAndIdentity();
-    std::puts("Held aim: native input/zoom/camera, scoped levels, two-player isolation, shield, cancellation and identity passed");
+    aim_test::ZoomSensitivity();aim_test::ToggleParity();aim_test::Holds();aim_test::CancelAndIdentity();aim_test::FiringHold();
+    std::puts("Zoom sensitivity and held aim: native input/zoom/camera, scoped levels, two-player isolation, shield, cancellation and identity passed");
 }

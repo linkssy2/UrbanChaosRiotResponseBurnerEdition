@@ -96,7 +96,7 @@ class BurnerLauncher : Form {
         manage.AutoScrollMinSize=new Size(0,manageHeight);
         foreach(var page in new[]{home,source,manage}){page.RowCount++;page.RowStyles.Add(new RowStyle(SizeType.Percent,100));}
         var feedback=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=1};feedback.RowStyles.Add(new RowStyle(SizeType.Percent,100));feedback.RowStyles.Add(new RowStyle(SizeType.Absolute,18));status.Text="Checking game data...";status.Dock=DockStyle.Fill;status.Font=new Font("Segoe UI",10);status.Padding=new Padding(0,8,0,0);feedback.Controls.Add(status,0,0);progress.Dock=DockStyle.Fill;progress.Visible=false;feedback.Controls.Add(progress,0,1);panel.Controls.Add(feedback,0,3);
-        var footer=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2};footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,70));footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,30));footer.Controls.Add(TextLabel("v0.09  |  Windows x64 / Direct3D 12\nNo disc files are included.",9),0,0);
+        var footer=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2};footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,70));footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,30));footer.Controls.Add(TextLabel("v0.10  |  Windows x64 / Direct3D 12\nNo disc files are included.",9),0,0);
         cancel=MakeButton("QUIT",(s,e)=>{if(busy&&!running&&cancelPath!=null){File.WriteAllText(cancelPath,"");status.Text="Cancelling safely...";cancel.Enabled=false;}else if(!busy)Close();});footer.Controls.Add(cancel,1,0);panel.Controls.Add(footer,0,4);
         ApplyStatus(new Dictionary<string,object>{{"ready",false}});ShowPage(home);
 #if !LAUNCHER_PREVIEW
