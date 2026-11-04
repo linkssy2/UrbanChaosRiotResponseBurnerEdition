@@ -44,6 +44,7 @@ void Fades(std::initializer_list<Fade> entries){
 void Register(uint32_t p){const uint32_t id=Word(p+0x54),entry=registry+0x3c+(id&1023)*8;Put(entry,id);Put(entry+4,p);}
 X86Context Context(uint32_t owner){X86Context c{};c.esp=stack;c.ecx=owner;c.eax=0x1234;c.esi=0x5678;c.edi=0x9876;c.ebp=0xabcd;c.cf=1;c.pf=1;c.top=2;return c;}
 void Setup(bool coop=true){
+    trial_health::enabled=true;
     kernel::memory.fill(0);health_packs::world=0;health_packs::medics.clear();health_packs::delivery=nullptr;health_packs::medic_owner=0;
     for(unsigned i=0;i<2;++i){health_packs::players[i]={};health_packs::published[i]=0;health_packs::pending[i]=0;health_packs::held[i]=false;health_packs::injections[i]={};hypospray[i]=false;}
     for(auto& r:health_packs::restored)r={};
@@ -567,6 +568,82 @@ void HudLetterbox(){
     assert(TrialHealthPackSnapshot(2).opacity==0);
     puts("health HUD fade: original owner/category query, native opacity, both players/SP, wildcard/max, caller isolation and unchanged injection admission passed");
 }
+void DifficultyAndToggle(){
+    Setup();auto profile=Context(p0);OriginalProfile(profile,Bytes());assert(profile.eax+0x48==0x5152f8);
+    for(bool coop:{false,true})for(unsigned difficulty=0;difficulty<4;++difficulty){
+        Setup(coop);Put(0x5152f8,difficulty);const unsigned limit=difficulty==0?3:difficulty==1?2:1;
+        for(unsigned slot=0;slot<(coop?2u:1u);++slot){
+            const uint32_t owner=slot?p1:p0;
+            assert(health_packs::players[slot].count==1);
+            Update(slot);assert(TrialHealthPackSnapshot(slot).capacity==limit);
+            for(unsigned count=0;count<=limit;++count){
+                health_packs::players[slot].count=count;Update(slot);
+                assert(TrialHealthPackMedicPrompt(Bytes(),owner,client,medic,false)==(count<limit));
+            }
+            health_packs::players[slot].count=3;Update(slot);assert(TrialHealthPackSnapshot(slot).count==limit);
+        }
+        Deliver(true);assert(Word(world+0xf74)==3); // both at the difficulty cap
+        health_packs::players[0].count=limit-1;
+        Deliver(true);assert(Word(world+0xf74)==2&&TrialHealthPackSnapshot(0).count==limit);
+    }
+    // Off keeps the stock-limited original injection and the actual request owner.
+    for(bool coop:{false,true})for(unsigned slot=0;slot<(coop?2u:1u);++slot){
+        Setup(coop);const auto owner=slot?p1:p0,other=slot?p0:p1;
+        trial_health::enabled=false;Float(owner+0x9c,600);Update(slot);
+        const auto hidden=TrialHealthPackSnapshot(slot);
+        assert(!hidden.visible&&!hidden.can_revive&&!hidden.can_heal_partner);
+        assert(TrialHealthPackMedicPrompt(Bytes(),owner,client,medic,false));
+        if(coop)assert(!TrialHealthPackMedicPrompt(Bytes(),other,client,medic,false));
+        assert(TrialHealthPackMedicClaim(Bytes(),owner,client,medic));Put(client+0xb4,4);
+        duplicate=true;Deliver(true);assert(Bytes()[owner+0x470]&&!Bytes()[other+0x470]);
+        assert(Word(world+0xf74)==2&&stock_calls==1&&health_packs::players[slot].count==1);
+        auto c=Context(behavior);TrialHealthPackMedicScope scope(c,Bytes());
+        for(double health:{50.,100.}){
+            c.top=0;c.st[0]=health;c.esp=stack;StoredEligibility(c,Bytes());assert(bool(c.eax)==(health<100));
+        }
+        Bytes()[owner+0x470]=0;nearby=other;
+        for(auto use:{TrialHealthPackUse::Context,TrialHealthPackUse::Self,TrialHealthPackUse::Partner}){
+            TrialHealthPackRequest(slot,use);Press(slot);Update(slot);
+            assert(!Bytes()[owner+0x470]&&!revives&&health_packs::players[slot].count==1);
+        }
+        trial_health::enabled=true;Update(slot);assert(TrialHealthPackSnapshot(slot).count==1);
+        health_packs::players[slot].count=0;trial_health::enabled=false;Update(slot);trial_health::enabled=true;Update(slot);
+        assert(TrialHealthPackSnapshot(slot).count==0); // switching never refills inventory
+    }
+    // Disable after admission: discard queued actions and consume cancelled
+    // partner Heal events rather than falling through to a self-heal.
+    Setup();nearby=p1;revive_success=true;Press(0);trial_health::enabled=false;Update(0);
+    assert(!Bytes()[p0+0x470]&&!revives);
+    for(bool update:{false,true}){
+        Setup();nearby=p1;revive_success=true;Press(0);Update(0);StartInjection(0);
+        trial_health::enabled=false;if(update)Update(0);
+        Bytes()[p0+0x1a2]=1;InjectionTick(0);
+        assert(!revives&&!self_pulses&&health_packs::players[0].count==1);
+    }
+    Setup(false);Put(0x5152f8,0xffffffffu);Update(0);assert(TrialHealthPackSnapshot(0).capacity==1);
+    for(unsigned slot=0;slot<2;++slot){
+        const uint32_t owner=slot?p1:p0,other=slot?p0:p1;
+        // A mode change during a handoff rechecks eligibility but never changes its owner.
+        Setup();assert(TrialHealthPackMedicClaim(Bytes(),owner,client,medic));Put(client+0xb4,4);
+        trial_health::enabled=false;Deliver(true);
+        assert(Word(world+0xf74)==3&&!receipts&&!stock_calls); // full health: no direct injection
+        Float(owner+0x9c,600);Deliver(true);
+        assert(Bytes()[owner+0x470]&&!Bytes()[other+0x470]&&Word(world+0xf74)==2&&stock_calls==1);
+        assert(health_packs::players[slot].count==1&&health_packs::players[1-slot].count==1);
+
+        Setup();trial_health::enabled=false;Float(owner+0x9c,600);Update(slot);
+        assert(TrialHealthPackMedicClaim(Bytes(),owner,client,medic));Put(client+0xb4,4);
+        trial_health::enabled=true;Put(0x5152f8,2);Deliver(true);
+        assert(Word(world+0xf74)==3&&!receipts&&!stock_calls); // now at Elite's pack limit
+        health_packs::players[slot].count=0;Deliver(true);
+        assert(Word(world+0xf74)==2&&stock_calls==1&&!Bytes()[owner+0x470]&&!Bytes()[other+0x470]);
+        assert(TrialHealthPackSnapshot(slot).count==1&&TrialHealthPackSnapshot(slot).capacity==1);
+        Put(0x5152f8,0);Update(slot);
+        assert(TrialHealthPackSnapshot(slot).count==1&&TrialHealthPackSnapshot(slot).capacity==3);
+    }
+    puts("health pack options: difficulty 3/2/1/1, shared caps, Off original medic delivery, isolated owners, hidden HUD and cancelled uses passed");
+    puts("pending medic handoff: Off/On and difficulty changes recheck eligibility, retain requester and spend stock exactly once");
+}
 void Checkpoints(){
     Setup();
     constexpr uint32_t settings=0x640000,save=0x641000,snapshot=save+4;
@@ -594,6 +671,21 @@ void Checkpoints(){
     health_packs::players[1].actor=0;TrialHealthPackCheckpointLoaded(load,Bytes());
     auto create=Context(p1);create.eax=p1;TrialHealthPackCreated(create,Bytes());assert(TrialHealthPackSnapshot(1).count==2);
     health_packs::players[1].count=0;Update(1);assert(TrialHealthPackSnapshot(1).count==0);
+    // Existing three-pack companion records remain valid, then clamp to the
+    // selected difficulty without rewriting the original game checkpoint.
+    health_packs::players[1].count=3;TrialHealthPackCheckpointSaved(save_context,Bytes());
+    health_packs::checkpoints.clear();
+    for(unsigned difficulty:{1u,2u,3u}){
+        Put(0x5152f8,difficulty);TrialHealthPackCheckpointLoaded(load,Bytes());
+        assert(TrialHealthPackSnapshot(1).count==(difficulty==1?2u:1u));
+        health_packs::players[1].actor=0;TrialHealthPackCheckpointLoaded(load,Bytes());
+        TrialHealthPackCreated(create,Bytes());assert(TrialHealthPackSnapshot(1).count==(difficulty==1?2u:1u));
+        trial_health::enabled=false;health_packs::players[1].count=0;
+        TrialHealthPackCheckpointLoaded(load,Bytes());assert(!TrialHealthPackSnapshot(1).visible);
+        trial_health::enabled=true;Update(1);
+        assert(TrialHealthPackSnapshot(1).count==(difficulty==1?2u:1u));
+    }
+    Put(0x5152f8,0);
     // Different profiles, mission entries, checkpoint bytes and truncated
     // companions cannot restore packs from another save or mint a start pack.
     for(uint32_t address:{0x5152b4u,world+0x2c,snapshot+0x174}){
@@ -609,4 +701,4 @@ void Checkpoints(){
     std::filesystem::remove(directory);
 }
 }
-int main(){hp_test::GuestReturnContract();hp_test::Pickup();hp_test::Eligibility();hp_test::MedicOrders();hp_test::Use();hp_test::PartnerInjection();hp_test::LivingPartner();hp_test::RevivePrompt();hp_test::HealthBarExtent();hp_test::HudVisibility();hp_test::HudLetterbox();hp_test::Checkpoints();std::puts("health packs: retail delivery/stock/eligibility/HUD admission, isolated input, healing, revive and checkpoint contracts passed");}
+int main(){hp_test::GuestReturnContract();hp_test::Pickup();hp_test::Eligibility();hp_test::MedicOrders();hp_test::Use();hp_test::PartnerInjection();hp_test::LivingPartner();hp_test::RevivePrompt();hp_test::HealthBarExtent();hp_test::HudVisibility();hp_test::HudLetterbox();hp_test::DifficultyAndToggle();hp_test::Checkpoints();std::puts("health packs: retail delivery/stock/eligibility/HUD admission, isolated input, healing, revive and checkpoint contracts passed");}

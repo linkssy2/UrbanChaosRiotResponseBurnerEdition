@@ -1,4 +1,5 @@
 #include "xbe_health_packs.h"
+#include "xbe_health_settings.h"
 #include "xbe_player_actions.h"
 #include "xbe_coop.h"
 #include "xbe_coop_death.h"
@@ -8,6 +9,7 @@
 #include "kernel/memory.h"
 #include "xbe_input_memory.h"
 #include <array>
+#include <algorithm>
 #include <atomic>
 #include <cmath>
 #include <cstdio>
@@ -25,7 +27,7 @@
 #endif
 
 namespace health_packs {
-constexpr unsigned capacity=3;
+constexpr unsigned file_capacity=3;
 struct Player {uint32_t actor=0,id=0xffffffffu;unsigned count=1;bool hud=false;float hud_opacity=0,maximum=0;};
 Player players[2];
 struct Injection {
@@ -55,6 +57,12 @@ thread_local uint32_t medic_owner=0;
 thread_local TrialHealthPackDeliveryScope* delivery=nullptr;
 uint32_t Read(const uint8_t* b,uint32_t p){uint32_t v;std::memcpy(&v,b+p,4);return v;}
 float Real(const uint8_t* b,uint32_t p){float v;std::memcpy(&v,b+p,4);return v;}
+unsigned Capacity(const uint8_t* b){
+    // 167C0 reads 643E0() +48: the selected profile difficulty, not adaptive AI.
+    if(!b||!TrialGuestReadable(0x5152f8,4))return 1;
+    const unsigned difficulty=Read(b,0x5152f8);
+    return difficulty==0?3:difficulty==1?2:1; // Elite and unlockable Terror.
+}
 bool Actor(const uint8_t* b,uint32_t p){return b&&TrialGuestReadable(p,0x890)&&Read(b,p)==0x46fbe8&&!(Read(b,p+0x5c)&1)&&Read(b,p+0x54)!=0xffffffffu;}
 int Slot(const uint8_t* b,uint32_t p){
     if(!Actor(b,p)||!TrialGuestReadable(0x51c4dc,4)||Read(b,0x51c4dc)!=world)return -1;
@@ -176,7 +184,7 @@ bool Load(const CheckpointKey& key,std::array<unsigned,2>& counts){
     file.read(reinterpret_cast<char*>(header.data()),header.size());
     file.read(reinterpret_cast<char*>(stored_key.data()),stored_key.size());
     if(!file||header[0]!='U'||header[1]!='H'||header[2]!='P'||header[3]!=1||
-       header[4]>capacity||header[5]>capacity||header[6]||header[7]||stored_key!=key||file.peek()!=EOF)return false;
+       header[4]>file_capacity||header[5]>file_capacity||header[6]||header[7]||stored_key!=key||file.peek()!=EOF)return false;
     counts={header[4],header[5]};return true;
 }
 void Save(const CheckpointKey& key,const std::array<unsigned,2>& counts){
@@ -256,9 +264,14 @@ Medic* Retained(const uint8_t* b,uint32_t actor){
 bool DialogueActive(const uint8_t* b,const Medic& m){
     return m.dialogue&&Entity(b,m.dialogue_id)==m.dialogue;
 }
+bool Needs(const uint8_t* b,uint32_t owner){
+    const int slot=Slot(b,owner);if(slot<0||!Alive(b,owner))return false;
+    const auto& p=players[slot];
+    return trial_health::enabled?p.count<Capacity(b):p.maximum>Real(b,owner+0x9c);
+}
 bool CanCollect(const uint8_t* b,uint32_t owner,uint32_t actor){
     const int slot=Slot(b,owner);const uint32_t stock=Stock(b,actor);
-    return slot>=0&&Alive(b,owner)&&players[slot].count<capacity&&stock&&Read(b,stock)>0&&Read(b,stock)<=0x7fffffffu;
+    return slot>=0&&Needs(b,owner)&&stock&&Read(b,stock)>0&&Read(b,stock)<=0x7fffffffu;
 }
 bool HudAllowed(const X86Context& c,uint8_t* b,uint32_t owner){
     // The original 73D80 HUD wrapper uses the world hide flag and
@@ -323,13 +336,13 @@ void Publish(const uint8_t* b,unsigned slot){
     const uint32_t injured=visible?NearbyInjuredPartner(b,owner):0;
     const bool heal=injured&&players[slot].count&&CanInject(b,owner)&&!injections[slot].target&&PartnerInFront(b,owner,injured,true,true);
     uint32_t bits;std::memcpy(&bits,&extent,4);
-    published[slot].store(valid?(uint64_t(bits)<<32)|(uint64_t(visible?opacity:0)<<16)|players[slot].count|(visible?0x100u:0)|(revive?0x200u:0)|(heal?0x400u:0):0);
+    published[slot].store(valid?(uint64_t(bits)<<32)|(uint64_t(Capacity(b))<<24)|(uint64_t(visible?opacity:0)<<16)|players[slot].count|(visible?0x100u:0)|(revive?0x200u:0)|(heal?0x400u:0):0);
 }
 uint32_t Choose(const uint8_t* b,uint32_t medic){
     HostRestore host;
     double best=INFINITY;uint32_t result=0;
     for(unsigned slot=0;slot<2;++slot){
-        const auto& p=players[slot];if(!Alive(b,p.actor)||p.count>=capacity)continue;
+        const auto& p=players[slot];if(!Needs(b,p.actor))continue;
         double distance=0;bool finite=true;
         for(unsigned axis=0;axis<3;++axis){
             const float a=Real(b,p.actor+0x40+axis*4),m=Real(b,medic+0x40+axis*4);
@@ -346,6 +359,7 @@ uint32_t Select(X86Context& c,uint8_t* b,bool choosing){
     if(!b||!world||Read(b,0x51c4dc)!=world)return 0;
     const uint32_t actor=MedicActor(b,c.ecx);
     if(!actor||!Root(c,b,c.ecx))return 0;
+    if(!trial_health::enabled)for(auto& p:players)if(Alive(b,p.actor))p.maximum=Maximum(c,b,p.actor);
     auto found=medics.end();
     for(auto it=medics.begin();it!=medics.end();++it)if(it->actor==actor){found=it;break;}
     if(found!=medics.end()&&found->id!=Read(b,actor+0x54)){medics.erase(found);found=medics.end();}
@@ -375,18 +389,18 @@ uint32_t Select(X86Context& c,uint8_t* b,bool choosing){
 void TrialHealthPackInput(unsigned slot,bool down,bool allowed){
     using namespace health_packs;if(slot>1)return;
     const bool previous=held[slot].exchange(down);
-    if(!allowed){pending[slot]=0;return;}
+    if(!allowed||!trial_health::enabled){pending[slot]=0;return;}
     if(down&&!previous)TrialHealthPackRequest(slot,TrialHealthPackUse::Context);
 }
 void TrialHealthPackRequest(unsigned slot,TrialHealthPackUse use){
-    if(slot<2&&use>=TrialHealthPackUse::Context&&use<=TrialHealthPackUse::Partner)
+    if(trial_health::enabled&&slot<2&&use>=TrialHealthPackUse::Context&&use<=TrialHealthPackUse::Partner)
         health_packs::pending[slot]=(health_packs::generation.load()<<2)|unsigned(use);
 }
 TrialHealthPackStatus TrialHealthPackSnapshot(unsigned slot){
     health_packs::HostRestore host;
-    const uint64_t v=slot<2?health_packs::published[slot].load():0;
+    const uint64_t v=slot<2&&trial_health::enabled?health_packs::published[slot].load():0;
     const uint32_t bits=uint32_t(v>>32);float extent;std::memcpy(&extent,&bits,4);
-    return {unsigned(v)&0xffu,health_packs::capacity,(v&0x100)!=0,(v&0x200)!=0,extent,float((v>>16)&0xffu)/255.f,(v&0x400)!=0};
+    return {unsigned(v)&0xffu,unsigned((v>>24)&3u),(v&0x100)!=0,(v&0x200)!=0,extent,float((v>>16)&0xffu)/255.f,(v&0x400)!=0};
 }
 void TrialHealthPackStorage(const std::filesystem::path& directory){
     health_packs::storage=directory;health_packs::checkpoints.clear();
@@ -410,8 +424,8 @@ void TrialHealthPackCheckpointLoaded(const X86Context& c,const uint8_t* b){
     // level-start pack every time an existing checkpoint is reloaded.
     if(Slot(b,c.ebx)==int(slot)){
         injections[slot].cancelled=true;
-        restored[slot]={};players[slot].count=counts[slot];pending[slot]=0;Publish(b,slot);
-    }else restored[slot]={c.ebx,counts[slot]};
+        restored[slot]={};players[slot].count=std::min(counts[slot],Capacity(b));pending[slot]=0;Publish(b,slot);
+    }else restored[slot]={c.ebx,std::min(counts[slot],Capacity(b))};
 }
 void TrialHealthPackCreated(const X86Context& c,const uint8_t* b){
     using namespace health_packs;if(!Actor(b,c.eax))return;
@@ -425,7 +439,7 @@ void TrialHealthPackCreated(const X86Context& c,const uint8_t* b){
     for(auto& a:injections)if(a.target==c.eax)a.cancelled=true;
     injections[slot]={};
     const unsigned count=restored[slot].actor==c.eax?restored[slot].count:1;
-    restored[slot]={};players[slot]={c.eax,Read(b,c.eax+0x54),count};Publish(b,slot);
+    restored[slot]={};players[slot]={c.eax,Read(b,c.eax+0x54),std::min(count,Capacity(b))};Publish(b,slot);
 }
 void TrialHealthPackDestroyed(const X86Context& c,const uint8_t* b){
     using namespace health_packs;const int slot=Slot(b,c.ecx);if(slot<0)return;
@@ -439,9 +453,10 @@ void TrialHealthPackUpdate(X86Context& c,uint8_t* b){
     using namespace health_packs;HostRestore host;const int slot=Slot(b,c.ecx);
     if(slot<0){for(unsigned i=0;i<2;++i)if(players[i].actor==c.ecx){published[i]=0;pending[i]=0;}return;}
     const uint32_t owner=c.ecx;auto& p=players[slot];
+    p.count=std::min(p.count,Capacity(b));
     p.hud=HudAllowed(c,b,owner);
     p.hud_opacity=p.hud?HudOpacity(c,b,owner):0;
-    p.maximum=trial_coop::Active()&&p.hud&&Alive(b,owner)?Maximum(c,b,owner):0;
+    p.maximum=(!trial_health::enabled||trial_coop::Active())&&Alive(b,owner)?Maximum(c,b,owner):0;
     auto& injection=injections[slot];
     if(injection.target){
         if(!InjectionOwner(b,unsigned(slot)))injection={};
@@ -449,7 +464,7 @@ void TrialHealthPackUpdate(X86Context& c,uint8_t* b){
             const bool animating=Read(b,owner+0x170)==3;
             if(animating)injection.started=true;
             else if(injection.started||!b[owner+0x470])injection={};
-            if(injection.target&&(!Alive(b,owner)||!p.hud||!InjectionTarget(b,unsigned(slot)))){
+            if(injection.target&&(!trial_health::enabled||!Alive(b,owner)||!p.hud||!InjectionTarget(b,unsigned(slot)))){
                 injection.cancelled=true;
                 // Before native state entry we own the pending receipt. Once
                 // playing, retain cancellation through the full animation so
@@ -460,7 +475,7 @@ void TrialHealthPackUpdate(X86Context& c,uint8_t* b){
     }
     const uint64_t request=pending[slot].exchange(0);
     const auto use=TrialHealthPackUse(request&3);
-    if(request&&(request>>2)==generation.load()&&p.count&&p.hud&&Alive(b,owner)&&Stack(c)&&!injection.target){
+    if(trial_health::enabled&&request&&(request>>2)==generation.load()&&p.count&&p.hud&&Alive(b,owner)&&Stack(c)&&!injection.target){
         const uint32_t downed=use==TrialHealthPackUse::Self?0:TrialCoopNearbyDownedPlayer(b,owner);
         const uint32_t partner=downed?downed:use==TrialHealthPackUse::Partner?NearbyInjuredPartner(b,owner):0;
         if(partner){
@@ -511,7 +526,7 @@ bool TrialHealthPackInjectionContact(X86Context& c,uint8_t* b){
     // while lowering the weapon must neither finish this new action nor heal self.
     if(Read(b,owner+0x174)!=2||!a.selected||a.contact)return true;
     a.contact=true;
-    if(a.cancelled||!Alive(b,owner)||!players[slot].count||!InjectionTarget(b,unsigned(slot))||
+    if(!trial_health::enabled||a.cancelled||!Alive(b,owner)||!players[slot].count||!InjectionTarget(b,unsigned(slot))||
        !HudAllowed(c,b,owner))return true;
     HostRestore host;
     bool healed=false;
@@ -546,7 +561,7 @@ void TrialHealthPackMedicPlayer(X86Context& c,const uint8_t* b,bool pointer){
 }
 bool TrialHealthPackMedicNeeds(const uint8_t* b,bool original){
     using namespace health_packs;const int slot=Slot(b,medic_owner);
-    return !medic_owner?original:slot>=0&&Alive(b,medic_owner)&&players[slot].count<capacity;
+    return !medic_owner?original:slot>=0&&Alive(b,medic_owner)&&(trial_health::enabled?players[slot].count<Capacity(b):original);
 }
 bool TrialHealthPackMedicOfferOwner(const uint8_t* b,uint32_t owner,uint32_t client,uint32_t target){
     using namespace health_packs;const uint32_t actor=ClientMedic(b,client,true);
@@ -587,14 +602,14 @@ TrialHealthPackDeliveryScope::TrialHealthPackDeliveryScope(X86Context& c,uint8_t
     if(!owner)return;
     intercept=true;root=Root(c,b,c.ecx);const int slot=Slot(b,owner);const uint32_t medic=MedicActor(b,c.ecx);
     stock=Stock(b,medic);if(!stock)return;before=Read(b,stock);
-    accepted=slot>=0&&Alive(b,owner)&&players[slot].count<capacity&&before>0&&before<=0x7fffffffu&&!delivery;
+    accepted=slot>=0&&Needs(b,owner)&&before>0&&before<=0x7fffffffu&&!delivery;
     if(accepted){medic_owner=owner;delivery=this;exceptions=std::uncaught_exceptions();}
 }
 TrialHealthPackDeliveryScope::~TrialHealthPackDeliveryScope(){
     using namespace health_packs;
     if(delivery==this){
         const int slot=Slot(base,owner);
-        if(std::uncaught_exceptions()==exceptions&&received&&slot>=0&&Read(base,stock)+1==before&&players[slot].count<capacity){
+        if(std::uncaught_exceptions()==exceptions&&received&&slot>=0&&Read(base,stock)+1==before&&players[slot].count<Capacity(base)){
             ++players[slot].count;Publish(base,unsigned(slot));
         }
         delivery=nullptr;
@@ -603,7 +618,7 @@ TrialHealthPackDeliveryScope::~TrialHealthPackDeliveryScope(){
 }
 bool TrialHealthPackMedicReceipt(const X86Context& c,const uint8_t* b){
     using namespace health_packs;
-    if(!delivery||!delivery->accepted||c.ecx!=delivery->owner||Slot(b,c.ecx)<0)return false;
+    if(!trial_health::enabled||!delivery||!delivery->accepted||c.ecx!=delivery->owner||Slot(b,c.ecx)<0)return false;
     delivery->received=true;return true;
 }
 bool TrialHealthPackMedicStockBlocked(const X86Context& c,const uint8_t* b){

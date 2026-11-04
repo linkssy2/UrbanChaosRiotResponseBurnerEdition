@@ -1,4 +1,4 @@
-Urban Chaos: Riot Response - Burner Edition 0.10
+Urban Chaos: Riot Response - Burner Edition 0.11
 EXPERIMENTAL LINUX / PROTON PACKAGE
 
 This runs the same Windows x64 game through Proton; this is not a native port.
@@ -123,6 +123,13 @@ Controller users double-tap D-pad Down to heal themselves, or hold it while
 facing a nearby injured/downed partner to heal or revive them. Keyboard/mouse
 uses Use health pack for self-healing and the separate Heal Partner binding
 (default U unless already assigned). Treatment spends the giver's pack.
+Options > Gameplay > Stored health packs applies to both players and single-player.
+On is the default: capacity is Rookie 3, Veteran 2, Elite/Terror 1, with one pack
+per player at a fresh mission start. Off restores direct medic healing and
+disables stored packs, partner healing and reviving. Co-op death ends the
+mission with packs Off; On keeps the ten-second revival window.
+FMV Fill defaults to proportional fitting with verified source margins removed;
+true 4:3 footage retains side bars. See README.txt for details.
 Live Proton co-op acceptance for this build remains pending.
 
 UPDATES AND SAVES

@@ -118,7 +118,7 @@ bool Validate(const Draft& d, app::Mode desktop, std::string& message) {
     else if(d.weapon_fov<50||d.weapon_fov>150)
         message="Weapon field of view must be between 50% and 150%.";
     else if(d.fmv_scale>1)
-        message="Choose Fill or 4:3 for FMV scaling.";
+        message="Choose Fill or Original aspect ratio for FMV scaling.";
     else if(d.msaa!=1&&d.msaa!=2&&d.msaa!=4)
         message="Choose Off, 2x or 4x MSAA.";
     else if(d.character_quality>1||d.ragdolls>2)

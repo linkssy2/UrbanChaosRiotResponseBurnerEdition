@@ -1,4 +1,4 @@
-# Urban Chaos: Riot Response — Burner Edition 0.10
+# Urban Chaos: Riot Response — Burner Edition 0.11
 
 Windows and experimental Linux/Proton share a statically recompiled Xbox game
 runtime built on XboxXBERecomp, with maintained Urban Chaos adapters. Linux uses
@@ -11,7 +11,7 @@ original disc data, generated game code, private captures and player state.
 
 A fresh checkout does not yet reproduce the complete executable. See
 [build status](docs/BUILDING.md), [source map](docs/CODE_MAP.md),
-[changes](docs/CHANGES-0.10.md) and
+[changes](docs/CHANGES-0.11.md) and
 [runtime maintenance](docs/XBE-RUNTIME-MAINTENANCE.md) for the supported scope.
 Dependency identities and backports are recorded in `dependencies.lock.json`.
 

@@ -20,6 +20,7 @@
 #include "xbe_coop_pause.h"
 #include "xbe_coop_cinematics.h"
 #include "xbe_health_packs.h"
+#include "xbe_health_settings.h"
 #include "xbe_aim_mode.h"
 #include "xbe_menu_key_taps.h"
 
@@ -370,7 +371,7 @@ void TrialInputPad(int port,input::Pad& pad){
     if(input_pause_owner!=pause_owner){input_pause_owner=pause_owner;TrialGraphicsInputChanged();}
     auto health_use=TrialHealthPackUse::None;
     if(port<2){
-        const bool allowed=controller_connected&&focused()&&gameplay&&!menu_mode&&!TrialGraphicsOpen()&&
+        const bool allowed=trial_health::enabled&&controller_connected&&focused()&&gameplay&&!menu_mode&&!TrialGraphicsOpen()&&
             !intro_gate.owner&&!controls_capture[port].active&&trial_coop::PauseAllowsPlayer(port)&&
             (!port||trial_coop::Active())&&TrialCoopPresentation()!=2;
         const auto status=TrialHealthPackSnapshot(port);
@@ -446,10 +447,10 @@ void TrialInputPad(int port,input::Pad& pad){
         auto health_pad=pad;health_pad.buttons&=~2u; // Physical Down is reserved for the two health gestures.
         const bool down=trial_controls::HealthPackDown(false,health_pad,port)||
             (!port&&trial_controls::HealthPackDown(true,pad,0,captured));
-        TrialHealthPackInput(port,down,allowed);
+        TrialHealthPackInput(port,down,allowed&&trial_health::enabled);
         if(!port){
             const bool partner_down=trial_controls::HealPartnerDown(captured);
-            if(partner_down&&!partner_key_held&&allowed&&TrialCoopPresentation()!=2)
+            if(partner_down&&!partner_key_held&&allowed&&trial_health::enabled&&TrialCoopPresentation()!=2)
                 TrialHealthPackRequest(0,TrialHealthPackUse::Partner);
             partner_key_held=partner_down;
         }

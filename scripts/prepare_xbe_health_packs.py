@@ -4,6 +4,8 @@ import hashlib
 import struct
 
 PINS=(
+    (0x643e0,6,"2f50be2683201136880faa73c01094369ebb3428808d2188c528381e7a624d6a"),
+    (0x167f3,8,"cf544b24ed2963a18e4c6355659272bff6c3e5e52fc53a702444a933313493ae"),
     (0x1688b0,0x84,"dc01f2253b9ee220865f62e4065b24edcef98ac5dd66857d9b8d73fe404df09b"),
     (0x168d58,0x1b,"342c97c11a9e89f0b6d830d75533c67e653ce46d30f5037a4a572cfdc6612df4"),
     (0x168f20,0xac,"8d00899f2fea392b9f1c49cd4526abaa3037fe6dbd330a1fae19948abe24486a"),
@@ -123,9 +125,13 @@ def prepare(area):
         patched[unit]=s
         s=s.replace('#include "x86_recomp_shared.h"\n','#include "x86_recomp_shared.h"\n'+include,1)
         path.write_text(s)
-    for name in ('xbe_health_packs.cpp','xbe_health_packs.h'):
+    for name in ('xbe_health_packs.cpp','xbe_health_packs.h','xbe_health_settings.h'):
         (area/'src/common'/name).write_text((local/name).read_text())
-    pieces=[]
+    (area/'src/compat/xbe_health_settings.cpp').write_text((local/'xbe_health_settings.cpp').read_text())
+    s=(area/'generated/game/x86_recomp.9.cpp').read_text()
+    a=s.index('X86_FUNC(__imp__sub_000643E0) {');z=s.index('\nX86_WEAK_FUNC',a)
+    assert hashlib.sha256(s[a:z].encode()).hexdigest()=='65b95e293f8c3716565c1374654c761393adda622e455e39302fc425780aa031'
+    pieces=[s[a:z].replace('__imp__sub_000643E0','OriginalProfile',1)]
     s=originals[20];a=s.index('X86_FUNC(__imp__sub_000C77D0)');z=s.index('\nX86_WEAK_FUNC',a)
     assert hashlib.sha256(s[a:z].encode()).hexdigest()=='b825323f5092a034627affb083742c20ebd0978b0114cd9ef6439640ecc2de05'
     pieces.append(s[a:z].replace('__imp__sub_000C77D0','OriginalAimRay',1))

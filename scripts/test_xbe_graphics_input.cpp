@@ -15,6 +15,7 @@
 #include "core/input.h"
 #include "xbe_controls.h"
 #include "xbe_health_packs.h"
+#include "xbe_health_settings.h"
 #include "xbe_controls_capture.h"
 #include "xbe_coop.h"
 #include "xbe_coop_pause.h"
@@ -271,6 +272,10 @@ static void HealthGestures(){
         test_health_status[player].can_revive=false;test_health_status[player].can_heal_partner=true;
         poll(false);poll(true,500);poll(true,650);
         assert(health_requests[player]==3&&requested_health[player]==Use::Partner&&!health_requests[1-player]);poll(false);
+        trial_health::enabled=false;
+        poll(true,500);assert(poll(true,800).buttons&2);poll(false);poll(true,100);poll(false,80);poll(true,150);
+        assert(health_requests[player]==3&&!health_allowed[player]);
+        trial_health::enabled=true;poll(false);
     }
     test_health_status[0]=test_health_status[1]={};trial_coop::Reset();ReleaseAll();
     trial_coop::SetActive(true);captured=true;menu_mode=false;gameplay=true;test_presentation=1;

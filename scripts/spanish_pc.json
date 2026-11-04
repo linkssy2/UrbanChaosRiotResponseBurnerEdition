@@ -93,9 +93,10 @@
   "HD game textures": "Texturas del juego en HD",
   "FMV scaling": "Escala de vídeos",
   "Fill": "Llenar",
-  "Fill stretches the complete picture to the screen. Built-in black bars remain.": "Llenar estira toda la imagen a la pantalla. Conserva las bandas del vídeo.",
-  "4:3 preserves the complete movie picture and original proportions.": "4:3 conserva toda la imagen y las proporciones originales del vídeo.",
-  "Choose Fill or 4:3 for FMV scaling.": "Elige Llenar o 4:3 para la escala de vídeos.",
+  "Original aspect ratio": "Proporciones originales",
+  "Fill removes verified black borders without stretching. Some bars may remain.": "Llenar elimina las bandas negras verificadas sin estirar. Pueden quedar algunas bandas.",
+  "Original aspect ratio preserves the complete movie frame, including built-in borders.": "Proporciones originales conserva toda la imagen del vídeo, incluidas sus bandas.",
+  "Choose Fill or Original aspect ratio for FMV scaling.": "Elige Llenar o Proporciones originales para la escala de vídeos.",
   "HD textures unavailable": "Texturas HD no disponibles",
   "Not installed": "Sin instalar",
   "Optional HD game texture pack. Keeps HUD and menus unchanged; uses more video memory.": "Pack opcional de texturas HD. No modifica el HUD ni los menús; usa más memoria gráfica.",
@@ -414,5 +415,13 @@
   "Active output": "Salida activa",
   "Configure your device speakers first. Restart after changing the device layout.": "Configura los altavoces del dispositivo. Reinicia si cambias su distribución.",
   "Choose Stereo, 5.1 Surround or 7.1 Surround.": "Elige Estéreo, Envolvente 5.1 o Envolvente 7.1.",
-  "Could not save audio settings.": "No se pudo guardar la configuración de audio."
+  "Could not save audio settings.": "No se pudo guardar la configuración de audio.",
+  "Gameplay": "Jugabilidad",
+  "GAMEPLAY": "JUGABILIDAD",
+  "Stored health packs": "Botiquines guardados",
+  "Pack limit follows mission difficulty: Rookie 3, Veteran 2, Elite / Terror 1.": "Límite según la dificultad: Novato 3, Veterano 2, Élite / Terror 1.",
+  "Off restores direct medic healing and disables stored packs, partner healing and revives.": "Desactivado: el médico te cura directamente. No puedes guardar botiquines ni curar o reanimar a tu compañero.",
+  "Applies to single-player and both co-op players. Each mission starts with one pack when enabled.": "Se aplica al modo individual y a ambos jugadores cooperativos. Si está activado, empiezas cada misión con un botiquín.",
+  "With packs Off, a co-op death ends the mission.": "Con los botiquines desactivados, la muerte de un jugador termina la misión cooperativa.",
+  "Could not save gameplay settings.": "No se pudo guardar la configuración de jugabilidad."
 }

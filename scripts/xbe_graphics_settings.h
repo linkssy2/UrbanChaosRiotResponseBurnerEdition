@@ -32,7 +32,7 @@ struct Draft {
     uint32_t reticle_scale = 100; // percentage of the authored crosshair size
     bool world_textures = false;
     uint32_t weapon_fov = 100; // percentage of each weapon's authored view window
-    uint32_t fmv_scale = 0; // 0 fill, 1 preserve the complete 4:3 movie frame
+    uint32_t fmv_scale = 0; // 0 proportional fill, 1 preserve the complete movie frame
     std::array<uint32_t,4> reticle_colors{}; // normal, enemy, friendly, spin
 };
 Draft Snapshot();

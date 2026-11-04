@@ -1,4 +1,4 @@
-Urban Chaos: Riot Response - Burner Edition 0.10
+Urban Chaos: Riot Response - Burner Edition 0.11
 
 HD HUD is still a work in progress and has known prompt/display issues.
 Turn HD UI Off to use the original HUD, which works normally.
@@ -8,14 +8,11 @@ Windows x64 PC port using XboxXBERecomp by TGP482, with native Direct3D12 render
 PC controls and menus. Original gameplay is statically recompiled from Xbox code.
 XboxXBERecomp: https://github.com/TGP482/XboxXBERecomp
 
-NEW IN 0.10 (SINCE 0.09)
-- Audio: choose Stereo, 5.1 Surround or 7.1 Surround. The saved choice falls back to the available speaker layout. Configure the output device first; restart after changing its speaker layout.
-- Controls: separate zoom sensitivity for each player, with regular and zoom sensitivity shown as percentages and their defaults at 100%.
-- Added assignable Walk (Hold or Toggle) and Toggle HUD actions for single-player and co-op. Both start unbound; set them in Controls. Subtitles, menus and downed warnings remain visible.
-- Holding Aim now stays active when firing.
-- Fixed the first medic's missing health-pack collection prompt when inventory has room and she has supplies, including both co-op players.
-- Corrected rapid NPC blinking and exaggerated ragdoll launches at high frame rates, including deaths caused by police gunfire.
-- Fixed Officer Daniels spawning outside the corridor floor in Angel Heights, which could leave him missing and block the rescue.
+NEW IN 0.11 (SINCE 0.10)
+- Added Options > Gameplay > Stored health packs (On/Off), shared by single-player and co-op.
+- Pack capacity now follows difficulty: Rookie 3, Veteran 2, Elite/Terror 1. Each player starts a fresh mission with one pack; medic supplies remain limited.
+- Off restores direct medic healing and disables stored packs, partner healing and reviving. In co-op, a death ends the mission with packs Off; On retains the ten-second revival window.
+- FMV Fill is the default and preserves proportions, removing verified encoded black margins without cutting into the picture. Original aspect ratio keeps the complete encoded frame. True 4:3 videos retain side bars; existing saved choices are respected.
 - The separate 0.09 HD game texture pack remains compatible; no reinstall is needed.
 
 Co-op is experimental. Full-campaign progression, all character/action combinations,
@@ -121,7 +118,12 @@ edits apply to the player who paused; other graphics settings are shared.
 Shared objectives appear in both views. Personal combat and interaction prompts
 follow their player. Authored in-game cutscenes use one fullscreen view.
 
-Each fresh level starts each player with one stored health pack, up to three.
+Options > Gameplay > Stored health packs enables or disables the system for
+single-player and both co-op players. It defaults to On. Capacity follows
+mission difficulty: Rookie 3, Veteran 2, Elite/Terror 1. Each fresh level starts
+each player with one pack. Off restores direct medic healing, hides the pack
+display and disables pack use and partner healing/reviving. With packs Off,
+a co-op death ends the mission. Toggling the option never refills spent packs.
 Get more from a medic while their original supplies last, including at full
 health when your pack inventory has room. Look at the medic within range.
 Assign Use health pack in Controls (keyboard default H). Keyboard/mouse also
@@ -130,17 +132,20 @@ Controller users double-tap D-pad Down to heal themselves, or hold it while
 facing a nearby injured/downed partner to heal/revive them. The giver spends
 their own pack. Living partners have no healing prompt; downed partners retain
 the Revive Partner prompt. These gestures affect only the controller's player.
-A downed player
-has ten seconds to be revived; expiry or both players falling fails the mission.
+With packs On, a downed player has ten seconds to be revived; expiry or both
+players falling fails the mission.
 The downed view pulses red and blurs; shared audio stays clear for the partner.
 Stored packs also work in single-player. Existing checkpoints without stored-pack
 data restore zero packs; they do not grant another free pack on every reload.
 
 MOVIES
-Graphics > FMV scaling has Fill and 4:3 modes. Fill shows the complete movie
-across the screen and stretches 4:3 sources to full width, without cropping.
-4:3 preserves original proportions with side bars on wider displays.
-Bars already present in the source movie may remain in either mode.
+Graphics > FMV scaling has Fill (default) and Original aspect ratio modes.
+Both preserve proportions. Fill removes only verified black rows already in
+the original movie, then fits the complete active picture without cropping.
+Original aspect ratio keeps the whole encoded frame, including its margins.
+True 4:3 footage retains side bars on a widescreen display. Other remaining
+bars depend on the source proportions; Fill does not stretch the image.
+Existing saved choices remain respected.
 
 NOTES
 Switch 2 USB support is experimental: the native SDL USB driver and libusb DLL

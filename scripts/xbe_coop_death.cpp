@@ -4,6 +4,7 @@
 #include "xbe_coop_body.h"
 #include "xbe_coop_cinematics.h"
 #include "xbe_ragdoll_settings.h"
+#include "xbe_health_settings.h"
 #include "kernel/memory.h"
 #include "xbe_input_memory.h"
 #include "cpu/x86_ops.h"
@@ -128,7 +129,8 @@ void TrialCoopDeathUpdate(X86Context& c,uint8_t* b){
         if(!Down(b,i)){d.counting=false;revive_seconds[i].store(0,std::memory_order_relaxed);continue;}
         if(!d.counting){d.remaining=10.0;d.counting=true;}
         else if(advance)d.remaining-=delta;
-        if(d.remaining<=0){
+        // With stored packs disabled there is no revival opportunity to count down.
+        if(!trial_health::enabled||d.remaining<=0){
             team_failed=true;expired_slot=i;ClearSeconds();
             failure_sent=NotifyFailure(c,b);return;
         }
@@ -173,7 +175,7 @@ uint32_t TrialCoopNearbyDownedPlayer(const uint8_t* b,uint32_t healer){
     return distance<=200.0*200.0?owners[1-slot]:0;
 }
 bool TrialCoopRevivePlayer(X86Context& c,uint8_t* b,uint32_t owner){
-    if(!Pair(b)||team_failed||c.esp<0x18000||!TrialGuestReadable(c.esp-0x7000,0x7000))return false;
+    if(!trial_health::enabled||!Pair(b)||team_failed||c.esp<0x18000||!TrialGuestReadable(c.esp-0x7000,0x7000))return false;
     const int slot=Slot(owner);
     if(slot<0||!Down(b,slot)||TrialCoopNearbyDownedPlayer(b,owners[1-slot])!=owner)return false;
     // D35A0 touches these initialized animation/transition objects directly.

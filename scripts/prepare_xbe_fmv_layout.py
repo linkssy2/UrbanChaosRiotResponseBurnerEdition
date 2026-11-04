@@ -1,4 +1,4 @@
-"""Full-frame Fill/original 4:3 on the movie quad, before queued submission."""
+"""Proportional Fill/original frame on the movie quad, before queued submission."""
 from pathlib import Path
 import hashlib
 import re
@@ -35,6 +35,7 @@ def prepare(area):
         ('00087810','const auto fmv_layout=TrialFmvLayout(base);'),
         ('00087938','TrialFmvBorders(ctx,base,fmv_layout);'),
         *[(address,'TrialFmvVertex(ctx,base,fmv_layout);') for address in ('000878C2','000878DF','00087902','00087927')],
+        *[(address,'TrialFmvTexcoord(ctx,base,fmv_layout);') for address in ('000878AD','000878CD','000878ED','00087913')],
     ]:
         marker='\t// '+address+' '
         assert source.count(marker)==1,address

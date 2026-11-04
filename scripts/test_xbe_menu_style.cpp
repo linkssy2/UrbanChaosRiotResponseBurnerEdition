@@ -11,6 +11,7 @@
 #include <cstring>
 #include <fstream>
 #include <string>
+#include <stdexcept>
 #include <vector>
 #include "xbe_graphics_settings.h"
 #include "xbe_controls.h"
@@ -86,8 +87,9 @@ namespace app {
 void* Window(){return nullptr;}
 Mode Output(){return output;}
 static unsigned audio_saves=0;
+static bool fail_save=false;
 std::recursive_mutex& UiLock(){static std::recursive_mutex lock;return lock;}
-void Save(){++audio_saves;}
+void Save(){if(fail_save)throw std::runtime_error("save failed");++audio_saves;}
 }
 namespace trial_graphics {
 static bool hud_widescreen=true;
@@ -295,7 +297,7 @@ static void CheckNativeConfirmTransitions(){
 }
 static void OpenGraphics(const TrialFrontendFrame& f){
     CHECK(f.list_kind==3);
-    Publish(f);CHECK(hits.size()==f.source.count+2);
+    Publish(f);CHECK(hits.size()==f.source.count+3);
     if(keyboard_mode)for(unsigned i=0;i<hits.size();++i){
         CHECK(hits[i].a.x==48.f*output.width/640.f);
         CHECK(hits[i].b.x==432.f*output.width/640.f);
@@ -1083,7 +1085,7 @@ static void CheckControls(const TrialFrontendFrame& options){
     RightClick();CHECK(!confirm_back&&ControlsDirty());
     footer(3);CHECK(confirm_back);Click(1);CHECK(!PanelOpen());EmptyAction();
     // The redundant Game Options entry is gone; profile values live in Controls.
-    Publish(options);CHECK(hits.size()==options.source.count+2);
+    Publish(options);CHECK(hits.size()==options.source.count+3);
     // Controller left/right reaches every footer action. It
     // never silently reuses a queued Confirm from the capture dialog.
     open();auto apply=hits[hits.size()-4];Move((apply.a.x+apply.b.x)/2,(apply.a.y+apply.b.y)/2);
@@ -1157,7 +1159,7 @@ static void CheckPerPlayerSettings(){
     for(const auto size:{app::Mode{640,480},app::Mode{1920,1080},app::Mode{2560,1440}}){
         output=size;trial_language::active=size.width==1920?4:0;
         for(unsigned player:{0u,1u}){
-            own(player);auto f=options();Publish(f);CHECK(frontend_active&&hits.size()==f.source.count+2);
+            own(player);auto f=options();Publish(f);CHECK(frontend_active&&hits.size()==f.source.count+3);
             controls_player=1-player;controls_device=controls_player?1:0;
             // The ordinary controller Controls row opens the owned editor, not the original shared profile page.
             if(player)pad(0,255);else Click(0);
@@ -1246,7 +1248,7 @@ static void CheckOwnedPauseNavigation(){
 }
 static void CheckLanguage(const TrialFrontendFrame& options){
     trial_language::selected=trial_language::active=0;
-    auto open=[&](){Publish(options);CheckStrip(options.source.count+2);Click(options.source.count+1);
+    auto open=[&](){Publish(options);CheckStrip(options.source.count+3);Click(options.source.count+1);
         CHECK(PanelOpen()&&settings_page==2&&hits.size()==4);EmptyAction();};
     auto change=[&](){const auto r=hits[0];ClickPoint(r.b.x-15*float(output.width)/640,(r.a.y+r.b.y)/2);};
     open();CHECK(!LanguageDirty());change();CHECK(language_draft==1&&LanguageDirty()&&trial_language::Snapshot()==0);
@@ -1521,7 +1523,7 @@ static void CheckSize(unsigned width,unsigned height){
     ChangeSetting(6);CHECK(Dirty()&&message.empty());Click(22);CHECK(confirm_back&&hits.size()==3);
     Key(ImGuiKey_Escape);Settle();CHECK(!confirm_back&&PanelOpen()&&Dirty()&&hits.size()==23);
     Click(22);CHECK(confirm_back&&hits.size()==3);Click(1);CHECK(!PanelOpen());
-    CHECK(live.settings.render_percent==125&&live.settings.fps_cap==60);CheckStrip(options.source.count+2);
+    CHECK(live.settings.render_percent==125&&live.settings.fps_cap==60);CheckStrip(options.source.count+3);
 
     // A fresh controller Back reaches the open page; its held repeat cannot
     // immediately leave the parent menu after the page has closed.
@@ -1622,11 +1624,45 @@ static void CheckSize(unsigned width,unsigned height){
     // A settings overlay also relinquishes the outgoing scene immediately,
     // before a later context callback has published the new manager identity.
     OpenGraphics(options);auto moving_options=options;moving_options.source.source_kind|=UC_HF_TRANSITION;
-    TrialFrontendPublish(moving_options);DrawFrame();CHECK(!PanelOpen()&&hits.size()==options.source.count+2);
+    TrialFrontendPublish(moving_options);DrawFrame();CHECK(!PanelOpen()&&hits.size()==options.source.count+3);
     TrialFrontendPublish({});DrawFrame();CHECK(hits.empty()&&!TrialGraphicsOpen());
     // Render, effects, world/weapon FOV, FMV scaling, HD, four fog modes, RMB flow, controller Apply.
     CHECK(applied==before+13);
     std::printf("PASS %ux%u: menu strips, profile targets, typed names, 17 level hits, draft/apply/discard, release gates and stale screen revocation\n",width,height);
+}
+static void CheckHealthOptions(){
+    for(const auto size:{app::Mode{640,480},app::Mode{1920,1080},app::Mode{2560,1440}})
+    for(int owner:{-2,-1,0,1}){
+        output=size;trial_coop::Reset();trial_coop::ResetPauseOwner();keyboard_mode=owner==-2?0:1;
+        if(owner>=0){
+            trial_coop::SetActive(true);trial_coop::pause_state.Sample(false,false);
+            trial_coop::pause_state.Sample(owner==0,owner==1);trial_coop::pause_state.Consume(true);trial_coop::pause_state.Enter();
+        }
+        TrialStoredHealthPacks=false;trial_health::Initialize();CHECK(!trial_health::enabled);
+        TrialStoredHealthPacks=true;trial_health::Initialize();
+        auto options=MakeList(3);if(owner>=0)options.source.source_kind|=0x80000000u;
+        Publish(options);CHECK(hits.size()==options.source.count+3);
+        CHECK(TrialFrontendOwns(options.source.owner,UC_HF_LIST));
+        if(xbox_KeyboardMode())Click(options.source.count+2);
+        else{
+            auto pad=[](unsigned buttons,unsigned a=0){TrialFrontendPad(0,0,0,0,0);Settle();TrialFrontendPad(buttons,a,0,0,0);Settle();TrialFrontendPad(0,0,0,0,0);Settle();};
+            Move(0,0);pad(1);pad(0,255); // first row -> last (Gameplay)
+        }
+        CHECK(PanelOpen()&&settings_page==4&&hits.size()==2);EmptyAction();
+        const unsigned saved=app::audio_saves;
+        auto row=hits[0];ClickPoint(row.b.x-5*size.width/640.f,(row.a.y+row.b.y)/2);
+        CHECK(!trial_health::enabled&&!TrialStoredHealthPacks&&app::audio_saves==saved+1);
+        app::fail_save=true;Key(ImGuiKey_RightArrow);app::fail_save=false;
+        CHECK(!trial_health::enabled&&!TrialStoredHealthPacks&&!message.empty()&&app::audio_saves==saved+1);
+        TrialFrontendPad(0,0,0,0,0);Settle();TrialFrontendPad(8,0,0,0,0);Settle();TrialFrontendPad(0,0,0,0,0);Settle();
+        CHECK(trial_health::enabled&&TrialStoredHealthPacks&&message.empty()&&app::audio_saves==saved+2);
+        RightClick();CHECK(!PanelOpen());EmptyAction();
+        CHECK(hits.size()==options.source.count+3);
+        CHECK(trial_coop::PauseOwner()==(owner<0?-1:owner));
+    }
+    trial_coop::Reset();trial_coop::ResetPauseOwner();keyboard_mode=1;
+    trial_language::active=4;CHECK(std::strcmp(trial_language::Ui("Stored health packs"),"Botiquines guardados")==0);trial_language::active=0;
+    puts("health settings: saved On/Off, failed-save rollback, mouse/controller, both pause owners, 3 resolutions and Spanish passed");
 }
 int main(){
     ImGui::CreateContext();auto& io=ImGui::GetIO();io.IniFilename=nullptr;io.LogFilename=nullptr;
@@ -1698,6 +1734,7 @@ int main(){
     }
     std::printf("UI totals: input changes=%u, applies=%u, frames=%u\n",input_changes,applied-before_ui,frames);
     CHECK(input_changes>10&&applied==before_ui+39&&frames>100);
+    CheckHealthOptions();
     CheckPerPlayerSettings();
     CheckOwnedPauseNavigation();
     CheckCheats();
@@ -1721,6 +1758,7 @@ int main(){
     CHECK(std::strcmp(trial_language::Ui("Equip or select the previous available firearm."),"Equipa o selecciona el arma de fuego anterior disponible.")==0);
     CHECK(std::strcmp(trial_language::Ui("FMV scaling"),"Escala de v\xc3\xad" "deos")==0);
     CHECK(std::strcmp(trial_language::Ui("Fill"),"Llenar")==0);
+    CHECK(std::strcmp(trial_language::Ui("Original aspect ratio"),"Proporciones originales")==0);
     CHECK(std::strcmp(trial_language::Ui("Nick Mason"),"Nick Mason")==0);
     for(const auto size:{app::Mode{640,480},app::Mode{1920,1080},app::Mode{2560,1440}}){
         output=size;auto page=MakeList(3);Publish(page);

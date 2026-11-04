@@ -132,6 +132,7 @@ uint32_t CallGuest(X86Context& c,uint32_t fn,const uint32_t* args,size_t n){
 }
 }
 void Setup(){
+    trial_health::enabled=true;
     kernel::memory.fill(0);trial_coop::Reset();TrialCoopDeathReset();
     body_calls=queries=ragdoll_branches=animation_branches=expires=0;
     resets=recreates=collision_releases=collision_creates=0;fail_recreate=false;
@@ -309,9 +310,33 @@ void TestCountdown(){
     assert(!TrialCoopReviveSeconds(2));
 }
 
+void TestHealthPackToggle(){
+    for(unsigned slot=0;slot<2;++slot)for(bool already_downed:{false,true}){
+        Setup();
+        if(already_downed){DownPlayer(slot);Tick(.25f);assert(TrialCoopReviveSeconds(slot)==10);}
+        trial_health::enabled=false;
+        if(!already_downed){
+            Tick(.25f);assert(!fail_requests&&!team_failed);
+            DownPlayer(slot);assert(PolicyDestination(slot)==1);
+        }
+        X86Context c{};c.esp=0x7e0000;
+        assert(!TrialCoopRevivePlayer(c,B(),kPlayers[slot])&&!resets&&!recreates);
+        Tick(.25f);
+        assert(team_failed&&failure_sent&&fail_requests==1&&FailureSelected(slot==0));
+        assert(!TrialCoopReviveSeconds(0)&&!TrialCoopReviveSeconds(1));
+        assert(PositiveHealth(B(),kPlayers[1-slot]));
+        // Re-enabling cannot reverse a committed failure or enqueue it again.
+        trial_health::enabled=true;Tick(.25f);
+        assert(fail_requests==1&&!TrialCoopRevivePlayer(c,B(),kPlayers[slot]));
+    }
+    Setup();DownPlayer(0);Tick(.25f);assert(TrialCoopReviveSeconds(0)==10&&!fail_requests);
+    puts("health packs Off: both co-op slots, death before/after toggle, no revival, one terminal mission failure and restart reset passed");
+}
+
 int main(){
     TestRevivedVisibility();
     TestCountdown();
+    TestHealthPackToggle();
     for(unsigned slot=0;slot<2;++slot){
         Setup();auto c=Caller(slot);OriginalDeathBodyCaller(c,B());assert(!body_calls&&queries==1);
         c=Caller(slot);CoopDeathBodyCaller(c,B());assert(body_calls==1&&ragdoll_branches==1&&!animation_branches);

@@ -414,10 +414,10 @@ int main(){uint32_t r=0;if(uc_ds_ref(r,false)!=0||uc_ds_ref(r,true)!=1||uc_ds_re
  info=info.replace('#include "xbe_graphics_settings.h"','#include "xbe_graphics_settings.h"\n#include "xbe_language.h"')
  info=info.replace('{"ragdoll_amount", nullptr, &TrialRagdollMode}',
                    '{"ragdoll_amount", nullptr, &TrialRagdollMode}, {"language", nullptr, &TrialLanguage}, {"world_textures", &TrialWorldTextures, nullptr}, {"hd_ui", &TrialHdUi, nullptr}, {"reticle_scale", nullptr, &TrialReticleScale}, {"reticle_normal_color", nullptr, &TrialReticleColors[0][0]}, {"reticle_enemy_color", nullptr, &TrialReticleColors[0][1]}, {"reticle_friendly_color", nullptr, &TrialReticleColors[0][2]}, {"reticle_spin_color", nullptr, &TrialReticleColors[0][3]}, {"player2_reticle_normal_color", nullptr, &TrialReticleColors[1][0]}, {"player2_reticle_enemy_color", nullptr, &TrialReticleColors[1][1]}, {"player2_reticle_friendly_color", nullptr, &TrialReticleColors[1][2]}, {"player2_reticle_spin_color", nullptr, &TrialReticleColors[1][3]}, {"weapon_fov_scale", nullptr, &TrialWeaponFovScale}, {"player2_field_of_view", nullptr, &TrialPlayer2FieldOfView}, {"player2_weapon_fov_scale", nullptr, &TrialPlayer2WeaponFovScale}, {"fmv_scale", nullptr, &TrialFmvScale}')
- info=info.replace('#include "xbe_graphics_settings.h"','#include "xbe_graphics_settings.h"\n#include "xbe_audio_output.h"')
- info=info.replace('{"fmv_scale", nullptr, &TrialFmvScale}', '{"fmv_scale", nullptr, &TrialFmvScale}, {"sound_output", nullptr, &TrialSoundOutput}')
+ info=info.replace('#include "xbe_graphics_settings.h"','#include "xbe_graphics_settings.h"\n#include "xbe_audio_output.h"\n#include "xbe_health_settings.h"')
+ info=info.replace('{"fmv_scale", nullptr, &TrialFmvScale}', '{"fmv_scale", nullptr, &TrialFmvScale}, {"sound_output", nullptr, &TrialSoundOutput}, {"stored_health_packs", &TrialStoredHealthPacks, nullptr}')
  info=info.replace('.init = trial_graphics::Initialize,',
-                   '.init = []{trial_graphics::Initialize();trial_language::Initialize();trial_audio::Initialize();},')
+                   '.init = []{trial_graphics::Initialize();trial_language::Initialize();trial_audio::Initialize();trial_health::Initialize();},')
  info=info.replace('Game Title','Urban Chaos XboxXBERecomp Integration').replace('L"Game"','L"UrbanChaosXbeTrial"').replace('"game",','"urban_chaos_xbe_trial",').replace('"Game"}}','"UrbanChaosXbeTrial"}}')
  if RELEASE:
   info=info.replace('L"Urban Chaos XboxXBERecomp Integration"','L"Urban Chaos: Riot Response - Burner Edition"')
@@ -463,12 +463,14 @@ int main(){uint32_t r=0;if(uc_ds_ref(r,false)!=0||uc_ds_ref(r,true)!=1||uc_ds_re
  prepare_coop_pause_host(AREA)
  from prepare_xbe_draw_bindings import finalize as finalize_draw_bindings
  finalize_draw_bindings(AREA)
+ zlib_dll=Path(os.environ.get('UCRR_ZLIB_DLL','C:/Users/Administrator/.cache/codex-runtimes/codex-primary-runtime/dependencies/native/git/mingw64/bin/zlib1.dll'))
+ assert zlib_dll.is_file(),f'Missing zlib dependency: {zlib_dll}'
  (AREA/'CMakeLists.txt').write_text('''cmake_minimum_required(VERSION 3.25)
 project(UrbanChaosXbeTrial LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 include("'''+SDK.as_posix()+'''/cmake/XbeRecomp.cmake")
-set(UC_ZLIB_DLL "C:/Users/Administrator/.cache/codex-runtimes/codex-primary-runtime/dependencies/native/git/mingw64/bin/zlib1.dll")
+set(UC_ZLIB_DLL "'''+zlib_dll.as_posix()+'''")
 set(UC_ZLIB_INCLUDE "C:/Users/Administrator/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/Lib/site-packages/lxml/includes/extlibs")
 # The pinned runtime uses clang's GNU frontend/llvm-ar; the existing archive
 # target expects cl/lib flags. Reuse its C sources with this toolchain instead.
@@ -527,6 +529,7 @@ list(APPEND XBE_HOST_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/compat/shaders.cpp
 list(APPEND XBE_HOST_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/compat/dsound.cpp")
 list(APPEND XBE_HOST_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/compat/xaudio2.cpp" "${CMAKE_CURRENT_SOURCE_DIR}/src/compat/xbe_audio_loop.cpp")
 list(APPEND XBE_HOST_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/compat/xbe_audio_settings.cpp")
+list(APPEND XBE_HOST_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/compat/xbe_health_settings.cpp")
 list(APPEND XBE_HOST_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/compat/d3d8.cpp" "${CMAKE_CURRENT_SOURCE_DIR}/src/compat/d3d12.cpp")
 add_executable(test_controller_device "'''+(ROOT/'scripts/test_xbe_controller_device.cpp').as_posix()+'''" src/compat/input.cpp "'''+(SDK/'runtime/core/log.cpp').as_posix()+'''")
 target_include_directories(test_controller_device PRIVATE "'''+(SDK/'runtime').as_posix()+'''")
@@ -777,7 +780,7 @@ add_executable(test_frontend_fonts src/compat/test_frontend_fonts.cpp src/compat
     ${imgui_SOURCE_DIR}/imgui.cpp ${imgui_SOURCE_DIR}/imgui_draw.cpp ${imgui_SOURCE_DIR}/imgui_tables.cpp ${imgui_SOURCE_DIR}/imgui_widgets.cpp)
 target_include_directories(test_frontend_fonts PRIVATE src/compat "'''+ROOT.as_posix()+'''" "'''+(SDK/'runtime').as_posix()+'''" ${imgui_SOURCE_DIR})
 target_link_libraries(test_frontend_fonts PRIVATE uc_native_texture gdi32 windowscodecs ole32 bcrypt)
-add_executable(test_menu_style src/compat/test_menu_style.cpp src/compat/xbe_audio_settings.cpp src/compat/xbe_frontend_fonts.cpp src/compat/xbe_hd_ui.cpp src/compat/xbe_pc_prompt_art.cpp "'''+(ROOT/'native/font.c').as_posix()+'''"
+add_executable(test_menu_style src/compat/test_menu_style.cpp src/compat/xbe_audio_settings.cpp src/compat/xbe_health_settings.cpp src/compat/xbe_frontend_fonts.cpp src/compat/xbe_hd_ui.cpp src/compat/xbe_pc_prompt_art.cpp "'''+(ROOT/'native/font.c').as_posix()+'''"
     ${imgui_SOURCE_DIR}/imgui.cpp ${imgui_SOURCE_DIR}/imgui_draw.cpp ${imgui_SOURCE_DIR}/imgui_tables.cpp ${imgui_SOURCE_DIR}/imgui_widgets.cpp)
 target_include_directories(test_menu_style PRIVATE src/common src/compat "'''+ROOT.as_posix()+'''" "'''+(SDK/'runtime').as_posix()+'''" ${imgui_SOURCE_DIR})
 target_link_libraries(test_menu_style PRIVATE uc_native_texture gdi32 user32 windowscodecs ole32 bcrypt)

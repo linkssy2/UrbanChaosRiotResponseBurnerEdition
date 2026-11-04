@@ -11,7 +11,7 @@ import sys
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
-VERSION = '0.10'
+VERSION = '0.11'
 SDK = REPO / 'build/upstream-review-xboxxbe-20261014'
 RUNTIME_NAME = 'UrbanChaosXbeTrial.exe'
 RUNTIME_FILES = (RUNTIME_NAME, 'zlib1.dll', 'libusb-1.0.dll', 'msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll')
@@ -219,7 +219,7 @@ def sources(runtime):
         'assets/README.txt': HERE / 'README-assets.txt',
         'licenses/XboxXBERecomp.txt': SDK / 'LICENSE',
         'licenses/XboxXBERecomp-third-party.txt': SDK / 'THIRD_PARTY.txt',
-        'licenses/zlib.txt': Path('C:/Users/Administrator/.cache/codex-runtimes/codex-primary-runtime/dependencies/native/git/mingw64/share/licenses/zlib/LICENSE'),
+        'licenses/zlib.txt': HERE / 'zlib-license.txt',
         'licenses/Microsoft-Visual-Cpp-Runtime-license.rtf': HERE / 'Microsoft-Visual-Cpp-Runtime-license.rtf',
         'licenses/Microsoft-Visual-Studio-Redist.txt': VS / 'Licenses/1033/Redist.txt',
         'licenses/Microsoft-Visual-Cpp-Redistribution.txt': HERE / 'Microsoft-Visual-Cpp-Redistribution.txt',

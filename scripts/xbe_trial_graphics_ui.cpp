@@ -28,6 +28,7 @@
 #include "xbe_coop_death.h"
 #include "xbe_coop_pause.h"
 #include "xbe_health_packs.h"
+#include "xbe_health_settings.h"
 #include "xbe_host_input.h"
 #include "xbe_cheats.h"
 
@@ -70,7 +71,7 @@ bool TakeNativeConfirm(bool ready){
     return ready&&received&&received==navigation_generation.load();
 }
 std::atomic<bool> panel_open=false, open_requested=false;
-std::atomic<unsigned> settings_page=0; // 0 Graphics, 1 Controls, 2 Language, 3 Cheats.
+std::atomic<unsigned> settings_page=0; // 0 Graphics, 1 Controls, 2 Language, 3 Cheats, 4 Gameplay.
 unsigned settings_player=0;
 int settings_pause_player=-1;
 uint64_t cheats_epoch=0;
@@ -557,7 +558,7 @@ void FrontendUi(const TrialFrontendFrame& f,const ImGuiViewport* view,bool inter
         if(coop&&int(i)==campaign)rows[count++]=src.count;
     }
     if(main){rows[count++]=src.count+unsigned(coop);rows[count++]=src.count+unsigned(coop)+1;}
-    else for(unsigned i=0,n=profiles?3:graphics?2:0;i<n;++i)rows[count++]=src.count+i;
+    else for(unsigned i=0,n=profiles?3:graphics?3:0;i<n;++i)rows[count++]=src.count+i;
     static uint64_t last_epoch=0;static unsigned focus=0,profile_slot=0;static TrialFrontendReleaseGate gate;
     if(last_epoch!=src.epoch){
         last_epoch=src.epoch;profile_slot=src.selected;focus=0;
@@ -584,7 +585,7 @@ void FrontendUi(const TrialFrontendFrame& f,const ImGuiViewport* view,bool inter
             std::lock_guard lock(context_lock);
             if(frontend_active&&frontend.source.epoch==src.epoch&&context.owner==src.owner&&
                context.screen==src.screen&&context.kind==f.list_kind){
-                opened=context;settings_page=main?3:controls?1:i==src.count+1?2:0;cheats_epoch=src.epoch;open_requested=true;
+                opened=context;settings_page=main?3:controls?1:i==src.count+2?4:i==src.count+1?2:0;cheats_epoch=src.epoch;open_requested=true;
             }
         }else FrontendAction(f,UC_HF_ACTIVATE,i);
     };
@@ -661,11 +662,11 @@ void FrontendUi(const TrialFrontendFrame& f,const ImGuiViewport* view,bool inter
         const char* labels[23]{};bool enabled[23]{};
         for(unsigned i=0;i<count;++i){
             const unsigned row=rows[i];
-            labels[i]=row>=src.count?(main?(coop&&row==src.count?"Co-op":row==src.count+unsigned(coop)?"Cheats":"Quit to desktop"):row==src.count?"Graphics":"Language"):
+            labels[i]=row>=src.count?(main?(coop&&row==src.count?"Co-op":row==src.count+unsigned(coop)?"Cheats":"Quit to desktop"):row==src.count?"Graphics":row==src.count+1?"Language":"Gameplay"):
                 graphics&&!std::strcmp(src.rows[row].label,"NewFrontEnd-ControllerOptions-1")?"Controls":f.labels[row];
             enabled[i]=row>=src.count||src.rows[row].enabled;
         }
-        if(xbox_KeyboardMode()||main){
+        if(xbox_KeyboardMode()||main||graphics){
             const char* title=TrialFrontendDifficulty(src)?"DIFFICULTY":main?"MAIN MENU":f.list_kind==2?"PAUSED":f.list_kind==7?"MISSION FAILED":"OPTIONS";
             // Mission Failed already has authored scene shading over its death sequence.
             canvas.SettingsFrame((src.source_kind&0x80000000u)!=0,title,f.list_kind!=7);
@@ -768,6 +769,33 @@ int SettingRow(MenuCanvas& c,const char* label,const char* value,unsigned index,
     c.Arrow(555,y+9,true,selected||hot?white:muted);
     if(delta)message.clear();
     ImGui::PopID();return delta;
+}
+
+void GameplayUi(const ImGuiViewport* view,bool paused){
+    BeginMenu("Burner gameplay",view);MenuCanvas canvas(view);canvas.SettingsFrame(paused,"GAMEPLAY");
+    static TrialFrontendReleaseGate gate;static uint64_t epoch=0;static unsigned focus=0;
+    const auto generation=navigation_generation.load();
+    if(epoch!=generation){epoch=generation;focus=0;}
+    const bool ready=gate.Accept(generation,UiHeld());
+    const unsigned events=frontend_events.exchange(0);
+    const bool confirm=TakeNativeConfirm(ready)||(ready&&(events&4));
+    const bool back=ready&&((events&8)||ImGui::IsMouseClicked(1,false)||ImGui::IsKeyPressed(ImGuiKey_Q,false)||ImGui::IsKeyPressed(ImGuiKey_Escape,false));
+    if(ready&&((events&3)||ImGui::IsKeyPressed(ImGuiKey_UpArrow)||ImGui::IsKeyPressed(ImGuiKey_DownArrow)||ImGui::IsKeyPressed(ImGuiKey_Tab)))focus=1-focus;
+    const int direction=ready&&((events&(16|32))||ImGui::IsKeyPressed(ImGuiKey_LeftArrow)||ImGui::IsKeyPressed(ImGuiKey_RightArrow)||confirm)?1:0;
+    ImGui::BeginDisabled(!ready);
+    const bool enabled=trial_health::enabled;
+    if(SettingRow(canvas,"Stored health packs",enabled?"On":"Off",0,focus,direction,26,110))trial_health::Apply(!enabled,message);
+    canvas.Text("Pack limit follows mission difficulty: Rookie 3, Veteran 2, Elite / Terror 1.",61,160,14,white,518);
+    canvas.Text("Off restores direct medic healing and disables stored packs, partner healing and revives.",61,212,14,white,518);
+    canvas.Text("Applies to single-player and both co-op players. Each mission starts with one pack when enabled.",61,274,12,muted,518);
+    canvas.Text("With packs Off, a co-op death ends the mission.",61,330,12,muted,518);
+    const char* labels[]={"Back"};
+    RowStrip(canvas,labels,nullptr,1,398,focus?0:1,[&](unsigned){focus=1;},[&](unsigned){if(ready)Close();});
+    if(back||(confirm&&focus))Close();
+    canvas.Center(message.c_str(),30,429,580,11,muted);
+    if(xbox_KeyboardMode())FooterPrompts(canvas,{{VK_LEFT,"Change"},{VK_RIGHT,"Change"},{VK_RBUTTON,"Back"}});
+    else FooterPrompts(canvas,{{0x103,"Navigate"},{0x101,"Change"},{0x102,"Back"}});
+    ImGui::EndDisabled();EndMenu();
 }
 
 void OriginalSettingsUi(const TrialFrontendFrame& f,const ImGuiViewport* view,bool interactive=true){
@@ -978,10 +1006,10 @@ void SettingsUi(const ImGuiViewport* view,bool paused){
             canvas.Text("Not installed",418,y+2,13,disabled,124);
             ImGui::EndDisabled();
         }
-        const uint32_t fmv_scales[]={0,1};const char* fmv_names[]={"Fill","4:3"};
+        const uint32_t fmv_scales[]={0,1};const char* fmv_names[]={"Fill","Original aspect ratio"};
         SettingChoice(canvas,"FMV scaling",draft.fmv_scale,fmv_scales,fmv_names,19,focus,keyboard_row==19?delta:0,top,step);
         canvas.Line(60,364,520,IM_COL32(118,126,121,100));
-        canvas.Text(focus==19?(draft.fmv_scale==0?"Fill stretches the complete picture to the screen. Built-in black bars remain.":"4:3 preserves the complete movie picture and original proportions."):
+        canvas.Text(focus==19?(draft.fmv_scale==0?"Fill removes verified black borders without stretching. Some bars may remain.":"Original aspect ratio preserves the complete movie frame, including built-in borders."):
                     focus==18?(textures_available?"Optional HD game texture pack. Keeps HUD and menus unchanged; uses more video memory.":"Not installed. Use Install HD Texture Pack in the launcher, then restart the game."):
                     focus==17?"Weapon FOV: 100% is original. Changes the gun and hands; keeps the world view.":
                     focus==16?"Change reticle size and colors for normal aim, enemies, friends and pistol spin.":
@@ -1032,7 +1060,8 @@ void TrialFrontendPublish(const TrialFrontendFrame& frame){
     const bool owned_pause=trial_coop::PauseOwner()>=0&&
         ((frame.source.source_kind&0x80000000u)||(frame.source.kind==UC_HF_LIST&&frame.list_kind==3));
     const bool audio=frame.source.kind==UC_HF_LIST&&frame.list_kind==4;
-    const bool native=xbox_KeyboardMode()||IsMainMenu(frame)||frame.delete_dialog||coop_open.load()||owned_pause||audio;
+    const bool options=frame.source.kind==UC_HF_LIST&&frame.list_kind==3;
+    const bool native=xbox_KeyboardMode()||IsMainMenu(frame)||frame.delete_dialog||coop_open.load()||owned_pause||audio||options;
     const bool active=TrialFrontendSupported(frame)&&native;bool changed;
     {std::lock_guard lock(context_lock);
         coop_menu.Observe(frame);
@@ -1268,7 +1297,7 @@ void TrialGraphicsUi() {
     else if(quit_open)QuitUi(view);
     else if(panel_open){
         const bool paused=opened.kind==2||(frame.source.source_kind&0x80000000u);
-        if(settings_page==1)ControlsUi(view,paused);else if(settings_page==2)LanguageUi(view,paused);else if(settings_page==3)CheatsUi(view);else SettingsUi(view,paused);
+        if(settings_page==1)ControlsUi(view,paused);else if(settings_page==2)LanguageUi(view,paused);else if(settings_page==3)CheatsUi(view);else if(settings_page==4)GameplayUi(view,paused);else SettingsUi(view,paused);
     }
     else if(current){
         if(frame.source.kind==UC_HF_OBJECTIVES)ObjectivesUi(frame,view);

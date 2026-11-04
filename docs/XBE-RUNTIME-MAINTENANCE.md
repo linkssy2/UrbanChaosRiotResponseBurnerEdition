@@ -1,5 +1,89 @@
 # Burner Edition: current runtime
 
+## Proportional FMV Fill (November 4, post-0.10 candidate)
+
+FMV scaling now matches Darkwatch's recent proportional presentation: Fill is
+the default and fits the active movie picture after trimming verified encoded
+black rows. Original aspect ratio (formerly labeled 4:3; saved value 1) retains
+the entire encoded frame. Both preserve proportions. Existing saved choices
+remain respected. Residual bars are intentional where further enlargement would
+crop the scene; full-frame 4:3 news videos retain side bars on a 16:9 display.
+
+All 42 original Xbox XMV files were decoded through every frame, including the
+PAL variants and four menu/background movies. Exact first/last nonzero RGB bytes
+were measured, rather than treating cropdetect's line averages as pixel bounds.
+The 98,768 decoded frames agree with an independent XMV packet/frame census.
+Fourteen non-background films have removable rows. The maintained name table
+retains four black rows beyond the all-frame picture bounds and never trims
+horizontally. News footage, unknown identities and unsupported same-name custom
+replacements are not inferred from Darkwatch's assets. Spanish voice imports
+preserve the original video bytes, so the same verified layout applies.
+
+`prepare_xbe_fmv_layout.py` pins the original movie open/close/draw routines and
+adds UV adjustment at the four original texture-coordinate submissions, alongside
+the existing quad positions. The same original draw fixture verifies 240
+movie/mode/aspect combinations at four output sizes, source UV limits, original
+guest state, black-band clear ordering and lifecycle/invalid-input guards.
+Movie backgrounds and the alternate authored 448-line path remain untouched.
+The two active frontend movie callers pass zero for that alternate-height flag.
+Fill/Original, save rollback, default Fill, English/Spanish UI and skip routing
+are covered by the existing production fixtures. Source-frame comparison images
+were inspected; these are previews of the framing, not live game captures.
+
+Audit scripts, per-movie hashes/bounds, independent census, preserved prior
+runtime/symbols and focused build evidence are in `build/fmv-proportional-20261104`.
+The shared Windows/Proton runtime compiles and focused checks pass. The Linux
+wrapper suite passes its Windows-host checks (three platform cases skipped).
+New live Windows and Proton movie playback remain unverified. Original movies,
+published packages and the HD pack are unchanged; this is not a new release.
+
+## Stored health-pack option (November 4, post-0.10 candidate)
+
+Options -> Gameplay now saves `stored_health_packs` (On by default). This is
+one campaign rule shared by single-player and both co-op players. The native
+profile difficulty at 643E0()+48 determines inventory capacity: Rookie 3,
+Veteran 2, Elite 1 and unlockable Terror 1. The mission-start grant remains one.
+The inventory HUD publishes the same effective capacity. Medic stock remains
+finite and a handoff consumes one of the medic's supplies.
+
+Off hides the stored-pack HUD, disables pack input/partner healing/reviving,
+and restores the original direct medic injection for an injured recipient.
+The existing per-player medic owner and stock protections remain active; Off
+must not redirect a P2 request to P1. A pending partner injection cannot deliver
+a revive or fall through into self-healing after the option is disabled.
+Dormant inventory is retained while Off, so switching cannot refill spent packs.
+Existing checkpoint companions up to three packs remain readable; restored
+counts clamp to the current difficulty without altering the original save.
+
+The shared Windows/Proton runtime uses `xbe_health_settings.cpp`, registered
+through the maintained builder's game settings table. `prepare_xbe_health_packs.py`
+pins the original profile lookup and difficulty access. Production health,
+original medic delivery/eligibility/stock and checkpoint fixtures cover capacity,
+Off behavior, owner isolation, cancellation and old records. The real ImGui
+fixture checks mouse/controller access, both pause owners, three resolutions,
+Spanish strings and failed-save rollback. Evidence and the preserved prior
+runtime/symbols are under `build/health-pack-options-20261104`.
+No live gameplay acceptance or Proton gameplay validation is claimed for this
+candidate. Published v0.10 packages and the HD texture pack are unchanged.
+
+The follow-up health-system audit found that Off still exposed the co-op revival
+countdown despite disabling treatment. `xbe_coop_death.cpp` now rejects revival
+with packs Off and queues the normal mission failure after the actors update,
+including when Off is selected during an existing countdown. Both players alive
+does not fail; re-enabling cannot reverse a committed failure. With packs On,
+the existing ten-second timer, pause/cinematic freeze, both-down failure and
+revived equipment visibility are unchanged. The Gameplay page explains this
+in English and Spanish.
+
+Expanded original-code fixtures cover pending medic handoffs across On/Off and
+difficulty changes, correct recipient/finite stock, and checkpoint restoration
+while disabled. Health, controller/keyboard routing, medic orders, menu saving,
+death, downed-camera and blur fixtures pass. The pre-fix death implementation
+fails the new Off regression check. Shared-runtime build and evidence are under
+`build/health-system-audit-20261104`; the Windows-host Linux wrapper checks pass
+with three platform-specific cases skipped. This remains offline verification,
+not new live Windows or Proton gameplay acceptance or a published package.
+
 ## Stereo / surround output (November 3, 0.10 preparation)
 
 The Audio menu now saves `sound_output`: Stereo (default), 5.1 Surround or
@@ -1869,27 +1953,9 @@ controller symbol. Controller mode retains its original/remapped symbols.
 
 ## FMV framing
 
-Graphics `fmv_scale` defaults to Fill (0); 4:3 (1) preserves the original
-proportions. Both now preserve the complete movie. The user requested this
-change on November 1 after the earlier Black-style zoom cropped visible content.
-
-`prepare_xbe_fmv_layout.py` pins the original open, close and movie-draw routines.
-In the widescreen game viewport, Fill retains the full 640x480 movie quad and
-unchanged UVs, stretching 4:3 footage to the output viewport without cropping.
-4:3 narrows the picture horizontally and clears the side
-bands after the movie draw, since movie playback skips the normal color clear.
-Startup Dolby, Eidos and Rocksteady films obey the same Fill/4:3 selection as
-campaign movies. Previously classifying these as Preserve forced 4:3 even in
-Fill, producing a 960-pixel-wide image on a 1280x720 output. Unrecognized movie
-names preserve their complete picture; menu background movies keep their
-original layout. The authored alternate 448-line
-draw and a 4:3 game viewport remain unchanged.
-
-This does not detect or remove encoded black bars: borders baked into footage
-remain. Fill retains titles and news tickers but changes 4:3 proportions; use
-4:3 for the original shape. This does not add an ultrawide game viewport.
-
-The draw fixture executes the original and patched guest routines and verifies
-positions, UVs, clear ordering, guest state and movie lifecycle. Settings, menu,
-language and skip fixtures cover integration. These are offline contracts;
-Windows and Proton movie playback must each be checked before release.
+Graphics `fmv_scale` defaults to proportional Fill (0); Original aspect ratio
+(1) preserves the complete encoded frame. See the November 4 audit above for
+movie bounds, source provenance and verification. This supersedes the November 1
+full-frame stretched Fill behavior. Neither mode crops scene content or stretches
+proportions. Fit can leave bars; there is no per-frame automatic crop or movie
+re-encode, and this does not add an ultrawide game viewport.
