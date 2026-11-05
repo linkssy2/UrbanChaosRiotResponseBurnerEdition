@@ -91,12 +91,33 @@ static void CheckGameViewWidth() {
 static std::string Read() {
     std::ifstream f(app::file);return {std::istreambuf_iterator<char>(f),{}};
 }
+static void CheckUltrawideSettings(){
+    const auto saved=app::settings;const auto aspect=TrialAspectRatio;
+    auto check_close=[](float a,float b){assert(std::abs(a-b)<.001f);};
+    TrialAspectRatio=0;
+    for(const auto size:{app::Mode{2560,1080},app::Mode{3440,1440},app::Mode{5120,1440}}){
+        app::settings.width=size.width;app::settings.height=size.height;trial_graphics::Initialize();
+        check_close(trial_graphics::AspectRatio(),float(size.width)/size.height);
+        const auto game=trial_graphics::ViewBounds(float(size.width),float(size.height));
+        check_close(game.x,0);check_close(game.y,0);check_close(game.width,float(size.width));check_close(game.height,float(size.height));
+        const auto menu=trial_graphics::ViewBounds(float(size.width),float(size.height),true);
+        check_close(menu.width,size.height*(16.f/9.f));check_close(menu.x,(size.width-menu.width)/2);check_close(menu.y,0);
+        check_close(trial_graphics::HudScale()*game.width/640,game.height/480);
+    }
+    for(unsigned selected:{3u,4u}){
+        TrialAspectRatio=selected;trial_graphics::Initialize();
+        check_close(trial_graphics::AspectRatio(),(selected==3?21.f:32.f)/9.f);
+        auto draft=trial_graphics::Snapshot();std::string error;assert(trial_graphics::Validate(draft,app::Desktop(),error));
+    }
+    app::settings=saved;TrialAspectRatio=aspect;trial_graphics::Initialize();
+}
 int main() {
     app::file=std::filesystem::temp_directory_path()/
         (L"uc-graphics-fixture-"+std::to_wstring(GetCurrentProcessId())+L".toml");
     app::settings.join_ip="retained";
     trial_graphics::Initialize();assert(trial_graphics::Widescreen());
     CheckGameViewWidth();
+    CheckUltrawideSettings();
     assert(!TrialWorldTextures&&!trial_graphics::WorldTextures());
     assert(!TrialHdUi&&!trial_graphics::HdUi()&&!trial_graphics::Snapshot().hd_ui);
     assert(TrialReticleScale==100&&trial_graphics::ReticleScale()==100);
@@ -162,7 +183,7 @@ int main() {
         if(which==1)bad.settings.render_percent=0;
         if(which==2)bad.settings.aniso=3;
         if(which==3)bad.settings.fps_cap=1;
-        if(which==4)bad.aspect=3;
+        if(which==4)bad.aspect=5;
         if(which==5)bad.settings.display_mode=app::DisplayMode(3);
         if(which==6)bad.settings.height=99999;
         if(which==7)bad.msaa=3;

@@ -24,7 +24,7 @@ uint32_t TrialPlayer2FieldOfView = 0, TrialPlayer2WeaponFovScale = 0;
 uint32_t TrialFmvScale = 0;
 uint32_t TrialCharacterQuality = 0, TrialRagdollMode = 0;
 namespace trial_graphics {
-static std::atomic<bool> boot_wide{true};
+static std::atomic<float> boot_aspect{16.f/9.f};
 static std::atomic<uint32_t> field_of_view{53};
 static std::atomic<bool> hd_ui{false};
 static std::atomic<bool> world_textures{false};
@@ -93,11 +93,12 @@ void PublishMsaaSupport(uint32_t mask){
     msaa_samples=TrialMsaaSamples;
 }
 
-static bool RequestedWide(const Draft& d, app::Mode desktop) {
-    if (d.aspect) return d.aspect == 2;
+static float RequestedAspect(const Draft& d, app::Mode desktop) {
+    constexpr float ratios[]={0,4.f/3.f,16.f/9.f,21.f/9.f,32.f/9.f};
+    if(d.aspect&&d.aspect<std::size(ratios))return ratios[d.aspect];
     const auto& s = d.settings;
     auto m = s.width && s.height ? app::Mode{s.width,s.height} : desktop;
-    return uint64_t(m.width)*2 >= uint64_t(m.height)*3;
+    return m.height?std::clamp(float(m.width)/m.height,4.f/3.f,32.f/9.f):16.f/9.f;
 }
 
 bool Validate(const Draft& d, app::Mode desktop, std::string& message) {
@@ -105,7 +106,7 @@ bool Validate(const Draft& d, app::Mode desktop, std::string& message) {
         message="Choose a listed reticle color.";return false;
     }
     const auto& s=d.settings;
-    if(uint32_t(s.display_mode)>2 || d.aspect>2) message="Invalid display or aspect setting.";
+    if(uint32_t(s.display_mode)>2 || d.aspect>4) message="Invalid display or aspect setting.";
     else if((s.width==0)!=(s.height==0) || (s.width &&
             (s.width<320 || s.height<240 || s.width>7680 || s.height>4320)))
         message="Choose Desktop or a resolution between 320 x 240 and 7680 x 4320.";
@@ -161,12 +162,13 @@ void Initialize() {
     // renderer or the existing single-player camera configuration.
     if(TrialPlayer2FieldOfView<40||TrialPlayer2FieldOfView>90)TrialPlayer2FieldOfView=d.fov;
     if(TrialPlayer2WeaponFovScale<50||TrialPlayer2WeaponFovScale>150)TrialPlayer2WeaponFovScale=d.weapon_fov;
-    boot_wide.store(RequestedWide(d,app::Desktop()));
+    boot_aspect.store(RequestedAspect(d,app::Desktop()));
     msaa_samples=d.msaa;
     PublishEffects(d);
 }
 
-bool Widescreen() { return boot_wide.load(); }
+float AspectRatio() { return boot_aspect.load(); }
+bool Widescreen() { return AspectRatio()>1.5f; }
 float GameViewWidth() {
     const auto window=static_cast<HWND>(app::Window());
     RECT client{};
@@ -174,8 +176,7 @@ float GameViewWidth() {
     const auto width=int64_t(client.right)-client.left;
     const auto height=int64_t(client.bottom)-client.top;
     if(width<=0||height<=0)return 0;
-    const float aspect=Widescreen()?16.0f/9.0f:4.0f/3.0f;
-    return std::min(float(width),float(height)*aspect);
+    return ViewBounds(float(width),float(height)).width;
 }
 bool ScalePending() { return scale_pending.load(); }
 void SetScalePending(bool pending) { scale_pending.store(pending); }
@@ -237,7 +238,7 @@ bool Apply(const Draft& draft,std::string& message,unsigned player) {
     msaa_samples=draft.msaa;
     PublishEffects(committed);
     if(display) app::ApplyDisplay();
-    if(RequestedWide(draft,desktop)!=boot_wide.load())
+    if(RequestedAspect(draft,desktop)!=boot_aspect.load())
         message="Changes applied and saved. Restart to update the game camera aspect.";
     else if(old.settings.render_percent!=draft.settings.render_percent || old.settings.height!=draft.settings.height||old.msaa!=draft.msaa)
         message="Changes saved. Rendering quality updates when the game redraws the scene.";

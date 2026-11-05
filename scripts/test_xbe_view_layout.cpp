@@ -10,6 +10,8 @@ namespace mem {bool IsCommitted(uint32_t page){return page<kernel::memory.size()
 namespace trial_graphics {
 static unsigned fov=53,fov2=53,reticle_percent=100,weapon_percent=100,weapon_percent2=100;static bool wide=true;
 static float game_view_width=2560;
+static float aspect_override=0;
+float AspectRatio(){return aspect_override?aspect_override:(wide?16.f/9.f:4.f/3.f);}
 static unsigned color_choices[2][4]{};
 uint32_t ReticleColor(unsigned p,unsigned s){return p<2&&s<4?color_choices[p][s]:0;}
 float GameViewWidth(){return game_view_width;}
@@ -46,6 +48,8 @@ X86_FUNC(sub_000656D0);
 X86_FUNC(sub_000731E0);
 X86_FUNC(sub_00273860);
 X86_FUNC(NativeHelpQueue);
+X86_FUNC(sub_000A5C10);X86_FUNC(sub_000A5C20);X86_FUNC(sub_000A5C30);
+X86_FUNC(sub_000A5E80);
 static bool retail_borders=false;
 static std::vector<std::array<float,5>> queued_borders;
 static bool sample_reticle=false,center_reticle=false;
@@ -66,6 +70,10 @@ uint32_t CallGuest(X86Context& c,uint32_t target,const uint32_t* p,size_t count)
 }
 }
 void x86_icall(X86Context& c,uint8_t* b,uint32_t target){
+    if(target==0xa5c10){sub_000A5C10(c,b);return;}
+    if(target==0xa5c20){sub_000A5C20(c,b);return;}
+    if(target==0xa5c30){sub_000A5C30(c,b);return;}
+    if(target==0xa5e80){sub_000A5E80(c,b);return;}
     if(target==0x7afe0){sub_0007AFE0(c,b);return;}
     if(target==0x7b340){sub_0007B340(c,b);return;}
     if(target==0x701020){c.eax=reticle_sprite;c.esp+=4;return;} // Original size-interface forwarding.
@@ -139,6 +147,17 @@ X86_FUNC(sub_0008BD60){assert(ctx.ecx==0x770d0);ctx.eax=0x76000;ctx.esp+=4;}
 // GENERATED_MODEL_OPERATION
 // GENERATED_POINT_PROJECTION
 // GENERATED_TASER_DRAW
+static uint32_t viewport_allocation=0x73000;
+X86_FUNC(sub_002D57FB){assert(Word(base,ctx.esp+4)==28);ctx.eax=viewport_allocation;ctx.esp+=4;}
+// GENERATED_VIEWPORT_HEIGHT
+// GENERATED_VIEWPORT_WIDTH
+// GENERATED_VIEWPORT_ASPECT
+// GENERATED_ROOT_VIEWPORT
+// GENERATED_FITTED_VIEWPORT
+// GENERATED_DISPLAY_FIT
+// GENERATED_ORIGINAL_DISPLAY_FIT
+// GENERATED_DERIVED_VIEWPORT
+// GENERATED_PERSPECTIVE
 X86_FUNC(sub_000BE210){ctx.eax=0x69000;ctx.esp+=4;}
 X86_FUNC(sub_000658C0);
 bool TrialFrontendHideListSprites(){return false;}
@@ -254,8 +273,9 @@ static void CheckPlayerReticle(uint8_t* b){
         RegisterPlayer(b,actor,slot,500+slot,600+slot);W(b,actor,0x46fbe8);W(b,actor+0x5c,0);W(b,actor+0x300,hroot);
     }
     sample_reticle=true;unsigned cases=0;
-    for(unsigned mode:{0u,1u,2u})for(unsigned slot=0;slot<2;++slot)for(bool wide:{false,true})
+    for(unsigned mode:{0u,1u,2u})for(unsigned slot=0;slot<2;++slot)for(float aspect:{4.f/3.f,16.f/9.f,21.f/9.f,3440.f/1440.f,32.f/9.f})
         for(unsigned percent:{50u,80u,100u,125u,200u})for(unsigned item=0;item<28;++item){
+        const bool wide=aspect>1.5f;trial_graphics::aspect_override=aspect;
         trial_coop::active=mode!=0;presentation=mode;trial_graphics::wide=wide;trial_graphics::reticle_percent=percent;
         W(b,hroot,0x4531a0);W(b,hroot+4,coop_players[slot]);W(b,root+4,coop_players[slot]);
         for(unsigned i=0;i<28;++i)W(b,root+0x20+i*4,i==item?fade:0);
@@ -284,7 +304,7 @@ static void CheckPlayerReticle(uint8_t* b){
             const float hd_u=(extent*2+2)/(extent*4);assert(original_u==hd_u);
             const float aim=(fixed[0]+float(fixed[2]-fixed[0])*original_u)/16;
             assert(std::fabs(aim-320)<.063f); // At most one native queue quantization step.
-            if(mode==0&&slot==0&&item==2&&percent==80&&wide){
+            if(mode==0&&slot==0&&item==2&&percent==80&&aspect==16.f/9.f){
                 const float baseline=(old[0]+float(old[2]-old[0])*original_u)/16;
                 assert(std::fabs(baseline-319.26904296875f)<.0001f);
                 std::printf("SP 80%% widescreen pistol anchor: %.9f -> %.9f native X; %.6f -> %.6f pixels from center at 2560 wide\n",baseline,aim,(baseline-320)*4,(aim-320)*4);
@@ -309,7 +329,7 @@ static void CheckPlayerReticle(uint8_t* b){
         }
         ++cases;
     }
-    sample_reticle=false;center_reticle=false;trial_coop::active=false;presentation=0;
+    trial_graphics::aspect_override=0;sample_reticle=false;center_reticle=false;trial_coop::active=false;presentation=0;
     std::printf("PASS %u native reticle placement cases: single-player/both split views, original/HD anchor, unchanged Y/cinematics\n",cases);
 }
 
@@ -328,9 +348,9 @@ static void CheckCoopHelp(uint8_t* b){
         RegisterPlayer(b,actor,slot,100+slot,200+slot);W(b,actor,0x46fbe8);W(b,actor+0x300,root);
     }
     sample_help=true;unsigned cases=0;
-    for(bool reverse:{false,true})for(unsigned index=0;index<2;++index)for(bool wide:{false,true})for(unsigned mode:{0u,1u,2u}){
+    for(bool reverse:{false,true})for(unsigned index=0;index<2;++index)for(float aspect:{4.f/3.f,16.f/9.f,21.f/9.f,3440.f/1440.f,32.f/9.f})for(unsigned mode:{0u,1u,2u}){
         const unsigned slot=reverse?1-index:index;const float top=float(slot)*240;
-        trial_coop::active=mode!=0;presentation=mode;trial_graphics::wide=wide;
+        trial_coop::active=mode!=0;presentation=mode;trial_graphics::wide=aspect>1.5f;trial_graphics::aspect_override=aspect;
         W(b,root+4,coop_players[slot]);
         X86Context c{};c.ecx=root;c.esp=0x70000;const uint32_t d=c.esp+16;
         Put(b,d,0);Put(b,d+4,mode==1?top:0);Put(b,d+8,640);Put(b,d+12,mode==1?top+240:480);
@@ -370,7 +390,7 @@ static void CheckCoopHelp(uint8_t* b){
     X86Context q{};q.ecx=help_queue;q.esp=0x71000;W(b,q.esp,0);W(b,q.esp+4,0x70010);
     queued_borders.clear();sub_00077570(q,b);
     assert(q.esp==0x71008&&queued_borders.size()==1&&queued_borders[0][1]==219.5f);
-    sample_help=false;trial_coop::active=false;presentation=0;trial_graphics::wide=true;
+    sample_help=false;trial_coop::active=false;presentation=0;trial_graphics::wide=true;trial_graphics::aspect_override=0;
     std::printf("PASS %u native help queue/text-draw cases; per-view glyph placement/restoration, original negative witness; font shaping/artwork remain live verification\n",cases);
 }
 
@@ -404,16 +424,16 @@ static void CheckCoopHud(uint8_t* b){
     Put(b,0x4505cc,255);Put(b,0x4523d4,640);Put(b,0x4523d0,480);
     for(unsigned i=0;i<4;++i)Put(b,0x690d0+i*4,1);
     unsigned cases=0;
-    for(unsigned slot=0;slot<2;++slot)for(bool wide:{false,true})for(unsigned mode:{0u,1u,2u})for(bool reward:{false,true}){
+    for(unsigned slot=0;slot<2;++slot)for(float aspect:{4.f/3.f,16.f/9.f,21.f/9.f,3440.f/1440.f,32.f/9.f})for(unsigned mode:{0u,1u,2u})for(bool reward:{false,true}){
         reward_notice=reward;
-        trial_coop::active=mode!=0;presentation=mode;trial_graphics::wide=wide;
+        trial_coop::active=mode!=0;presentation=mode;trial_graphics::wide=aspect>1.5f;trial_graphics::aspect_override=aspect;
         const uint32_t actor=coop_players[slot];W(b,root+4,actor);
         X86Context c{};c.ecx=root;c.esp=0x70000;const uint32_t d=c.esp+0x10;
         const float top=float(slot)*240;
         Put(b,d,0);Put(b,d+4,top);Put(b,d+8,640);Put(b,d+12,top+240);
         TrialHudLayoutScope scope(c,b);TrialHudLayout(c,b);
         const bool changed=mode==1;
-        assert(scope.split_==changed);assert(scope.scale_==(changed&&wide?.75f:1.f));
+        assert(scope.split_==changed);assert(scope.scale_==(changed?trial_graphics::HudScale():1.f));
         assert(scope.root_==(changed?root:0)); // Reject a split descriptor outside co-op.
         const auto descriptor=std::array<float,4>{Real(b,d),Real(b,d+4),Real(b,d+8),Real(b,d+12)};
         auto draw=[&](uint32_t node){X86Context q{};q.ecx=node;q.esp=0x71000;W(b,q.esp,0);W(b,q.esp+4,d);sub_0007C1E0(q,b);};
@@ -422,7 +442,7 @@ static void CheckCoopHud(uint8_t* b){
         assert(inset_rect[2]==descriptor[2]-(changed?16:48)&&inset_rect[3]==top+240-(changed?12:36));
         assert(Real(b,corner+12)==48&&Real(b,corner+20)==36);
         sample_notice=true;draw(notices);sample_notice=false;
-        const float scale=changed&&wide?.75f:1.f;
+        const float scale=changed?trial_graphics::HudScale():1.f;
         if(changed){
             assert(std::abs((notice_rect[0]+notice_rect[2])*.5f-319.5f)<.001f);
             assert(notice_rect[1]==top+41.5f&&notice_rect[3]==top+85.5f);
@@ -448,7 +468,7 @@ static void CheckCoopHud(uint8_t* b){
         }
         assert(hud==&scope);++cases;
     }
-    trial_coop::active=false;presentation=0;trial_graphics::wide=true;
+    trial_coop::active=false;presentation=0;trial_graphics::wide=true;trial_graphics::aspect_override=0;
     std::printf("PASS %u original inset + notice caller/tween + scope centering cases; GPU text and artwork remain live verification\n",cases);
 }
 
@@ -516,11 +536,11 @@ static void CheckProjectedHud(uint8_t* b){
     W(b,0x76034,0x701001);W(b,0x76038,0x701002);
     Put(b,0x44bf94,1);Put(b,0x44c1f8,.5f);Put(b,0x44d024,0);
     unsigned checks=0;
-    for(bool wide:{false,true})for(unsigned fov:{40u,53u,70u,90u})
+    for(float aspect:{4.f/3.f,16.f/9.f,21.f/9.f,3440.f/1440.f,32.f/9.f})for(unsigned fov:{40u,53u,70u,90u})
         for(unsigned weapon:{50u,100u,150u})for(float x:{-100.f,0.f,100.f}){
-            trial_graphics::wide=wide;trial_graphics::fov=fov;trial_graphics::weapon_percent=weapon;
+            const bool wide=aspect>1.5f;trial_graphics::wide=wide;trial_graphics::aspect_override=aspect;trial_graphics::fov=fov;trial_graphics::weapon_percent=weapon;
             const float sy=1.f/std::tan(fov*float(3.14159265358979323846/360));
-            const float sx=sy/(wide?16.f/9:4.f/3);
+            const float sx=sy/aspect;
             const std::array<float,16> m={sx,0,0,0,0,sy,0,0,0,0,1,1,0,0,0,0};
             std::memcpy(b+matrix,m.data(),64);Put(b,point,x);Put(b,point+4,30);Put(b,point+8,400);
             X86Context project{};project.esp=0x80000;
@@ -551,7 +571,7 @@ static void CheckProjectedHud(uint8_t* b){
             }
             assert(hud==&h);
             {TrialHudQuadScope ordinary(c,b);
-                assert(Real(b,a)==(wide?trial_view::HudX(expected_x-20-.5f,.75f):expected_x-20-.5f));
+                assert(Real(b,a)==(wide?trial_view::HudX(expected_x-20-.5f,trial_graphics::HudScale()):expected_x-20-.5f));
             }
             assert(!std::memcmp(before.data(),b+a,before.size()));
             // An unrelated owner cannot disable the regular HUD correction.
@@ -559,7 +579,7 @@ static void CheckProjectedHud(uint8_t* b){
             {TrialProjectedHudScope unrelated(c,b);assert(hud==&h);}
             W(b,owner,0x45312c);++checks;
         }
-    trial_graphics::wide=true;trial_graphics::fov=53;trial_graphics::weapon_percent=100;
+    trial_graphics::aspect_override=0;trial_graphics::wide=true;trial_graphics::fov=53;trial_graphics::weapon_percent=100;
     assert(!hud);
     std::printf("PASS %u retail 470A0 projected HUD placements: centered/off-center, FOV/aspect, weapon independence, nested restoration and static anchors\n",checks);
 }
@@ -790,6 +810,74 @@ static void CheckPlayerViews(uint8_t* b){
     trial_coop::active=false;coop_players[0]=coop_players[1]=0;
     std::printf("PASS two original player/view identities: independent FOV, ladder models, taser ratios, foreign effects and nested/retired owner isolation\n");
 }
+static void CheckUltrawide(uint8_t* b){
+    // Execute the display's root -> fit sequence, split derivation and perspective builder.
+    // GENERATED_VIEWPORT_CONSTANTS
+    const uint32_t root=0x73040,camera=0x73100,matrix=0x73200,stack=0x76000;
+    for(float aspect:{4.f/3.f,16.f/9.f,21.f/9.f,3440.f/1440.f,32.f/9.f}){
+        trial_graphics::aspect_override=aspect;
+        X86Context c{};c.esp=stack;c.ecx=root;
+        W(b,stack,0x8bf4a);W(b,stack+4,0);Put(b,stack+8,0);Put(b,stack+12,0);
+        Put(b,stack+16,480);Put(b,stack+20,640);Put(b,stack+24,16.f/9.f);
+        sub_000A5C50(c,b);assert(c.esp==stack+28&&c.eax==root);
+        assert(std::abs(Real(b,root+24)-480*aspect/640)<.00001f);
+        // Unknown constructors retain their requested aspect.
+        c.esp=stack;W(b,stack,0);assert(TrialRootAspect(c,b)==16.f/9.f);
+        const uint32_t fitted=0x73080;
+        viewport_allocation=fitted;
+        W(b,0x456f98+0x2c,0xa5c30);W(b,0x456f98+0x34,0xa5e80);
+        c={};c.esp=stack;c.esi=0x73400;c.eax=root;Put(b,stack+28,aspect>1.5f?16.f/9.f:4.f/3.f);
+        OriginalDisplayFit(c,b);assert(c.esp==stack);
+        if(aspect>16.f/9.f)assert(Real(b,fitted+12)>0&&Real(b,fitted+20)<640);
+        c={};c.esp=stack;c.esi=0x73400;c.eax=root;
+        NativeDisplayFit(c,b);assert(c.eax==fitted&&c.esp==stack);
+        assert(std::abs(Real(b,fitted+8))<.0001f&&std::abs(Real(b,fitted+12))<.0001f);
+        assert(std::abs(Real(b,fitted+16)-480)<.0001f&&std::abs(Real(b,fitted+20)-640)<.0001f);
+        viewport_allocation=0x73000;
+        for(unsigned part=0;part<3;++part){
+            uint32_t selected=fitted;
+            if(part){
+                c={};c.ecx=fitted;c.esp=stack;
+                Put(b,stack+4,float(part-1)*240);Put(b,stack+8,0);
+                Put(b,stack+12,float(part)*240);Put(b,stack+16,640);
+                sub_000A5CD0(c,b);selected=c.eax;assert(c.esp==stack+20&&selected==viewport_allocation);
+            }
+            for(float fov:{40.f,53.f,70.f,90.f}){
+                c={};c.ecx=camera;c.esp=stack;W(b,stack+4,matrix);Put(b,stack+8,fov);
+                W(b,camera+24,selected);Put(b,camera+28,.1f);Put(b,camera+32,10000);
+                Put(b,camera+36,0);Put(b,camera+40,1);
+                sub_0021E260(c,b);assert(c.esp==stack+12);
+                const float y=1/std::tan(fov*3.14159265358979323846f/360);
+                assert(std::abs(Real(b,matrix+20)-y)<.00001f);
+                assert(std::abs(Real(b,matrix)-y/(aspect*(part?2:1)))<.00001f);
+                assert(Real(b,matrix+8)==0&&Real(b,matrix+24)==0); // Center projection unchanged.
+            }
+        }
+        // Native menu quads are centered at a 16:9 safe width; guest words are restored.
+        c={};c.esp=stack;W(b,stack+4,0x73300);W(b,stack+8,0x73310);
+        Put(b,0x73300,-.5f);Put(b,0x73310,639.5f);
+        const float scale=std::min(1.f,(16.f/9.f)/aspect);
+        {TrialMenuLayoutScope menu;TrialMenuLayoutScope nested;
+            {TrialHudQuadScope q(c,b);
+                assert(std::abs(Real(b,0x73300)-(319.5f-320*scale))<.0001f);
+                assert(std::abs(Real(b,0x73310)-(319.5f+320*scale))<.0001f);
+            }
+            assert(Real(b,0x73300)==-.5f&&Real(b,0x73310)==639.5f);
+            {TrialMenuLayoutScope news(4.f/3.f);TrialHudQuadScope q(c,b);
+                const float movie_scale=(4.f/3.f)/aspect;
+                assert(std::abs(Real(b,0x73300)-(319.5f-320*movie_scale))<.0001f);
+                assert(std::abs(Real(b,0x73310)-(319.5f+320*movie_scale))<.0001f);
+            }
+            {TrialHudQuadScope q(c,b);
+                assert(std::abs(Real(b,0x73300)-(319.5f-320*scale))<.0001f);
+            }
+        }
+        assert(menu_depth==0);
+        {TrialHudQuadScope q(c,b);assert(Real(b,0x73300)==-.5f&&Real(b,0x73310)==639.5f);}
+    }
+    trial_graphics::aspect_override=0;
+    puts("PASS ultrawide: original root/fit/split projection, FOV 40-90, centered native menu quads and restoration");
+}
 int main(){
     auto*b=kernel::memory.data();X86Context c{};c.esi=0x20000;c.eax=17;c.ecx=0x30000;c.esp=0x40000;
     W(b,c.esi+0x54,12);W(b,c.esi+0x308,17);TrialPlayerCameraCreated(c,b);
@@ -920,6 +1008,7 @@ int main(){
     CheckPlayerViews(b);
     CheckReticleColors(b);
     CheckPlayerReticle(b);
+    CheckUltrawide(b);
 }
 
 

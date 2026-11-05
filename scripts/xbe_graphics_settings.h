@@ -2,6 +2,7 @@
 #include "app/app.h"
 #include <string>
 #include <array>
+#include <algorithm>
 
 // Persist through GameInfo.options; zero follows the selected display at boot.
 extern uint32_t TrialAspectRatio;
@@ -39,6 +40,16 @@ Draft Snapshot();
 Draft Snapshot(unsigned player);
 void Initialize();
 bool Widescreen();
+float AspectRatio(); // fixed at startup, like the guest's root viewport
+inline float HudScale(){return (4.f/3.f)/AspectRatio();}
+struct ViewRect {float x,y,width,height;};
+inline ViewRect ViewBounds(float width,float height,bool menu=false){
+    if(width<=0||height<=0)return {};
+    const float aspect=AspectRatio();
+    const float w=(std::min)(width,height*aspect),h=w/aspect;
+    const float content=menu?(std::min)(w,h*(16.f/9.f)):w;
+    return {(width-content)*.5f,(height-h)*.5f,content,h};
+}
 float GameViewWidth(); // displayed game pixels after aspect bars; zero if no valid client area
 uint32_t FieldOfView();
 uint32_t FieldOfView(unsigned player);

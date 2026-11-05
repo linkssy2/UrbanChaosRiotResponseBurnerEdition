@@ -137,7 +137,7 @@ void EnumerateModes() {
         modes.push_back(m);
     };
     // Windowed/borderless output sizes are useful even without an exclusive monitor mode.
-    for(auto mode:{app::Mode{1280,720},{1600,900},{1920,1080},{2560,1440},{3840,2160}})add(mode);
+    for(auto mode:{app::Mode{1280,720},{1600,900},{1920,1080},{2560,1080},{2560,1440},{3440,1440},{3840,1600},{3840,2160},{5120,1440}})add(mode);
     MONITORINFOEXW monitor{};monitor.cbSize=sizeof(monitor);
     if(GetMonitorInfoW(MonitorFromWindow(static_cast<HWND>(app::Window()),MONITOR_DEFAULTTOPRIMARY),&monitor)) {
         DEVMODEW mode{};mode.dmSize=sizeof(mode);
@@ -152,11 +152,13 @@ constexpr ImU32 disabled=IM_COL32(80,84,81,255),frame_color=IM_COL32(118,126,121
 // Match the original 640x480 menu bands. Text keeps its proportions as the
 // framed panel expands to widescreen; input uses exactly the drawn rectangles.
 struct MenuCanvas {
-    const ImGuiViewport* view;
     ImDrawList* draw;
-    float sx,sy;
-    explicit MenuCanvas(const ImGuiViewport* v):view(v),draw(ImGui::GetWindowDrawList()),sx(v->Size.x/640.f),sy(v->Size.y/480.f){}
-    ImVec2 Point(float x,float y)const{return {view->Pos.x+x*sx,view->Pos.y+y*sy};}
+    float sx,sy;ImVec2 origin;
+    explicit MenuCanvas(const ImGuiViewport* v,bool menu=true):draw(ImGui::GetWindowDrawList()){
+        const auto r=trial_graphics::ViewBounds(v->Size.x,v->Size.y,menu);
+        sx=r.width/640.f;sy=r.height/480.f;origin={v->Pos.x+r.x,v->Pos.y+r.y};
+    }
+    ImVec2 Point(float x,float y)const{return {origin.x+x*sx,origin.y+y*sy};}
     ImFont* Font(bool title=false)const{return TrialFrontendFontForUi(title&&title_font?title_font:body_font?body_font:ImGui::GetFont());}
     float Width(const char* text,float height,bool title=false)const{
         text=trial_language::Ui(text);
@@ -287,11 +289,12 @@ void DrawRevivePrompt(MenuCanvas& c,unsigned slot,bool split,bool available,unsi
 void DrawCoopDivider(const ImGuiViewport* view){
     // Window content clipping must not leave a gap at the split-screen seam.
     auto* draw=ImGui::GetForegroundDrawList();
-    const float thickness=std::max(2.f,std::round(view->Size.y/480.f*3.f));
+    const auto bounds=trial_graphics::ViewBounds(view->Size.x,view->Size.y);
+    const float thickness=std::max(2.f,std::round(bounds.height/480.f*3.f));
     // Bias the strip down one original UI pixel to cover the lower seam edge.
-    const float y=view->Pos.y+std::floor(view->Size.y*.5f)-std::floor(thickness*.5f)+std::round(view->Size.y/480.f);
+    const float y=view->Pos.y+std::floor(view->Size.y*.5f)-std::floor(thickness*.5f)+std::round(bounds.height/480.f);
     draw->PushClipRect(view->Pos,{view->Pos.x+view->Size.x,view->Pos.y+view->Size.y},false);
-    draw->AddRectFilled({view->Pos.x,y},{view->Pos.x+view->Size.x,y+thickness},IM_COL32(0,0,0,255));
+    draw->AddRectFilled({view->Pos.x+bounds.x,y},{view->Pos.x+bounds.x+bounds.width,y+thickness},IM_COL32(0,0,0,255));
     draw->PopClipRect();
 }
 bool PointerMoved(){return ImGui::GetIO().MouseDelta.x!=0||ImGui::GetIO().MouseDelta.y!=0;}
@@ -757,7 +760,7 @@ int SettingRow(MenuCanvas& c,const char* label,const char* value,unsigned index,
     int delta=focus==index?key_delta:0;
     if(clicked){
         focus=index;
-        const float x=(ImGui::GetIO().MousePos.x-c.view->Pos.x)/c.sx;
+        const float x=(ImGui::GetIO().MousePos.x-c.origin.x)/c.sx;
         // Clicking the label selects its row; the value or either arrow changes it.
         if(x>=376)delta=x<408?-1:1;
     }
@@ -857,13 +860,13 @@ void SettingSlider(MenuCanvas& c,const char* label,uint32_t& value,int low,int h
                    const char* suffix,unsigned index,unsigned& focus,int key_delta,float top,float step=16,float display_scale=1){
     char text[32];std::snprintf(text,sizeof(text),"%g%s",double(value)*display_scale,trial_language::Ui(suffix));
     const int delta=SettingRow(c,label,text,index,focus,key_delta,step,top);
-    const float grab_x=(ImGui::GetIO().MouseClickedPos[0].x-c.view->Pos.x)/c.sx;
+    const float grab_x=(ImGui::GetIO().MouseClickedPos[0].x-c.origin.x)/c.sx;
     const bool track_grab=grab_x>=410&&grab_x<=548;
     // Releasing a track drag must not also count as the row's value click.
     const int change=track_grab&&ImGui::IsMouseReleased(0)?(focus==index?key_delta:0):delta;
     if(change)value=uint32_t(std::clamp(int(value)+(change>0?increment:-increment),low,high));
     if(ImGui::IsItemActive()&&ImGui::IsMouseDown(0)&&track_grab){
-        const float x=(ImGui::GetIO().MousePos.x-c.view->Pos.x)/c.sx;
+        const float x=(ImGui::GetIO().MousePos.x-c.origin.x)/c.sx;
         const float raw=low+(x-418)*(high-low)/124;
         value=uint32_t(std::clamp(low+int(std::round((raw-low)/increment))*increment,low,high));
         focus=index;message.clear();
@@ -962,7 +965,7 @@ void SettingsUi(const ImGuiViewport* view,bool paused){
         const app::DisplayMode display[]={app::DisplayMode::Fullscreen,app::DisplayMode::Borderless,app::DisplayMode::Windowed};
         const char* display_names[]={"Fullscreen","Borderless","Windowed"};
         SettingChoice(canvas,"Display mode",draft.settings.display_mode,display,display_names,1,focus,keyboard_row==1?delta:0,top,step);
-        const uint32_t aspects[]={0,1,2};const char* aspect_names[]={"Automatic","4:3","16:9"};
+        const uint32_t aspects[]={0,1,2,3,4};const char* aspect_names[]={"Automatic","4:3","16:9","21:9","32:9"};
         SettingChoice(canvas,"Aspect ratio",draft.aspect,aspects,aspect_names,2,focus,keyboard_row==2?delta:0,top,step);
         const uint32_t scales[]={25,50,67,75,100,125,150,200};const char* scale_names[]={"25%","50%","67%","75%","100%","125%","150%","200%"};
         SettingChoice(canvas,"Internal render scale",draft.settings.render_percent,scales,scale_names,3,focus,keyboard_row==3?delta:0,top,step);
@@ -1241,7 +1244,7 @@ void TrialGraphicsUi() {
         const auto* hud_view=ImGui::GetMainViewport();
         if(presentation!=2&&hud_view->Size.x>0&&hud_view->Size.y>0){
             health_hud=true;
-            BeginMenu("Stored health packs",hud_view,ImGuiWindowFlags_NoInputs);MenuCanvas c(hud_view);
+            BeginMenu("Stored health packs",hud_view,ImGuiWindowFlags_NoInputs);MenuCanvas c(hud_view,false);
             const bool split=presentation==1;
             if(!split)revive_slide[1]=0;
             for(unsigned slot=0;slot<(split?2u:1u);++slot){
@@ -1270,8 +1273,7 @@ void TrialGraphicsUi() {
                 const unsigned source=bindings[0]?bindings[0]:bindings[1];
                 const bool gesture=!keyboard&&(!source||source==14);
                 const char* binding=keyboard?xbox_KeyboardSourceName(source):trial_controller::Label(source);
-                const bool wide=trial_graphics::Widescreen();
-                const float x=((split?74.f:106.f)+status.bar_extent)*(wide?.75f:1.f)-.5f+6.f*c.sy/c.sx;
+                const float x=((split?74.f:106.f)+status.bar_extent)*trial_graphics::HudScale()-.5f+6.f*c.sy/c.sx;
                 const float y=split?14.f+slot*240.f:38.f;
                 constexpr float icon_height=16.f;
                 const float icon_width=icon_height*c.sy/c.sx;

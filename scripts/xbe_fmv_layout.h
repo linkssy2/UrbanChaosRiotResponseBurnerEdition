@@ -21,10 +21,11 @@ inline Movie Classify(std::string_view name) {
     return {};
 }
 struct Layout { float x=1, y=1, top=0, bottom=0; };
-inline Layout Geometry(Movie movie,bool wide,uint32_t mode) {
-    if(movie.kind==Kind::Background)return {};
+inline Layout Geometry(Movie movie,float display,uint32_t mode) {
+    if(!(display>=4.f/3.f&&display<=32.f/9.f))display=4.f/3.f;
+    if(movie.kind==Kind::Background)return {(std::min)(1.f,(16.f/9.f)/display),1,0,0};
     const float top=mode==0?movie.top:0, bottom=mode==0?movie.bottom:0;
-    const float picture=640/(480-top-bottom), display=wide?16.f/9:4.f/3;
+    const float picture=640/(480-top-bottom);
     return {(std::min)(1.f,picture/display),(std::min)(1.f,display/picture),top,bottom};
 }
 }

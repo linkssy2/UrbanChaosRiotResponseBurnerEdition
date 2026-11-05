@@ -129,6 +129,8 @@ def prepare(settings, main, graphics, area):
               'trial_graphics::FullscreenRequested()')
     graphics=once(graphics,'#include "app/app.h"',
                   '#include "app/app.h"\n#include "xbe_graphics_settings.h"\n#include "xbe_target_resize.h"')
+    graphics=once(graphics,'    bool wide = app::Widescreen();\n    float aspect = wide ? 16.0f / 9.0f : 4.0f / 3.0f;',
+                  '    float aspect = trial_graphics::AspectRatio();')
     graphics=once(graphics,'    Target* EnsureTarget(const Surface& s, bool depth);',
                   '    Target* EnsureTarget(const Surface& s, bool depth);\n'
                   '    Target* EnsurePairedTarget(const Surface&, bool, const Surface&);')

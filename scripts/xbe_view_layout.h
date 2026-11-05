@@ -15,6 +15,13 @@ inline float HudX(float x,float scale){return (x+.5f)*scale-.5f;}
 }
 
 struct X86Context;
+float TrialRootAspect(const X86Context&,const uint8_t*);
+uint32_t TrialDisplayAspectBits();
+struct TrialMenuLayoutScope {
+    float previous_;
+    explicit TrialMenuLayoutScope(float aspect=16.f/9.f);
+    ~TrialMenuLayoutScope();
+};
 void TrialPlayerCameraCreated(const X86Context&,const uint8_t*);
 float TrialCameraTarget(const X86Context&,const uint8_t*);
 // BAC10's draw-local first-person projection, before the original publication.

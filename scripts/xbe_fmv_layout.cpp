@@ -31,7 +31,7 @@ trial_fmv::Layout TrialFmvLayout(uint8_t* base) {
     // Only the verified 640x480 movie quad; the alternate retail 448-line path stays authored.
     if(!TrialGuestReadable(0x519e20,9)||!FmvWord(base,0x519e20)||base[0x519e28])return {};
     Arithmetic arithmetic;
-    return trial_fmv::Geometry(movie_info.load(),trial_graphics::Widescreen(),trial_graphics::FmvScale());
+    return trial_fmv::Geometry(movie_info.load(),trial_graphics::AspectRatio(),trial_graphics::FmvScale());
 }
 void TrialFmvVertex(X86Context& ctx,uint8_t* base,trial_fmv::Layout layout) {
     if(layout.x==1&&layout.y==1)return;

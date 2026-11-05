@@ -18,6 +18,8 @@ struct PlayerView {
 };
 PlayerView players[4];
 thread_local uint32_t view_player=0;
+thread_local unsigned menu_depth=0;
+thread_local float menu_aspect=16.f/9.f;
 thread_local TrialHudLayoutScope* hud=nullptr;
 thread_local TrialReticleScope* reticle=nullptr;
 uint32_t Word(const uint8_t* b,uint32_t a){uint32_t v;std::memcpy(&v,b+a,4);return v;}
@@ -59,6 +61,20 @@ float ReticleAimU(const uint8_t* b,const X86Context& c,uint32_t root){
 }
 }
 
+float TrialRootAspect(const X86Context& c,const uint8_t* b){
+    if(!b||!TrialGuestReadable(c.esp,28))return 4.f/3.f;
+    const float original=Real(b,c.esp+24);
+    // Only the display root. Derived split/cinematic viewports inherit its pixel aspect.
+    if(Word(b,c.esp)!=0x8bf4au||Word(b,c.esp+4)||Real(b,c.esp+8)!=0||
+       Real(b,c.esp+12)!=0||Real(b,c.esp+16)!=480||Real(b,c.esp+20)!=640)return original;
+    return trial_graphics::AspectRatio();
+}
+uint32_t TrialDisplayAspectBits(){
+    const float aspect=trial_graphics::AspectRatio();
+    uint32_t bits;std::memcpy(&bits,&aspect,4);return bits;
+}
+TrialMenuLayoutScope::TrialMenuLayoutScope(float aspect):previous_(menu_aspect){++menu_depth;menu_aspect=aspect;}
+TrialMenuLayoutScope::~TrialMenuLayoutScope(){menu_aspect=previous_;--menu_depth;}
 void TrialPlayerCameraCreated(const X86Context& c,const uint8_t* b){
     if(!b||!TrialGuestReadable(c.esi,0x36c))return;
     const uint32_t port=Word(b,c.esi+0x368),id=Word(b,c.esi+0x54);
@@ -211,8 +227,7 @@ void TrialHudLayout(const X86Context& c,uint8_t* b){
     hud->split_=trial_coop::Active()&&hud->root_&&Real(b,d)==0&&Real(b,d+4)==top&&
         Real(b,d+8)==640&&Real(b,d+12)==top+240;
     if(!hud->split_&&(Real(b,d)!=0||Real(b,d+4)!=0||Real(b,d+8)!=640||Real(b,d+12)!=480)){hud->root_=0;return;}
-    if(!trial_graphics::Widescreen())return;
-    Arithmetic arithmetic;hud->scale_=.75f;Put(b,d+8,640/.75f);
+    Arithmetic arithmetic;hud->scale_=trial_graphics::HudScale();Put(b,d+8,640/hud->scale_);
 }
 TrialHudInsetScope::TrialHudInsetScope(const X86Context& c,uint8_t* b):base_(b),layout_(hud),notification_(hud?hud->notification_:false){
     if(!hud||!hud->split_||!TrialGuestReadable(c.ecx,0x1c)||Word(b,c.ecx)!=0x453cd0)return;
@@ -326,6 +341,17 @@ TrialReticleScope::TrialReticleScope(const X86Context& c,const uint8_t* b):previ
 }
 TrialReticleScope::~TrialReticleScope(){reticle=previous_;}
 TrialHudQuadScope::TrialHudQuadScope(const X86Context& c,uint8_t* b):base_(b){
+    if(!hud&&menu_depth&&TrialGuestReadable(c.esp,12)){
+        Arithmetic arithmetic;
+        const float scale=std::min(1.f,menu_aspect/trial_graphics::AspectRatio());
+        if(scale==1)return;
+        const uint32_t a=Word(b,c.esp+4),z=Word(b,c.esp+8);
+        if(!TrialGuestReadable(a,8)||!TrialGuestReadable(z,8)||
+           !std::isfinite(Real(b,a))||!std::isfinite(Real(b,z)))return;
+        address_[0]=a;original_[0]=Word(b,a);Put(b,a,319.5f+(Real(b,a)-319.5f)*scale);
+        if(z!=a){address_[1]=z;original_[1]=Word(b,z);Put(b,z,319.5f+(Real(b,z)-319.5f)*scale);}
+        return;
+    }
     if(!hud||(hud->scale_==1&&!reticle&&!hud->notification_&&!hud->help_)||!TrialGuestReadable(c.esp,12))return;
     const uint32_t a=Word(b,c.esp+4),z=Word(b,c.esp+8);
     if(!TrialGuestReadable(a,8)||!TrialGuestReadable(z,8)||

@@ -48,6 +48,8 @@ HOOKS={
 
 def clean(source,unit):
     source=source.replace(INCLUDE,'')
+    # View-layout preparation may insert its scope before this diagnostic scope.
+    if unit==11:source=source.replace('\tTrialAimReticleScope trial_aim_reticle(ctx,base);\n','')
     if unit==23:source=source.replace('\tTrialAimImpact(ctx,base);\n','')
     for old,new,count in HOOKS[unit]:
         if new in source:

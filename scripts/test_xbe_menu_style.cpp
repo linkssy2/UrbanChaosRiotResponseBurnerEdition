@@ -92,8 +92,9 @@ std::recursive_mutex& UiLock(){static std::recursive_mutex lock;return lock;}
 void Save(){if(fail_save)throw std::runtime_error("save failed");++audio_saves;}
 }
 namespace trial_graphics {
-static bool hud_widescreen=true;
-bool Widescreen(){return hud_widescreen;}
+static float aspect_override=0;
+float AspectRatio(){return aspect_override?aspect_override:float(output.width)/output.height;}
+bool Widescreen(){return AspectRatio()>1.5f;}
 Draft Snapshot(){return live;}
 Draft Snapshot(unsigned player){CHECK(player<2);auto result=live;if(player){result.fov=second_fov;result.weapon_fov=second_weapon_fov;result.reticle_colors=second_colors;}return result;}
 bool Apply(const Draft& next,std::string& status){
@@ -344,7 +345,8 @@ static void CheckPanelShade(unsigned alpha){
 static void CheckHealthPackIcons(const ImGuiWindow* hud,bool split){
     unsigned icons=0,slot=0,expected=0;
     for(unsigned i=0;i<(split?2u:1u);++i)expected+=health_status[i].visible&&health_status[i].opacity>0;
-    const float sx=output.width/640.f,sy=output.height/480.f;
+    const auto bounds=trial_graphics::ViewBounds(float(output.width),float(output.height));
+    const float sx=bounds.width/640.f,sy=bounds.height/480.f;
     for(int i=0;i+3<hud->DrawList->VtxBuffer.Size;++i){
         const auto* v=&hud->DrawList->VtxBuffer[i];
         if((v[0].col&~IM_COL32_A_MASK)!=IM_COL32(38,102,49,0))continue;
@@ -353,9 +355,9 @@ static void CheckHealthPackIcons(const ImGuiWindow* hud,bool split){
         const unsigned alpha=unsigned(health_status[slot].opacity*255.f+.5f);
         CHECK(v[0].col==IM_COL32(38,102,49,alpha));
         const float raw_end=(split?74.f:106.f)+health_status[slot].bar_extent;
-        const float bar_right=raw_end*(trial_graphics::hud_widescreen?.75f:1.f)-.5f;
-        CHECK(std::abs(v[0].pos.x-bar_right*sx-6*sy)<.01f);
-        CHECK(std::abs(v[0].pos.y-(split?14.f+slot*240.f:38.f)*sy)<.01f);
+        const float bar_right=raw_end*trial_graphics::HudScale()-.5f;
+        CHECK(std::abs(v[0].pos.x-bounds.x-bar_right*sx-6*sy)<.01f);
+        CHECK(std::abs(v[0].pos.y-bounds.y-(split?14.f+slot*240.f:38.f)*sy)<.01f);
         CHECK(std::abs(v[2].pos.x-v[0].pos.x-16*sy)<.01f);
         CHECK(std::abs(v[2].pos.y-v[0].pos.y-16*sy)<.01f);
         CHECK(i+11<hud->DrawList->VtxBuffer.Size);
@@ -388,15 +390,16 @@ static void CheckHealthPackIcons(const ImGuiWindow* hud,bool split){
 }
 static void CheckHealthPackHud(){
     const bool previous_hd=live.hd_ui;
-    const bool previous_wide=trial_graphics::hud_widescreen;
+    const float previous_aspect=trial_graphics::aspect_override;
     TrialFrontendPublish({});TrialGraphicsMenuContext(0,0,0,0);
-    for(const auto size:{app::Mode{640,480},app::Mode{1920,1080},app::Mode{2560,1440}})for(bool wide:{false,true}){
-        trial_graphics::hud_widescreen=wide;
+    for(const auto size:{app::Mode{640,480},app::Mode{1920,1080},app::Mode{2560,1440},app::Mode{3440,1440},app::Mode{5120,1440}})for(float aspect:{4.f/3.f,16.f/9.f,21.f/9.f,32.f/9.f}){
+        trial_graphics::aspect_override=aspect;
         output=size;trial_coop::SetActive(true);coop_presentation=1;
         health_status[0]={1,3,true,false};health_status[1]={2,3,true,true};
         DrawFrame();const auto* hud=ImGui::FindWindowByName("Stored health packs");
         CHECK(hud&&hud->Active&&(hud->Flags&ImGuiWindowFlags_NoInputs)==ImGuiWindowFlags_NoInputs&&hits.empty());
-        const float sx=size.width/640.f,sy=size.height/480.f;
+        const auto bounds=trial_graphics::ViewBounds(float(size.width),float(size.height));
+        const float sx=bounds.width/640.f,sy=bounds.height/480.f;
         CheckHealthPackIcons(hud,true);
         health_status[0].count=0;DrawFrame();CheckHealthPackIcons(hud,true);
         health_status[0].count=1;
@@ -413,9 +416,9 @@ static void CheckHealthPackHud(){
             DrawFrame();unsigned prompts=0;
             for(int i=0;i+3<hud->DrawList->VtxBuffer.Size;++i){
                 const auto* v=&hud->DrawList->VtxBuffer[i];
-                if(v[0].col==IM_COL32(0,0,0,115)&&std::abs(v[0].pos.x-400*sx)<.01f&&std::abs(v[2].pos.x-616*sx)<.01f){
-                    CHECK(std::abs(v[0].pos.y-(215+240*speaker)*sy)<.01f);
-                    CHECK(std::abs(v[2].pos.y-(234+240*speaker)*sy)<.01f);++prompts;
+                if(v[0].col==IM_COL32(0,0,0,115)&&std::abs(v[0].pos.x-bounds.x-400*sx)<.01f&&std::abs(v[2].pos.x-bounds.x-616*sx)<.01f){
+                    CHECK(std::abs(v[0].pos.y-bounds.y-(215+240*speaker)*sy)<.01f);
+                    CHECK(std::abs(v[2].pos.y-bounds.y-(234+240*speaker)*sy)<.01f);++prompts;
                 }
             }
             CHECK(prompts==1&&hits.empty());conversation_status[speaker]={};
@@ -434,7 +437,7 @@ static void CheckHealthPackHud(){
             health_status[0].opacity=opacity;DrawFrame();CheckHealthPackIcons(hud,false);
         }
     }
-    health_status[0]=health_status[1]={};coop_presentation=0;trial_coop::Reset();live.hd_ui=previous_hd;trial_graphics::hud_widescreen=previous_wide;DrawFrame();
+    health_status[0]=health_status[1]={};coop_presentation=0;trial_coop::Reset();live.hd_ui=previous_hd;trial_graphics::aspect_override=previous_aspect;DrawFrame();
 }
 static unsigned HealthSymbol(unsigned slot,const float (&uv)[4]){
     const auto* hud=ImGui::FindWindowByName("Stored health packs");CHECK(hud&&hud->Active);
@@ -1664,6 +1667,45 @@ static void CheckHealthOptions(){
     trial_language::active=4;CHECK(std::strcmp(trial_language::Ui("Stored health packs"),"Botiquines guardados")==0);trial_language::active=0;
     puts("health settings: saved On/Off, failed-save rollback, mouse/controller, both pause owners, 3 resolutions and Spanish passed");
 }
+static void CheckUltrawideMenus(){
+    const auto previous=output;trial_coop::Reset();trial_coop::SetAvailable(true);keyboard_mode=1;
+    for(const auto size:{app::Mode{3440,1440},app::Mode{5120,1440}}){
+        output=size;Close();
+        const float left=(size.width-size.height*(16.f/9.f))*.5f,right=size.width-left;
+        auto bounds=[&]{
+            CHECK(!hits.empty());
+            for(const auto& h:hits)CHECK(h.a.x>=left-1&&h.b.x<=right+1&&h.a.y>=0&&h.b.y<=size.height+1);
+        };
+        for(unsigned kind:{1u,2u,7u}){
+            auto page=MakeList(kind);Publish(page);bounds();
+            Click(0);const auto a=Take();CHECK(a.kind==UC_HF_ACTIVATE&&a.index==0);
+        }
+        auto main=MakeList(1);main.source.rows[0].callback=0x271730;
+        std::strcpy(main.source.rows[0].label,"NewFrontend-Singleplayer-1");
+        Publish(main);Click(1);CHECK(coop_open);bounds();CHECK(preview_records.size()==2);
+        for(const auto& r:preview_records)CHECK(r.minimum.x>=left&&r.maximum.x<=right);
+        Click(1);CHECK(coop_menu.choice[0]==1);RightClick();CHECK(!coop_open);EmptyAction();
+        auto options=MakeList(3);Publish(options);bounds();
+        Click(0);CHECK(PanelOpen()&&settings_page==1);bounds();
+        const auto selected=Take();CHECK(selected.kind==UC_HF_SELECT&&selected.index==0);
+        RightClick();CHECK(!PanelOpen());EmptyAction();
+        Click(options.source.count);CHECK(PanelOpen());bounds();
+        const unsigned old=draft.aspect;ChangeSetting(2);CHECK(draft.aspect==(old+1)%5);
+        const float scale=(right-left)/640.f;
+        const auto aspect_row=hits[2];
+        ClickPoint(left+391*scale,(aspect_row.a.y+aspect_row.b.y)*.5f);
+        CHECK(draft.aspect==old);
+        const auto slider=hits[14];const float y=(slider.a.y+slider.b.y)*.5f;
+        Move(left+418*scale,y);ImGui::GetIO().AddMouseButtonEvent(0,true);DrawFrame();
+        CHECK(draft.fov==40);
+        Move(left+480*scale,y);CHECK(draft.fov==65);
+        Move(left+542*scale,y);CHECK(draft.fov==90);
+        ImGui::GetIO().AddMouseButtonEvent(0,false);Settle();CHECK(draft.fov==90);
+        ReadDraft();RightClick();CHECK(!PanelOpen());EmptyAction();
+    }
+    trial_coop::Reset();trial_coop::SetAvailable(false);output=previous;
+    puts("PASS ultrawide mouse menus: centered 16:9 safe area, graphics, pause, failed mission and co-op previews");
+}
 int main(){
     ImGui::CreateContext();auto& io=ImGui::GetIO();io.IniFilename=nullptr;io.LogFilename=nullptr;
     trial_coop::Reset();trial_coop::SetAvailable(false);
@@ -1750,6 +1792,7 @@ int main(){
     CheckMainOrder();
     CheckCoopSelector();
     CheckCoopCampaignHeader();
+    CheckUltrawideMenus();
     trial_language::active=4;
     CHECK(std::strcmp(trial_language::Ui("Controls"),"Controles")==0);
     CHECK(std::strcmp(trial_language::Ui("Next Firearm"),"Siguiente arma de fuego")==0);

@@ -23,6 +23,7 @@
 #include "xbe_health_settings.h"
 #include "xbe_aim_mode.h"
 #include "xbe_menu_key_taps.h"
+#include "xbe_graphics_settings.h"
 
 namespace {
 std::recursive_mutex input_lock;
@@ -267,7 +268,8 @@ int ucrr_host_menu_pointer(float* x,float* y,int* click){
     if(release_keys[VK_LBUTTON])click_pending=false;
     RECT r;POINT p;
     if(!GetClientRect(game_window,&r)||!GetCursorPos(&p)||!ScreenToClient(game_window,&p)||r.right<=0||r.bottom<=0)return 0;
-    *x=p.x*640.f/r.right;*y=p.y*480.f/r.bottom;
+    const auto bounds=trial_graphics::ViewBounds(float(r.right),float(r.bottom),true);
+    *x=(p.x-bounds.x)*640.f/bounds.width;*y=(p.y-bounds.y)*480.f/bounds.height;
     if(click_pending){*x=click_x;*y=click_y;*click=1;click_pending=false;}
     return *x>=0&&*x<640&&*y>=0&&*y<480;
 }

@@ -78,7 +78,7 @@ def prepare(area):
     marker='X86_FUNC(__imp__sub_00065550) {\n'
     assert text.count(marker)==1
     text=text.replace(marker,marker+hook,1)
-    # Glyph quads at188CA/18A00 use65170 directly, bypassing65550 and9D9B0.
+    # Glyph quads at188CA/18A00 bypass65550;65170 still publishes through9D9B0.
     assert hashlib.sha256(read(0x65170,0x98)).hexdigest()=='065c75529af885b1496619ccb3d328b405fb562dc7bf321db649260df5a2f553'
     marker='X86_FUNC(__imp__sub_00065170) {\n'
     assert text.count(marker)==1

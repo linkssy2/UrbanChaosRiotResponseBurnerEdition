@@ -19,9 +19,9 @@ static uint32_t denied=0xffffffff;
 bool IsCommitted(uint32_t page){return page<kernel::memory.size()&&page!=denied;}
 }
 namespace trial_graphics {
-static bool wide=true;
+static float aspect=16.f/9.f;
 static uint32_t mode=0;
-bool Widescreen(){return wide;}
+float AspectRatio(){return aspect;}
 uint32_t FmvScale(){return mode;}
 }
 #include "../common/xbe_fmv_layout.cpp"
@@ -107,10 +107,10 @@ int main(int argc,char**){
         {"unknown",0,0},{"pal_dolby",0,0},
     };
     unsigned cases=0;
-    for(const auto& movie:movies)for(bool wide:{false,true})for(unsigned mode:{0u,1u,2u}){
-        trial_graphics::wide=wide;trial_graphics::mode=mode;Open(movie.name);
+    for(const auto& movie:movies)for(float aspect:{4.f/3.f,16.f/9.f,21.f/9.f,3440.f/1440.f,32.f/9.f})for(unsigned mode:{0u,1u,2u}){
+        trial_graphics::aspect=aspect;trial_graphics::mode=mode;Open(movie.name);
         const float top=mode==0?float(movie.top):0,bottom=mode==0?float(movie.bottom):0;
-        const double source_height=480-top-bottom,display=wide?16./9:4./3;
+        const double source_height=480-top-bottom,display=aspect;
         const double scale=(std::min)(480*display/640,480/source_height);
         const float w=float(640*scale*640/(480*display)),h=float(source_height*scale);
         const float x0=(640-w)/2,y0=(480-h)/2;
@@ -131,13 +131,17 @@ int main(int argc,char**){
         }
         ++cases;
     }
-    trial_graphics::wide=true;trial_graphics::mode=0;
+    trial_graphics::aspect=16.f/9.f;trial_graphics::mode=0;
     Open("unknown");Draw();Corners(80,560,0,480);assert(clears==1);
     for(const char* name: {"fe_bk1","fe_mp","gamelogo","splash"}){
         Open(name);
-        for(unsigned mode:{0u,1u}){trial_graphics::mode=mode;Draw();Corners(0,640,0,480);assert(!clears);}
+        for(float aspect:{16.f/9.f,21.f/9.f,32.f/9.f})for(unsigned mode:{0u,1u}){
+            trial_graphics::aspect=aspect;trial_graphics::mode=mode;Draw();
+            const float x=320*(1-(16.f/9.f)/aspect);
+            Corners(x,640-x,0,480);assert(clears==unsigned(x>0));
+        }
     }
-    trial_graphics::wide=true;trial_graphics::mode=0;
+    trial_graphics::aspect=16.f/9.f;trial_graphics::mode=0;
     Open("dolby");
     Draw(false,true,true);Corners(0,640,0,448);assert(!clears);
     Draw(false,false);assert(calls.empty()&&!clears);
@@ -153,7 +157,7 @@ int main(int argc,char**){
     Draw();assert(_mm_getcsr()==0x7f80);_mm_setcsr(previous);
     trial_graphics::mode=1;_mm_setcsr(0x7f80);Draw();assert(_mm_getcsr()==0x7f80);_mm_setcsr(previous);
     // Invalid texture coordinates and unreadable storage must remain untouched.
-    const auto layout=trial_fmv::Geometry(trial_fmv::Classify("dolby"),true,0);
+    const auto layout=trial_fmv::Geometry(trial_fmv::Classify("dolby"),16.f/9.f,0);
     for(unsigned invalid=0;invalid<5;++invalid){
         X86Context c{};c.esp=stack;W32(stack,invalid==0?8:9);
         G<float>(stack+4)=invalid==1?17:640;G<float>(stack+8)=invalid==2?239:0;
@@ -163,5 +167,5 @@ int main(int argc,char**){
         const X86Context saved=c;TrialFmvTexcoord(c,g_base,layout);mem::denied=0xffffffff;
         assert(std::memcmp(before.data(),g_base+stack,12)==0&&std::memcmp(&saved,&c,sizeof(c))==0);
     }
-    std::printf("FMV: %u original-guest draw cases; proportional Fill/Original, 4:3/16:9, four output sizes, UV/ABI, clear ordering, backgrounds, guards and lifecycle passed\n",cases);
+    std::printf("FMV: %u original-guest draw cases; proportional Fill/Original through 32:9, four output sizes, UV/ABI, clear ordering, backgrounds, guards and lifecycle passed\n",cases);
 }

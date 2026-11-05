@@ -342,7 +342,7 @@ void ControlsUi(const ImGuiViewport* view,bool paused){
         canvas.Rect(600,track_top,5,track_height,IM_COL32(80,90,85,140));
         canvas.Hit("controls scrollbar",594,track_top,17,track_height);
         if(ImGui::IsItemActive()&&ImGui::IsMouseDown(0)){
-            const float y=(ImGui::GetIO().MousePos.y-view->Pos.y)/canvas.sy;
+            const float y=(ImGui::GetIO().MousePos.y-canvas.origin.y)/canvas.sy;
             controls_scroll=unsigned(std::clamp(int(std::round((y-track_top-thumb_height/2)*max_scroll/(track_height-thumb_height))),0,int(max_scroll)));
         }
         const float thumb_top=track_top+(track_height-thumb_height)*controls_scroll/std::max(1u,max_scroll);

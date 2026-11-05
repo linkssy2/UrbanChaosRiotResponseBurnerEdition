@@ -1,5 +1,84 @@
 # Burner Edition: current runtime
 
+## 0.12 release review (November 4)
+
+The review against published 0.11 found a mouse-coordinate regression in the
+centered ultrawide menu. Setting arrows and sliders now subtract the drawn
+canvas origin, as does the Controls scrollbar. The unused viewport member was
+removed. The production-ImGui regression reproduces the wrong left-arrow
+direction before the correction and checks slider endpoints/midpoint at 21:9
+and 32:9 afterward. Existing callers share this correction.
+
+The ultrawide paths use bounded arithmetic and existing layout scopes, without
+new per-frame allocations, I/O or diagnostic output. Release preparation keeps
+heavy diagnostics compiled out; session logging remains explicitly opt-in and
+off by default, and essential error reporting is retained. This is a code and
+release-overhead review, not a new performance benchmark or a claim that no
+further optimization is possible. Paired 0.12 preparation, frozen input hashes,
+repeatability, package allowlists and upgrade evidence are in `build/release-0.12`.
+The 0.09 HD pack is unchanged. Release notes belong on the release page, not in
+the downloadable asset list. No game assets, personal state, PDBs or test logs
+are included in the release packages.
+
+## Ultrawide candidate (November 4, post-0.11)
+
+Automatic aspect uses the selected output's actual ratio at startup, bounded
+from 4:3 to 32:9. Explicit 21:9 and 32:9 choices join the existing 4:3/16:9
+choices. Changing the camera aspect requires restarting; the running renderer
+and guest camera retain the same ratio until then. Common ultrawide resolutions
+are included in the Graphics list. Windows and Proton use the same implementation.
+
+The original 640x480 guest coordinates remain intact. The display root's pixel
+aspect, logical viewport fit, perspective projection and final presentation now
+agree. The first live 2100x900 test exposed an omitted logical-fit step: 8BF4E
+still passed 16:9 to A5E80, producing viewport X=76, width=488 instead of the
+full 640. Native menu drawing then gained an extra offset and clipping. The
+correction pins that exact original call site and passes the startup aspect;
+other viewport-fit callers and safe-area operations retain their original logic.
+The fixture executes both the original and corrected constructor/fit sequence,
+then the original split derivation and perspective builder at five ratios.
+
+HUD artwork retains height-based proportions with corner anchors across the
+wider view; projected interaction markers and reticles stay tied to the camera.
+Native and replacement menus share a centered 16:9 safe area and matching mouse
+coordinates. Frontend background movies use that same safe area. Campaign movie
+Fill/Original behavior remains proportional, with the existing audited row trims
+and residual bars where necessary. Authored in-game cameras inherit the wider
+root; co-op cinematics retain their existing single full-screen presentation.
+No new HD texture pack is required.
+
+The native news-film clock uses a nested 4:3 drawing scope, rather than the
+menu's 16:9 safe area. The live 21:9 check exposed the clock outside its red
+movie box; the corrected 21:9 and 32:9 runs keep it inside that box. The movie
+quad has its own framing path. Original movie-update bytes are pinned, and the
+fixture checks nested scope restoration through 32:9.
+
+Evidence is under `build/ultrawide-20261104`, including the preserved runtime and
+symbols, maintained-source hashes, original-byte guards, native-code fixtures,
+screenshots and a private test package. Final runtime SHA-256 is
+`0839b483e49223d7cb23155ec05b5370f39714d4e76350ff2874499336659897`.
+All 172 maintained build/check steps and four additional asset checks passed.
+These include 600 original-guest FMV cases, native root/fit/split projection,
+projected prompts/reticles and mouse-menu hitboxes across ultrawide ratios.
+The Linux wrapper suite passed its Windows-host checks (19 cases, three
+platform-specific skips). The same maintained runtime is used by Proton;
+Linux/Proton gameplay remains untested, not inferred from Windows success.
+
+Windows live checks used isolated windowed outputs at 2100x900 and 2400x675
+(21:9 and 32:9), not physical ultrawide monitors. Profile/main menus, native
+level selection, news-film framing and its clock were inspected at both ratios.
+The final 21:9 build loaded single-player Canals with a full-width world view,
+centered reticle and corner HUD, then opened pause, Options and Graphics by mouse.
+At 32:9, co-op character previews, mouse Ready/Deploy, Hope Street's shared
+opening cinematic, transition into both split views, HUD corners/divider and
+pause/restart confirmation were checked. These are scoped visual checks, not a
+full campaign playthrough, controller gameplay test or performance benchmark.
+Full-screen monitor switching and live Original-mode playback remain untested;
+both FMV modes and multiple output sizes pass the native-code fixtures.
+The live evidence record distinguishes final-build captures from earlier
+negative witnesses. Published packages and the user's normal installation are
+intact; all 338 tracked mutable files in the source test package were unchanged.
+
 ## Proportional FMV Fill (November 4, post-0.10 candidate)
 
 FMV scaling now matches Darkwatch's recent proportional presentation: Fill is

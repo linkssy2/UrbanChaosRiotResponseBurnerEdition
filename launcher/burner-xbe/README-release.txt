@@ -1,4 +1,4 @@
-Urban Chaos: Riot Response - Burner Edition 0.11
+Urban Chaos: Riot Response - Burner Edition 0.12
 
 HD HUD is still a work in progress and has known prompt/display issues.
 Turn HD UI Off to use the original HUD, which works normally.
@@ -8,12 +8,12 @@ Windows x64 PC port using XboxXBERecomp by TGP482, with native Direct3D12 render
 PC controls and menus. Original gameplay is statically recompiled from Xbox code.
 XboxXBERecomp: https://github.com/TGP482/XboxXBERecomp
 
-NEW IN 0.11 (SINCE 0.10)
-- Added Options > Gameplay > Stored health packs (On/Off), shared by single-player and co-op.
-- Pack capacity now follows difficulty: Rookie 3, Veteran 2, Elite/Terror 1. Each player starts a fresh mission with one pack; medic supplies remain limited.
-- Off restores direct medic healing and disables stored packs, partner healing and reviving. In co-op, a death ends the mission with packs Off; On retains the ten-second revival window.
-- FMV Fill is the default and preserves proportions, removing verified encoded black margins without cutting into the picture. Original aspect ratio keeps the complete encoded frame. True 4:3 videos retain side bars; existing saved choices are respected.
-- The separate 0.09 HD game texture pack remains compatible; no reinstall is needed.
+NEW IN 0.12 (SINCE 0.11)
+- Added ultrawide support through 32:9, Automatic display aspect, explicit 21:9/32:9 choices and common ultrawide resolutions. Restart after changing camera aspect.
+- Updated single-player/co-op views, HUD anchors, reticles and interaction markers for wider displays. Menus stay centered with matching mouse targets and sliders.
+- Corrected native menu sizing and the clock overlay in mission news videos. In-game cinematics use the wider view; co-op cinematics remain shared full-screen.
+- FMV Fill remains proportional and the default. Remaining bars preserve the picture; Original retains the complete encoded frame.
+- The separate 0.09 HD texture pack remains compatible; no reinstall is needed.
 
 Co-op is experimental. Full-campaign progression, all character/action combinations,
 helicopter sections and Proton co-op still need gameplay testing. The reported

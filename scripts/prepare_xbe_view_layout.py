@@ -12,6 +12,12 @@ def prepare(area):
     count,table=struct.unpack_from('<II',xbe,0x11c)
     sections=[struct.unpack_from('<6I',xbe,table-base+i*56) for i in range(count)]
     for va,size,digest in [
+        (0xa5c50,85,'1d32eaf934ad8376c68bfd9f231236ca6ae2280b126a3edabec8c9b318e74993'),
+        (0x8bf4e,19,'8acedae21d632b25135a7835cdcb0a225fcbc83047adcb9b74c9751023c32a28'),
+        (0xa5e80,273,'b498e0b214e5f1554201bee857ff6d178beac8c4524207f8cb178c1094aa3562'),
+        (0x272870,317,'d4e626b5839ae231a22f9c129becf403586dbeae36ae06f910a5a5d18088acc6'),
+        (0x272bb0,1027,'6f33cf9392fdf78e692cafcaa47169817c1d5fcec37b20fa22eb2fc5d738021c'),
+        (0xa5cd0,179,'8635225542d840952d85bb00227e9f75cc336f45f2fa33183e9d1513628891ea'),
         (0x738d0,384,'b597664a720e41d60024d10f799fac58ab278a09980a1428d440363fbb9b2837'),
         (0x70d90,455,'879111defca52dd723604dadc820a063cf5705351be989ed3f38d58867be6671'),
         (0x72b50,60,'afadb1353b883d95b024a9df1eab40feb131e45afdf63c01826869ce55784691'),
@@ -87,6 +93,11 @@ def prepare(area):
             ('\t// 00073E32 call 0x0022D360','\tTrialHudLayout(ctx,base);\n')],
         12:[('X86_FUNC(__imp__sub_0007C1E0) {\n','\tTrialHudInsetScope trial_hud_inset(ctx,base);\n')],
         16:[('X86_FUNC(__imp__sub_0009D9B0) {\n','\tTrialHudQuadScope trial_hud_quad(ctx,base);\n')],
+        17:[],
+        14:[],
+        65:[('X86_FUNC(__imp__sub_00272870) {\n','\tTrialMenuLayoutScope trial_menu_layout;\n'),
+            # The news clock belongs to its uncropped 4:3 film, not the 16:9 menus.
+            ('X86_FUNC(__imp__sub_00272BB0) {\n','\tTrialMenuLayoutScope trial_movie_overlay(4.f/3.f);\n')],
         19:[('\t// 000BADED call [eax+0x28]','\tTrialWeaponProjection(ctx,base);\n')],
         54:[('X86_FUNC(__imp__sub_00215060) {\n','\tTrialPlayerViewScope trial_player_view;\n'),
             ('\t// 0021525A call [eax+0x4C]','\ttrial_player_view.Select(ctx,base);\n'),
@@ -99,6 +110,20 @@ def prepare(area):
             s=s.replace(hook,'');assert s.count(anchor)==1,anchor
             s=s.replace(anchor,anchor+hook if anchor.startswith('X86_FUNC') else hook+anchor,1)
             assert s.count(hook)==1,hook
+        if chunk==17:
+            original='{ uint32_t ea = (uint32_t)(ctx.esp + 0x18u); float a = ctx.xmm[0].f[0], b = X86_MEMF32(ea); (void)a; ctx.xmm[0].f[0] = a * b; }'
+            changed=original.replace('X86_MEMF32(ea)','TrialRootAspect(ctx,base)')
+            first=s.index('X86_FUNC(__imp__sub_000A5C50) {')
+            last=s.index('\nX86_WEAK_FUNC(sub_000A5C50',first)
+            body=s[first:last].replace(changed,original)
+            assert body.count(original)==1
+            s=s[:first]+body.replace(original,changed,1)+s[last:]
+        if chunk==14:
+            # The logical view must use the root's aspect, or retail refits it to 16:9.
+            original='\t// 0008BF4E mov ecx, [esp+0x1C]\n\t{ uint32_t ea = (uint32_t)(ctx.esp + 0x1Cu); ctx.ecx = (uint32_t)(X86_MEM32(ea)); }'
+            changed='\t// 0008BF4E mov ecx, [esp+0x1C]\n\tctx.ecx = TrialDisplayAspectBits();'
+            s=s.replace(changed,original);assert s.count(original)==1
+            s=s.replace(original,changed,1)
         if chunk==46:
             s=s.replace('\tTrialCameraFovScope trial_camera_fov(ctx,base);\n','')
             first=s.index('X86_FUNC(__imp__sub_001CDEE0) {')
@@ -154,12 +179,25 @@ def prepare(area):
                                 (12,'0007AFE0','// GENERATED_RETICLE_SPRITE'),
                                 (12,'0007B340','// GENERATED_RETICLE_SIZE'),
                                 (16,'0009D7E0','// GENERATED_RETICLE_QUEUE'),
-                                (11,'0007AAE0','// GENERATED_CENTERED_SCOPE_CHILD')):
+                                (11,'0007AAE0','// GENERATED_CENTERED_SCOPE_CHILD'),
+                                (17,'000A5C10','// GENERATED_VIEWPORT_HEIGHT'),(17,'000A5C20','// GENERATED_VIEWPORT_WIDTH'),
+                                (17,'000A5C30','// GENERATED_VIEWPORT_ASPECT'),(17,'000A5C50','// GENERATED_ROOT_VIEWPORT'),
+                                (17,'000A5E80','// GENERATED_FITTED_VIEWPORT'),
+                                (17,'000A5CD0','// GENERATED_DERIVED_VIEWPORT'),(55,'0021E260','// GENERATED_PERSPECTIVE')):
         source=(area/f'generated/game/x86_recomp.{chunk}.cpp').read_text()
         first=source.index('X86_FUNC(__imp__sub_'+address+') {')
         last=source.index('\nX86_WEAK_FUNC(sub_'+address,first)
         assert test.count(marker)==1
         test=test.replace(marker,source[first:last].replace('__imp__sub_'+address,'sub_'+address))
+    source=(area/'generated/game/x86_recomp.14.cpp').read_text()
+    first=source.index('\t// 0008BF4E mov ecx, [esp+0x1C]')
+    last=source.index('\t// 0008BF61 mov ecx, [esp+0x20]',first)
+    test=test.replace('// GENERATED_DISPLAY_FIT',
+        'X86_FUNC(NativeDisplayFit) {\n'+source[first:last]+'\n}\n')
+    original=source[first:last].replace('ctx.ecx = TrialDisplayAspectBits();',
+        'ctx.ecx = X86_MEM32(ctx.esp + 0x1Cu);')
+    test=test.replace('// GENERATED_ORIGINAL_DISPLAY_FIT',
+        'X86_FUNC(OriginalDisplayFit) {\n'+original+'\n}\n')
     source=(area/'generated/game/x86_recomp.11.cpp').read_text()
     first=source.index('X86_FUNC(__imp__sub_00077570) {')
     last=source.index('\nX86_WEAK_FUNC(sub_00077570',first)
@@ -181,4 +219,10 @@ def prepare(area):
         '{ uint32_t ea = 0x51BDF4u; ctx.eax = (ctx.eax & 0xFFFFFF00u) | X86_MEM8(ea); }')
     test=test.replace('// GENERATED_RETICLE_COLOR',
         'X86_FUNC(NativeReticleColor) { X86_LOAD_FLAGS(); uint32_t ca=0,cb=0;\n'+part+'\n}\n')
+    constants=[]
+    for va in (0x456fbc,0x456fc0,0x456fc4,0x44d948,0x44bf94,0x44c1f8):
+        section=next(s for s in sections if s[1]<=va and va+4<=s[1]+s[4])
+        word=struct.unpack_from('<I',xbe,section[3]+va-section[1])[0]
+        constants.append(f'W(b,0x{va:x},0x{word:x});')
+    test=test.replace('// GENERATED_VIEWPORT_CONSTANTS',''.join(constants))
     (area/'src/compat/test_view_layout.cpp').write_text(test)

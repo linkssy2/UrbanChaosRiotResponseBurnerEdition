@@ -1,4 +1,4 @@
-# Burner Edition 0.11 source map
+# Burner Edition 0.12 source map
 
 - `scripts/build_xbe_game_trial.py`: maintained build, preparation order and tests.
 - `scripts/prepare_xbe_*.py`: pinned transformations of the XboxXBERecomp runtime
