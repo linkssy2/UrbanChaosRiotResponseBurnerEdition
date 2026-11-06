@@ -274,7 +274,7 @@ static void CheckPlayerReticle(uint8_t* b){
         RegisterPlayer(b,actor,slot,500+slot,600+slot);W(b,actor,0x46fbe8);W(b,actor+0x5c,0);W(b,actor+0x300,hroot);
     }
     sample_reticle=true;unsigned cases=0;
-    for(unsigned mode:{0u,1u,2u})for(unsigned slot=0;slot<2;++slot)for(float aspect:{4.f/3.f,16.f/9.f,21.f/9.f,3440.f/1440.f,32.f/9.f})
+    for(unsigned mode:{0u,1u,2u})for(unsigned slot=0;slot<2;++slot)for(float aspect:{4.f/3.f,16.f/10.f,16.f/9.f,21.f/9.f,3440.f/1440.f,32.f/9.f})
         for(unsigned percent:{50u,80u,100u,125u,200u})for(unsigned item=0;item<28;++item){
         const bool wide=aspect>1.5f;trial_graphics::aspect_override=aspect;
         trial_coop::active=mode!=0;presentation=mode;trial_graphics::wide=wide;trial_graphics::reticle_percent=percent;
@@ -349,7 +349,7 @@ static void CheckCoopHelp(uint8_t* b){
         RegisterPlayer(b,actor,slot,100+slot,200+slot);W(b,actor,0x46fbe8);W(b,actor+0x300,root);
     }
     sample_help=true;unsigned cases=0;
-    for(bool reverse:{false,true})for(unsigned index=0;index<2;++index)for(float aspect:{4.f/3.f,16.f/9.f,21.f/9.f,3440.f/1440.f,32.f/9.f})for(unsigned mode:{0u,1u,2u})for(float width:{80.f,160.f,210.f}){
+    for(bool reverse:{false,true})for(unsigned index=0;index<2;++index)for(float aspect:{4.f/3.f,16.f/10.f,16.f/9.f,21.f/9.f,3440.f/1440.f,32.f/9.f})for(unsigned mode:{0u,1u,2u})for(float width:{80.f,160.f,210.f}){
         const unsigned slot=reverse?1-index:index;const float top=float(slot)*240;
         trial_coop::active=mode!=0;presentation=mode;trial_graphics::wide=aspect>1.5f;trial_graphics::aspect_override=aspect;
         // 140680 right-aligns measured helper lines against the native X590
@@ -439,7 +439,7 @@ static void CheckCoopHud(uint8_t* b){
     Put(b,0x4505cc,255);Put(b,0x4523d4,640);Put(b,0x4523d0,480);
     for(unsigned i=0;i<4;++i)Put(b,0x690d0+i*4,1);
     unsigned cases=0;
-    for(unsigned slot=0;slot<2;++slot)for(float aspect:{4.f/3.f,16.f/9.f,21.f/9.f,3440.f/1440.f,32.f/9.f})for(unsigned mode:{0u,1u,2u})for(bool reward:{false,true}){
+    for(unsigned slot=0;slot<2;++slot)for(float aspect:{4.f/3.f,16.f/10.f,16.f/9.f,21.f/9.f,3440.f/1440.f,32.f/9.f})for(unsigned mode:{0u,1u,2u})for(bool reward:{false,true}){
         reward_notice=reward;
         trial_coop::active=mode!=0;presentation=mode;trial_graphics::wide=aspect>1.5f;trial_graphics::aspect_override=aspect;
         const uint32_t actor=coop_players[slot];W(b,root+4,actor);
@@ -551,7 +551,7 @@ static void CheckProjectedHud(uint8_t* b){
     W(b,0x76034,0x701001);W(b,0x76038,0x701002);
     Put(b,0x44bf94,1);Put(b,0x44c1f8,.5f);Put(b,0x44d024,0);
     unsigned checks=0;
-    for(float aspect:{4.f/3.f,16.f/9.f,21.f/9.f,3440.f/1440.f,32.f/9.f})for(unsigned fov:{40u,53u,70u,90u})
+    for(float aspect:{4.f/3.f,16.f/10.f,16.f/9.f,21.f/9.f,3440.f/1440.f,32.f/9.f})for(unsigned fov:{40u,53u,70u,90u})
         for(unsigned weapon:{50u,100u,150u})for(float x:{-100.f,0.f,100.f}){
             const bool wide=aspect>1.5f;trial_graphics::wide=wide;trial_graphics::aspect_override=aspect;trial_graphics::fov=fov;trial_graphics::weapon_percent=weapon;
             const float sy=1.f/std::tan(fov*float(3.14159265358979323846/360));
@@ -615,7 +615,7 @@ static void CheckWeaponProjection(uint8_t* b){
     for(unsigned mode:{0u,1u,2u}){
     trial_coop::active=mode!=0;
     const unsigned slot=mode==2?1:0;selected.ecx=coop_players[slot];player_view.Select(selected,b);
-    for(bool climbing:{false,true})for(float aspect:{4.f/3,16.f/9})for(float degrees:{38.f,48.f,53.f})
+    for(bool climbing:{false,true})for(float aspect:{4.f/3,16.f/10,16.f/9})for(float degrees:{38.f,48.f,53.f})
         for(unsigned percent=50;percent<=150;++percent)for(unsigned op=0;op<7;++op){
             trial_graphics::weapon_percent=slot?200-percent:percent;
             trial_graphics::weapon_percent2=slot?percent:200-percent;
@@ -825,11 +825,11 @@ static void CheckPlayerViews(uint8_t* b){
     trial_coop::active=false;coop_players[0]=coop_players[1]=0;
     std::printf("PASS two original player/view identities: independent FOV, ladder models, taser ratios, foreign effects and nested/retired owner isolation\n");
 }
-static void CheckUltrawide(uint8_t* b){
+static void CheckDisplayAspects(uint8_t* b){
     // Execute the display's root -> fit sequence, split derivation and perspective builder.
     // GENERATED_VIEWPORT_CONSTANTS
     const uint32_t root=0x73040,camera=0x73100,matrix=0x73200,stack=0x76000;
-    for(float aspect:{4.f/3.f,16.f/9.f,21.f/9.f,3440.f/1440.f,32.f/9.f}){
+    for(float aspect:{4.f/3.f,16.f/10.f,16.f/9.f,21.f/9.f,3440.f/1440.f,32.f/9.f}){
         trial_graphics::aspect_override=aspect;
         X86Context c{};c.esp=stack;c.ecx=root;
         W(b,stack,0x8bf4a);W(b,stack+4,0);Put(b,stack+8,0);Put(b,stack+12,0);
@@ -844,6 +844,9 @@ static void CheckUltrawide(uint8_t* b){
         c={};c.esp=stack;c.esi=0x73400;c.eax=root;Put(b,stack+28,aspect>1.5f?16.f/9.f:4.f/3.f);
         OriginalDisplayFit(c,b);assert(c.esp==stack);
         if(aspect>16.f/9.f)assert(Real(b,fitted+12)>0&&Real(b,fitted+20)<640);
+        if(aspect==16.f/10.f){
+            assert(std::abs(Real(b,fitted+8)-24)<.0001f&&std::abs(Real(b,fitted+16)-456)<.0001f);
+        }
         c={};c.esp=stack;c.esi=0x73400;c.eax=root;
         NativeDisplayFit(c,b);assert(c.eax==fitted&&c.esp==stack);
         assert(std::abs(Real(b,fitted+8))<.0001f&&std::abs(Real(b,fitted+12))<.0001f);
@@ -891,7 +894,7 @@ static void CheckUltrawide(uint8_t* b){
         {TrialHudQuadScope q(c,b);assert(Real(b,0x73300)==-.5f&&Real(b,0x73310)==639.5f);}
     }
     trial_graphics::aspect_override=0;
-    puts("PASS ultrawide: original root/fit/split projection, FOV 40-90, centered native menu quads and restoration");
+    puts("PASS 4:3/16:10/16:9/ultrawide: original root/fit/split projection, FOV 40-90, centered native menu quads and restoration");
 }
 int main(){
     auto*b=kernel::memory.data();X86Context c{};c.esi=0x20000;c.eax=17;c.ecx=0x30000;c.esp=0x40000;
@@ -1023,7 +1026,7 @@ int main(){
     CheckPlayerViews(b);
     CheckReticleColors(b);
     CheckPlayerReticle(b);
-    CheckUltrawide(b);
+    CheckDisplayAspects(b);
 }
 
 

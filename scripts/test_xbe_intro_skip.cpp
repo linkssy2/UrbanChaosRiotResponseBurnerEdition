@@ -35,6 +35,8 @@ unsigned title_finishes=0;
 void TrialTitleContext(bool eligible){title_gate.Context(eligible&&test_focused&&!test_graphics);}
 bool TrialTitleTake(){return title_gate.Take()&&test_focused&&!test_graphics;}
 void TrialGraphicsInputChanged(){++title_finishes;menu_key_taps.Clear();}
+void TrialRagdollDragInput(unsigned,bool){}
+namespace trial_controls {void SuspendControllerDeadzones(){}}
 // GENERATED_HOST
 #include "../common/xbe_intro_skip.cpp"
 #ifdef UC_TEST_PREVIOUS_STARTUP

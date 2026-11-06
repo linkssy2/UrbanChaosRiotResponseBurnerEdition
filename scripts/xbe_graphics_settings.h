@@ -5,6 +5,7 @@
 #include <algorithm>
 
 // Persist through GameInfo.options; zero follows the selected display at boot.
+// Stable IDs: 1=4:3, 2=16:9, 3=21:9, 4=32:9, 5=16:10.
 extern uint32_t TrialAspectRatio;
 extern uint32_t TrialMsaaSamples;
 extern uint32_t TrialFieldOfView;

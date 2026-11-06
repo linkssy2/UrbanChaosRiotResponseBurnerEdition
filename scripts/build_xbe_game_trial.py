@@ -32,6 +32,14 @@ try:
  save()
  from prepare_xbe_cheats import unprepare as unprepare_cheats
  unprepare_cheats(AREA)
+ from prepare_xbe_ragdoll_drag import unprepare as unprepare_ragdoll_drag
+ unprepare_ragdoll_drag(AREA)
+ from prepare_xbe_corpse_shield_impact import unprepare as unprepare_corpse_shield_impact
+ unprepare_corpse_shield_impact(AREA)
+ from prepare_xbe_corpse_shield import unprepare as unprepare_corpse_shield
+ unprepare_corpse_shield(AREA)
+ from prepare_xbe_corpse_shield_physics import unprepare as unprepare_corpse_shield_physics
+ unprepare_corpse_shield_physics(AREA)
  from prepare_xbe_coop_hazards import unprepare as unprepare_coop_hazards
  unprepare_coop_hazards(AREA)
  (AREA/'src/compat').mkdir(parents=True,exist_ok=True)
@@ -41,6 +49,8 @@ try:
  unprepare_coop_aim_blur(AREA)
  from prepare_xbe_aim_mode import unprepare as unprepare_aim_mode
  unprepare_aim_mode(AREA)
+ from prepare_xbe_controller_deadzone import unprepare as unprepare_controller_deadzone
+ unprepare_controller_deadzone(AREA)
  from prepare_xbe_movement_inertia import unprepare as unprepare_movement_inertia
  unprepare_movement_inertia(AREA)
  from prepare_xbe_camera_push import unprepare as unprepare_camera_push
@@ -417,6 +427,8 @@ int main(){uint32_t r=0;if(uc_ds_ref(r,false)!=0||uc_ds_ref(r,true)!=1||uc_ds_re
  prepare_aim_mode(AREA)
  from prepare_xbe_movement_inertia import prepare as prepare_movement_inertia
  prepare_movement_inertia(AREA)
+ from prepare_xbe_controller_deadzone import prepare as prepare_controller_deadzone
+ prepare_controller_deadzone(AREA)
  info=(SDK/'templates/game/src/common/game_info.cpp').read_text()
  info=info.replace('#include "app/app.h"','#include "app/app.h"\n#include "xbe_graphics_settings.h"\nextern bool TrialInputMessage(void*, uint32_t, uintptr_t, intptr_t, intptr_t*);\nextern void TrialInputWindow(void*);\nextern void TrialInputPad(int, input::Pad&);\nextern void TrialHudUi(double);\nextern bool TrialShowFps;\nextern bool TrialSmoothFog;\nextern bool TrialDistanceFog;\nextern uint32_t TrialFogDistanceMode;')
  info=info.replace('.window = nullptr,','.window = TrialInputWindow,')
@@ -429,10 +441,10 @@ int main(){uint32_t r=0;if(uc_ds_ref(r,false)!=0||uc_ds_ref(r,true)!=1||uc_ds_re
  info=info.replace('{"ragdoll_amount", nullptr, &TrialRagdollMode}', '{"death_convulsions", &TrialDeathConvulsions, nullptr}, {"ragdoll_amount", nullptr, &TrialRagdollMode}')
  info=info.replace('{"ragdoll_amount", nullptr, &TrialRagdollMode}',
                    '{"ragdoll_amount", nullptr, &TrialRagdollMode}, {"language", nullptr, &TrialLanguage}, {"world_textures", &TrialWorldTextures, nullptr}, {"hd_ui", &TrialHdUi, nullptr}, {"reticle_scale", nullptr, &TrialReticleScale}, {"reticle_normal_color", nullptr, &TrialReticleColors[0][0]}, {"reticle_enemy_color", nullptr, &TrialReticleColors[0][1]}, {"reticle_friendly_color", nullptr, &TrialReticleColors[0][2]}, {"reticle_spin_color", nullptr, &TrialReticleColors[0][3]}, {"player2_reticle_normal_color", nullptr, &TrialReticleColors[1][0]}, {"player2_reticle_enemy_color", nullptr, &TrialReticleColors[1][1]}, {"player2_reticle_friendly_color", nullptr, &TrialReticleColors[1][2]}, {"player2_reticle_spin_color", nullptr, &TrialReticleColors[1][3]}, {"weapon_fov_scale", nullptr, &TrialWeaponFovScale}, {"player2_field_of_view", nullptr, &TrialPlayer2FieldOfView}, {"player2_weapon_fov_scale", nullptr, &TrialPlayer2WeaponFovScale}, {"fmv_scale", nullptr, &TrialFmvScale}')
- info=info.replace('#include "xbe_graphics_settings.h"','#include "xbe_graphics_settings.h"\n#include "xbe_audio_output.h"\n#include "xbe_health_settings.h"')
- info=info.replace('{"fmv_scale", nullptr, &TrialFmvScale}', '{"fmv_scale", nullptr, &TrialFmvScale}, {"sound_output", nullptr, &TrialSoundOutput}, {"stored_health_packs", &TrialStoredHealthPacks, nullptr}')
+ info=info.replace('#include "xbe_graphics_settings.h"','#include "xbe_graphics_settings.h"\n#include "xbe_audio_output.h"\n#include "xbe_health_settings.h"\n#include "xbe_cheats.h"')
+ info=info.replace('{"fmv_scale", nullptr, &TrialFmvScale}', '{"fmv_scale", nullptr, &TrialFmvScale}, {"sound_output", nullptr, &TrialSoundOutput}, {"stored_health_packs", &TrialStoredHealthPacks, nullptr}, {"corpse_shield", &TrialCorpseShield, nullptr}')
  info=info.replace('.init = trial_graphics::Initialize,',
-                   '.init = []{trial_graphics::Initialize();trial_language::Initialize();trial_audio::Initialize();trial_health::Initialize();},')
+                   '.init = []{trial_graphics::Initialize();trial_language::Initialize();trial_audio::Initialize();trial_health::Initialize();trial_cheats::Initialize();},')
  info=info.replace('Game Title','Urban Chaos XboxXBERecomp Integration').replace('L"Game"','L"UrbanChaosXbeTrial"').replace('"game",','"urban_chaos_xbe_trial",').replace('"Game"}}','"UrbanChaosXbeTrial"}}')
  if RELEASE:
   info=info.replace('L"Urban Chaos XboxXBERecomp Integration"','L"Urban Chaos: Riot Response - Burner Edition"')
@@ -478,6 +490,16 @@ int main(){uint32_t r=0;if(uc_ds_ref(r,false)!=0||uc_ds_ref(r,true)!=1||uc_ds_re
  # Add the read-only recorder after production-body fixtures are exported.
  from prepare_xbe_death_spasm import prepare as prepare_death_spasm
  prepare_death_spasm(AREA)
+ from prepare_xbe_ragdoll_drag import prepare as prepare_ragdoll_drag
+ prepare_ragdoll_drag(AREA)
+ from prepare_xbe_corpse_shield_impact import prepare as prepare_corpse_shield_impact
+ prepare_corpse_shield_impact(AREA)
+ from prepare_xbe_corpse_shield import prepare as prepare_corpse_shield
+ prepare_corpse_shield(AREA)
+ from prepare_xbe_corpse_shield_native import prepare as prepare_corpse_shield_native
+ prepare_corpse_shield_native(AREA)
+ from prepare_xbe_corpse_shield_physics import prepare as prepare_corpse_shield_physics
+ prepare_corpse_shield_physics(AREA)
  from prepare_xbe_aim_diagnostic import prepare as prepare_aim_diagnostic
  prepare_aim_diagnostic(AREA)
  if os.environ.get('UCRR_XBE_SHADOW_DIAG')=='1':
@@ -628,6 +650,18 @@ add_executable(test_ragdoll_force src/compat/test_ragdoll_force.cpp)
 target_include_directories(test_ragdoll_force PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
 add_executable(test_death_spasm src/compat/test_death_spasm.cpp)
 target_include_directories(test_death_spasm PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
+add_executable(test_ragdoll_drag src/compat/test_ragdoll_drag.cpp)
+target_include_directories(test_ragdoll_drag PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
+add_executable(test_corpse_shield_impact src/compat/test_corpse_shield_impact.cpp)
+target_include_directories(test_corpse_shield_impact PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
+add_executable(test_corpse_shield src/compat/test_corpse_shield.cpp)
+target_include_directories(test_corpse_shield PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
+add_executable(test_corpse_shield_query src/compat/test_corpse_shield_query.cpp)
+target_include_directories(test_corpse_shield_query PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
+add_executable(test_corpse_shield_step src/compat/test_corpse_shield_step.cpp)
+target_include_directories(test_corpse_shield_step PRIVATE "'''+(SDK/'runtime').as_posix()+'''")
+add_executable(test_corpse_shield_native src/compat/test_corpse_shield_native.cpp)
+target_include_directories(test_corpse_shield_native PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
 add_executable(test_ragdoll_recovery src/compat/test_ragdoll_recovery.cpp)
 target_include_directories(test_ragdoll_recovery PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
 add_executable(test_daniels_spawn src/compat/test_daniels_spawn.cpp)
@@ -752,6 +786,8 @@ target_include_directories(test_aim_mode PRIVATE src/common "'''+(SDK/'runtime')
 add_executable(test_camera_push src/compat/test_camera_push.cpp)
 add_executable(test_movement_inertia src/compat/test_movement_inertia.cpp)
 target_include_directories(test_movement_inertia PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
+add_executable(test_controller_deadzone src/compat/test_controller_deadzone.cpp)
+target_include_directories(test_controller_deadzone PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
 target_include_directories(test_camera_push PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
 add_executable(test_coop_menu src/compat/test_coop_menu.cpp)
 target_include_directories(test_coop_menu PRIVATE src/common "'''+ROOT.as_posix()+'''")
@@ -877,7 +913,7 @@ target_include_directories(UrbanChaosXbeTrial PRIVATE "'''+ROOT.as_posix()+'''" 
  assert '#define HAVE_LIBUSB 1' in config,'Switch 2 USB driver would be silently omitted'
  run('build-game-msvc',['cmake','--build',AREA/'out-msvc','--target','UrbanChaosXbeTrial','test_device_refs','test_pc_keyboard','test_pc_camera','test_pc_memory','test_coroutines','test_voice_mode','test_stream_factory','test_io_apc','test_recorded_draws','test_visibility','test_query_resolves','test_query_resolves_gpu','test_inline_draws','test_resource_refs','test_shader_state','test_cursor','test_target60','test_signed_lighting','test_depth_alias','test_audio_rolloff','test_audio_cone','test_audio_factors','test_audio_pitch','test_stream_status','test_audio_loop','test_audio_routing','test_heap_probe','test_graphics_menu_context','test_graphics_input','test_graphics_settings','test_target_resize','test_smooth_fog','-j','4'])
  run('test-window-icon',[sys.executable,ROOT/'scripts/test_xbe_window_icon.py',AREA/'out-msvc/UrbanChaosXbeTrial.exe',ROOT/'launcher/burner/burner.ico'])
- run('build-interface-fixtures',['cmake','--build',AREA/'out-msvc','--target','test_world_textures','test_pistol_spin','test_firearm_cycle','test_release_assets','test_disc_files','test_language','test_audio_config','test_missing_texture','test_release','test_prompt_handoff','test_state_costs','test_event_callback','test_shader_cache','test_perf','test_controls','test_msaa','test_effect_settings','test_ragdoll_force','test_ragdoll_settings','test_ragdoll_contacts','test_filter','test_intro_skip','test_conversation_skip','test_health_pulse','test_health_upgrade_fade','test_view_layout','test_coop_input','test_coop_controls','test_pause_imgui','test_coop_guest','test_coop_resources','test_coop_body','test_coop_effects','test_coop_cinematics','test_coop_death','test_coop_downed_blur','test_coop_shields','test_coop_progression','test_coop_interactions','test_coop_rewards','test_coop_collectibles','test_coop_ko_rewards','test_coop_turrets','test_coop_turret_assets','test_coop_turret_view','test_health_packs','test_aim_mode','test_movement_inertia','test_coop_menu','test_pc_prompts','test_hd_ui_renderer','test_hd_ui_prompts','test_hd_ui_gpu','test_coop_blur_gpu','test_hd_ui','test_hd_ui_restored','test_hd_ui_reconstruct','test_frontend','test_cheats','test_level_details','test_frontend_fonts','test_menu_style','-j','4'])
+ run('build-interface-fixtures',['cmake','--build',AREA/'out-msvc','--target','test_world_textures','test_pistol_spin','test_firearm_cycle','test_release_assets','test_disc_files','test_language','test_audio_config','test_missing_texture','test_release','test_prompt_handoff','test_state_costs','test_event_callback','test_shader_cache','test_perf','test_controls','test_msaa','test_effect_settings','test_ragdoll_force','test_ragdoll_settings','test_ragdoll_contacts','test_filter','test_intro_skip','test_conversation_skip','test_health_pulse','test_health_upgrade_fade','test_view_layout','test_coop_input','test_coop_controls','test_pause_imgui','test_coop_guest','test_coop_resources','test_coop_body','test_coop_effects','test_coop_cinematics','test_coop_death','test_coop_downed_blur','test_coop_shields','test_coop_progression','test_coop_interactions','test_coop_rewards','test_coop_collectibles','test_coop_ko_rewards','test_coop_turrets','test_coop_turret_assets','test_coop_turret_view','test_health_packs','test_aim_mode','test_movement_inertia','test_controller_deadzone','test_coop_menu','test_pc_prompts','test_hd_ui_renderer','test_hd_ui_prompts','test_hd_ui_gpu','test_coop_blur_gpu','test_hd_ui','test_hd_ui_restored','test_hd_ui_reconstruct','test_frontend','test_cheats','test_level_details','test_frontend_fonts','test_menu_style','-j','4'])
  run('build-controller-device',['cmake','--build',AREA/'out-msvc','--target','test_controller_device','-j','4'])
  run('test-controller-device',[AREA/'out-msvc/test_controller_device.exe'])
  run('test-language',[AREA/'out-msvc/test_language.exe'])
@@ -920,6 +956,18 @@ target_include_directories(UrbanChaosXbeTrial PRIVATE "'''+ROOT.as_posix()+'''" 
  run('test-ragdoll-force',[AREA/'out-msvc/test_ragdoll_force.exe'])
  run('build-death-spasm',['cmake','--build',AREA/'out-msvc','--target','test_death_spasm','-j','4'])
  run('test-death-spasm',[AREA/'out-msvc/test_death_spasm.exe',AREA/'assets/ragdoll-recovery/authored.bin'])
+ run('build-ragdoll-drag',['cmake','--build',AREA/'out-msvc','--target','test_ragdoll_drag','-j','4'])
+ run('test-ragdoll-drag',[AREA/'out-msvc/test_ragdoll_drag.exe'])
+ run('build-corpse-shield-impact',['cmake','--build',AREA/'out-msvc','--target','test_corpse_shield_impact','-j','4'])
+ run('test-corpse-shield-impact',[AREA/'out-msvc/test_corpse_shield_impact.exe'])
+ run('build-corpse-shield',['cmake','--build',AREA/'out-msvc','--target','test_corpse_shield','-j','4'])
+ run('test-corpse-shield',[AREA/'out-msvc/test_corpse_shield.exe'])
+ run('build-corpse-shield-query',['cmake','--build',AREA/'out-msvc','--target','test_corpse_shield_query','-j','4'])
+ run('test-corpse-shield-query',[AREA/'out-msvc/test_corpse_shield_query.exe'])
+ run('build-corpse-shield-step',['cmake','--build',AREA/'out-msvc','--target','test_corpse_shield_step','-j','4'])
+ run('test-corpse-shield-step',[AREA/'out-msvc/test_corpse_shield_step.exe'])
+ run('build-corpse-shield-native',['cmake','--build',AREA/'out-msvc','--target','test_corpse_shield_native','-j','4'])
+ run('test-corpse-shield-native',[AREA/'out-msvc/test_corpse_shield_native.exe'])
  run('build-ragdoll-recovery',['cmake','--build',AREA/'out-msvc','--target','test_ragdoll_recovery','-j','4'])
  run('test-ragdoll-recovery',[AREA/'out-msvc/test_ragdoll_recovery.exe',AREA/'assets/Default.xbe',AREA/'assets/ragdoll-recovery/authored.bin'])
  run('build-daniels-spawn',['cmake','--build',AREA/'out-msvc','--target','test_daniels_spawn','-j','4'])
@@ -978,6 +1026,7 @@ target_include_directories(UrbanChaosXbeTrial PRIVATE "'''+ROOT.as_posix()+'''" 
  run('test-health-packs',[AREA/'out-msvc/test_health_packs.exe'])
  run('test-aim-mode',[AREA/'out-msvc/test_aim_mode.exe'])
  run('test-movement-inertia',[AREA/'out-msvc/test_movement_inertia.exe'])
+ run('test-controller-deadzone',[AREA/'out-msvc/test_controller_deadzone.exe'])
  run('build-camera-push',['cmake','--build',AREA/'out-msvc','--target','test_camera_push','-j','4'])
  run('test-camera-push',[AREA/'out-msvc/test_camera_push.exe'])
  run('test-coop-shields',[AREA/'out-msvc/test_coop_shields.exe'])

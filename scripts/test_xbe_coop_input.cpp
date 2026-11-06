@@ -65,15 +65,33 @@ static void Map(bool candidate){
     if(candidate)CandidateMapping(ctx,g_base);else OriginalMapping(ctx,g_base);
     assert(ctx.esp==stack+4&&ctx.edi==platform&&ctx.ebx==0x12345678&&ctx.esi==0xabcdef01);
 }
-static float Query(unsigned player){
+static float Query(unsigned player,unsigned action=0x12,unsigned mode=3){
     X86Context ctx{};ctx.esp=stack;ctx.ecx=manager;W32(stack,0xbefb9);
-    W32(stack+4,player);W32(stack+8,0x12);W32(stack+12,3);
+    W32(stack+4,player);W32(stack+8,action);W32(stack+12,mode);
     sub_000567F0(ctx,g_base);assert(ctx.esp==stack+16);return float(X87_ST(0));
 }
-static void Button(unsigned player,unsigned button,bool down){
+static uint32_t Button(unsigned player,unsigned button,bool down){
     X86Context ctx{};ctx.ecx=manager;ctx.esp=stack;W32(stack+4,states+player*0xd0);W32(stack+8,button);
     sub_00055CD0(ctx,g_base);assert(ctx.eax);G<float>(ctx.eax+4)=down?1.f:0.f;
     g_base[ctx.eax]=down?3:0; // Native held/rising bits used by the direct help query.
+    return ctx.eax;
+}
+static void HeldUseTests(){
+    for(bool coop:{false,true})for(unsigned slot=0;slot<(coop?2u:1u);++slot){
+        Seed();trial_coop::SetActive(coop);Map(true);
+        // Host gameplay Interact is mapped to retail A, not Cycle Firearm/X.
+        const uint32_t button=Button(slot,0x16,true);
+        std::array<uint8_t,0x1a0> before{};std::memcpy(before.data(),g_base+states,before.size());
+        assert(Query(slot,0x16,1)==1&&Query(slot,0x18,0)==0);
+        for(unsigned repeat=0;repeat<3;++repeat)
+            assert(Query(slot,0x16,0)==1&&Query(slot^1,0x16,0)==0);
+        assert(Query(slot,0x16,1)==1&&!std::memcmp(before.data(),g_base+states,before.size()));
+        // Observing Use cannot consume its ordinary press edge or confuse it with a hold.
+        g_base[button]=1;assert(Query(slot,0x16,0)==1&&Query(slot,0x16,1)==0);
+        g_base[button]=2;assert(Query(slot,0x16,0)==0&&Query(slot,0x16,1)==1);
+        Button(slot,0x16,false);Button(slot,0x18,true);
+        assert(Query(slot,0x16,0)==0&&Query(slot,0x16,1)==0&&Query(slot,0x18,0)==1);
+    }
 }
 static void Frontend(bool candidate=true){
     X86Context c{};c.ecx=0x509a70;c.esp=stack;c.ebx=123;c.esi=456;c.edi=789;
@@ -154,6 +172,7 @@ static void NativeHelpTests(){
     puts("Controller help: original P1-only negative witness, owner Back, isolation and unowned action parity passed");
 }
 int main(){
+    HeldUseTests();
     NativeHelpTests();
     PauseTests();
     for(int port=-2;port<6;++port){

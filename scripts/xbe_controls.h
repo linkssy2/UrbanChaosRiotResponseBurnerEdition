@@ -4,7 +4,8 @@
 
 namespace trial_controls {
 struct Draft {
-    unsigned keyboard[25][2]{}, controller[24][2]{}, deadzone[2]{}, sensitivity=400, invert_mouse=0;
+    // 0..30 replaces the native stick deadzone; 31 preserves the original curve.
+    unsigned keyboard[25][2]{}, controller[24][2]{}, deadzone[2]{31,31}, sensitivity=400, invert_mouse=0;
     unsigned spin_mode=0,spin_binding[2][2]{}; // 0 retail gesture, 1 assigned button
     unsigned previous_firearm[2]{};
     unsigned health_pack[2][2]{};
@@ -23,6 +24,12 @@ Draft Defaults();
 bool Apply(const Draft&, std::string& error,unsigned player=0);
 unsigned ControllerSource(const input::Pad&);
 void Remap(input::Pad&,unsigned player=0);
+// Native stick descriptors are associated with the pad sampled by XInputGetState.
+void BeginControllerSample(unsigned port);
+void AllowControllerDeadzone(unsigned port,unsigned axis_mask);
+void SuspendControllerDeadzones();
+void RegisterControllerAxes(uint32_t axes);
+bool NativeControllerResponse(uint32_t source,float minimum,float gain,float& value);
 unsigned SpinMode(unsigned player=0);
 unsigned AimMode(unsigned player=0);
 unsigned ZoomSensitivity(unsigned player=0);

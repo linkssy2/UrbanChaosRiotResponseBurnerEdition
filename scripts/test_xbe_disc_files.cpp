@@ -135,7 +135,7 @@ int main(){
         Read(std::string("D:\\")+name,expected);Read(std::string("D:\\")+name,expected,true);
         Read("D:\\"+Upper(name),expected);Listing(name,expected.size());ReadOnly(std::string("D:\\")+name);
     }
-    // The main generated archive may collide with a disc entry; other three
+    // The main generated archive may collide with a disc entry; the others
     // are absent from the ISO. Both paths have identical guest semantics.
     CHECK(!MountedDisc()->Find("coopinjection.lst"));
     CHECK(!ResolvePath("D:\\coopinjection.lst",0).empty());

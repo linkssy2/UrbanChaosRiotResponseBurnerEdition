@@ -29,7 +29,7 @@ ROOT = Path(__file__).resolve().parent.parent
 RUNTIME_NAME = 'UrbanChaosXbeTrial.exe'
 RUNTIME_FILES = (RUNTIME_NAME, 'zlib1.dll', 'libusb-1.0.dll', 'msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll')
 ARTWORK_LIMIT = 32 * 1024 * 1024
-SOURCE_FILES = frozenset(('Default.xbe', *spanish_text.FILES))
+SOURCE_FILES = frozenset(('Default.xbe', 'shield.lst', *spanish_text.FILES))
 
 
 def read_record(path, root):
@@ -359,7 +359,7 @@ def import_iso(iso_path, data, cancel, *, direct=False):
             raise ValueError('Keep the source ISO outside the managed installed folder before selecting it.')
         source = iso_path.stat()
         marker = {'version': 1, 'disc_manifest': sha(ROOT / 'tools/disc-manifest.json'),
-                  'files': len(required), 'importer': 'burner-xbe-0.13',
+                  'files': len(required), 'importer': 'burner-xbe-0.14',
                   'source_mode': 'iso' if direct else 'extracted'}
         if direct:
             marker.update(iso_path=str(iso_path), iso_size=source.st_size,
@@ -414,6 +414,9 @@ def check_installation(data, *, full=False, cancel=None):
         row = required[name]
         path = data / 'installed/game_files' / name
         unlinked_path(path, root=data)
+        # Older direct-ISO installs did not need this small conversion source.
+        if direct and name == 'shield.lst' and not path.exists():
+            continue
         if not path.is_file() or path.stat().st_size != row['size']:
             raise ValueError('Installed game files need repair. Select your Xbox ISO again: ' + name)
         if full or name == 'Default.xbe':
@@ -622,11 +625,27 @@ def _ensure_coop_archive(game, data, key, info=None, cancel=None):
     level = {'coop_turrets03': '3-01', 'coop_turrets08': '8-01'}.get(key)
     turret = level is not None
     injection = key == 'coop_injection'
-    names = (level + '.ent',) if turret else (('1-01.ent',) if injection else ('40-01.ent',))
+    corpse_shield = key == 'corpse_shield'
+    names = (('shield.lst', '40-01.ent', '12-01.ent') if corpse_shield else
+             (level + '.ent',) if turret else (('1-01.ent',) if injection else ('40-01.ent',)))
     sources = [game / name for name in names]
-    dest = game / (key.replace('coop_', 'coop') + '.lst' if turret or injection else 'coopcharacters.lst')
+    dest = game / ('corpseshield.lst' if corpse_shield else
+                   key.replace('coop_', 'coop') + '.lst' if turret or injection else 'coopcharacters.lst')
     for path in (*sources, dest):
         unlinked_path(path, root=data)
+    if (corpse_shield and not sources[0].exists() and game == data / 'installed/game_files' and
+            source_record(data).get('source_mode') == 'iso'):
+        # Borrow the authenticated disc source without reimporting or touching saves.
+        with original_sources(data, ('shield.lst',), cancel) as borrowed:
+            temporary = game / ('.coop-characters-' + uuid.uuid4().hex)
+            try:
+                with (borrowed / 'shield.lst').open('rb') as source, temporary.open('xb') as target:
+                    shutil.copyfileobj(source, target)
+                check()
+                unlinked_path(sources[0], root=data)
+                os.replace(temporary, sources[0])
+            finally:
+                temporary.unlink(missing_ok=True)
     rows = manifest()['files']
     for source in sources:
         row = rows.get(source.name)
@@ -637,16 +656,19 @@ def _ensure_coop_archive(game, data, key, info=None, cancel=None):
         raise ValueError('Invalid managed co-op resource path.')
     if dest.is_file() and dest.stat().st_size == recipe['size'] and sha(dest) == recipe['sha256']:
         return
-    helper_name = ('coop_turret_assets.py' if turret else
+    helper_name = ('corpse_shield_assets.py' if corpse_shield else 'coop_turret_assets.py' if turret else
                    'coop_injection_assets.py' if injection else 'coop_assets.py')
-    for name in (helper_name, 'analyze_frontend.py'):
+    helpers = (helper_name, 'analyze_frontend.py')
+    if corpse_shield:
+        helpers += ('coop_injection_assets.py',)
+    for name in helpers:
         helper = ROOT / 'tools' / name
         unlinked_path(helper, root=ROOT)
         if not helper.is_file():
             raise ValueError('The co-op resource setup is incomplete. Extract the entire build again.')
     temporary = game / ('.coop-characters-' + uuid.uuid4().hex)
     try:
-        progress('Preparing co-op turret resources' if turret else
+        progress('Preparing corpse shield' if corpse_shield else 'Preparing co-op turret resources' if turret else
                  'Preparing partner healing animation' if injection else 'Preparing co-op character resources', 99)
         spec = importlib.util.spec_from_file_location('burner_' + key, ROOT / 'tools' / helper_name)
         builder = importlib.util.module_from_spec(spec)
@@ -657,7 +679,7 @@ def _ensure_coop_archive(game, data, key, info=None, cancel=None):
         finally:
             sys.path[:] = old_path
         report = (builder.build_archive(game, temporary, level=level, cancel=check) if turret else
-                  builder.build_archive(game, temporary, cancel=check) if injection else
+                  builder.build_archive(game, temporary, cancel=check) if injection or corpse_shield else
                   builder.build(sources[0], temporary, cancel=check))
         check()
         if (report['sha256'] != recipe['sha256'] or report['size'] != recipe['size'] or
@@ -665,6 +687,7 @@ def _ensure_coop_archive(game, data, key, info=None, cancel=None):
                 any(sha(source) != rows[source.name]['sha256'] for source in sources)):
             raise ValueError('Co-op resource verification failed. Your existing data was kept.')
         unlinked_path(dest, root=data)
+        check()
         os.replace(temporary, dest)
     finally:
         if temporary.exists():
@@ -672,7 +695,7 @@ def _ensure_coop_archive(game, data, key, info=None, cancel=None):
 
 
 def _ensure_coop_assets(game, data, info=None, cancel=None):
-    for key in ('coop_assets', 'coop_turrets03', 'coop_turrets08', 'coop_injection'):
+    for key in ('coop_assets', 'coop_turrets03', 'coop_turrets08', 'coop_injection', 'corpse_shield'):
         _ensure_coop_archive(game, data, key, info, cancel)
 
 

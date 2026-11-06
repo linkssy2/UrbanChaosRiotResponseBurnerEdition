@@ -1,4 +1,4 @@
-# Burner Edition 0.13 build status
+# Burner Edition 0.14 build status
 
 This is an inspection/contribution snapshot of the active source closure, not a
 self-contained clean-build kit. The current builder still requires qualified
@@ -31,6 +31,9 @@ generated title code, saves, diagnostic captures or compiled runtime. Approved
 replacement HD UI images and the validated portable shader seed are the explicit
 binary exceptions. The seed is not a GPU driver cache. Optional co-op, Spanish
 and voice resources are derived locally from the player's verified discs.
+The body-shield recipe likewise derives its models from authenticated local
+`shield.lst`, `40-01.ent` and `12-01.ent`; neither the source archive nor the
+binary packages contain those original models or the derived model archive.
 
 Native Linux wrapper tests do not establish Proton video, audio, controls or
 gameplay. Automated checks and user acceptance of particular Windows fixes are

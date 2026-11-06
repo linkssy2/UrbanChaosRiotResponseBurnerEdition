@@ -99,7 +99,7 @@ void PublishMsaaSupport(uint32_t mask){
 }
 
 static float RequestedAspect(const Draft& d, app::Mode desktop) {
-    constexpr float ratios[]={0,4.f/3.f,16.f/9.f,21.f/9.f,32.f/9.f};
+    constexpr float ratios[]={0,4.f/3.f,16.f/9.f,21.f/9.f,32.f/9.f,16.f/10.f};
     if(d.aspect&&d.aspect<std::size(ratios))return ratios[d.aspect];
     const auto& s = d.settings;
     auto m = s.width && s.height ? app::Mode{s.width,s.height} : desktop;
@@ -111,7 +111,7 @@ bool Validate(const Draft& d, app::Mode desktop, std::string& message) {
         message="Choose a listed reticle color.";return false;
     }
     const auto& s=d.settings;
-    if(uint32_t(s.display_mode)>2 || d.aspect>4) message="Invalid display or aspect setting.";
+    if(uint32_t(s.display_mode)>2 || d.aspect>5) message="Invalid display or aspect setting.";
     else if((s.width==0)!=(s.height==0) || (s.width &&
             (s.width<320 || s.height<240 || s.width>7680 || s.height>4320)))
         message="Choose Desktop or a resolution between 320 x 240 and 7680 x 4320.";

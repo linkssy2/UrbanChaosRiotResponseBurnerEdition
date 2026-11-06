@@ -39,6 +39,7 @@ int main(){
     assert(GetTempFileNameW(folder,L"uct",0,directory));assert(DeleteFileW(directory));
     assert(CreateDirectoryW(directory,nullptr));swprintf(profile,MAX_PATH,L"%s\\xboxrecomp.ini",directory);
     auto defaults=trial_controls::Defaults();std::string error;
+    assert(defaults.deadzone[0]==31&&defaults.deadzone[1]==31);
     assert(defaults.previous_firearm[0]==257&&defaults.previous_firearm[1]==0);
     assert(defaults.health_pack[0][0]=='H'&&!defaults.health_pack[1][0]);
     assert(defaults.heal_partner[0]=='U'&&!defaults.heal_partner[1]);
@@ -113,7 +114,7 @@ int main(){
         if(bad==0)d.keyboard[0][0]=VK_ESCAPE;
         if(bad==1)d.keyboard[24][0]=256;
         if(bad==2)d.controller[0][0]=25;
-        if(bad==3)d.deadzone[1]=31;
+        if(bad==3)d.deadzone[1]=32;
         if(bad==4)d.sensitivity=0;
         if(bad==5)d.sensitivity=1601;
         assert(!trial_controls::Apply(d,error)&&Same(changed,trial_controls::Snapshot()));
@@ -133,7 +134,21 @@ int main(){
     input::Pad p;p.connected=true;p.analog[3]=255;assert(trial_controls::ControllerSource(p)==4);
     assert(trial_controls::Apply(changed,error));trial_controls::Remap(p);
     assert(p.connected&&p.analog[0]==255&&p.analog[3]==0);
-    p={};p.connected=true;p.lx=2000;trial_controls::Remap(p);assert(p.lx==0);
+    p={};p.connected=true;p.lx=2000;trial_controls::BeginControllerSample(0);trial_controls::Remap(p);assert(p.lx==2000);
+    trial_controls::AllowControllerDeadzone(0,15);trial_controls::RegisterControllerAxes(0x10000);
+    InterlockedExchange(&keyboard_mode,0);
+    float response=1;assert(trial_controls::NativeControllerResponse(0x10000,.4f,1.f/.45f,response)&&response==0);
+    // An input event after registration must revoke P1 immediately, before a
+    // subsequent XInput poll has an opportunity to refresh the cached mask.
+    xbox_KeyboardNoteInput();
+    const auto saved_deadzone=controller_config.stick_deadzone[0];
+    for(unsigned deadzone:{0u,30u,31u}){
+        controller_config.stick_deadzone[0]=deadzone;response=123.f;
+        assert(!trial_controls::NativeControllerResponse(0x10000,.4f,1.f/.45f,response)&&response==123.f);
+    }
+    controller_config.stick_deadzone[0]=saved_deadzone;
+    InterlockedExchange(&keyboard_mode,0);
+    assert(trial_controls::NativeControllerResponse(0x10000,.4f,1.f/.45f,response)&&response==0);
     p={};p.connected=true;p.lx=32767;trial_controls::Remap(p);assert(p.lx>=32766);
     p={};p.connected=true;p.ly=-20000;assert(trial_controls::ControllerSource(p)==20);
     p.connected=false;assert(trial_controls::ControllerSource(p)==0);
@@ -186,7 +201,10 @@ int main(){
     p={};p.connected=true;p.analog[1]=255;auto first_pad=p;trial_controls::Remap(first_pad);
     trial_controls::Remap(p,1);assert(p.analog[0]==255&&!p.analog[1]);
     assert(!first_pad.analog[0]&&first_pad.analog[1]==255);
-    p={};p.connected=true;p.lx=5000;trial_controls::Remap(p,1);assert(!p.lx);
+    p={};p.connected=true;p.lx=5000;trial_controls::BeginControllerSample(1);trial_controls::Remap(p,1);assert(p.lx==5000);
+    trial_controls::AllowControllerDeadzone(1,15);trial_controls::RegisterControllerAxes(0x20000);
+    xbox_KeyboardNoteInput(); // P1 mouse/keyboard ownership never blocks P2.
+    assert(trial_controls::NativeControllerResponse(0x20000,.4f,1.f/.45f,response)&&response==0);
     p={};p.connected=true;p.buttons=16;
     assert(trial_controls::SpinMode(1)==1&&trial_controls::SpinButtonDown(false,p,1));
     assert(!trial_controls::SpinButtonDown(false,p)&&!trial_controls::SpinButtonDown(true,p,1));
@@ -218,7 +236,7 @@ int main(){
     for(unsigned bad=0;bad<8;++bad){
         auto d=second;
         if(bad==0)d.controller[0][0]=25;
-        if(bad==1)d.deadzone[0]=31;
+        if(bad==1)d.deadzone[0]=32;
         if(bad==2)d.spin_mode=2;
         if(bad==3)d.spin_binding[1][0]=25;
         if(bad==4)d.walk_mode=2;
@@ -248,11 +266,12 @@ int main(){
     }
     assert(WritePrivateProfileStringW(L"ControllerPlayer2",L"Binding0_0",L"25",profile));
     assert(WritePrivateProfileStringW(L"ControllerPlayer2",L"Deadzone0",L"31",profile));
+    assert(WritePrivateProfileStringW(L"ControllerPlayer2",L"StickDeadzone0",L"32",profile));
     assert(WritePrivateProfileStringW(L"PistolSpinPlayer2",L"Mode",L"2",profile));
     assert(WritePrivateProfileStringW(L"PistolSpinPlayer2",L"Binding1_0",L"25",profile));
     for(unsigned i=0;i<7;++i)assert(WritePrivateProfileStringW(L"ControllerOptionsPlayer2",trial_controls::profile_keys[i],L"-1",profile));
     trial_controls::second_loaded=false;auto safe=trial_controls::Snapshot(1);
-    assert(safe.controller[0][0]==1&&!safe.deadzone[0]&&!safe.spin_mode&&!safe.spin_binding[1][0]);
+    assert(safe.controller[0][0]==1&&safe.deadzone[0]==31&&!safe.spin_mode&&!safe.spin_binding[1][0]);
     assert(!std::memcmp(safe.native_profile,defaults.native_profile,sizeof(safe.native_profile)));
     assert(trial_controls::Apply(defaults,error,1));
     for(const wchar_t* invalid:{L"0",L"201",L"-1",L"25junk",L"999999999999999999999999999999999999"}){
@@ -286,6 +305,37 @@ int main(){
         p={};p.connected=true;p.buttons=255;p.lx=axis;p.ly=axis;p.rx=axis;p.ry=axis;
         std::fill(std::begin(p.analog),std::end(p.analog),uint8_t(analog));const auto before=p;
         trial_controls::Remap(p,1);assert(!std::memcmp(&p,&before,sizeof(p)));
+    }
+    // Old hidden Deadzone keys remain additional filters only in Original mode.
+    // The pad retains Original axes; the native controller response bypasses
+    // the old filter and replaces the guest's inner deadzone only for its owner.
+    for(unsigned player=0;player<2;++player){
+        const auto section=player?L"ControllerPlayer2":L"Controller";
+        assert(WritePrivateProfileStringW(section,L"Deadzone0",L"20",profile));
+        assert(WritePrivateProfileStringW(section,L"StickDeadzone0",nullptr,profile));
+        if(player)trial_controls::second_loaded=false;else controller_load(nullptr,nullptr,nullptr);
+        auto migrated=trial_controls::Snapshot(player);assert(migrated.deadzone[0]==31);
+        input::Pad raw;raw.connected=true;raw.lx=10000;
+        auto filtered=raw;trial_controls::Remap(filtered,player);assert(filtered.lx>0&&filtered.lx<raw.lx);
+        for(unsigned value:{0u,1u,10u,30u,31u}){
+            migrated.deadzone[0]=value;assert(trial_controls::Apply(migrated,error,player));
+            assert(GetPrivateProfileIntW(section,L"Deadzone0",99,profile)==20);
+            assert(GetPrivateProfileIntW(section,L"StickDeadzone0",99,profile)==value);
+            if(player)trial_controls::second_loaded=false;else controller_load(nullptr,nullptr,nullptr);
+            assert(trial_controls::Snapshot(player).deadzone[0]==value);
+            filtered=raw;trial_controls::BeginControllerSample(player);trial_controls::Remap(filtered,player);
+            assert(filtered.lx>0&&filtered.lx<raw.lx);
+            trial_controls::AllowControllerDeadzone(player,15);trial_controls::RegisterControllerAxes(0x30000+player*0x10000);
+            InterlockedExchange(&keyboard_mode,0);response=123.f;
+            const bool adjusted=trial_controls::NativeControllerResponse(0x30000+player*0x10000,.4f,1.f/.45f,response);
+            assert(value==31?!adjusted&&response==123.f:adjusted&&response>0);
+            if(value==0)assert(response>.35f); // Would be zero if the legacy filter were applied twice.
+        }
+        for(const wchar_t* invalid:{L"-1",L"32",L"1junk",L"999999999999999999999999999999999999"}){
+            assert(WritePrivateProfileStringW(section,L"StickDeadzone0",invalid,profile));
+            if(player)trial_controls::second_loaded=false;else controller_load(nullptr,nullptr,nullptr);
+            assert(trial_controls::Snapshot(player).deadzone[0]==31);
+        }
     }
     WritePrivateProfileStringW(nullptr,nullptr,nullptr,profile);DeleteFileW(profile);RemoveDirectoryW(directory);
     puts("Controls: atomic save/failure, validation, defaults, capture, remapping, identity parity and player isolation passed.");

@@ -101,6 +101,14 @@ int main(){
         if(which==4){a.shape_user=1;b.shape_user=2;}
         setup(a,b);assert(!accepted(false,reverse));dispatch(false,reverse);assert(events.empty());++checks;
     }
+    // A held corpse excludes its holder, while retaining other-player and world contacts.
+    for(bool reverse:{false,true})for(unsigned other:{0x123u,0x124u}){
+        auto a=character(),b=ragdoll();a.layers|=other;b.layers|=0x125;
+        b.properties.push_back({0x18,0x123});setup(a,b);
+        assert(accepted(false,reverse)==(other!=0x123));++checks;
+        a.type=1;a.properties={{1,0}};setup(a,b);
+        assert(accepted(false,reverse)==(other!=0x123));++checks;
+    }
     // Non-character phantoms and character-character pairs retain retail behavior.
     for(unsigned flag:{0u,2u})for(bool reverse:{false,true}){
         auto a=character();a.properties[0].second=flag;setup(a,ragdoll());assert(accepted(false,reverse)==accepted(true,reverse));++checks;

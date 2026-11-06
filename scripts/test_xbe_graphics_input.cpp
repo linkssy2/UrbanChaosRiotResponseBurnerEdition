@@ -41,6 +41,11 @@ uint64_t TestTicks(){return test_ticks;}
 
 bool aim_cycle[2]{},aim_allowed[2]{};
 void TrialAimInput(unsigned slot,bool down,bool allowed){assert(slot<2);aim_cycle[slot]=down;aim_allowed[slot]=allowed;}
+bool drag_allowed[2]{};
+unsigned drag_cancellations[2]{};
+void TrialRagdollDragInput(unsigned slot,bool allowed){
+    assert(slot<2);if(drag_allowed[slot]&&!allowed)++drag_cancellations[slot];drag_allowed[slot]=allowed;
+}
 void TrialReloadPublish(bool down,bool enabled){reload_down=down;reload_enabled=enabled;}
 void TrialConversationPublish(bool down,bool enabled){conversation_down=down;conversation_enabled=enabled;}
 bool focused(){return test_focused;}
@@ -138,6 +143,47 @@ static input::Pad Controller(unsigned control){
         case 11:p.ry=-30000;break;
     }
     return p;
+}
+static void CheckRagdollDragInput(){
+    trial_coop::SetActive(true);trial_coop::ResetPauseOwner();
+    menu_mode=false;gameplay=true;captured=true;test_presentation=0;intro_gate={};
+    trial_controls::CancelCapture(0);trial_controls::CancelCapture(1);ReleaseAll();
+    input::Pad pad;pad.connected=true;
+    auto poll=[&](){Poll(0);Poll(1,pad);};
+    poll();assert(drag_allowed[0]&&drag_allowed[1]);
+    // Menu/capture cancellation must publish even when no guest poll runs.
+    ucrr_host_menu_mode(1);assert(!drag_allowed[0]&&!drag_allowed[1]);
+    ucrr_host_menu_mode(0);poll();assert(drag_allowed[0]&&drag_allowed[1]);
+    for(unsigned slot=0;slot<2;++slot){
+        trial_controls::BeginCapture(slot?1:0,slot);assert(!drag_allowed[slot]&&drag_allowed[1-slot]);
+        poll();assert(!drag_allowed[slot]);trial_controls::CancelCapture(slot);poll();
+    }
+    for(unsigned reason=0;reason<4;++reason){
+        if(reason==0)test_focused=false;
+        if(reason==1)test_open=true;
+        if(reason==2)test_presentation=2;
+        if(reason==3)intro_gate.Context(99,0,true,true);
+        poll();assert(!drag_allowed[0]&&!drag_allowed[1]);
+        test_focused=true;test_open=false;test_presentation=0;intro_gate={};
+        poll();assert(drag_allowed[0]&&drag_allowed[1]);
+    }
+    TrialGraphicsInputChanged();assert(!drag_allowed[0]&&!drag_allowed[1]);poll();
+    for(unsigned owner=0;owner<2;++owner){
+        trial_coop::pause_state.Sample(false,false);
+        trial_coop::pause_state.Sample(owner==0,owner==1);
+        trial_coop::pause_state.Consume(true);trial_coop::pause_state.Enter();
+        poll();assert(!drag_allowed[1-owner]);
+        trial_coop::ResetPauseOwner();poll();assert(drag_allowed[0]&&drag_allowed[1]);
+    }
+    unsigned cancelled=drag_cancellations[1];Poll(1);
+    assert(!drag_allowed[1]&&drag_cancellations[1]==cancelled+1);
+    Poll(1,pad);assert(drag_allowed[1]);
+    Poll(0,pad);cancelled=drag_cancellations[0];Poll(0);
+    assert(drag_allowed[0]&&drag_cancellations[0]==cancelled+1); // Keyboard remains usable after unplug.
+    Poll(0);assert(drag_cancellations[0]==cancelled+1);
+    Poll(2,pad);Poll(3,pad);assert(drag_allowed[0]&&drag_allowed[1]);
+    gameplay=false;poll();assert(!drag_allowed[0]&&!drag_allowed[1]);gameplay=true;
+    trial_coop::Reset();ReleaseAll();assert(drag_allowed[0]&&!drag_allowed[1]);
 }
 static void CheckMouseLook(){
     constexpr uint32_t first=0x10000,second=0x11000;
@@ -288,6 +334,106 @@ static void HealthGestures(){
     physical_keys['J']=false;Poll(0);physical_keys['J']=true;Poll(0);assert(health_requests[0]==2);
     trial_coop::Reset();ReleaseAll();
     puts("Health gestures: both pad owners, timing, one-shot use, cancelled partner, menus/focus/cinematics/disconnect and unchanged X passed");
+}
+static void CheckControllerDeadzones(){
+    using namespace trial_controls;
+    trial_coop::SetActive(true);trial_coop::ResetPauseOwner();
+    menu_mode=false;gameplay=true;captured=true;test_presentation=0;intro_gate={};
+    CancelCapture(0);CancelCapture(1);ReleaseAll();
+    keyboard_defaults(&keyboard_config);
+    controller_defaults(&controller_config);controller_defaults(&second_controller);second_loaded=true;
+    controller_config.deadzone[0]=20; // An upgraded profile must not stack this at 0%.
+    controller_config.stick_deadzone[0]=0;controller_config.stick_deadzone[1]=30;
+    second_controller.stick_deadzone[0]=20;second_controller.stick_deadzone[1]=0;controller_publish();
+    InterlockedExchange(&keyboard_mode,0);
+    input::Pad pad;pad.connected=true;pad.lx=pad.ly=pad.rx=pad.ry=1000;
+    auto poll=[&](unsigned player){auto result=Poll(int(player),pad);RegisterControllerAxes(player?0x20000:0x10000);return result;};
+    auto response=[&](uint32_t source,float& value){return NativeControllerResponse(source,.4f,1.f/(.85f-.4f),value);};
+    assert(poll(0).lx==0);poll(1);
+    float value=0;
+    assert(response(0x10000,value)&&value>.03f);assert(response(0x10008,value)&&value==0);
+    assert(response(0x20000,value)&&value==0);assert(response(0x20008,value)&&value>.03f);
+    assert(!response(0x10001,value)&&!response(0x30000,value));
+    // Keyboard ownership also excludes drift from unused axes and the other stick.
+    physical_keys['W']=true;poll(0);
+    for(unsigned axis=0;axis<4;++axis)assert(!response(0x10000+4*axis,value));
+    assert(response(0x20008,value)&&value>.03f);
+    physical_keys['W']=false;poll(0);assert(!response(0x10004,value));
+    pad.buttons=1;poll(0);pad.buttons=0;assert(response(0x10004,value));
+    ucrr_host_menu_mode(1);assert(!response(0x10000,value)&&!response(0x20008,value));
+    poll(0);assert(!response(0x10000,value));ucrr_host_menu_mode(0);
+    ReleaseAll();poll(0);poll(1);assert(response(0x10000,value));
+    BeginCapture(1,0);assert(!response(0x10000,value)&&response(0x20008,value));poll(0);assert(!response(0x10000,value));CancelCapture(0);
+    ReleaseAll();poll(0);poll(1);BeginCapture(1,1);assert(!response(0x20008,value)&&response(0x10000,value));
+    poll(1);assert(!response(0x20008,value));CancelCapture(1);
+    ReleaseAll();poll(0);poll(1);TrialIntroMovie(99,0,true,true);
+    assert(!response(0x10000,value)&&!response(0x20008,value));intro_gate={};
+    ReleaseAll();poll(0);test_focused=false;Poll(0,pad);assert(!response(0x10000,value));test_focused=true;
+    ReleaseAll();poll(0);test_open=true;TrialInputPublish();assert(!response(0x10000,value));test_open=false;
+    ReleaseAll();poll(0);Poll(0);assert(!response(0x10000,value));
+    ReleaseAll();poll(0);poll(1);
+    BeginControllerSample(1);Remap(pad,1);AllowControllerDeadzone(1,15);RegisterControllerAxes(0x10000);
+    assert(response(0x10000,value)&&value==0); // Reused address now belongs only to P2.
+    BeginControllerSample(4);RegisterControllerAxes(0x10000);assert(!response(0x10000,value));
+    // A real controller handoff keeps tiny 0% inputs active after the button/stick is released.
+    trial_coop::Reset();ReleaseAll();controller_defaults(&controller_config);
+    controller_config.stick_deadzone[0]=controller_config.stick_deadzone[1]=0;controller_publish();
+    for(unsigned control:{2u,4u}){
+        xbox_KeyboardNoteInput();Poll(0,Controller(control));assert(!TrialGameplayKeyboardMode());
+        input::Pad tiny;tiny.connected=true;tiny.rx=1;
+        Poll(0,tiny);RegisterControllerAxes(0x30000);
+        float output=0;assert(NativeControllerResponse(0x30008,.4f,1.f/.45f,output)&&output>0);
+        xbox_KeyboardNoteInput();assert(!NativeControllerResponse(0x30008,.4f,1.f/.45f,output));
+    }
+    controller_defaults(&controller_config);controller_defaults(&second_controller);controller_publish();
+    trial_coop::Reset();ReleaseAll();
+}
+static void CheckControllerKeyboardIsolation(){
+    using namespace trial_controls;
+    constexpr uint32_t actor=0x10000;
+    RAWINPUT raw{};raw.header.dwType=RIM_TYPEMOUSE;
+    raw.data.mouse.lLastX=100;raw.data.mouse.lLastY=50;
+    for(bool coop:{false,true})for(bool connected:{false,true})for(unsigned legacy:{0u,20u})for(unsigned zone:{31u,0u,15u,30u}){
+        trial_coop::Reset();trial_coop::SetActive(coop);ReleaseAll();
+        menu_mode=false;gameplay=true;captured=true;intro_gate={};test_presentation=0;
+        keyboard_defaults(&keyboard_config);controller_defaults(&controller_config);controller_defaults(&second_controller);
+        controller_config.deadzone[0]=controller_config.deadzone[1]=legacy;
+        second_loaded=true;controller_config.stick_deadzone[0]=controller_config.stick_deadzone[1]=zone;
+        second_controller.stick_deadzone[0]=second_controller.stick_deadzone[1]=0;controller_publish();
+        input::Pad noise;noise.connected=connected;noise.lx=1500;noise.ly=-1500;noise.rx=2000;noise.ry=-2500;
+        const auto sample=[&](){const auto p=Poll(0,noise);RegisterControllerAxes(0x30000);return p;};
+        const auto unchanged=[&](){for(unsigned axis=0;axis<4;++axis){
+            float output=123.f;assert(!NativeControllerResponse(0x30000+4*axis,.4f,1.f/.45f,output)&&output==123.f);
+        }};
+        // Actual raw mouse path, including takeover between pad sampling and evaluation.
+        InterlockedExchange(&keyboard_mode,0);sample();
+        std::memset(mouse_guest,0,sizeof mouse_guest);
+        *reinterpret_cast<float*>(mouse_guest+actor+0x37c)=1.5f;
+        dx=dy=spin_dx=spin_dy=0;order_held=false;mouse_sensitivity=400;mouse_invert=0;zoom_scale=1;
+        TestMouseMessage(WM_INPUT,reinterpret_cast<intptr_t>(&raw));unchanged();
+        sample();unchanged();TestGuestMouse(actor);
+        assert(std::fabs(*reinterpret_cast<float*>(mouse_guest+actor+0x688)+.05f)<.000001f);
+        assert(std::fabs(*reinterpret_cast<float*>(mouse_guest+actor+0x68c)+.1f)<.000001f);
+        // Forward, diagonal, opposed keys and keyboard look all exclude stick adjustment.
+        noise.lx=15000;
+        for(const char* keys:{"W","WD","WS","AD","J","IK"}){
+            std::memset(physical_keys,0,sizeof physical_keys);
+            for(const char* key=keys;*key;++key)physical_keys[unsigned(*key)]=true;
+            controller_config.stick_deadzone[0]=controller_config.stick_deadzone[1]=31;controller_publish();
+            const auto original=sample();
+            controller_config.stick_deadzone[0]=controller_config.stick_deadzone[1]=zone;controller_publish();
+            InterlockedExchange(&keyboard_mode,0);const auto configured=sample();assert(TrialGameplayKeyboardMode());unchanged();
+            assert(original.lx==configured.lx&&original.ly==configured.ly&&original.rx==configured.rx&&original.ry==configured.ry);
+            if(coop){
+                auto second=noise;second.connected=true;Poll(1,second);RegisterControllerAxes(0x40000);
+                float output=0;assert(NativeControllerResponse(0x40008,.4f,1.f/.45f,output)&&output>0);
+                unchanged();
+            }
+        }
+    }
+    controller_defaults(&controller_config);controller_defaults(&second_controller);controller_publish();
+    keyboard_defaults(&keyboard_config);trial_coop::Reset();ReleaseAll();
+    puts("Controller deadzones: mouse/keyboard ownership, raw rotation, opposed keys and P2 isolation passed");
 }
 int main(){
     keyboard_init();keyboard_defaults(&keyboard_config);
@@ -736,7 +882,10 @@ int main(){
         trial_coop::ResetPauseOwner();ReleaseAll();assert(!trial_coop::PauseBlocksKeyboard()&&xbox_KeyboardMode());
         trial_coop::Reset();
     }
+    CheckControllerDeadzones();
+    CheckControllerKeyboardIsolation();
     std::puts("graphics input: actual pad/keyboard ownership, focus, all ports, held keys/clicks/sticks and release handoff passed");
     HealthGestures();
     CheckPlayerActions();
+    CheckRagdollDragInput();
 }

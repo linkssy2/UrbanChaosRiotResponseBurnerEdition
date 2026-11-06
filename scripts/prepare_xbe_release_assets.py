@@ -87,20 +87,23 @@ RELEASE_GAME=r'''bool FindGame(GameFiles& game) {
 
 
 PREPARED_FILES = ('coopcharacters.lst', 'coopinjection.lst',
-                  'coopturrets03.lst', 'coopturrets08.lst')
+                  'coopturrets03.lst', 'coopturrets08.lst', 'corpseshield.lst')
 
 
 def patch_files(source):
-    """Preserve language priority; only four generated root files override an ISO.
+    """Preserve language priority; only listed generated root files override an ISO.
 
     The original archives remain on the disc. Host consumers of ResolvePath and
     guest file APIs see the same prepared files, including directory metadata.
     Save partitions keep their original write behavior.
     """
     marker='// Setup-created co-op archives are the only local disc additions.'
-    if marker in source:
-        return source
     names=', '.join('"'+name+'"' for name in PREPARED_FILES)
+    if marker in source:
+        start=source.index('constexpr const char* kPreparedArchives[] = {')
+        end=source.index(';',start)+1
+        source=source[:start]+'constexpr const char* kPreparedArchives[] = {'+names+'};'+source[end:]
+        return source
     source=once(source,'struct File : Object {',
         marker+'\nconstexpr const char* kPreparedArchives[] = {'+names+'};\n\n'
         'bool IsPreparedArchive(const std::vector<std::string>& parts) {\n'

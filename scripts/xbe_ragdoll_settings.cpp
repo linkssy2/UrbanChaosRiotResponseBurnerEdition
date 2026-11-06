@@ -32,6 +32,13 @@ Slot Read(size_t i){return i<5?Slot{R32(pool+uint32_t(i)*8),R32(pool+uint32_t(i)
 void Write(size_t i,Slot s){if(i<5){W32(pool+uint32_t(i)*8,s.id);W32(pool+uint32_t(i)*8+4,s.body);}else extra[i-5]=s;}
 void Require(X86Context& ctx,bool valid,uint32_t entry){if(!valid)x86_trap(ctx,entry,"Invalid retained ragdoll ownership");}
 bool Span(uint32_t p,uint64_t n){return n&&n<=UINT32_MAX&&TrialGuestReadable(p,uint32_t(n));}
+uint32_t LimbList(const uint8_t* base,uint32_t object){
+    if(!Span(object,0xa0))return 0;
+    const auto word=[&](uint32_t p){uint32_t v;std::memcpy(&v,base+p,4);return v;};
+    if(word(object)!=0x48dd60||!word(object+0x1c)||!word(object+0x20)||word(object+0x74)!=12)return 0;
+    const uint32_t list=word(object+0x70);
+    return Span(list,12*4)?list:0;
+}
 uint32_t Call(X86Context& ctx,uint8_t* base,uint32_t fn,uint32_t object,
               std::initializer_list<uint32_t> args,uint32_t ret){
     // Extra clone construction can occur during gameplay, after startup asset
@@ -139,6 +146,29 @@ bool TrialRagdollWorldPosition(const uint8_t* base,uint32_t handle,float (&posit
         result[axis]=value*100.f;if(!std::isfinite(result[axis]))return false;
     }
     std::memcpy(position,result,sizeof result);return true;
+}
+
+bool TrialRagdollFindLimb(const uint8_t* base,uint32_t rigid,uint32_t& handle,uint32_t& ragdoll,unsigned& index){
+    if(!base||!Span(rigid,0x58)||!Span(pool,48)||!base[initialized])return false;
+    for(size_t i=0;i<Count();++i){
+        const Slot slot=Read(i);if(slot.id==UINT32_MAX)continue;
+        const uint32_t list=LimbList(base,slot.body);if(!list)continue;
+        for(unsigned j=0;j<12;++j){
+            uint32_t member;std::memcpy(&member,base+list+j*4,4);
+            if(member==rigid){handle=slot.id;ragdoll=slot.body;index=j;return true;}
+        }
+    }
+    return false;
+}
+bool TrialRagdollMatchesLimb(const uint8_t* base,uint32_t handle,uint32_t ragdoll,unsigned index,uint32_t rigid){
+    if(!base||handle==UINT32_MAX||index>=12||!Span(rigid,0x58)||!Span(pool,48)||!base[initialized])return false;
+    for(size_t i=0;i<Count();++i){
+        const Slot slot=Read(i);if(slot.id!=handle)continue;
+        if(slot.body!=ragdoll)return false;
+        const uint32_t list=LimbList(base,ragdoll);if(!list)return false;
+        uint32_t member;std::memcpy(&member,base+list+index*4,4);return member==rigid;
+    }
+    return false;
 }
 
 bool TrialRetainedObjectPoolFull(uint32_t owner,bool full){

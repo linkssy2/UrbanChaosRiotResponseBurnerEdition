@@ -54,11 +54,54 @@ static void LoadSecond(){
         swprintf(key,32,L"Deadzone%u",slot);
         const unsigned value=GetPrivateProfileIntW(L"ControllerPlayer2",key,0,path);
         if(value<=30)second_controller.deadzone[slot]=value;
+        swprintf(key,32,L"StickDeadzone%u",slot);
+        second_controller.stick_deadzone[slot]=trial_input_profile::Read(path,L"ControllerPlayer2",key,31,31);
         swprintf(key,32,L"Binding1_%u",slot);
         const unsigned source=GetPrivateProfileIntW(L"PistolSpinPlayer2",key,0,path);
         if(source<=24)second_spin_binding[slot]=source;
     }
     second_spin_mode=GetPrivateProfileIntW(L"PistolSpinPlayer2",L"Mode",0,path)==1;
+}
+static thread_local unsigned controller_sample_port=4;
+static uint32_t controller_axes[4]{};
+static unsigned controller_axis_mask[4]{};
+static input::Pad controller_original[2]{};
+void BeginControllerSample(unsigned port){
+    std::lock_guard guard(input_lock);
+    controller_sample_port=port;
+    if(port<4)controller_axis_mask[port]=0;
+}
+void AllowControllerDeadzone(unsigned port,unsigned axis_mask){
+    std::lock_guard guard(input_lock);
+    if(port<2)controller_axis_mask[port]=axis_mask&15u;
+}
+void SuspendControllerDeadzones(){
+    std::lock_guard guard(input_lock);
+    std::memset(controller_axis_mask,0,sizeof(controller_axis_mask));
+}
+void RegisterControllerAxes(uint32_t axes){
+    std::lock_guard guard(input_lock);
+    // A reconnected device can reuse an old guest address on a different port.
+    for(unsigned port=0;port<4;++port)if(port!=controller_sample_port&&controller_axes[port]==axes){
+        controller_axes[port]=0;controller_axis_mask[port]=0;
+    }
+    if(controller_sample_port<4)controller_axes[controller_sample_port]=axes;
+    controller_sample_port=4;
+}
+bool NativeControllerResponse(uint32_t source,float minimum,float gain,float& value){
+    std::lock_guard guard(input_lock);
+    for(unsigned port=0;port<2;++port){
+        const uint32_t offset=source-controller_axes[port];
+        if(!controller_axes[port]||offset>=16||(offset&3)||!(controller_axis_mask[port]&(1u<<(offset/4))))continue;
+        // Mouse/key events can take P1 after its last pad poll. Recheck ownership
+        // at consumption so a cached controller mask cannot affect that frame.
+        if(!port&&InterlockedCompareExchange(&keyboard_mode,0,0))return false;
+        if(port){LoadSecond();return controller_axis_response(controller_original[port],second_controller,offset/4,minimum,gain,value);}
+        controller_init();AcquireSRWLockShared(&controller_lock);
+        const bool applied=controller_axis_response(controller_original[port],controller_config,offset/4,minimum,gain,value);
+        ReleaseSRWLockShared(&controller_lock);return applied;
+    }
+    return false;
 }
 static void LoadFirearm(){
     if(firearm_loaded)return;firearm_loaded=true;keyboard_init();
@@ -188,7 +231,7 @@ Draft Snapshot(unsigned player){
         d.zoom_sensitivity=zoom_sensitivity[1];d.aim_mode=aim_mode[1];std::memcpy(d.scope_zoom[1],scope_zoom[1][1],sizeof(d.scope_zoom[1]));
         std::memcpy(d.health_pack[1],health_binding[1][1],sizeof(d.health_pack[1]));
         std::memcpy(d.controller,second_controller.binding,sizeof(d.controller));
-        std::memcpy(d.deadzone,second_controller.deadzone,sizeof(d.deadzone));
+        std::memcpy(d.deadzone,second_controller.stick_deadzone,sizeof(d.deadzone));
         std::memcpy(d.native_profile,second_profile,sizeof(d.native_profile));
         d.spin_mode=second_spin_mode;std::memcpy(d.spin_binding[1],second_spin_binding,sizeof(second_spin_binding));return d;
     }
@@ -202,7 +245,7 @@ Draft Snapshot(unsigned player){
     AcquireSRWLockShared(&keyboard_lock);AcquireSRWLockShared(&controller_lock);
     std::memcpy(d.keyboard,keyboard_config.binding,sizeof(d.keyboard));
     std::memcpy(d.controller,controller_config.binding,sizeof(d.controller));
-    std::memcpy(d.deadzone,controller_config.deadzone,sizeof(d.deadzone));d.sensitivity=mouse_sensitivity;d.invert_mouse=mouse_invert;
+    std::memcpy(d.deadzone,controller_config.stick_deadzone,sizeof(d.deadzone));d.sensitivity=mouse_sensitivity;d.invert_mouse=mouse_invert;
     ReleaseSRWLockShared(&controller_lock);ReleaseSRWLockShared(&keyboard_lock);return d;
 }
 static bool Save(const Draft& d,unsigned player){
@@ -227,7 +270,13 @@ static bool Save(const Draft& d,unsigned player){
     at=0;
     for(unsigned a=0;a<24;++a)for(unsigned s=0;s<2;++s)
         at+=swprintf(section+at,2048-at,L"Binding%u_%u=%u",a,s,d.controller[a][s])+1;
-    for(unsigned s=0;s<2;++s)at+=swprintf(section+at,2048-at,L"Deadzone%u=%u",s,d.deadzone[s])+1;
+    // Keep the hidden old filter for an exact Original-mode upgrade. Numeric
+    // values replace it and the guest's inner deadzone, rather than stacking.
+    const auto& previous=player?second_controller:controller_config;
+    for(unsigned s=0;s<2;++s){
+        at+=swprintf(section+at,2048-at,L"Deadzone%u=%u",s,previous.deadzone[s])+1;
+        at+=swprintf(section+at,2048-at,L"StickDeadzone%u=%u",s,d.deadzone[s])+1;
+    }
     section[at]=0;ok=ok&&WritePrivateProfileSectionW(player?L"ControllerPlayer2":L"Controller",section,temp);
     if(player){
         at=0;
@@ -301,9 +350,9 @@ bool Apply(const Draft& d,std::string& error,unsigned player){
             if(!keyboard_valid_action(a,d.keyboard[a][s])){error="That key cannot be assigned to this action.";return false;}
     }
     for(auto& row:d.controller)for(auto source:row)if(source>24){error="Invalid controller button.";return false;}
-    if(d.deadzone[0]>30||d.deadzone[1]>30||(!player&&(d.sensitivity<1||d.sensitivity>1600))){error="Invalid input sensitivity.";return false;}
+    if(d.deadzone[0]>31||d.deadzone[1]>31||(!player&&(d.sensitivity<1||d.sensitivity>1600))){error="Invalid input sensitivity.";return false;}
     std::lock_guard guard(input_lock);
-    if(!player){keyboard_init();controller_init();}
+    if(!player){keyboard_init();controller_init();}else LoadSecond();
     if(!Save(d,player)){error="Could not save controls. Your previous bindings are unchanged.";return false;}
     actions_loaded[player]=true;walk_mode[player]=d.walk_mode;movement_inertia[player]=d.movement_inertia;
     for(unsigned device=player;device<2;++device){
@@ -316,7 +365,7 @@ bool Apply(const Draft& d,std::string& error,unsigned player){
     for(unsigned device=player;device<2;++device)std::memcpy(scope_zoom[player][device],d.scope_zoom[device],sizeof(d.scope_zoom[device]));
     if(player){
         second_loaded=true;std::memcpy(second_controller.binding,d.controller,sizeof(d.controller));
-        std::memcpy(second_controller.deadzone,d.deadzone,sizeof(d.deadzone));
+        std::memcpy(second_controller.stick_deadzone,d.deadzone,sizeof(d.deadzone));
         std::memcpy(second_profile,d.native_profile,sizeof(d.native_profile));
         second_spin_mode=d.spin_mode;std::memcpy(second_spin_binding,d.spin_binding[1],sizeof(second_spin_binding));return true;
     }
@@ -325,7 +374,7 @@ bool Apply(const Draft& d,std::string& error,unsigned player){
     AcquireSRWLockExclusive(&keyboard_lock);AcquireSRWLockExclusive(&controller_lock);
     std::memcpy(keyboard_config.binding,d.keyboard,sizeof(d.keyboard));
     std::memcpy(controller_config.binding,d.controller,sizeof(d.controller));
-    std::memcpy(controller_config.deadzone,d.deadzone,sizeof(d.deadzone));mouse_sensitivity=d.sensitivity;mouse_invert=d.invert_mouse;
+    std::memcpy(controller_config.stick_deadzone,d.deadzone,sizeof(d.deadzone));mouse_sensitivity=d.sensitivity;mouse_invert=d.invert_mouse;
     controller_publish();ReleaseSRWLockExclusive(&controller_lock);ReleaseSRWLockExclusive(&keyboard_lock);
     return true;
 }
@@ -393,6 +442,7 @@ unsigned ControllerSource(const input::Pad& p){
 void Remap(input::Pad& p,unsigned player){
     if(!p.connected||player>1)return;
     std::lock_guard guard(input_lock);
+    if(controller_sample_port==player)controller_original[player]=p;
     if(player){LoadSecond();controller_apply_profile(&p,&second_controller);}
     else {controller_init();controller_apply(&p);}
 }

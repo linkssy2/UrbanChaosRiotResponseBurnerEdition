@@ -114,6 +114,14 @@ int main(){
     input::Pad raw;raw.connected=true;raw.lx=-6553;controller_apply_profile(&raw,&mapping);assert(!raw.analog[0]);
     raw={};raw.connected=true;raw.lx=-32768;controller_apply_profile(&raw,&mapping);assert(raw.analog[0]==255&&raw.lx==-32768);
     raw={};raw.connected=true;raw.lx=20000;controller_apply_profile(&raw,&mapping);assert(raw.analog[0]==131&&raw.lx==16808);
+    mapping.stick_deadzone[0]=30;mapping.binding[8][0]=18;
+    raw={};raw.connected=true;raw.lx=5000;controller_apply_profile(&raw,&mapping);
+    assert(!raw.analog[0]&&!(raw.buttons&16)&&raw.lx==0);
+    raw={};raw.connected=true;raw.lx=20000;controller_apply_profile(&raw,&mapping);
+    assert(raw.analog[0]>0&&(raw.buttons&16)&&raw.lx==16808);
+    mapping.stick_deadzone[0]=0;
+    raw={};raw.connected=true;raw.lx=5000;controller_apply_profile(&raw,&mapping);
+    assert(raw.analog[0]>0&&(raw.buttons&16)&&raw.lx==0);
     WritePrivateProfileStringW(nullptr,nullptr,nullptr,profile);assert(DeleteFileW(profile));assert(RemoveDirectoryW(directory));
     std::puts("Input bindings: profile compatibility/validation, focus, wheel pulses, modifiers, consumed clicks, identity and remapping passed.");
 }

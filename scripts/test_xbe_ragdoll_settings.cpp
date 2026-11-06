@@ -448,6 +448,48 @@ static void WorldPositionRegression(){
     Run(sub_002A6850,{5});float position[3]{};assert(!TrialRagdollWorldPosition(g_base,5,position));
     Run(sub_002A5030);assert(extra.empty());
 }
+static void LimbLookupRegression(){
+    Setup(2);for(unsigned i=0;i<6;++i)assert(Acquire()==i);
+    for(uint32_t id:{0u,5u}){
+        const uint32_t object=Lookup(id),list=0xb00000+id*0x100,rigid=0xc00000+id*0x1000;
+        const std::array<uint32_t,5> offsets{0,0x1c,0x20,0x70,0x74};
+        std::array<uint32_t,5> previous{};
+        for(unsigned i=0;i<offsets.size();++i)previous[i]=R32(object+offsets[i]);
+        W32(object,0x48dd60);W32(object+0x1c,0x683000);W32(object+0x20,0x684000);
+        W32(object+0x70,list);W32(object+0x74,12);
+        for(unsigned j=0;j<12;++j)W32(list+j*4,rigid+j*0x100);
+        for(unsigned j=0;j<12;++j){
+            uint32_t handle=99,body=98;unsigned index=97;
+            assert(TrialRagdollFindLimb(g_base,rigid+j*0x100,handle,body,index));
+            assert(handle==id&&body==object&&index==j);
+            assert(TrialRagdollMatchesLimb(g_base,handle,body,index,rigid+j*0x100));
+            assert(!TrialRagdollMatchesLimb(g_base,handle+100,body,index,rigid+j*0x100));
+            assert(!TrialRagdollMatchesLimb(g_base,handle,body+4,index,rigid+j*0x100));
+            assert(!TrialRagdollMatchesLimb(g_base,handle,body,(index+1)%12,rigid+j*0x100));
+        }
+        for(unsigned invalid=0;invalid<6;++invalid){
+            if(invalid==0)W32(object,0x48dd70);
+            if(invalid==1)W32(object+0x1c,0);
+            if(invalid==2)W32(object+0x20,0);
+            if(invalid==3)W32(object+0x74,13);
+            if(invalid==4)W32(object+0x70,0xfffffff0);
+            if(invalid==5)G<uint8_t>(initialized)=0;
+            uint32_t handle=99,body=98;unsigned index=97;
+            assert(!TrialRagdollFindLimb(g_base,rigid,handle,body,index));
+            assert(handle==99&&body==98&&index==97);
+            assert(!TrialRagdollMatchesLimb(g_base,id,object,0,rigid));
+            W32(object,0x48dd60);W32(object+0x1c,0x683000);W32(object+0x20,0x684000);
+            W32(object+0x74,12);W32(object+0x70,list);G<uint8_t>(initialized)=1;
+        }
+        Run(sub_002A6850,{id});assert(!TrialRagdollMatchesLimb(g_base,id,object,0,rigid));
+        const uint32_t replacement=Acquire();assert(replacement>=6&&Lookup(replacement)==object);
+        assert(!TrialRagdollMatchesLimb(g_base,id,object,0,rigid));
+        assert(TrialRagdollMatchesLimb(g_base,replacement,object,0,rigid));
+        assert(!TrialRagdollMatchesLimb(g_base,replacement,object,12,rigid));
+        for(unsigned i=0;i<offsets.size();++i)W32(object+offsets[i],previous[i]);
+    }
+    Run(sub_002A5030);assert(extra.empty());
+}
 static void RegionActor(unsigned index,uint32_t table=0x45c770,uint32_t flags=1,float health=0.f){
     const auto actor=kActor+index*0x400,owner=0x6c0000+index*0x100,data=0x6d0000+index*0x100;
     W32(actor,table);W32(actor+0x54,100+index);W32(actor+0x5c,0x2000);
@@ -593,6 +635,7 @@ int main(){
     Setup(0);W32(0x51da70,UINT32_MAX-1);assert(Acquire()==UINT32_MAX-1);assert(Acquire()==UINT32_MAX);
     assert(!Lookup(UINT32_MAX));assert(Acquire()==0&&Lookup(0));Run(sub_002A5030);
     WorldPositionRegression();
+    LimbLookupRegression();
     RegionalRetentionRegression();
     ObjectPoolRegression();
     LayerRegression();OtherPoolProfiles();RendererAdmissionRegression();

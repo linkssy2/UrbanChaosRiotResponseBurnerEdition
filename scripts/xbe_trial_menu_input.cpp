@@ -22,6 +22,7 @@
 #include "xbe_health_packs.h"
 #include "xbe_health_settings.h"
 #include "xbe_aim_mode.h"
+#include "xbe_ragdoll_drag.h"
 #include "xbe_menu_key_taps.h"
 #include "xbe_graphics_settings.h"
 
@@ -94,7 +95,9 @@ void BeginCapture(unsigned device,unsigned player){
     std::lock_guard guard(input_lock);
     if(player>=2)return;
     controls_capture[player].Cancel();
-    if(device<=1&&(!player||device==1))controls_capture[player].Begin(device);
+    if(device<=1&&(!player||device==1)){
+        controls_capture[player].Begin(device);AllowControllerDeadzone(player,0);TrialRagdollDragInput(player,false);
+    }
 }
 void CancelCapture(unsigned player){std::lock_guard guard(input_lock);if(player<2)controls_capture[player].Cancel();}
 unsigned TakeCapture(unsigned player){std::lock_guard guard(input_lock);return player<2?controls_capture[player].Take():0;}
@@ -120,7 +123,7 @@ bool TrialMenuRightBack(){
 }
 void TrialIntroMovie(uint32_t owner,uint32_t kind,bool opening,bool ready){
     std::lock_guard guard(input_lock);
-    if(owner)menu_key_taps.Clear();
+    if(owner){trial_controls::SuspendControllerDeadzones();menu_key_taps.Clear();for(unsigned slot=0;slot<2;++slot)TrialRagdollDragInput(slot,false);}
     intro_gate.Context(owner,kind,opening,ready);
     if(owner)click_pending=false;
 }
@@ -165,12 +168,13 @@ static void ReconcileCapture(){
 }
 void TrialGraphicsInputChanged(){
     std::lock_guard guard(input_lock);
+    trial_controls::SuspendControllerDeadzones();
     menu_key_taps.Clear();
     for(unsigned key=1;key<256;++key)release_keys[key]=(GetAsyncKeyState(key)&0x8000)!=0;
     for(unsigned port=0;port<4;++port)release_pad[port]=last_pad[port];
     click_pending=false;dx=dy=0;
     spin_dx=spin_dy=0;spin_tick=0;spin_button_held[0]=spin_button_held[1]=true;
-    for(unsigned slot=0;slot<2;++slot){health_gesture[slot].Reset();TrialHealthPackInput(slot,false,false);TrialAimInput(slot,false,false);trial_player_actions::Cancel(slot);}
+    for(unsigned slot=0;slot<2;++slot){health_gesture[slot].Reset();TrialHealthPackInput(slot,false,false);TrialAimInput(slot,false,false);TrialRagdollDragInput(slot,false);trial_player_actions::Cancel(slot);}
     firearm_direction=0;
     partner_key_held=false;
     order_phase=order_buttons=0;order_held=false;keyboard_wheel_clear();
@@ -247,6 +251,8 @@ int TrialSpinSample(float* x,float* y,unsigned player){
 }
 void ucrr_host_menu_mode(int enabled){
     std::lock_guard guard(input_lock);
+    if(enabled)trial_controls::SuspendControllerDeadzones();
+    if(enabled)for(unsigned slot=0;slot<2;++slot)TrialRagdollDragInput(slot,false);
     if(menu_mode!=!!enabled){menu_key_taps.Clear();menu_mode=!!enabled;click_pending=false;dx=dy=0;PostMessage(game_window,kCapture,0,0);}
 }
 void TrialMenuKeysReset(){std::lock_guard guard(input_lock);menu_key_taps.Clear();}
@@ -286,6 +292,7 @@ void xbox_KeyboardSourceEvent(unsigned source,int down){
 void xbox_KeyboardWheel(int delta){if(captured)keyboard_wheel_record(delta);}
 void TrialInputPublish(){
     std::lock_guard guard(input_lock);
+    if(!focused()||!gameplay||menu_mode||TrialGraphicsOpen()||intro_gate.owner)trial_controls::SuspendControllerDeadzones();
     if(captured&&focused())keyboard_wheel_publish();else keyboard_wheel_clear();
     TrialConversationPublish(ActionSourceDown(1),focused()&&!TrialGraphicsOpen()&&!menu_mode);
     TrialReloadPublish(ActionSourceDown(0),focused()&&!TrialGraphicsOpen()&&!menu_mode);
@@ -305,11 +312,12 @@ bool TrialInputMessage(void*,uint32_t msg,uintptr_t wp,intptr_t lp,intptr_t* res
     if(msg==WM_RBUTTONDOWN||msg==WM_RBUTTONUP)TrialMenuRightButton(msg==WM_RBUTTONDOWN);
     if(TrialGraphicsMessage(msg,wp,lp)){click_pending=false;dx=dy=0;*result=0;return true;}
     if(msg==WM_KILLFOCUS||(msg==WM_ACTIVATEAPP&&!wp)){
+        trial_controls::SuspendControllerDeadzones();
         menu_key_taps.Clear();
         intro_gate.FocusLost();
         title_gate.Context(false);
         spin_dx=spin_dy=0;spin_tick=0;spin_button_held[0]=spin_button_held[1]=true;
-        for(unsigned slot=0;slot<2;++slot){TrialHealthPackInput(slot,false,false);TrialAimInput(slot,false,false);trial_player_actions::Cancel(slot);}
+        for(unsigned slot=0;slot<2;++slot){TrialHealthPackInput(slot,false,false);TrialAimInput(slot,false,false);TrialRagdollDragInput(slot,false);trial_player_actions::Cancel(slot);}
         menu_right_pending=menu_right_down=false;menu_right_consumed=(GetAsyncKeyState(VK_RBUTTON)&0x8000)!=0;
         captured=false;dx=dy=0;order_phase=order_buttons=0;order_held=false;click_pending=false;keyboard_wheel_clear();ClipCursor(nullptr);
     }
@@ -366,8 +374,11 @@ bool TrialInputMessage(void*,uint32_t msg,uintptr_t wp,intptr_t lp,intptr_t* res
 void TrialInputPad(int port,input::Pad& pad){
     std::lock_guard guard(input_lock);
     if(port<0||port>=4)return;
+    trial_controls::BeginControllerSample(unsigned(port));
     const bool controller_connected=pad.connected;
     if(port==0)firearm_direction=0;
+    // Revoke an old drag on unplug, while keeping P1 available to the keyboard.
+    if(port<2&&last_pad[port].connected&&!controller_connected)TrialRagdollDragInput(port,false);
     last_pad[port]=pad;
     const int pause_owner=trial_coop::PauseOwner();
     if(input_pause_owner!=pause_owner){input_pause_owner=pause_owner;TrialGraphicsInputChanged();}
@@ -380,7 +391,7 @@ void TrialInputPad(int port,input::Pad& pad){
         health_use=health_gesture[port].Update((pad.buttons&2)!=0,allowed,status.visible&&(status.can_revive||status.can_heal_partner),GetTickCount64());
     }
     if(!trial_coop::PauseAllowsPlayer(unsigned(port))){
-        if(port<2){TrialHealthPackInput(port,false,false);TrialAimInput(port,false,false);trial_player_actions::Cancel(port);}
+        if(port<2){TrialHealthPackInput(port,false,false);TrialAimInput(port,false,false);TrialRagdollDragInput(port,false);trial_player_actions::Cancel(port);}
         const bool connected=pad.connected||port==0;pad={};pad.connected=connected;return;
     }
     if(port==0)for(unsigned key=1;key<256;++key)
@@ -413,7 +424,7 @@ void TrialInputPad(int port,input::Pad& pad){
     const int menu_port=trial_coop::PauseOwner()==1?1:0;
     if(port==menu_port&&focused())TrialCoopMenuPad(controller_connected,pad.buttons|(pad.analog[2]>30?0x100u:0u)|(pad.analog[3]>30?0x200u:0u),pad.analog[0],pad.analog[1],pad.lx,pad.ly);
     if(TrialGraphicsOpen()){
-        if(port<2){TrialHealthPackInput(port,false,false);TrialAimInput(port,false,false);trial_player_actions::Cancel(port);}
+        if(port<2){TrialHealthPackInput(port,false,false);TrialAimInput(port,false,false);TrialRagdollDragInput(port,false);trial_player_actions::Cancel(port);}
         bool connected=pad.connected;pad={};pad.connected=connected;return;
     }
     // Consume only controls held across the handoff; drift must not lock other inputs.
@@ -430,14 +441,14 @@ void TrialInputPad(int port,input::Pad& pad){
     axis(pad.lx,held.lx,7849);axis(pad.ly,held.ly,7849);
     axis(pad.rx,held.rx,8689);axis(pad.ry,held.ry,8689);
     if(intro_gate.OwnsPad(port)){
-        if(port<2){TrialHealthPackInput(port,false,false);TrialAimInput(port,false,false);trial_player_actions::Cancel(port);}
+        if(port<2){TrialHealthPackInput(port,false,false);TrialAimInput(port,false,false);TrialRagdollDragInput(port,false);trial_player_actions::Cancel(port);}
         bool connected=pad.connected;pad={};pad.connected=connected;return;
     }
     if(port==1&&trial_coop::Active()&&gameplay&&!menu_mode&&TrialCoopPresentation()==2){
         // The original cinematic controls P1. P2 shares that camera and must
         // not move or fire unseen, but its configured Pause still works.
         TrialHealthPackInput(1,false,false);
-        TrialAimInput(1,false,false);trial_player_actions::Cancel(1);
+        TrialAimInput(1,false,false);TrialRagdollDragInput(1,false);trial_player_actions::Cancel(1);
         auto pause=pad;trial_controls::Remap(pause,1);
         release_pad[1]=last_pad[1];
         spin_button_held[1]=trial_controls::SpinButtonDown(false,last_pad[1],1);
@@ -461,6 +472,7 @@ void TrialInputPad(int port,input::Pad& pad){
         const bool cycle=trial_controls::ScopeZoomDown(false,pad,port)||
             (!port&&trial_controls::ScopeZoomDown(true,pad,0,captured));
         TrialAimInput(port,cycle,allowed&&TrialCoopPresentation()!=2);
+        TrialRagdollDragInput(port,allowed&&!intro_gate.owner&&TrialCoopPresentation()!=2&&(!port||controller_connected));
         const bool walk=trial_controls::WalkDown(false,pad,port)||(!port&&trial_controls::WalkDown(true,pad,0,captured));
         const bool hud=trial_controls::HudToggleDown(false,pad,port)||(!port&&trial_controls::HudToggleDown(true,pad,0,captured));
         trial_player_actions::Update(port,walk,hud,trial_controls::WalkMode(port),allowed&&TrialCoopPresentation()!=2);
@@ -468,6 +480,8 @@ void TrialInputPad(int port,input::Pad& pad){
     // Keep menu navigation on the physical controller; remaps apply to the
     // original gameplay slots before keyboard/mouse contributions are merged.
     if(gameplay&&!menu_mode)trial_controls::Remap(pad,trial_coop::Active()&&port==1?1:0);
+    if(port==1&&controller_connected&&focused()&&gameplay&&!menu_mode&&!controls_capture[port].active&&trial_coop::Active())
+        trial_controls::AllowControllerDeadzone(unsigned(port),15);
     if(port!=0||!focused())return;
     if(pad.buttons||std::abs(int(pad.rx))>8689||std::abs(int(pad.ry))>8689)InterlockedExchange(&keyboard_mode,0);
     if(menu_key_update)menu_key_taps.GuestPortPolled(port);
@@ -508,6 +522,10 @@ void TrialInputPad(int port,input::Pad& pad){
     for(unsigned i=0;i<8;i++)pad.analog[i]=std::max(pad.analog[i],keys.bAnalogButtons[i]);
     if(keys.sThumbLX)pad.lx=keys.sThumbLX;if(keys.sThumbLY)pad.ly=keys.sThumbLY;
     if(keys.sThumbRX)pad.rx=keys.sThumbRX;if(keys.sThumbRY)pad.ry=keys.sThumbRY;
+    // Mouse/keyboard ownership excludes every controller axis, including drift
+    // on an unused axis or while opposite movement keys cancel each other.
+    if(controller_connected&&gameplay&&!menu_mode&&!controls_capture[0].active)
+        trial_controls::AllowControllerDeadzone(0,TrialGameplayKeyboardMode()?0:15);
 }
 int TrialFirearmDirection(){
     std::lock_guard guard(input_lock);

@@ -21,11 +21,11 @@ void CheatsUi(const ImGuiViewport* view){
     const unsigned keyboard_focus=focus;
     ImGui::BeginDisabled(!ready||!available||state.pending);
     for(unsigned i=0;i<trial_cheats::Count;++i){
-        if(SettingRow(canvas,trial_cheats::Names[i],state.enabled&(1u<<i)?"On":"Off",i,focus,i==keyboard_focus?delta:0,22,94)&&ready&&available&&!state.pending)
-            if(!trial_cheats::Toggle(i,state))message="Cheat state changed. Try again.";
+        if(SettingRow(canvas,trial_cheats::Names[i],state.enabled&(1u<<i)?"On":"Off",i,focus,i==keyboard_focus?delta:0,20,94)&&ready&&available&&!state.pending)
+            if(!trial_cheats::Toggle(i,state))message="Could not change the cheat. Try again.";
     }
     ImGui::EndDisabled();
-    canvas.Text("Original cheats apply to the whole game, including both co-op players.",61,325,12,muted,518);
+    canvas.Text("Cheats apply to both players. Burner body shield is saved in PC settings.",61,325,12,muted,518);
     canvas.Text("Weapon changes may require re-equipping or restarting the mission.",61,346,12,muted,518);
     ImGui::BeginDisabled(!ready);
     const char* labels[]={"Back"};

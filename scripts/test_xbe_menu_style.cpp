@@ -212,6 +212,9 @@ static void ClickPoint(float x,float y,bool settle=true){
     ImGui::GetIO().AddMouseButtonEvent(0,false);DrawFrame();if(settle)Settle();
 }
 static void Click(unsigned index,bool settle=true){
+    if(PanelOpen()&&settings_page==0&&!reticle_page&&!confirm_back&&index>=21&&index<=23){
+        CHECK(hits.size()>=3);index=unsigned(hits.size())-3+(index-21);
+    }
     CHECK(index<hits.size());auto r=hits[index];ClickPoint((r.a.x+r.b.x)*.5f,(r.a.y+r.b.y)*.5f,settle);
 }
 static bool KeyEvent(ImGuiKey key,bool down,bool repeat=false){
@@ -296,6 +299,59 @@ static void CheckNativeConfirmTransitions(){
     CHECK(!KeyEvent(ImGuiKey_Enter,true));CHECK(!KeyEvent(ImGuiKey_Enter,false));
     Publish(levels);no_action();
 }
+static void GraphicsWheel(float amount){
+    const auto frame=trial_graphics::ViewBounds(float(output.width),float(output.height),true);
+    Move(frame.x+frame.width*610/640,frame.y+frame.height*200/480);
+    ImGui::GetIO().AddMouseWheelEvent(0,amount);Settle();
+}
+static const HitRecord* FindGraphicsHit(unsigned index){
+    const auto* window=ImGui::FindWindowByName("Burner graphics");CHECK(window);
+    const int row=int(index);
+    const auto id=ImHashStr("setting",0,ImHashData(&row,sizeof(row),window->ID));
+    for(const auto& hit:hits)if(hit.id==id||(index==19&&hit.name=="HD textures unavailable"))return &hit;
+    return nullptr;
+}
+static HitRecord GraphicsHit(unsigned index){
+    CHECK(index<21);
+    for(unsigned attempt=0;attempt<8;++attempt){
+        if(const auto* hit=FindGraphicsHit(index))return *hit;
+        GraphicsWheel(attempt==0?100.f:-1.f);
+    }
+    CHECK(false);return {};
+}
+static void CheckGraphicsHits(){
+    CHECK(hits.size()>5&&hits.size()<24);
+    for(size_t i=hits.size()-3;i<hits.size();++i)CHECK(hits[i].name=="row");
+    const auto frame=trial_graphics::ViewBounds(float(output.width),float(output.height),true);
+    std::vector<HitRecord> rows;
+    for(const auto& hit:hits)if(hit.name=="setting"||hit.name=="HD textures unavailable"){
+        CHECK(hit.a.y>=frame.y+78*frame.height/480-.1f);
+        CHECK(hit.b.y<=frame.y+358*frame.height/480+.1f);rows.push_back(hit);
+    }
+    std::sort(rows.begin(),rows.end(),[](const auto& a,const auto& b){return a.a.y<b.a.y;});
+    for(size_t i=1;i<rows.size();++i)CHECK(rows[i-1].b.y<=rows[i].a.y+.1f);
+}
+static void CheckGraphicsScrolling(){
+    GraphicsWheel(100);CheckGraphicsHits();
+    CHECK(FindGraphicsHit(0)&&FindGraphicsHit(20)&&!FindGraphicsHit(15));
+    const auto apply=hits[hits.size()-3];
+    for(unsigned i=0;i<4;++i){
+        const auto found=std::find_if(hits.begin(),hits.end(),[](const auto& hit){return hit.name=="graphics scroll down";});
+        CHECK(found!=hits.end());const auto hit=*found;
+        ClickPoint((hit.a.x+hit.b.x)*.5f,(hit.a.y+hit.b.y)*.5f);
+    }
+    CheckGraphicsHits();CHECK(!FindGraphicsHit(0)&&FindGraphicsHit(15)&&FindGraphicsHit(17));
+    const auto& after=hits[hits.size()-3];
+    CHECK(apply.id==after.id&&apply.a.x==after.a.x&&apply.a.y==after.a.y&&apply.b.x==after.b.x&&apply.b.y==after.b.y);
+    for(unsigned row=0;row<21;++row){GraphicsHit(row);CheckGraphicsHits();}
+    GraphicsWheel(100);CHECK(FindGraphicsHit(0)&&!FindGraphicsHit(17));
+    // Keyboard focus reveals later groups; returning from the footer wraps to Display.
+    const auto first=GraphicsHit(0);ClickPoint(first.a.x+2,first.a.y+2);Move(0,0);
+    const unsigned order[]={0,1,2,5,6,7,20,3,4,9,8,10,11,12,19,13,14,15,18,16,17};
+    for(unsigned i=1;i<std::size(order);++i){Key(ImGuiKey_DownArrow);CHECK(FindGraphicsHit(order[i]));}
+    for(unsigned i=0;i<4;++i)Key(ImGuiKey_DownArrow);
+    CHECK(FindGraphicsHit(0)&&!FindGraphicsHit(17));
+}
 static void OpenGraphics(const TrialFrontendFrame& f){
     CHECK(f.list_kind==3);
     Publish(f);CHECK(hits.size()==f.source.count+3);
@@ -304,15 +360,11 @@ static void OpenGraphics(const TrialFrontendFrame& f){
         CHECK(hits[i].b.x==432.f*output.width/640.f);
         if(i)CHECK(hits[i].a.y>=hits[i-1].b.y-.1f);
     }
-    Click(f.source.count);CHECK(PanelOpen());CHECK(hits.size()==24);
-    for(unsigned i=0;i<21;++i){
-        CHECK(hits[i].name=="setting");
-        CHECK(hits[i].b.y<=364*output.height/480.f+.1f);
-        if(i)CHECK(hits[i-1].b.y<=hits[i].a.y+.1f);
-    }
+    Click(f.source.count);CHECK(PanelOpen());CheckGraphicsHits();
 }
 static void ChangeSetting(unsigned index){
-    CHECK(reticle_page?(index<5&&hits.size()==6):(index<21&&hits.size()==24));auto r=hits[index];
+    CHECK(reticle_page?(index<5&&hits.size()==6):index<21);
+    auto r=reticle_page?hits[index]:GraphicsHit(index);
     // Click the actual row's right-arrow side, using recorded production bounds.
     ClickPoint(r.b.x-15*float(output.width)/640,(r.a.y+r.b.y)*.5f);
 }
@@ -320,7 +372,7 @@ static void CheckStrip(unsigned count){
     CHECK(hits.size()==count);
     for(unsigned i=0;i<count;++i){
         CHECK(hits[i].name=="row");
-        CHECK(hits[i].b.y-hits[i].a.y>=26*output.height/480.f);
+        CHECK(hits[i].b.y-hits[i].a.y+.01f>=26*output.height/480.f);
         if(i){
             if(hits[i].a.y==hits[0].a.y)CHECK(hits[i-1].b.x<=hits[i].a.x+.1f);
             else {CHECK(hits[i].a.x==hits[0].a.x);CHECK(hits[i-1].b.y<=hits[i].a.y+.1f);}
@@ -392,7 +444,7 @@ static void CheckHealthPackHud(){
     const bool previous_hd=live.hd_ui;
     const float previous_aspect=trial_graphics::aspect_override;
     TrialFrontendPublish({});TrialGraphicsMenuContext(0,0,0,0);
-    for(const auto size:{app::Mode{640,480},app::Mode{1920,1080},app::Mode{2560,1440},app::Mode{3440,1440},app::Mode{5120,1440}})for(float aspect:{4.f/3.f,16.f/9.f,21.f/9.f,32.f/9.f}){
+    for(const auto size:{app::Mode{640,480},app::Mode{1280,800},app::Mode{1920,1080},app::Mode{2560,1440},app::Mode{2560,1600},app::Mode{3440,1440},app::Mode{5120,1440}})for(float aspect:{4.f/3.f,16.f/10.f,16.f/9.f,21.f/9.f,32.f/9.f}){
         trial_graphics::aspect_override=aspect;
         output=size;trial_coop::SetActive(true);coop_presentation=1;
         health_status[0]={1,3,true,false};health_status[1]={2,3,true,true};
@@ -960,6 +1012,18 @@ static void CheckLegacyFogSettings(){
 }
 static void CheckControls(const TrialFrontendFrame& options){
     auto footer=[&](unsigned i){Click(unsigned(hits.size())-4+i);};
+    auto display_row=[](unsigned action){
+        for(unsigned row=0;row<ControlsCount();++row)if(ControlsAction(row)==action)return row;
+        CHECK(false);return 0u;
+    };
+    auto control_hit=[&](unsigned action,unsigned slot=0){
+        const unsigned row=display_row(action);controls_scroll=std::min(row,ControlsCount()-8);Settle();
+        const float y=(148+(row-controls_scroll)*20)*output.height/480.f;
+        for(unsigned i=1;i<hits.size();++i)if((hits[i].name=="setting"||hits[i].name=="binding")&&hits[i].a.y<=y&&hits[i].b.y>y){
+            if(!slot)return i;--slot;
+        }
+        CHECK(false);return 0u;
+    };
     auto scroll=[&](float delta){Move(300*output.width/640.f,200*output.height/480.f);ImGui::GetIO().AddMouseWheelEvent(0,delta);DrawFrame();Settle();};
     auto open=[&](){
         Publish(options);Click(0);CHECK(PanelOpen()&&settings_page==1);
@@ -970,43 +1034,112 @@ static void CheckControls(const TrialFrontendFrame& options){
         EmptyAction();
     };
     trial_controls::live_controls=trial_controls::second_controls=trial_controls::Defaults();controls_device=controls_player=0;
-    open();CHECK(hits.size()==19);
+    open();CHECK(hits[1].name=="setting"&&ControlsMouseSensitivity(ControlsAction(0)));
     CHECK(std::strcmp(ControlsName(0),"Reload")==0);
     CHECK(std::strcmp(ControlsName(28),"Interact / dialogue skip")==0);
     CHECK(&ControlsBinding(0,0)!=&ControlsBinding(28,0));
     CHECK(std::strcmp(ControlsName(2),"Next Firearm")==0&&std::strcmp(ControlsName(29),"Previous Firearm")==0);
-    CHECK(ControlsAction(10)==2&&ControlsAction(11)==29&&ControlsSlots(2)==2&&ControlsSlots(29)==2);
+    CHECK(display_row(29)==display_row(2)+1&&ControlsSlots(2)==2&&ControlsSlots(29)==2);
     CHECK(&ControlsBinding(2,0)!=&ControlsBinding(29,0));
     CHECK(&ControlsBinding(29,1)==&controls_draft.previous_firearm[1]);
-    CHECK(std::strcmp(ControlsGroup(16),"COMBAT / INTERACTION")==0&&std::strcmp(ControlsGroup(17),"MOVEMENT / AIMING")==0);
-    CHECK(std::strcmp(ControlsGroup(32),"TEAMMATE ORDERS")==0&&std::strcmp(ControlsGroup(37),"MENU CONTROLS")==0);
-    CHECK(ControlsAction(7)==30&&ControlsHealthPack(30));
+    CHECK(std::strcmp(ControlsGroup(display_row(2)),"COMBAT / INTERACTION")==0&&std::strcmp(ControlsGroup(display_row(18)),"MOVEMENT / AIMING")==0);
+    CHECK(std::strcmp(ControlsGroup(display_row(24)),"TEAMMATE ORDERS")==0&&std::strcmp(ControlsGroup(display_row(8)),"MENU CONTROLS")==0);
+    CHECK(display_row(43)==display_row(10)+1&&ControlsProfile(43)&&ControlsSlots(43)==1);
+    CHECK(!std::strcmp(ControlsName(43),"Crouch mode")&&!std::strcmp(ControlsGroup(display_row(43)),"MOVEMENT / AIMING"));
+    CHECK(ControlsHealthPack(30));
     CHECK(&ControlsBinding(30,0)==&controls_draft.health_pack[0][0]);
-    CHECK(ControlsAction(8)==34&&ControlsHealPartner(34)&&ControlsSlots(34)==2);
+    CHECK(display_row(34)==display_row(30)+1&&ControlsHealPartner(34)&&ControlsSlots(34)==2);
     CHECK(&ControlsBinding(34,0)==&controls_draft.heal_partner[0]);
     for(unsigned device=0;device<2;++device){
-        controls_device=device;std::vector<bool> seen(ControlsCount());
-        for(unsigned row=0;row<ControlsCount();++row){const auto action=ControlsAction(row);CHECK(action<ControlsCount()&&!seen[action]);seen[action]=true;}
+        controls_device=device;CHECK(ControlsCount()==(device?43u:41u));bool seen[47]{};
+        for(unsigned row=0;row<ControlsCount();++row){const auto action=ControlsAction(row);CHECK(action<47&&!seen[action]);seen[action]=true;}
+        for(unsigned action=0;action<(device?43u:40u);++action)CHECK(seen[action]);
+        if(!device)for(unsigned action=40;action<47;++action)CHECK(seen[action]==(action==43));
         if(device)CHECK(std::strcmp(ControlsName(2),"Firearms")==0&&!ControlsPreviousFirearm(29));
     }
-    controls_device=0;CHECK(ControlsAction(0)==0&&ControlsAction(1)==28);
-    CHECK(ControlsAction(26)==33&&ControlsMouseInvert(33)&&ControlsSlots(33)==1);
+    controls_device=0;CHECK(display_row(28)==display_row(0)+1);
+    CHECK(ControlsMouseInvert(33)&&ControlsSlots(33)==1);
     CHECK(std::strcmp(ControlsName(33),"Invert mouse look")==0);
 
     CHECK(!ControlsDirty());
+    unsigned native_before[7];std::memcpy(native_before,profile_draft,sizeof(native_before));
+    auto crouch_hit=hits[control_hit(43)];ClickPoint(crouch_hit.a.x+2,(crouch_hit.a.y+crouch_hit.b.y)*.5f);
+    Key(ImGuiKey_RightArrow);CHECK(profile_draft[3]!=(native_before[3])&&ControlsDirty()&&controls_capture_action<0);
+    footer(0);CHECK(!ControlsDirty()&&profile_live[3]==(native_before[3]^1));
+    for(unsigned i=0;i<7;++i)if(i!=3)CHECK(profile_live[i]==native_before[i]);
+    crouch_hit=hits[control_hit(43)];ClickPoint(crouch_hit.a.x+2,(crouch_hit.a.y+crouch_hit.b.y)*.5f);
+    Key(ImGuiKey_LeftArrow);footer(0);CHECK(!ControlsDirty()&&!std::memcmp(profile_live,native_before,sizeof(native_before)));
     for(const auto* description:control_help)CHECK(std::strlen(description)>20);
     auto source=[](unsigned value){
         trial_controls::capture.Sample(0,0,true);
         trial_controls::capture.Sample(controls_device?0:value,controls_device?value:0,true);
         DrawFrame();Settle();
     };
+    for(unsigned player:{0u,1u})for(unsigned stick:{0u,1u}){
+        controls_device=1;controls_player=player;ControlsReadDraft();
+        const auto original=trial_controls::Snapshot(player),other=trial_controls::Snapshot(1-player);
+        CHECK(original.deadzone[stick]==31);
+        const unsigned action=ControlsProfileStart()+7+stick;
+        CHECK(ControlsDeadzone(action)&&ControlsSlots(action)==1&&!std::strcmp(ControlsGroup(display_row(action)),"INPUT SETTINGS"));
+        const auto hit=hits[control_hit(action)];const float y=(hit.a.y+hit.b.y)*.5f;
+        auto drag=[&](float x){Move(x*output.width/640.f,y);DrawFrame();};
+        drag(418);ImGui::GetIO().AddMouseButtonEvent(0,true);DrawFrame();
+        CHECK(controls_draft.deadzone[stick]==0&&ControlsDirty()&&controls_capture_action<0);
+        drag(480);CHECK(controls_draft.deadzone[stick]==16);
+        drag(542);CHECK(controls_draft.deadzone[stick]==31);
+        drag(418);ImGui::GetIO().AddMouseButtonEvent(0,false);Settle();
+        Key(ImGuiKey_LeftArrow);CHECK(controls_draft.deadzone[stick]==0);
+        for(unsigned value=1;value<=31;++value){Key(ImGuiKey_RightArrow);CHECK(controls_draft.deadzone[stick]==value);}
+        Key(ImGuiKey_RightArrow);CHECK(controls_draft.deadzone[stick]==31);
+        Key(ImGuiKey_LeftArrow);CHECK(controls_draft.deadzone[stick]==30);
+        frontend_events=64;DrawFrame();CHECK(controls_draft.deadzone[stick]==30&&controls_capture_action<0);
+        CHECK(controls_draft.deadzone[1-stick]==original.deadzone[1-stick]);
+        fail_apply=true;footer(0);fail_apply=false;
+        auto saved=trial_controls::Snapshot(player);CHECK(ControlsDirty()&&!std::memcmp(&saved,&original,sizeof(saved)));
+        footer(1);CHECK(!ControlsDirty()&&controls_draft.deadzone[stick]==31);
+        const auto restored=hits[control_hit(action)];
+        ClickPoint(restored.a.x+2,(restored.a.y+restored.b.y)*.5f);
+        frontend_events=16;DrawFrame();CHECK(controls_draft.deadzone[stick]==30);
+        frontend_events=32;DrawFrame();CHECK(controls_draft.deadzone[stick]==31);
+        Key(ImGuiKey_LeftArrow);footer(0);
+        CHECK(!ControlsDirty()&&trial_controls::Snapshot(player).deadzone[stick]==30);
+        ControlsReadDraft();Settle();CHECK(controls_draft.deadzone[stick]==30);
+        footer(2);CHECK(ControlsDirty()&&controls_draft.deadzone[0]==31&&controls_draft.deadzone[1]==31);
+        footer(1);CHECK(!ControlsDirty()&&controls_draft.deadzone[stick]==30);
+        footer(2);footer(0);CHECK(!ControlsDirty()&&trial_controls::Snapshot(player).deadzone[stick]==31);
+        const auto unchanged=trial_controls::Snapshot(1-player);CHECK(!std::memcmp(&other,&unchanged,sizeof(other)));
+    }
+    // Tab must pass every one-slot setting and slider, then reach Apply.
+    for(unsigned page:{0u,1u,2u}){
+        controls_device=page?1:0;controls_player=page==2;ControlsReadDraft();
+        const auto original=trial_controls::Snapshot(controls_player),other=trial_controls::Snapshot(1-controls_player);
+        const auto hit=hits[control_hit(ControlsAction(0))];
+        ClickPoint(hit.a.x+2,(hit.a.y+hit.b.y)*.5f);
+        if(controls_device)controls_draft.deadzone[0]=0;else controls_draft.sensitivity=1;
+        const auto before=controls_applied;
+        for(unsigned row=0;row<ControlsCount();++row){
+            const auto action=ControlsAction(row);
+            const unsigned tabs=ControlsSlots(action)>1&&!ControlsLookSlider(action)?2:1;
+            for(unsigned slot=0;slot<tabs;++slot){
+                CHECK(row>=controls_scroll&&row<controls_scroll+8);
+                const float y=(138+(row-controls_scroll)*20)*output.height/480.f;
+                const auto* window=ImGui::FindWindowByName("Burner controls");CHECK(window&&window->Active);
+                bool selected=false;
+                for(const auto& vertex:window->DrawList->VtxBuffer)
+                    if(vertex.col==IM_COL32(159,173,162,57)&&std::abs(vertex.pos.x-50*output.width/640.f)<.1f&&std::abs(vertex.pos.y-y)<.1f)selected=true;
+                CHECK(selected);Key(ImGuiKey_Tab);
+            }
+        }
+        Key(ImGuiKey_Enter);CHECK(controls_applied==before+1&&!ControlsDirty()&&controls_capture_action<0);
+        const auto unchanged=trial_controls::Snapshot(1-controls_player);CHECK(!std::memcmp(&other,&unchanged,sizeof(other)));
+        (controls_player?trial_controls::second_controls:trial_controls::live_controls)=original;
+    }
     for(unsigned page:{0u,1u,2u}){
         controls_device=page?1:0;controls_player=page==2;ControlsReadDraft();
         const auto other=trial_controls::Snapshot(1-controls_player);
-        const unsigned row=controls_device?21:24,action=controls_device?33:39;
-        CHECK(ControlsMovementInertia(action)&&ControlsSlots(action)==1&&ControlsAction(row)==action);
-        CHECK(ControlsWalk(ControlsAction(row-2))&&ControlsWalkMode(ControlsAction(row-1)));
-        CHECK(!std::strcmp(ControlsName(action),"Movement inertia")&&!std::strcmp(ControlsGroup(row),"MOVEMENT / AIMING"));
+        const unsigned action=controls_device?33:39,row=display_row(action);
+        CHECK(ControlsMovementInertia(action)&&ControlsSlots(action)==1);
+        CHECK(!std::strcmp(ControlsName(action),"Movement inertia")&&!std::strcmp(ControlsGroup(row),"INPUT SETTINGS"));
         controls_scroll=row;Settle();CHECK(controls_draft.movement_inertia==1);
         Click(1);CHECK(controls_draft.movement_inertia==1&&controls_capture_action<0);
         const auto hit=hits[1];ClickPoint(hit.b.x-35*float(output.width)/640,(hit.a.y+hit.b.y)/2);
@@ -1032,7 +1165,11 @@ static void CheckControls(const TrialFrontendFrame& options){
         controls_device=page?1:0;controls_player=page==2;ControlsReadDraft();Settle();
         const auto original=trial_controls::Snapshot(controls_player);
         const auto other=trial_controls::Snapshot(1-controls_player);
+        unsigned original_native[7];std::memcpy(original_native,profile_draft,sizeof(original_native));
+        const unsigned custom_native[]={0,1,0,0,0,23,77};
+        std::memcpy(profile_draft,custom_native,sizeof(custom_native));
         controls_draft.walk_mode=1;
+        controls_draft.deadzone[0]=3;controls_draft.deadzone[1]=4;
         for(unsigned device=0;device<2;++device){
             controls_draft.walk_binding[device][0]=device?22:'B';
             controls_draft.walk_binding[device][1]=device?23:'N';
@@ -1042,25 +1179,35 @@ static void CheckControls(const TrialFrontendFrame& options){
         footer(0);CHECK(!ControlsDirty());
         const auto custom=trial_controls::Snapshot(controls_player);
         const auto defaults=trial_controls::Defaults();
+        CHECK(!std::memcmp(controls_player?custom.native_profile:profile_live,custom_native,sizeof(custom_native)));
+        unsigned expected_native[7];std::memcpy(expected_native,controls_device?defaults.native_profile:custom_native,sizeof(expected_native));
+        expected_native[3]=defaults.native_profile[3];
         footer(2);
         CHECK(ControlsDirty()&&controls_draft.walk_mode==defaults.walk_mode);
+        CHECK(controls_draft.deadzone[0]==(controls_device?31u:3u)&&controls_draft.deadzone[1]==(controls_device?31u:4u));
         CHECK(!std::memcmp(controls_draft.walk_binding[controls_device],defaults.walk_binding[controls_device],sizeof(defaults.walk_binding[0])));
         CHECK(!std::memcmp(controls_draft.hud_binding[controls_device],defaults.hud_binding[controls_device],sizeof(defaults.hud_binding[0])));
         CHECK(!std::memcmp(controls_draft.walk_binding[1-controls_device],custom.walk_binding[1-controls_device],sizeof(defaults.walk_binding[0])));
         CHECK(!std::memcmp(controls_draft.hud_binding[1-controls_device],custom.hud_binding[1-controls_device],sizeof(defaults.hud_binding[0])));
         auto live=trial_controls::Snapshot(controls_player);
         CHECK(!std::memcmp(&live,&custom,sizeof(live)));
+        CHECK(!std::memcmp(profile_draft,expected_native,sizeof(expected_native)));
+        CHECK(!std::memcmp(controls_player?live.native_profile:profile_live,custom_native,sizeof(custom_native)));
         footer(1);CHECK(!ControlsDirty()&&controls_draft.walk_mode==1);
+        CHECK(!std::memcmp(profile_draft,custom_native,sizeof(custom_native)));
+        CHECK(controls_draft.deadzone[0]==3&&controls_draft.deadzone[1]==4);
         CHECK(!std::memcmp(controls_draft.walk_binding,custom.walk_binding,sizeof(custom.walk_binding)));
         CHECK(!std::memcmp(controls_draft.hud_binding,custom.hud_binding,sizeof(custom.hud_binding)));
         footer(2);footer(0);CHECK(!ControlsDirty());
         live=trial_controls::Snapshot(controls_player);
         CHECK(live.walk_mode==defaults.walk_mode);
+        CHECK(!std::memcmp(controls_player?live.native_profile:profile_live,expected_native,sizeof(expected_native)));
         CHECK(!std::memcmp(live.walk_binding[controls_device],defaults.walk_binding[controls_device],sizeof(defaults.walk_binding[0])));
         CHECK(!std::memcmp(live.hud_binding[controls_device],defaults.hud_binding[controls_device],sizeof(defaults.hud_binding[0])));
         const auto unchanged=trial_controls::Snapshot(1-controls_player);
         CHECK(!std::memcmp(&other,&unchanged,sizeof(other)));
         (controls_player?trial_controls::second_controls:trial_controls::live_controls)=original;
+        if(!controls_player)std::memcpy(profile_live,original_native,sizeof(original_native));
     }
     controls_device=controls_player=0;ControlsReadDraft();Settle();
     // Aim mode never enters binding capture, participates in saving/defaults,
@@ -1070,13 +1217,13 @@ static void CheckControls(const TrialFrontendFrame& options){
     ControlsBegin(32,0);DrawFrame();Settle();source('S');CHECK(controls_conflict_action==19);Click(0);
     CHECK(controls_draft.scope_zoom[0][0]=='S'&&!controls_draft.keyboard[19][0]&&controls_draft.aim_mode==1);
     footer(0);CHECK(!ControlsDirty()&&trial_controls::live_controls.aim_mode==1);
-    controls_scroll=4;Settle();Click(1);CHECK(controls_capture_action<0); // mode row, not capture
+    Click(control_hit(31));CHECK(controls_capture_action<0); // mode row, not capture
     const auto mode=controls_draft.aim_mode;
     frontend_events=64;DrawFrame();CHECK(controls_draft.aim_mode==mode);
     Key(ImGuiKey_RightArrow);CHECK(controls_draft.aim_mode!=mode);
     Key(ImGuiKey_LeftArrow);CHECK(controls_draft.aim_mode==mode);
     footer(2);CHECK(!controls_draft.aim_mode&&!controls_draft.scope_zoom[0][0]);footer(0);
-    controls_scroll=0;Settle();
+    control_hit(0);
     // Both firearm directions capture independent slots, take part in conflict
     // replacement, save together and return to their own defaults.
     ControlsBegin(2,0);DrawFrame();Settle();source('B');
@@ -1093,20 +1240,20 @@ static void CheckControls(const TrialFrontendFrame& options){
     CHECK(controls_draft.keyboard[2][0]==defaults.keyboard[2][0]);footer(0);CHECK(!ControlsDirty());
     // The first held opening input is ignored. A later fresh key edits only
     // the selected slot, with explicit conflict decisions before publication.
-    Click(1);CHECK(controls_capture_action==0);
+    Click(control_hit(0));CHECK(controls_capture_action==0);
     trial_controls::capture.Sample(VK_LBUTTON,0,true);DrawFrame();CHECK(controls_capture_action==0);
     source('S');CHECK(controls_conflict_action==19&&hits.size()==3);
     Click(2);CHECK(controls_capture_action<0&&!ControlsDirty());
-    Click(1);source('Z');CHECK(controls_draft.keyboard[0][0]=='Z'&&ControlsDirty());
+    Click(control_hit(0));source('Z');CHECK(controls_draft.keyboard[0][0]=='Z'&&ControlsDirty());
     CHECK(trial_controls::live_controls.keyboard[0][0]=='R');
     ControlsBegin(28,0);DrawFrame();Settle();source(VK_MBUTTON);CHECK(controls_conflict_action==24);Click(1);
     CHECK(controls_draft.keyboard[0][1]==VK_MBUTTON&&controls_draft.keyboard[24][0]==VK_MBUTTON);
     const unsigned before=controls_applied;footer(0);CHECK(controls_applied==before+1&&!ControlsDirty());
     // Wheel capture is an event, not a held virtual key; it can bind normal
     // actions but not the hold-and-drag orders action.
-    Click(1);trial_controls::capture.Sample(0,0,true);trial_controls::capture.Wheel(256);DrawFrame();Settle();
+    Click(control_hit(0));trial_controls::capture.Sample(0,0,true);trial_controls::capture.Wheel(256);DrawFrame();Settle();
     CHECK(controls_draft.keyboard[0][0]==256&&ControlsDirty());footer(1);CHECK(!ControlsDirty());
-    controls_scroll=32;Settle();
+    control_hit(24);
     CHECK(ControlsAction(controls_scroll)==24);Click(1);CHECK(controls_capture_action==24);
     trial_controls::capture.Sample(0,0,true);trial_controls::capture.Wheel(257);DrawFrame();Settle();
     CHECK(controls_capture_action==24&&trial_controls::CaptureWaiting()&&!ControlsDirty());
@@ -1117,11 +1264,11 @@ static void CheckControls(const TrialFrontendFrame& options){
     ImGui::GetIO().AddMouseButtonEvent(0,true);DrawFrame();
     CHECK(controls_capture_action<0&&!ControlsDirty());
     ImGui::GetIO().AddMouseButtonEvent(0,false);Settle();
-    controls_scroll=15;Settle();Click(1);CHECK(controls_draft.spin_mode==1&&ControlsDirty());
-    Click(3);CHECK(controls_capture_action==26);source('P');
+    Click(control_hit(25));CHECK(controls_draft.spin_mode==1&&ControlsDirty());
+    Click(control_hit(26));CHECK(controls_capture_action==26);source('P');
     CHECK(controls_draft.spin_binding[0][0]=='P');
     footer(1);CHECK(!ControlsDirty()); // Discard restores mode and button together.
-    controls_scroll=25;Settle();
+    control_hit(27);
     CHECK(controls_draft.sensitivity==400);
     const auto slider=hits[1];const float slider_y=(slider.a.y+slider.b.y)*.5f;
     Move(418*output.width/640.f,slider_y);ImGui::GetIO().AddMouseButtonEvent(0,true);DrawFrame();
@@ -1130,8 +1277,8 @@ static void CheckControls(const TrialFrontendFrame& options){
     Move(418*output.width/640.f,slider_y);DrawFrame();ImGui::GetIO().AddMouseButtonEvent(0,false);Settle();
     CHECK(controls_draft.sensitivity==1);Key(ImGuiKey_LeftArrow);CHECK(controls_draft.sensitivity==1);
     Key(ImGuiKey_RightArrow);CHECK(controls_draft.sensitivity==2);
-    Key(ImGuiKey_Tab);Key(ImGuiKey_Enter);CHECK(trial_controls::live_controls.sensitivity==2&&!ControlsDirty());
-    controls_scroll=26;Settle();const unsigned stick_invert=profile_draft[1];
+    Key(ImGuiKey_Tab);footer(0);CHECK(trial_controls::live_controls.sensitivity==2&&!ControlsDirty());
+    control_hit(33);const unsigned stick_invert=profile_draft[1];
     CHECK(!controls_draft.invert_mouse);Click(1);
     CHECK(!controls_draft.invert_mouse&&controls_capture_action<0); // Label click selects; arrows/value edit.
     auto toggle_mouse=[&](){const auto row=hits[1];ClickPoint(row.b.x-35*float(output.width)/640,(row.a.y+row.b.y)/2);};
@@ -1141,8 +1288,8 @@ static void CheckControls(const TrialFrontendFrame& options){
     footer(0);CHECK(trial_controls::live_controls.invert_mouse==1&&!ControlsDirty());
     footer(2);CHECK(!controls_draft.invert_mouse&&ControlsDirty());
     footer(1);CHECK(controls_draft.invert_mouse==1&&!ControlsDirty());
-    controls_scroll=26;Settle();toggle_mouse();footer(0);CHECK(!trial_controls::live_controls.invert_mouse&&!ControlsDirty());
-    controls_scroll=27;Settle();CHECK(ControlsZoomSensitivity(ControlsAction(27)));
+    control_hit(33);toggle_mouse();footer(0);CHECK(!trial_controls::live_controls.invert_mouse&&!ControlsDirty());
+    control_hit(35);CHECK(ControlsZoomSensitivity(35));
     CHECK(controls_draft.zoom_sensitivity==100);
     auto zoom_slider=hits[1];const float zoom_y=(zoom_slider.a.y+zoom_slider.b.y)/2;
     Move(418*output.width/640.f,zoom_y);ImGui::GetIO().AddMouseButtonEvent(0,true);DrawFrame();
@@ -1157,8 +1304,8 @@ static void CheckControls(const TrialFrontendFrame& options){
     // Device selection returns to the top. Controller sources are raw, and
     // Replace clears an overlapping source instead of silently invoking both.
     auto device=hits[0];ClickPoint(device.b.x-15*float(output.width)/640,(device.a.y+device.b.y)/2);
-    CHECK(controls_device==1&&controls_scroll==0&&hits.size()==21);
-    Click(1);source(8);CHECK(controls_conflict_action==7);Click(0);
+    CHECK(controls_device==1&&controls_scroll==0&&hits[1].name=="setting");
+    Click(control_hit(0));source(8);CHECK(controls_conflict_action==7);Click(0);
     CHECK(controls_draft.controller[0][0]==8&&!controls_draft.controller[7][0]);
     fail_apply=true;footer(0);fail_apply=false;CHECK(ControlsDirty()&&trial_controls::live_controls.controller[0][0]==1);
     footer(0);CHECK(!ControlsDirty()&&trial_controls::live_controls.controller[0][0]==8);
@@ -1180,13 +1327,13 @@ static void CheckControls(const TrialFrontendFrame& options){
     CHECK(controls_scroll==ControlsCount()-8);
     Move((bar.a.x+bar.b.x)*.5f,bar.a.y+1);DrawFrame();CHECK(controls_scroll==0);
     ImGui::GetIO().AddMouseButtonEvent(0,false);Settle();
-    Move(0,0);ClickPoint(hits[1].a.x+2,hits[1].a.y+2);
+    Move(0,0);const auto binding=hits[control_hit(0)];ClickPoint(binding.a.x+2,binding.a.y+2);
     Key(ImGuiKey_Escape);Settle(); // Cancel capture, retaining row focus.
     for(unsigned i=0;i<ControlsCount()+8;++i)Key(ImGuiKey_DownArrow);
     CHECK(controls_scroll==ControlsCount()-8);
     footer(3);CHECK(!PanelOpen());EmptyAction();
     // Native edits commit only to the matching original Options profile snapshot.
-    open();const unsigned settings[]={1,1,1,0,1,75,35};
+    open();controls_device=1;ControlsReadDraft();Settle();const unsigned settings[]={1,1,1,0,1,75,35};
     std::memcpy(profile_draft,settings,sizeof(settings));CHECK(ControlsDirty());
     footer(0);CHECK(!ControlsDirty()&&!std::memcmp(profile_live,settings,sizeof(settings)));
     profile_draft[0]=0;footer(1);CHECK(profile_draft[0]==1&&!ControlsDirty());
@@ -1196,7 +1343,7 @@ static void CheckControls(const TrialFrontendFrame& options){
     CHECK(!TrialControlsProfile(stale,true)&&stale[5]==75); // A changed profile rejects a queued write.
     TrialControlsProfile(snapshot,true);ControlsReadDraft();Close();Settle();
     open();controls_device=1;controls_player=1;ControlsReadDraft();Settle();
-    CHECK(ControlsCount()==41&&ControlsProfileStart()==34&&ControlsHealthPack(26));
+    CHECK(ControlsCount()==43&&ControlsProfileStart()==34&&ControlsHealthPack(26));
     const auto first_profile=trial_controls::live_controls;
     CHECK(ControlsWalk(30)&&ControlsWalkMode(31)&&ControlsHud(32));
     ControlsBegin(31,1);CHECK(controls_draft.walk_mode==1&&controls_capture_action<0);
@@ -1256,7 +1403,7 @@ static void CheckPerPlayerSettings(){
             const bool apply_before=profile_apply;
             const unsigned binding=controls_draft.controller[0][0]==22?23:22;
             controls_draft.controller[0][0]=binding;
-            if(player){CHECK(ControlsCount()==41);profile_draft[1]^=1;profile_draft[5]=23;}
+            if(player){CHECK(ControlsCount()==43);profile_draft[1]^=1;profile_draft[5]=23;}
             CHECK(ControlsDirty());fail_apply=true;CHECK(!ControlsApply());fail_apply=false;CHECK(ControlsDirty());
             CHECK(ControlsApply());
             if(player)CHECK(profile_apply==apply_before&&!std::memcmp(native_before,profile_live,sizeof(native_before))&&!std::memcmp(pending_before,profile_pending,sizeof(pending_before)));
@@ -1518,14 +1665,14 @@ static void CheckSize(unsigned width,unsigned height){
 
     // Settings edit only the draft until Apply; Back keeps the same draft behind
     // the unsaved-changes confirmation, while Discard leaves live values alone.
-    auto options=MakeList(3);OpenGraphics(options);unsigned before=applied;ChangeSetting(3);CHECK(Dirty());CHECK(live.settings.render_percent==100);
+    auto options=MakeList(3);OpenGraphics(options);CheckGraphicsScrolling();unsigned before=applied;ChangeSetting(3);CHECK(Dirty());CHECK(live.settings.render_percent==100);
     sample_support=2|(1u<<4);ChangeSetting(9);CHECK(draft.msaa==4&&live.msaa==1);
     sample_support=2|(1u<<2)|(1u<<4);
     Click(21);CHECK(applied==before+1&&live.settings.render_percent==125&&live.msaa==4&&!Dirty());
     ChangeSetting(10);ChangeSetting(11);ChangeSetting(12);ChangeSetting(13);ChangeSetting(13);
     CHECK(!draft.scenery&&!draft.characters&&draft.character_quality==1&&draft.ragdolls==2&&Dirty());
     CHECK(live.scenery&&live.characters&&live.character_quality==0&&live.ragdolls==0);
-    CHECK(hits.size()==24&&draft.ragdolls==2);Click(21);
+    CheckGraphicsHits();CHECK(draft.ragdolls==2);Click(21);
     CHECK(applied==before+2&&!live.scenery&&!live.characters&&live.character_quality==1&&live.ragdolls==2&&!Dirty());
     ChangeSetting(13);CHECK(Dirty());Click(22);CHECK(!Dirty()&&draft.ragdolls==2);
     // The shared convulsion toggle uses the same transactional Apply policy.
@@ -1538,7 +1685,7 @@ static void CheckSize(unsigned width,unsigned height){
     ChangeSetting(15);CHECK(draft.fov!=53&&live.fov==53&&Dirty());
     // Both real tracks drag/clamp without touching committed settings before Apply.
     auto drag=[&](unsigned row,float start,float end){
-        const auto hit=hits[row];const float y=(hit.a.y+hit.b.y)*.5f;
+        const auto hit=reticle_page?hits[row]:GraphicsHit(row);const float y=(hit.a.y+hit.b.y)*.5f;
         Move(start*width/640.f,y);ImGui::GetIO().AddMouseButtonEvent(0,true);DrawFrame();
         Move(end*width/640.f,y);DrawFrame();
         ImGui::GetIO().AddMouseButtonEvent(0,false);Settle();
@@ -1612,10 +1759,10 @@ static void CheckSize(unsigned width,unsigned height){
     Click(21);CHECK(!TrialDistanceFog&&TrialFogDistanceMode==0&&!TrialSmoothFog&&!Dirty());
     ChangeSetting(8);Click(21);CHECK(TrialDistanceFog&&TrialFogDistanceMode==0&&!TrialSmoothFog&&!Dirty());
     ChangeSetting(8);Click(23);CHECK(confirm_back&&hits.size()==3);
-    Key(ImGuiKey_Escape);Settle();CHECK(!confirm_back&&PanelOpen()&&Dirty()&&hits.size()==24);
+    Key(ImGuiKey_Escape);Settle();CHECK(!confirm_back&&PanelOpen()&&Dirty());CheckGraphicsHits();
     CHECK(draft_fog_mode==2&&!TrialSmoothFog);Click(22);CHECK(!Dirty());
     ChangeSetting(6);CHECK(Dirty()&&message.empty());Click(23);CHECK(confirm_back&&hits.size()==3);
-    Key(ImGuiKey_Escape);Settle();CHECK(!confirm_back&&PanelOpen()&&Dirty()&&hits.size()==24);
+    Key(ImGuiKey_Escape);Settle();CHECK(!confirm_back&&PanelOpen()&&Dirty());CheckGraphicsHits();
     Click(23);CHECK(confirm_back&&hits.size()==3);Click(1);CHECK(!PanelOpen());
     CHECK(live.settings.render_percent==125&&live.settings.fps_cap==60);CheckStrip(options.source.count+3);
 
@@ -1672,25 +1819,25 @@ static void CheckSize(unsigned width,unsigned height){
         TrialFrontendPad(0,0,0,0,0);DrawFrame();TrialFrontendPad(buttons,a,b,0,0);DrawFrame();
         TrialFrontendPad(0,0,0,0,0);Settle();};
     // Select a known row with mouse once, then operate entirely by controller.
-    Move(0,0);ClickPoint(hits[7].a.x+2,hits[7].a.y+2);const bool old_fps=draft_fps;
+    Move(0,0);const auto fps_hit=GraphicsHit(7);ClickPoint(fps_hit.a.x+2,fps_hit.a.y+2);const bool old_fps=draft_fps;
     pad(8);CHECK(draft_fps!=old_fps);pad(4);CHECK(draft_fps==old_fps);
-    for(unsigned i=0;i<7;++i)pad(2); // FPS row 7 -> Death convulsions row 14.
+    for(unsigned i=0;i<11;++i)pad(2); // Display FPS -> Rendering quality's final row.
     pad(8);CHECK(!draft.death_convulsions&&live.death_convulsions&&Dirty());
-    pad(4);CHECK(draft.death_convulsions);pad(2);pad(2); // World FOV -> HD UI.
+    pad(4);CHECK(draft.death_convulsions);pad(2);pad(2);pad(2); // Camera: world FOV -> weapon FOV -> HD UI.
     const bool old_hd=live.hd_ui;pad(8);CHECK(draft.hd_ui!=old_hd&&live.hd_ui==old_hd&&Dirty());
-    pad(2); // Reticle row 17, then Weapon FOV row 18.
+    pad(2); // Reticle is the final Camera and HUD row.
     const auto old_reticle=live.reticle_scale;pad(8);
     CHECK(reticle_page&&draft.reticle_scale==old_reticle);pad(8);
     CHECK(draft.reticle_scale==old_reticle+5&&live.reticle_scale==old_reticle&&Dirty());
     pad(4);CHECK(draft.reticle_scale==old_reticle);
     pad(0,0,255);CHECK(!reticle_page&&PanelOpen());
-    pad(2);
+    pad(1);pad(1); // Return through HD UI to Weapon FOV.
     const auto old_weapon=live.weapon_fov;pad(8);
     CHECK(draft.weapon_fov==old_weapon+5&&live.weapon_fov==old_weapon&&Dirty());
-    pad(2);pad(8);CHECK(draft.world_textures!=live.world_textures);
-    pad(2);const auto old_fmv=live.fmv_scale;pad(8);
+    for(unsigned i=0;i<4;++i)pad(1);pad(8);CHECK(draft.world_textures!=live.world_textures);
+    for(unsigned i=0;i<8;++i)pad(1);const auto old_fmv=live.fmv_scale;pad(8);
     CHECK(draft.fmv_scale!=old_fmv&&live.fmv_scale==old_fmv&&Dirty());
-    pad(2); // Apply
+    for(unsigned i=0;i<15;++i)pad(2); // All groups -> pinned Apply.
     const auto saved=applied;pad(0,255);CHECK(applied==saved+1&&live.hd_ui!=old_hd&&!Dirty());
     pad(0,0,255);CHECK(!PanelOpen());EmptyAction();keyboard_mode=1;
     Publish(levels);pad(0x200);action=Take();CHECK(action.kind==UC_HF_DIFFICULTY);
@@ -1707,7 +1854,7 @@ static void CheckSize(unsigned width,unsigned height){
     Click(11);action=Take();CHECK(action.kind==UC_HF_SELECT&&action.index==9);
     rewards.source.selected=54;++rewards.source.epoch;Publish(rewards);CHECK(hits.size()==4);Click(0);action=Take();CHECK(action.index==54);
     for(unsigned i=0;i<1;++i){const auto r=TrialLevelBounds(i,TrialRewardsPerPage);
-        CHECK(hits[i].a.x==r.x*width/640.f&&hits[i].a.y==r.y*height/480.f);}
+        CHECK(std::abs(hits[i].a.x-r.x*width/640.f)<.01f&&std::abs(hits[i].a.y-r.y*height/480.f)<.01f);}
     RightClick();action=Take();CHECK(action.kind==UC_HF_BACK);
     keyboard_mode=0;Publish(rewards);CHECK(hits.empty()&&!frontend_presentation.visible);
     keyboard_mode=1;
@@ -1760,11 +1907,18 @@ static void CheckHealthOptions(){
     trial_language::active=4;CHECK(std::strcmp(trial_language::Ui("Stored health packs"),"Botiquines guardados")==0);trial_language::active=0;
     puts("health settings: saved On/Off, failed-save rollback, mouse/controller, both pause owners, 3 resolutions and Spanish passed");
 }
-static void CheckUltrawideMenus(){
+static void CheckDisplayAspectMenus(){
     const auto previous=output;trial_coop::Reset();trial_coop::SetAvailable(true);keyboard_mode=1;
-    for(const auto size:{app::Mode{3440,1440},app::Mode{5120,1440}}){
+    output={1920,1080};EnumerateModes();
+    for(const auto size:{app::Mode{1280,800},app::Mode{1920,1200},app::Mode{2560,1600}})
+        CHECK(std::count_if(modes.begin(),modes.end(),[&](auto mode){return mode.width==size.width&&mode.height==size.height;})==1);
+    for(const auto size:{app::Mode{1280,800},app::Mode{1920,1200},app::Mode{2560,1600},app::Mode{3440,1440},app::Mode{5120,1440}}){
         output=size;Close();
-        const float left=(size.width-size.height*(16.f/9.f))*.5f,right=size.width-left;
+        const float left=(std::max)(0.f,(size.width-size.height*(16.f/9.f))*.5f),right=size.width-left;
+        if(size.width*10==size.height*16){
+            const auto frame=trial_graphics::ViewBounds(float(size.width),float(size.height),true);
+            CHECK(frame.x==0&&frame.y==0&&frame.width==size.width&&frame.height==size.height);
+        }
         auto bounds=[&]{
             CHECK(!hits.empty());
             for(const auto& h:hits)CHECK(h.a.x>=left-1&&h.b.x<=right+1&&h.a.y>=0&&h.b.y<=size.height+1);
@@ -1783,12 +1937,15 @@ static void CheckUltrawideMenus(){
         const auto selected=Take();CHECK(selected.kind==UC_HF_SELECT&&selected.index==0);
         RightClick();CHECK(!PanelOpen());EmptyAction();
         Click(options.source.count);CHECK(PanelOpen());bounds();
-        const unsigned old=draft.aspect;ChangeSetting(2);CHECK(draft.aspect==(old+1)%5);
         const float scale=(right-left)/640.f;
-        const auto aspect_row=hits[2];
-        ClickPoint(left+391*scale,(aspect_row.a.y+aspect_row.b.y)*.5f);
-        CHECK(draft.aspect==old);
-        const auto slider=hits[15];const float y=(slider.a.y+slider.b.y)*.5f;
+        const unsigned next_aspect[]={1,5,3,4,0,2};
+        for(unsigned old=0;old<6;++old){
+            draft.aspect=old;DrawFrame();ChangeSetting(2);CHECK(draft.aspect==next_aspect[old]);
+            const auto aspect_row=GraphicsHit(2);
+            ClickPoint(left+391*scale,(aspect_row.a.y+aspect_row.b.y)*.5f);
+            CHECK(draft.aspect==old);
+        }
+        const auto slider=GraphicsHit(15);const float y=(slider.a.y+slider.b.y)*.5f;
         Move(left+418*scale,y);ImGui::GetIO().AddMouseButtonEvent(0,true);DrawFrame();
         CHECK(draft.fov==40);
         Move(left+480*scale,y);CHECK(draft.fov==65);
@@ -1797,7 +1954,7 @@ static void CheckUltrawideMenus(){
         ReadDraft();RightClick();CHECK(!PanelOpen());EmptyAction();
     }
     trial_coop::Reset();trial_coop::SetAvailable(false);output=previous;
-    puts("PASS ultrawide mouse menus: centered 16:9 safe area, graphics, pause, failed mission and co-op previews");
+    puts("PASS 16:10/ultrawide mouse menus: full 16:10 canvas, centered ultrawide safe area, six aspect choices, graphics, pause, failed mission and co-op previews");
 }
 int main(){
     ImGui::CreateContext();auto& io=ImGui::GetIO();io.IniFilename=nullptr;io.LogFilename=nullptr;
@@ -1811,7 +1968,7 @@ int main(){
     io.Fonts->SetTexID(ImTextureID(1));
     CheckLegacyFogSettings();CHECK(applied==8);
     const unsigned before_ui=applied;
-    CheckSize(640,480);CheckSize(1920,1080);CheckSize(2560,1440);
+    CheckSize(640,480);CheckSize(1280,800);CheckSize(1920,1080);CheckSize(2560,1440);CheckSize(2560,1600);
     CheckNativeConfirmTransitions();
     for(const auto size:{app::Mode{640,480},app::Mode{1920,1080},app::Mode{2560,1440}}){
         output=size;auto f=MakeList(2);f.list_kind=0;f.source.kind=UC_HF_OBJECTIVES;f.source.count=1;
@@ -1868,7 +2025,7 @@ int main(){
         keyboard_mode=1;
     }
     std::printf("UI totals: input changes=%u, applies=%u, frames=%u\n",input_changes,applied-before_ui,frames);
-    CHECK(input_changes>10&&applied==before_ui+48&&frames>100);
+    CHECK(input_changes>10&&applied==before_ui+80&&frames>100);
     CheckHealthOptions();
     CheckPerPlayerSettings();
     CheckOwnedPauseNavigation();
@@ -1885,7 +2042,7 @@ int main(){
     CheckMainOrder();
     CheckCoopSelector();
     CheckCoopCampaignHeader();
-    CheckUltrawideMenus();
+    CheckDisplayAspectMenus();
     trial_language::active=4;
     CHECK(std::strcmp(trial_language::Ui("Controls"),"Controles")==0);
     CHECK(std::strcmp(trial_language::Ui("Movement inertia"),"Inercia de movimiento")==0);
@@ -1904,7 +2061,7 @@ int main(){
     for(const auto size:{app::Mode{640,480},app::Mode{1920,1080},app::Mode{2560,1440}}){
         output=size;auto page=MakeList(3);Publish(page);
         Click(page.source.count);CHECK(PanelOpen());
-        CHECK(hits.size()==24);
+        CheckGraphicsHits();
         for(const auto& hit:hits)CHECK(hit.a.x>=0&&hit.b.x<=float(output.width)+1);
         RightClick();CHECK(!PanelOpen());EmptyAction();
     }
@@ -1920,7 +2077,7 @@ int main(){
                 CHECK(draft.reticle_colors[i]==(old+1)%std::size(trial_graphics::ReticlePalette));
             }
             CHECK(Dirty()&&trial_graphics::Snapshot(player).reticle_colors==before.reticle_colors);
-            RightClick();CHECK(PanelOpen()&&!reticle_page&&hits.size()==24);
+            RightClick();CHECK(PanelOpen()&&!reticle_page);CheckGraphicsHits();
             CHECK(Apply()&&!Dirty()&&trial_graphics::Snapshot(1-player).reticle_colors==other.reticle_colors);
             ChangeSetting(17);CHECK(reticle_page);ChangeSetting(1);ReadDraft();CHECK(!Dirty());
             Click(5);CHECK(!reticle_page&&PanelOpen());RightClick();CHECK(!PanelOpen());EmptyAction();

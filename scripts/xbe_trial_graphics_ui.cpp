@@ -137,7 +137,7 @@ void EnumerateModes() {
         modes.push_back(m);
     };
     // Windowed/borderless output sizes are useful even without an exclusive monitor mode.
-    for(auto mode:{app::Mode{1280,720},{1600,900},{1920,1080},{2560,1080},{2560,1440},{3440,1440},{3840,1600},{3840,2160},{5120,1440}})add(mode);
+    for(auto mode:{app::Mode{1280,720},{1280,800},{1600,900},{1920,1080},{1920,1200},{2560,1080},{2560,1440},{2560,1600},{3440,1440},{3840,1600},{3840,2160},{5120,1440}})add(mode);
     MONITORINFOEXW monitor{};monitor.cbSize=sizeof(monitor);
     if(GetMonitorInfoW(MonitorFromWindow(static_cast<HWND>(app::Window()),MONITOR_DEFAULTTOPRIMARY),&monitor)) {
         DEVMODEW mode{};mode.dmSize=sizeof(mode);
@@ -857,9 +857,9 @@ void SettingChoice(MenuCanvas& c,const char* label,T& value,const T(&values)[N],
 
 // Sliders share the menu's row hit target and controller/key navigation.
 void SettingSlider(MenuCanvas& c,const char* label,uint32_t& value,int low,int high,int increment,
-                   const char* suffix,unsigned index,unsigned& focus,int key_delta,float top,float step=16,float display_scale=1){
+                   const char* suffix,unsigned index,unsigned& focus,int key_delta,float top,float step=16,float display_scale=1,const char* display_override=nullptr){
     char text[32];std::snprintf(text,sizeof(text),"%g%s",double(value)*display_scale,trial_language::Ui(suffix));
-    const int delta=SettingRow(c,label,text,index,focus,key_delta,step,top);
+    const int delta=SettingRow(c,label,display_override?display_override:text,index,focus,key_delta,step,top);
     const float grab_x=(ImGui::GetIO().MouseClickedPos[0].x-c.origin.x)/c.sx;
     const bool track_grab=grab_x>=410&&grab_x<=548;
     // Releasing a track drag must not also count as the row's value click.
@@ -882,7 +882,9 @@ void SettingsUi(const ImGuiViewport* view,bool paused){
     canvas.SettingsFrame(paused,reticle_page?"RETICLE":settings_pause_player<0?"GRAPHICS":settings_player?"GRAPHICS - PLAYER 2":"GRAPHICS - PLAYER 1");
     static TrialFrontendReleaseGate gate;static uint64_t epoch=0;
     static unsigned focus=0,confirmation=2;
+    static float scroll=0;
     const auto generation=navigation_generation.load();
+    bool reveal=epoch!=generation;
     if(epoch!=generation){epoch=generation;confirmation=2;}
     const bool ready=gate.Accept(generation,UiHeld());
     const unsigned events=frontend_events.exchange(0);
@@ -936,12 +938,22 @@ void SettingsUi(const ImGuiViewport* view,bool paused){
         RowStrip(canvas,labels,nullptr,3,257,confirmation,[&](unsigned i){confirmation=i;},activate);
     }else{
         constexpr unsigned rows=21,total=rows+3;
-        constexpr float top=73,step=13.8f;
+        constexpr unsigned order[]={0,1,2,5,6,7,20,3,4,9,8,10,11,12,19,13,14,15,18,16,17};
+        constexpr float top=78,bottom=358,step=18,heading=22;
+        constexpr float extent=rows*step+3*heading,max_scroll=extent-(bottom-top);
+        auto position=[&](unsigned row){return unsigned(std::find(std::begin(order),std::end(order),row)-std::begin(order));};
+        auto row_y=[&](unsigned row){const auto i=position(row);return top+heading+i*step+(i>=7?heading:0)+(i>=17?heading:0);};
         focus=std::min(focus,total-1);
         int delta=0;
         if(ready){
-            if(((events&1)||ImGui::IsKeyPressed(ImGuiKey_UpArrow)))focus=(focus+total-1)%total;
-            if(((events&2)||ImGui::IsKeyPressed(ImGuiKey_DownArrow))||ImGui::IsKeyPressed(ImGuiKey_Tab))focus=(focus+1)%total;
+            int move=0;
+            if((events&1)||ImGui::IsKeyPressed(ImGuiKey_UpArrow))move=-1;
+            if((events&2)||ImGui::IsKeyPressed(ImGuiKey_DownArrow)||ImGui::IsKeyPressed(ImGuiKey_Tab))move=1;
+            if(move){
+                const unsigned current=focus<rows?position(focus):focus;
+                const unsigned next=(current+total+move)%total;
+                focus=next<rows?order[next]:next;reveal=true;
+            }
             if(focus<rows){
                 if(((events&16)||ImGui::IsKeyPressed(ImGuiKey_LeftArrow)))delta=-1;
                 if(((events&32)||ImGui::IsKeyPressed(ImGuiKey_RightArrow))||enter)delta=1;
@@ -949,13 +961,41 @@ void SettingsUi(const ImGuiViewport* view,bool paused){
                 if(((events&16)||ImGui::IsKeyPressed(ImGuiKey_LeftArrow)))focus=rows+(focus+2-rows)%3;
                 if(((events&32)||ImGui::IsKeyPressed(ImGuiKey_RightArrow)))focus=rows+(focus+1-rows)%3;
             }
+            const auto pointer=ImGui::GetIO().MousePos;
+            const auto a=canvas.Point(40,top),b=canvas.Point(630,bottom);
+            if(pointer.x>=a.x&&pointer.x<=b.x&&pointer.y>=a.y&&pointer.y<=b.y&&!ImGui::IsMouseDown(0))
+                scroll=std::clamp(scroll-ImGui::GetIO().MouseWheel*step*3,0.f,max_scroll);
         }
+        if((reveal||delta)&&focus<rows){
+            const float y=row_y(focus);
+            scroll=std::clamp(scroll,y+step-bottom,y-top);
+            scroll=std::clamp(scroll,0.f,max_scroll);
+        }
+        const char* headings[]={"Display","Rendering quality","Camera and HUD"};
+        const unsigned starts[]={0,7,17};
+        for(unsigned group=0;group<3;++group){
+            const float y=top+starts[group]*step+group*heading-scroll;
+            if(y<top||y+heading>bottom)continue;
+            canvas.Text(headings[group],61,y+3,12,white,518);
+            canvas.Line(61,y+18,518,IM_COL32(118,126,121,100));
+        }
+        auto visible=[&](unsigned row){const float y=row_y(row)-scroll;return y>=top&&y+step<=bottom;};
+        auto row_top=[&](unsigned row){return row_y(row)-scroll-row*step;};
         const unsigned keyboard_row=focus;
+        auto choice=[&](const char* label,auto& value,const auto& values,const auto& names,unsigned row){
+            if(visible(row))SettingChoice(canvas,label,value,values,names,row,focus,keyboard_row==row?delta:0,row_top(row),step);
+        };
+        auto row=[&](const char* label,const char* value,unsigned index){
+            return visible(index)?SettingRow(canvas,label,value,index,focus,keyboard_row==index?delta:0,step,row_top(index)):0;
+        };
+        auto slider=[&](const char* label,uint32_t& value,int low,int high,int increment,const char* suffix,unsigned index){
+            if(visible(index))SettingSlider(canvas,label,value,low,high,increment,suffix,index,focus,keyboard_row==index?delta:0,row_top(index),step);
+        };
         const bool flags[]={false,true};const char* flag_names[]={"Off","On"};
         char resolution[48];
         if(!draft.settings.width)std::snprintf(resolution,sizeof(resolution),"Desktop");
         else std::snprintf(resolution,sizeof(resolution),"%u x %u",draft.settings.width,draft.settings.height);
-        int resolution_delta=SettingRow(canvas,"Resolution",resolution,0,focus,keyboard_row==0?delta:0,step,top);
+        int resolution_delta=row("Resolution",resolution,0);
         if(resolution_delta&&!modes.empty()){
             size_t current=modes.size();
             for(size_t i=0;i<modes.size();++i)if(draft.settings.width==modes[i].width&&draft.settings.height==modes[i].height)current=i;
@@ -964,46 +1004,46 @@ void SettingsUi(const ImGuiViewport* view,bool paused){
         }
         const app::DisplayMode display[]={app::DisplayMode::Fullscreen,app::DisplayMode::Borderless,app::DisplayMode::Windowed};
         const char* display_names[]={"Fullscreen","Borderless","Windowed"};
-        SettingChoice(canvas,"Display mode",draft.settings.display_mode,display,display_names,1,focus,keyboard_row==1?delta:0,top,step);
-        const uint32_t aspects[]={0,1,2,3,4};const char* aspect_names[]={"Automatic","4:3","16:9","21:9","32:9"};
-        SettingChoice(canvas,"Aspect ratio",draft.aspect,aspects,aspect_names,2,focus,keyboard_row==2?delta:0,top,step);
+        choice("Display mode",draft.settings.display_mode,display,display_names,1);
+        const uint32_t aspects[]={0,1,5,2,3,4};const char* aspect_names[]={"Automatic","4:3","16:10","16:9","21:9","32:9"};
+        choice("Aspect ratio",draft.aspect,aspects,aspect_names,2);
         const uint32_t scales[]={25,50,67,75,100,125,150,200};const char* scale_names[]={"25%","50%","67%","75%","100%","125%","150%","200%"};
-        SettingChoice(canvas,"Internal render scale",draft.settings.render_percent,scales,scale_names,3,focus,keyboard_row==3?delta:0,top,step);
+        choice("Internal render scale",draft.settings.render_percent,scales,scale_names,3);
         const uint32_t filters[]={0,1,2,4,8,16};const char* filter_names[]={"Game default","Off","2x","4x","8x","16x"};
-        SettingChoice(canvas,"Anisotropic filtering",draft.settings.aniso,filters,filter_names,4,focus,keyboard_row==4?delta:0,top,step);
-        SettingChoice(canvas,"VSync",draft.settings.vsync,flags,flag_names,5,focus,keyboard_row==5?delta:0,top,step);
+        choice("Anisotropic filtering",draft.settings.aniso,filters,filter_names,4);
+        choice("VSync",draft.settings.vsync,flags,flag_names,5);
         const uint32_t caps[]={30,60,90,120,144,165,240,0};const char* cap_names[]={"30","60","90","120","144","165","240","Unlimited"};
-        SettingChoice(canvas,"FPS limit",draft.settings.fps_cap,caps,cap_names,6,focus,keyboard_row==6?delta:0,top,step);
-        SettingChoice(canvas,"FPS counter",draft_fps,flags,flag_names,7,focus,keyboard_row==7?delta:0,top,step);
+        choice("FPS limit",draft.settings.fps_cap,caps,cap_names,6);
+        choice("FPS counter",draft_fps,flags,flag_names,7);
         const uint32_t fog_modes[]={0,1,2,3};const char* fog_names[]={"Off","Original","Smooth original","Distant only"};
-        SettingChoice(canvas,"Fog",draft_fog_mode,fog_modes,fog_names,8,focus,keyboard_row==8?delta:0,top,step);
+        choice("Fog",draft_fog_mode,fog_modes,fog_names,8);
         const uint32_t samples[]={1,2,4};const char* sample_names[]={"Off","2x","4x"};
         unsigned sample_index=draft.msaa==4?2:draft.msaa==2?1:0;
-        const int sample_delta=SettingRow(canvas,"MSAA",sample_names[sample_index],9,focus,keyboard_row==9?delta:0,step,top);
+        const int sample_delta=row("MSAA",sample_names[sample_index],9);
         if(sample_delta){
             for(unsigned i=0;i<3;++i){
                 sample_index=(sample_index+(sample_delta>0?1:2))%3;
                 if(trial_graphics::MsaaSupported(samples[sample_index])){draft.msaa=samples[sample_index];break;}
             }
         }
-        SettingChoice(canvas,"Dynamic scenery lighting",draft.scenery,flags,flag_names,10,focus,keyboard_row==10?delta:0,top,step);
-        SettingChoice(canvas,"World character lighting",draft.characters,flags,flag_names,11,focus,keyboard_row==11?delta:0,top,step);
+        choice("Dynamic scenery lighting",draft.scenery,flags,flag_names,10);
+        choice("World character lighting",draft.characters,flags,flag_names,11);
         const uint32_t qualities[]={0,1};const char* quality_names[]={"Full","Simple"};
-        SettingChoice(canvas,"Character lighting quality",draft.character_quality,qualities,quality_names,12,focus,keyboard_row==12?delta:0,top,step);
+        choice("Character lighting quality",draft.character_quality,qualities,quality_names,12);
         const uint32_t amounts[]={0,1,2};const char* amount_names[]={"Default","More","Forever"};
-        SettingChoice(canvas,"Ragdoll amount",draft.ragdolls,amounts,amount_names,13,focus,keyboard_row==13?delta:0,top,step);
-        SettingChoice(canvas,"Death convulsions",draft.death_convulsions,flags,flag_names,14,focus,keyboard_row==14?delta:0,top,step);
-        SettingSlider(canvas,"Field of view (vertical)",draft.fov,40,90,1," degrees",15,focus,keyboard_row==15?delta:0,top,step);
-        SettingChoice(canvas,"HD HUD and menus",draft.hd_ui,flags,flag_names,16,focus,keyboard_row==16?delta:0,top,step);
-        if(SettingRow(canvas,"Reticle settings","Edit",17,focus,keyboard_row==17?delta:0,step,top)){
+        choice("Ragdoll amount",draft.ragdolls,amounts,amount_names,13);
+        choice("Death convulsions",draft.death_convulsions,flags,flag_names,14);
+        slider("Field of view (vertical)",draft.fov,40,90,1," degrees",15);
+        choice("HD HUD and menus",draft.hd_ui,flags,flag_names,16);
+        if(row("Reticle settings","Edit",17)){
             reticle_page=true;reticle_focus=0;frontend_events=0;++navigation_generation;
         }
-        SettingSlider(canvas,"Weapon FOV",draft.weapon_fov,50,150,5,"%",18,focus,keyboard_row==18?delta:0,top,step);
+        slider("Weapon FOV",draft.weapon_fov,50,150,5,"%",18);
         const bool textures_available=trial_graphics::WorldTexturesAvailable();
         if(textures_available){
-            SettingChoice(canvas,"HD game textures",draft.world_textures,flags,flag_names,19,focus,keyboard_row==19?delta:0,top,step);
-        }else{
-            const float y=top+19*step;ImGui::BeginDisabled();
+            choice("HD game textures",draft.world_textures,flags,flag_names,19);
+        }else if(visible(19)){
+            const float y=row_y(19)-scroll;ImGui::BeginDisabled();
             canvas.Hit("HD textures unavailable",50,y,540,step);
             const auto disabled=IM_COL32(111,116,112,160);
             canvas.Text("HD game textures",61,y+2,13,disabled,304);
@@ -1011,7 +1051,20 @@ void SettingsUi(const ImGuiViewport* view,bool paused){
             ImGui::EndDisabled();
         }
         const uint32_t fmv_scales[]={0,1,2};const char* fmv_names[]={"Fill","Original aspect ratio","Fill stretch"};
-        SettingChoice(canvas,"FMV scaling",draft.fmv_scale,fmv_scales,fmv_names,20,focus,keyboard_row==20?delta:0,top,step);
+        choice("FMV scaling",draft.fmv_scale,fmv_scales,fmv_names,20);
+        for(unsigned down=0;down<2;++down){
+            const float y=down?bottom-20:top;
+            const bool enabled=down?scroll<max_scroll:scroll>0;
+            ImGui::BeginDisabled(!enabled);
+            if(canvas.Hit(down?"graphics scroll down":"graphics scroll up",596,y,24,20))
+                scroll=std::clamp(scroll+(down?step*3:-step*3),0.f,max_scroll);
+            const float tip=down?y+14:y+5,base=down?y+5:y+14;
+            canvas.draw->AddTriangleFilled(canvas.Point(608,tip),canvas.Point(603,base),canvas.Point(613,base),enabled?muted:disabled);
+            ImGui::EndDisabled();
+        }
+        canvas.Rect(607,top+24,2,bottom-top-48,IM_COL32(118,126,121,70));
+        const float track=bottom-top-48,thumb=track*(bottom-top)/extent;
+        canvas.Rect(605,top+24+(track-thumb)*scroll/max_scroll,6,thumb,muted);
         canvas.Line(60,364,520,IM_COL32(118,126,121,100));
         canvas.Text(focus==20?(draft.fmv_scale==2?"Fill stretch removes verified black borders and stretches the picture to the screen without cropping it.":draft.fmv_scale==0?"Fill removes verified black borders without stretching. Some bars may remain.":"Original aspect ratio preserves the complete movie frame, including built-in borders."):
                     focus==19?(textures_available?"Optional HD game texture pack. Keeps HUD and menus unchanged; uses more video memory.":"Not installed. Use Install HD Texture Pack in the launcher, then restart the game."):

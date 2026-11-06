@@ -141,7 +141,7 @@ def prepare_input(input_source):
     input_source=once(input_source,old,'')
     input_source=once(input_source,'    if(port==0)pad.connected=true;',
         '''    if(port==0)pad.connected=true;
-    if(port==0&&focused()&&!TrialCoopMenuOpen()&&uc_pc_prompts::ControllerActive(pad)&&InterlockedExchange(&keyboard_mode,0))PostMessage(game_window,kCapture,0,0);''')
+    if(port==0&&controller_connected&&focused()&&!TrialCoopMenuOpen()&&uc_pc_prompts::ControllerActive(pad)&&InterlockedExchange(&keyboard_mode,0))PostMessage(game_window,kCapture,0,0);''')
     input_source=once(input_source,'    if(TrialGraphicsMessage(msg,wp,lp)){', '''    static uc_pc_prompts::PointerActivity pointer_activity;
     auto note_pointer_input=[&]{
         const bool changed=!xbox_KeyboardMode();xbox_KeyboardNoteInput();

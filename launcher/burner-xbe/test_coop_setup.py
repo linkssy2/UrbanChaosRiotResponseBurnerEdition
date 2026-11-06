@@ -42,7 +42,8 @@ class CoopSetup(unittest.TestCase):
         self.tools = self.package / 'tools'
         self.tools.mkdir(parents=True)
         (self.package / 'runtime').mkdir()
-        for name in ('coop_assets.py', 'coop_turret_assets.py', 'coop_injection_assets.py', 'analyze_frontend.py'):
+        for name in ('coop_assets.py', 'coop_turret_assets.py', 'coop_injection_assets.py',
+                     'corpse_shield_assets.py', 'analyze_frontend.py'):
             shutil.copy2(REPO / 'scripts' / name, self.tools / name)
         required = list(coop_assets.ROOTS) + list(coop_assets.ANIMATIONS) + sorted(coop_assets.TEMPLATES)
         required += list(coop_assets.LIFECYCLE_RESOURCES)
@@ -369,8 +370,126 @@ class CoopSetup(unittest.TestCase):
         self.assertEqual(plan['tools/coop_assets.py'], REPO / 'scripts/coop_assets.py')
         self.assertEqual(plan['tools/coop_turret_assets.py'], REPO / 'scripts/coop_turret_assets.py')
         self.assertEqual(plan['tools/coop_injection_assets.py'], REPO / 'scripts/coop_injection_assets.py')
+        self.assertEqual(plan['tools/corpse_shield_assets.py'], REPO / 'scripts/corpse_shield_assets.py')
         self.assertEqual(plan['tools/analyze_frontend.py'], REPO / 'scripts/analyze_frontend.py')
         self.assertFalse(any(Path(name).suffix == '.lst' for name in plan))
+
+    def corpse_shield_fixture(self):
+        import corpse_shield_assets
+        for name in ('40-01.ent', 'shield.lst', '12-01.ent'):
+            source = REPO / 'game_files' / name
+            if not source.is_file():
+                self.skipTest('Owned original shield and multiplayer archives required')
+            self.files[name] = source.read_bytes()
+            (self.game / name).write_bytes(self.files[name])
+            self.manifest['files'][name] = {'size': len(self.files[name]), 'sha256': digest(self.files[name])}
+        (self.tools / 'disc-manifest.json').write_text(json.dumps(self.manifest))
+        (self.game.parent / 'installed.json').write_text(json.dumps({
+            'version': 1, 'disc_manifest': worker.sha(self.tools / 'disc-manifest.json')}))
+        expected = self.base / 'characters.lst'
+        report = coop_assets.build(self.game / '40-01.ent', expected)
+        self.expected = expected.read_bytes()
+        self.info['coop_assets'] = dict(version=1, size=report['size'], sha256=report['sha256'])
+        expected = self.base / 'corpse.lst'
+        report = corpse_shield_assets.build_archive(self.game, expected)
+        recipe = dict(version=1, size=report['size'], sha256=report['sha256'])
+        self.assertEqual(recipe, packager.CORPSE_SHIELD)
+        self.info['corpse_shield'] = recipe
+        (self.tools / 'runtime-manifest.json').write_text(json.dumps(self.info))
+        self.keep = snapshot(self.data)
+        return self.game / 'corpseshield.lst', expected.read_bytes()
+
+    def test_corpse_shield_install_repair_and_source_validation(self):
+        dest, expected = self.corpse_shield_fixture()
+        worker.ensure_coop_assets(self.data)
+        self.assertEqual(dest.read_bytes(), expected)
+        before = snapshot(self.data)
+        with patch.object(worker.importlib.util, 'spec_from_file_location', side_effect=AssertionError('warm rebuild')):
+            worker.ensure_coop_assets(self.data)
+        self.assertEqual(snapshot(self.data), before)
+        dest.write_bytes(b'x' * len(expected))
+        worker.ensure_coop_assets(self.data)
+        self.assertEqual(dest.read_bytes(), expected)
+        dest.write_bytes(b'previous corpse shield')
+        before = snapshot(self.data)
+        with patch.object(worker.os, 'replace', side_effect=OSError('fixture publish failure')):
+            with self.assertRaises(OSError):
+                worker.ensure_coop_assets(self.data)
+        self.assertEqual(snapshot(self.data), before)
+        for invalid in (None, {}, dict(self.info['corpse_shield'], version=True),
+                        dict(self.info['corpse_shield'], sha256='0' * 64)):
+            with self.assertRaises(ValueError):
+                worker.ensure_coop_assets(self.data, dict(self.info, corpse_shield=invalid))
+            self.assertEqual(snapshot(self.data), before)
+        def cancel_after_write(path):
+            for staged in self.game.glob('.coop-characters-*'):
+                if staged.is_file():
+                    raise RuntimeError('fixture cancellation after archive write')
+        with patch.object(worker, 'check_cancel', cancel_after_write):
+            with self.assertRaises(RuntimeError):
+                worker.ensure_coop_assets(self.data, cancel=self.cancel)
+        self.assertEqual(snapshot(self.data), before)
+        for name in ('corpse_shield_assets.py', 'coop_injection_assets.py', 'analyze_frontend.py'):
+            helper = self.tools / name
+            original = helper.read_bytes()
+            helper.unlink()
+            with self.assertRaises(ValueError):
+                worker.ensure_coop_assets(self.data)
+            self.assertEqual(snapshot(self.data), before)
+            helper.write_bytes(original)
+        worker.ensure_coop_assets(self.data)
+        self.assertEqual(dest.read_bytes(), expected)
+        self.assert_preserved()
+        for name in ('40-01.ent', 'shield.lst', '12-01.ent'):
+            source = self.game / name
+            original = source.read_bytes()
+            source.write_bytes(bytes([original[0] ^ 1]) + original[1:])
+            before = snapshot(self.data)
+            with self.assertRaises(ValueError):
+                worker.ensure_coop_assets(self.data)
+            self.assertEqual(snapshot(self.data), before)
+            source.write_bytes(original)
+
+    def test_corpse_shield_extracted_and_direct_iso_import(self):
+        dest, expected = self.corpse_shield_fixture()
+        self.keep.pop('installed/installed.json')
+        iso = self.base / 'corpse-shield.iso'
+        make_iso(iso, self.files)
+        for direct in (False, True):
+            with self.subTest(direct=direct):
+                worker.import_iso(iso, self.data, self.cancel, direct=direct)
+                self.assertTrue(worker.ready(self.data))
+                self.assertEqual(dest.read_bytes(), expected)
+                self.assertEqual((self.game / 'shield.lst').read_bytes(), self.files['shield.lst'])
+                self.assert_preserved()
+        # An existing direct-ISO install must acquire the new source on update.
+        (self.game / 'shield.lst').unlink()
+        dest.unlink()
+        before = snapshot(self.data)
+        with patch.object(worker.os, 'replace', side_effect=OSError('fixture source publication failure')):
+            with self.assertRaises(OSError):
+                worker.ensure_coop_assets(self.data)
+        self.assertEqual(snapshot(self.data), before)
+        def cancel_source_publish(path):
+            if any(staged.is_file() for staged in self.game.glob('.coop-characters-*')):
+                raise RuntimeError('fixture source publication cancelled')
+        with patch.object(worker, 'check_cancel', cancel_source_publish):
+            with self.assertRaises(RuntimeError):
+                worker.ensure_coop_assets(self.data, cancel=self.cancel)
+        self.assertEqual(snapshot(self.data), before)
+        self.assertFalse(list(self.data.glob('.source-*')))
+        calls = []
+        class Process:
+            def __init__(process, args, **kwargs):
+                self.assertEqual(dest.read_bytes(), expected)
+                calls.append(args)
+                process.stderr = io.BytesIO()
+            def wait(process):
+                return 0
+        with patch.object(worker.subprocess, 'Popen', Process):
+            worker.launch(self.data)
+        self.assertEqual(len(calls), 1)
+        self.assert_preserved()
 
     def test_normal_launch_sanitizes_environment_and_keeps_validation(self):
         import setup_feedback
@@ -454,7 +573,7 @@ class CoopSetup(unittest.TestCase):
     def test_package_recipe_and_no_original_archive_payload(self):
         metadata = self.tools / 'runtime-manifest.json'
         good = dict(self.info, coop_assets=packager.COOP_ASSETS, **packager.COOP_TURRETS,
-                    coop_injection=packager.COOP_INJECTION)
+                    coop_injection=packager.COOP_INJECTION, corpse_shield=packager.CORPSE_SHIELD)
         metadata.write_text(json.dumps(good))
         allowed = set(snapshot(self.package))
         def audit():
@@ -465,7 +584,8 @@ class CoopSetup(unittest.TestCase):
             metadata.write_text(json.dumps(dict(good, coop_assets=invalid)))
             with self.assertRaises(ValueError):
                 audit()
-        for key, recipe in dict(packager.COOP_TURRETS, coop_injection=packager.COOP_INJECTION).items():
+        for key, recipe in dict(packager.COOP_TURRETS, coop_injection=packager.COOP_INJECTION,
+                                corpse_shield=packager.CORPSE_SHIELD).items():
             for invalid in (None, [], {}, dict(recipe, version=True), dict(recipe, sha256='0' * 64)):
                 metadata.write_text(json.dumps(dict(good, **{key: invalid})))
                 with self.assertRaises(ValueError):
@@ -476,6 +596,11 @@ class CoopSetup(unittest.TestCase):
         with self.assertRaises(ValueError):
             packager.audit(self.package, allowed | {'runtime/coopcharacters.lst'}, require_launchers=False)
         derivative.unlink()
+        helper = self.tools / 'corpse_shield_assets.py'
+        helper.unlink()
+        with self.assertRaises(ValueError):
+            packager.audit(self.package, allowed - {'tools/corpse_shield_assets.py'}, require_launchers=False)
+        shutil.copy2(REPO / 'scripts/corpse_shield_assets.py', helper)
         helper = self.tools / 'coop_injection_assets.py'
         helper.unlink()
         with self.assertRaises(ValueError):

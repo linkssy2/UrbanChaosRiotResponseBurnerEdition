@@ -11,7 +11,7 @@ import sys
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
-VERSION = '0.13'
+VERSION = '0.14'
 SDK = REPO / 'build/upstream-review-xboxxbe-20261014'
 RUNTIME_NAME = 'UrbanChaosXbeTrial.exe'
 RUNTIME_FILES = (RUNTIME_NAME, 'zlib1.dll', 'libusb-1.0.dll', 'msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll')
@@ -41,6 +41,8 @@ COOP_TURRETS = {
 }
 COOP_INJECTION = {'version': 1, 'size': 5964,
                   'sha256': '3ce047ad2184eca1b61ba6150cac439bcbc5aa935d1b71df0e777e297fd63f8b'}
+CORPSE_SHIELD = {'version': 1, 'size': 342235,
+                'sha256': '9dae777c28c028510ed823268b46b5b6ce6174d67d175b1db8e7a955b352cbe6'}
 
 
 def shader_seed_validator():
@@ -207,6 +209,7 @@ def sources(runtime):
         'tools/coop_assets.py': REPO / 'scripts/coop_assets.py',
         'tools/coop_turret_assets.py': REPO / 'scripts/coop_turret_assets.py',
         'tools/coop_injection_assets.py': REPO / 'scripts/coop_injection_assets.py',
+        'tools/corpse_shield_assets.py': REPO / 'scripts/corpse_shield_assets.py',
         'tools/analyze_frontend.py': REPO / 'scripts/analyze_frontend.py',
         'tools/disc-manifest.json': HERE.parent / 'burner/disc-manifest.json',
         'runtime/' + RUNTIME_NAME: runtime,
@@ -329,6 +332,13 @@ def audit(package, allowlist, require_launchers=True):
         raise ValueError('Partner healing animation recipe identity changed')
     if 'coop_injection' in info and not {'tools/coop_injection_assets.py', 'tools/analyze_frontend.py'} <= actual:
         raise ValueError('Missing partner healing animation setup helpers')
+    if 'corpse_shield' in info and (not isinstance(info['corpse_shield'], dict) or
+            type(info['corpse_shield'].get('version')) is not int or
+            type(info['corpse_shield'].get('size')) is not int or info['corpse_shield'] != CORPSE_SHIELD):
+        raise ValueError('Corpse shield resource recipe identity changed')
+    if 'corpse_shield' in info and not {'tools/corpse_shield_assets.py',
+            'tools/coop_injection_assets.py', 'tools/analyze_frontend.py'} <= actual:
+        raise ValueError('Missing corpse shield resource setup helpers')
     if require_launchers:
         receipt = json.loads((package / 'package-manifest.json').read_text())
         shared = {name: digest for name, digest in files.items() if name not in
@@ -375,7 +385,7 @@ def assemble(runtime, expected_sha256, output, shader_seed=None):
     info = {'version': VERSION, 'files': {
         name: sha(plan['runtime/' + name]) for name in RUNTIME_FILES}, 'artwork': artwork,
         'shader_seed': seed, 'spanish': spanish, 'coop_assets': COOP_ASSETS, **COOP_TURRETS,
-        'coop_injection': COOP_INJECTION}
+        'coop_injection': COOP_INJECTION, 'corpse_shield': CORPSE_SHIELD}
     (output / 'tools/runtime-manifest.json').write_text(json.dumps(info, indent=2) + '\n')
     (output / 'licenses/DEPENDENCIES.txt').write_text(
         'XboxXBERecomp by TGP482: https://github.com/TGP482/XboxXBERecomp (MIT).\n'
@@ -386,7 +396,7 @@ def assemble(runtime, expected_sha256, output, shader_seed=None):
         'Microsoft Visual C++2015-2022 runtime: app-local DLLs from the official VS2022 Redist folder; Microsoft-Visual-Cpp-Redistribution.txt and accompanying Microsoft notices.\n'
         'Direct3D12, XAudio2 and other Windows components are supplied by Windows.\n'
         'The launcher cover/icon is custom Burner Edition artwork. Approved restored HD UI PNGs are included under runtime/hd-ui; original disc files are still supplied by the user.\n'
-        'Co-op character, turret and partner healing animation resources are derived locally from the user-provided Xbox ISO; no original models or animation archives are distributed.\n'
+        'Co-op character, turret, partner healing animation and corpse shield resources are derived locally from the user-provided Xbox ISO; no original models or animation archives are distributed.\n'
         'Spanish game-text translations by ZARF with supplemental Burner Edition translations are bundled as strings under runtime/spanish; see runtime/spanish/credits.txt. The launcher rebuilds translated archives from the user-provided Xbox ISO. Optional Spanish voices are extracted locally from the user-provided European PS2 ISO; no original audio or converted audio pack is distributed.\n'
         'FFmpeg 8.1.2 full shared build by www.gyan.dev (GPLv3): tools/ffmpeg/LICENSE.txt and README.txt contain the license, build configuration and source information. Used as a separate program only during local PS2 movie-audio conversion.\n')
     allowlist = set(plan) | {'tools/python/python312._pth', 'tools/runtime-manifest.json',

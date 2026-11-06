@@ -37,9 +37,10 @@ static std::string ColorTable(){
     return result;
 }
 static unsigned display_posts=0;
+static Mode desktop{2560,1440};
 Settings& Get() { return settings; }
 std::recursive_mutex& UiLock() { return ui_lock; }
-Mode Desktop() { return {2560,1440}; }
+Mode Desktop() { return desktop; }
 void* Window() { return client_window; }
 void ApplyDisplay() { ++display_posts; }
 static std::filesystem::path File() { return file; }
@@ -80,6 +81,9 @@ static void CheckGameViewWidth() {
     trial_graphics::Initialize();
     check(2560,1440,1920);check(1920,1080,1440);check(800,600,800);check(600,800,600);
     client_rect={17,29,817,629};assert(trial_graphics::GameViewWidth()==800);
+    TrialAspectRatio=5;trial_graphics::Initialize();
+    check(1280,800,1280);check(1920,1200,1920);check(2560,1600,2560);
+    check(2560,1440,2304);check(3440,1440,2304);
     check(0,720,0);check(1280,0,0);check(-1,720,0);check(1280,-1,0);
     client_available=false;check(1280,720,0);client_available=true;
     const unsigned queries=client_queries;client_window=nullptr;
@@ -92,25 +96,38 @@ static void CheckGameViewWidth() {
 static std::string Read() {
     std::ifstream f(app::file);return {std::istreambuf_iterator<char>(f),{}};
 }
-static void CheckUltrawideSettings(){
-    const auto saved=app::settings;const auto aspect=TrialAspectRatio;
+static void CheckAspectSettings(){
+    const auto saved=app::settings;const auto desktop=app::desktop;const auto aspect=TrialAspectRatio;
     auto check_close=[](float a,float b){assert(std::abs(a-b)<.001f);};
     TrialAspectRatio=0;
-    for(const auto size:{app::Mode{2560,1080},app::Mode{3440,1440},app::Mode{5120,1440}}){
-        app::settings.width=size.width;app::settings.height=size.height;trial_graphics::Initialize();
-        check_close(trial_graphics::AspectRatio(),float(size.width)/size.height);
-        const auto game=trial_graphics::ViewBounds(float(size.width),float(size.height));
-        check_close(game.x,0);check_close(game.y,0);check_close(game.width,float(size.width));check_close(game.height,float(size.height));
-        const auto menu=trial_graphics::ViewBounds(float(size.width),float(size.height),true);
-        check_close(menu.width,size.height*(16.f/9.f));check_close(menu.x,(size.width-menu.width)/2);check_close(menu.y,0);
-        check_close(trial_graphics::HudScale()*game.width/640,game.height/480);
+    for(const auto size:{app::Mode{640,480},app::Mode{1280,800},app::Mode{1920,1200},app::Mode{2560,1600},
+                        app::Mode{1920,1080},app::Mode{2560,1080},app::Mode{3440,1440},app::Mode{5120,1440}}){
+        for(bool use_desktop:{false,true}){
+            app::desktop=use_desktop?size:desktop;
+            app::settings.width=use_desktop?0:size.width;app::settings.height=use_desktop?0:size.height;
+            trial_graphics::Initialize();
+            assert(TrialAspectRatio==0);
+            check_close(trial_graphics::AspectRatio(),float(size.width)/size.height);
+            const auto game=trial_graphics::ViewBounds(float(size.width),float(size.height));
+            check_close(game.x,0);check_close(game.y,0);check_close(game.width,float(size.width));check_close(game.height,float(size.height));
+            const auto menu=trial_graphics::ViewBounds(float(size.width),float(size.height),true);
+            check_close(menu.width,std::min(float(size.width),size.height*(16.f/9.f)));
+            check_close(menu.x,(size.width-menu.width)/2);check_close(menu.y,0);check_close(menu.height,float(size.height));
+            check_close(trial_graphics::HudScale()*game.width/640,game.height/480);
+        }
     }
-    for(unsigned selected:{3u,4u}){
+    constexpr float expected[]={0,4.f/3.f,16.f/9.f,21.f/9.f,32.f/9.f,16.f/10.f};
+    for(unsigned selected:{1u,2u,3u,4u,5u}){
         TrialAspectRatio=selected;trial_graphics::Initialize();
-        check_close(trial_graphics::AspectRatio(),(selected==3?21.f:32.f)/9.f);
+        assert(TrialAspectRatio==selected);
+        check_close(trial_graphics::AspectRatio(),expected[selected]);
         auto draft=trial_graphics::Snapshot();std::string error;assert(trial_graphics::Validate(draft,app::Desktop(),error));
     }
-    app::settings=saved;TrialAspectRatio=aspect;trial_graphics::Initialize();
+    for(unsigned invalid:{6u,0xffffffffu}){
+        auto draft=trial_graphics::Snapshot();draft.aspect=invalid;std::string error;
+        assert(!trial_graphics::Validate(draft,app::Desktop(),error));
+    }
+    app::settings=saved;app::desktop=desktop;TrialAspectRatio=aspect;trial_graphics::Initialize();
 }
 int main() {
     app::file=std::filesystem::temp_directory_path()/
@@ -118,7 +135,7 @@ int main() {
     app::settings.join_ip="retained";
     trial_graphics::Initialize();assert(trial_graphics::Widescreen());
     CheckGameViewWidth();
-    CheckUltrawideSettings();
+    CheckAspectSettings();
     assert(!TrialWorldTextures&&!trial_graphics::WorldTextures());
     assert(!TrialHdUi&&!trial_graphics::HdUi()&&!trial_graphics::Snapshot().hd_ui);
     assert(TrialReticleScale==100&&trial_graphics::ReticleScale()==100);
@@ -165,6 +182,11 @@ int main() {
     draft.aspect=1;assert(trial_graphics::Apply(draft,message));
     assert(message.find("Restart")!=std::string::npos&&trial_graphics::Widescreen());
     assert(TrialAspectRatio==1);trial_graphics::Initialize();assert(!trial_graphics::Widescreen());
+    draft.aspect=5;assert(trial_graphics::Apply(draft,message));
+    assert(message.find("Restart")!=std::string::npos&&!trial_graphics::Widescreen());
+    assert(TrialAspectRatio==5&&Read().find("aspect_ratio=5\n")!=std::string::npos);
+    trial_graphics::Initialize();
+    assert(trial_graphics::Widescreen()&&trial_graphics::AspectRatio()==16.f/10.f);
     saved=Read();auto before=trial_graphics::Snapshot();
     app::fail_save=true;draft.settings.width=1920;draft.settings.height=1080;draft.aspect=2;draft.msaa=2;
     draft.scenery=true;draft.characters=true;draft.character_quality=0;draft.ragdolls=0;draft.hd_ui=false;draft.reticle_scale=50;draft.weapon_fov=50;
@@ -190,7 +212,7 @@ int main() {
         if(which==1)bad.settings.render_percent=0;
         if(which==2)bad.settings.aniso=3;
         if(which==3)bad.settings.fps_cap=1;
-        if(which==4)bad.aspect=5;
+        if(which==4)bad.aspect=6;
         if(which==5)bad.settings.display_mode=app::DisplayMode(3);
         if(which==6)bad.settings.height=99999;
         if(which==7)bad.msaa=3;

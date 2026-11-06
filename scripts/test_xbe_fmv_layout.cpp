@@ -107,7 +107,7 @@ int main(int argc,char**){
         {"unknown",0,0},{"pal_dolby",0,0},
     };
     unsigned cases=0;
-    for(const auto& movie:movies)for(float aspect:{4.f/3.f,16.f/9.f,21.f/9.f,3440.f/1440.f,32.f/9.f})for(unsigned mode:{0u,1u,2u,3u}){
+    for(const auto& movie:movies)for(float aspect:{4.f/3.f,16.f/10.f,16.f/9.f,21.f/9.f,3440.f/1440.f,32.f/9.f})for(unsigned mode:{0u,1u,2u,3u}){
         trial_graphics::aspect=aspect;trial_graphics::mode=mode;Open(movie.name);
         const float top=mode==0?float(movie.top):mode==2&&movie.top?float(movie.top+4):0;
         const float bottom=mode==0?float(movie.bottom):mode==2&&movie.bottom?float(movie.bottom+4):0;
@@ -125,7 +125,7 @@ int main(int argc,char**){
         if(x){expected.push_back({0,0,x,480});expected.push_back({640-x,0,640,480});}
         if(y){expected.push_back({0,0,640,y});expected.push_back({0,480-y,640,480});}
         assert(rectangles==expected&&clears==unsigned(!expected.empty()));
-        for(float screen_h:{480.f,720.f,1080.f,1440.f}){
+        for(float screen_h:{480.f,720.f,800.f,1080.f,1440.f,1600.f}){
             const float screen_w=screen_h*float(display);
             const float sx=(points[0].x-points[1].x)*screen_w/640/640;
             const float sy=(points[2].y-points[1].y)*screen_h/480/float(source_height);
@@ -138,9 +138,9 @@ int main(int argc,char**){
     Open("unknown");Draw();Corners(80,560,0,480);assert(clears==1);
     for(const char* name: {"fe_bk1","fe_mp","gamelogo","splash"}){
         Open(name);
-        for(float aspect:{16.f/9.f,21.f/9.f,32.f/9.f})for(unsigned mode:{0u,1u,2u}){
+        for(float aspect:{4.f/3.f,16.f/10.f,16.f/9.f,21.f/9.f,32.f/9.f})for(unsigned mode:{0u,1u,2u}){
             trial_graphics::aspect=aspect;trial_graphics::mode=mode;Draw();
-            const float x=320*(1-(16.f/9.f)/aspect);
+            const float x=(std::max)(0.f,320*(1-(16.f/9.f)/aspect));
             Corners(x,640-x,0,480);assert(clears==unsigned(x>0));
         }
     }
@@ -171,5 +171,5 @@ int main(int argc,char**){
         const X86Context saved=c;TrialFmvTexcoord(c,g_base,layout);mem::denied=0xffffffff;
         assert(std::memcmp(before.data(),g_base+stack,12)==0&&std::memcmp(&saved,&c,sizeof(c))==0);
     }
-    std::printf("FMV: %u original-guest draw cases; Fill/Original/Fill stretch through 32:9, four output sizes, UV/ABI, clear ordering, backgrounds, guards and lifecycle passed\n",cases);
+    std::printf("FMV: %u original-guest draw cases; Fill/Original/Fill stretch including 16:10 through 32:9, six output sizes, UV/ABI, clear ordering, backgrounds, guards and lifecycle passed\n",cases);
 }

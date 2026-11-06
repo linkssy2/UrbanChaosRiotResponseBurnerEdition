@@ -368,9 +368,10 @@
   "Burning bullets": "Balas incendiarias",
   "Headless mode": "Modo sin cabeza",
   "Assault Rifle Mk. 3 / infinite shells": "Fusil Mk. 3 / granadas infinitas",
-  "Original cheats apply to the whole game, including both co-op players.": "Los trucos originales afectan a toda la partida, incluidos ambos jugadores.",
+  "Burner body shield": "Cadáver Burner como escudo",
+  "Cheats apply to both players. Burner body shield is saved in PC settings.": "Los trucos afectan a ambos jugadores. El escudo de cadáver se guarda en los ajustes del PC.",
   "Weapon changes may require re-equipping or restarting the mission.": "Los cambios de armas pueden requerir reequiparlas o reiniciar la misión.",
-  "Cheat state changed. Try again.": "El estado del truco ha cambiado. Inténtalo de nuevo.",
+  "Could not change the cheat. Try again.": "No se pudo cambiar el truco. Inténtalo de nuevo.",
   "Cheats are unavailable here.": "Los trucos no están disponibles aquí.",
   "Applying cheat...": "Aplicando truco...",
   "Down x2": "Abajo x2",
@@ -431,5 +432,12 @@
   "Off restores direct medic healing and disables stored packs, partner healing and revives.": "Desactivado: el médico te cura directamente. No puedes guardar botiquines ni curar o reanimar a tu compañero.",
   "Applies to single-player and both co-op players. Each mission starts with one pack when enabled.": "Se aplica al modo individual y a ambos jugadores cooperativos. Si está activado, empiezas cada misión con un botiquín.",
   "With packs Off, a co-op death ends the mission.": "Con los botiquines desactivados, la muerte de un jugador termina la misión cooperativa.",
-  "Could not save gameplay settings.": "No se pudo guardar la configuración de jugabilidad."
+  "Could not save gameplay settings.": "No se pudo guardar la configuración de jugabilidad.",
+  "INPUT SETTINGS": "AJUSTES DE ENTRADA",
+  "Left stick deadzone": "Zona muerta del stick izquierdo",
+  "Right stick deadzone": "Zona muerta del stick derecho",
+  "Ignore small stick movements. 0% responds immediately; Original keeps the original controller response. Applies to this player only.": "Ignora pequeños movimientos del stick. 0% responde al instante; Original conserva la respuesta original del mando. Solo afecta a este jugador.",
+  "Display": "Pantalla",
+  "Rendering quality": "Calidad gráfica",
+  "Camera and HUD": "Cámara e interfaz"
 }

@@ -1,4 +1,4 @@
-Urban Chaos: Riot Response - Burner Edition 0.13
+Urban Chaos: Riot Response - Burner Edition 0.14
 
 HD HUD is still a work in progress and has known prompt/display issues.
 Turn HD UI Off to use the original HUD, which works normally.
@@ -8,17 +8,15 @@ Windows x64 PC port using XboxXBERecomp by TGP482, with native Direct3D12 render
 PC controls and menus. Original gameplay is statically recompiled from Xbox code.
 XboxXBERecomp: https://github.com/TGP482/XboxXBERecomp
 
-NEW IN 0.13 (SINCE 0.12)
-- Refreshed launcher styling and grouped Manage pages, with matching buttons and full cover artwork. Existing launcher updates install the new design.
-- Optional Skip Startup goes straight to profile selection; mission videos remain unchanged.
-- Per-player Movement inertia toggle in Controls: Off removes input buildup without increasing maximum speed; On keeps the original behavior.
-- Optional death convulsions add brief, varied whole-body bursts to killed enemies and downed co-op players.
-- Fixed regional corpse cleanup bypassing the Forever ragdoll setting.
-- Added FMV Fill stretch: removes verified black borders and stretches the picture without cropping scene content. Existing Fill and Original aspect ratio remain available.
-- Fixed the health-upgrade marker appearing before the HUD; clarified that audio output changes apply immediately.
-- Corrected helper-tip placement and isolated co-op aiming blur to each player's view, including at different render scales.
-- Restored the reverse side of the Canals road-edge railing during the opening cutscene.
-- The separate 0.09 HD texture pack remains compatible; no reinstall is needed.
+NEW IN 0.14 (SINCE 0.13)
+- Added 16:10 and 1280x800, 1920x1200 and 2560x1600 resolution choices, with matching HUD, menus and cinematic layout.
+- Added per-player left/right controller stick deadzones. Controller-only settings now stay on controller pages and do not affect mouse/keyboard input.
+- Reorganized Graphics and Controls while preserving existing settings and bindings.
+- Added body dragging: aim at a nearby dead enemy's limb, head or chest and hold Interact (F by default) to grab; hold again to release. Pulling is responsive and slightly lifts the grabbed part.
+- Added an optional Burner body shield cheat in the main-menu Cheats list. The torso is supported while the head and limbs use ragdoll physics. Shield hits use body/blood effects instead of glass marks.
+- With the cheat enabled before the first mission, both table shield pickups appear as static seated Burners. Collecting them retains the original shield progression and co-op pickup rules.
+- Fixed body-shield visibility, its interception of the holder's attacks, and repeated model archive loading.
+- Updated the locally generated shield assets automatically on Play. The separate 0.09 HD texture pack is unchanged; no reinstall is needed.
 
 Co-op is experimental. Full-campaign progression, all character/action combinations,
 helicopter sections and Proton co-op still need gameplay testing. The reported

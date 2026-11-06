@@ -5,11 +5,13 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <stdexcept>
 #include <vector>
 namespace cheat_test {
 std::array<uint8_t,0x800000> memory{};
 constexpr uint32_t P=0x5152b0,W=0x600000,L=0x601000,A=0x602000,V=0x603000,M=0x604000,S=0x7f0000;
 bool committed=true;
+bool fail_save=false;unsigned saves=0;
 std::vector<uint32_t> events;
 uint8_t* Data(){return memory.data();}
 uint32_t Word(uint32_t p){uint32_t v;std::memcpy(&v,Data()+p,4);return v;}
@@ -17,6 +19,13 @@ void Put(uint32_t p,uint32_t v){std::memcpy(Data()+p,&v,4);}
 }
 namespace mem {bool IsCommitted(uint32_t page){return cheat_test::committed&&page<cheat_test::memory.size();}}
 #include "../common/xbe_cheats.cpp"
+namespace app {
+std::recursive_mutex& UiLock(){static std::recursive_mutex mutex;return mutex;}
+void Save(){
+    if(cheat_test::fail_save)throw std::runtime_error("save failed");
+    ++cheat_test::saves;
+}
+}
 [[noreturn]] void x86_trap(X86Context&,uint32_t,const char*){std::abort();}
 X86_FUNC(sub_000643E0);
 X86_FUNC(sub_00057FC0){
@@ -41,12 +50,13 @@ X86Context Context(){
 }
 void Seed(uint32_t enabled=0,uint32_t known=0,bool restricted=false){
     memory.fill(0);committed=true;events.clear();TrialCheatsInvalidate();
+    fail_save=false;saves=0;TrialCorpseShield=false;trial_cheats::Initialize();
     std::memcpy(Data()+0x501728,NativeTable,sizeof NativeTable);
     Put(0x51c4dc,W);Put(W+4,L);Put(W+0x6c,A);Put(A,V);
     Put(V+0x50,0x20000);Put(V+0x68,0x20004);
     Put(0x5096e0,M);Data()[M+4]=restricted?0x10:0;
     Put(P,123);std::memcpy(Data()+P+4,"Nick Mason",11);
-    for(unsigned i=0;i<trial_cheats::Count;++i){
+    for(unsigned i=0;i<trial_cheats::RetailCount;++i){
         Data()[P+0x179+cheats::offsets[i]]=uint8_t((enabled>>i)&1);
         Data()[P+0x188+cheats::offsets[i]]=uint8_t((known>>i)&1);
     }
@@ -59,7 +69,7 @@ void Step(uint64_t epoch=71){
 }
 void Parity(){
     unsigned comparisons=0;
-    for(unsigned i=0;i<trial_cheats::Count;++i)for(bool enabled:{false,true})for(bool known:{false,true}){
+    for(unsigned i=0;i<trial_cheats::RetailCount;++i)for(bool enabled:{false,true})for(bool known:{false,true}){
         const uint32_t bit=1u<<i;
         Seed((0x155u&~bit)|(enabled?bit:0),(0x2aau&~bit)|(known?bit:0));
         Step();const auto state=trial_cheats::Snapshot();assert(state.valid&&state.identity&&state.pause_epoch==71);
@@ -123,7 +133,7 @@ void PermissionAndReset(){
     assert(trial_cheats::Snapshot().enabled==1&&!trial_cheats::Snapshot().pending);
     Put(W+4,0xfffffff0);Step();assert(!trial_cheats::Snapshot().valid);
 
-    for(unsigned i=0;i<trial_cheats::Count;++i){
+    for(unsigned i=0;i<trial_cheats::RetailCount;++i){
         Seed(0,0,true);auto permission=Context();permission.esi=i*20;OriginalPermission(permission,Data());
         const bool allowed=permission.eax!=0;Step();assert(trial_cheats::Toggle(i,trial_cheats::Snapshot()));Step();
         assert(bool(trial_cheats::Snapshot().enabled&(1u<<i))==allowed);
@@ -136,10 +146,44 @@ void PermissionAndReset(){
     }
     Seed(0x3ff,0x3ff);auto c=Context();OriginalReset(c,Data());Step();
     assert(trial_cheats::Snapshot().enabled==((1u<<1)|(1u<<3)));
-    for(unsigned i=0;i<trial_cheats::Count;++i)assert(Data()[P+0x188+cheats::offsets[i]]==1);
+    for(unsigned i=0;i<trial_cheats::RetailCount;++i)assert(Data()[P+0x188+cheats::offsets[i]]==1);
+}
+void CustomOption(){
+    constexpr unsigned index=trial_cheats::CorpseShield;
+    constexpr uint32_t bit=1u<<index;
+    Seed();Step();assert(!trial_cheats::CorpseShieldEnabled());
+    const auto first=trial_cheats::Snapshot();
+    const std::vector<uint8_t> before(memory.begin(),memory.end());
+    assert(trial_cheats::Toggle(index,first));
+    assert(TrialCorpseShield&&trial_cheats::CorpseShieldEnabled()&&saves==1);
+    assert(trial_cheats::Snapshot().enabled==bit&&!trial_cheats::Snapshot().pending);
+    assert(!std::memcmp(Data(),before.data(),before.size())&&events.empty());
+    assert(!trial_cheats::Toggle(index,first)&&saves==1);
+    Step();assert(trial_cheats::Snapshot().enabled==bit&&!std::memcmp(Data(),before.data(),before.size())&&events.empty());
+
+    // This host setting survives retail cheat reset, profile changes and UI closure.
+    auto c=Context();OriginalReset(c,Data());Step();
+    assert(trial_cheats::Snapshot().enabled==bit&&trial_cheats::CorpseShieldEnabled());
+    events.clear();
+    Put(P,124);Step();assert(trial_cheats::Snapshot().enabled==bit);
+    TrialCheatsInvalidate();assert(trial_cheats::CorpseShieldEnabled());Step();
+    const auto current=trial_cheats::Snapshot();
+    assert(!trial_cheats::Toggle(index,first));
+    fail_save=true;
+    assert(!trial_cheats::Toggle(index,current));
+    assert(TrialCorpseShield&&trial_cheats::CorpseShieldEnabled()&&saves==1);
+    assert(trial_cheats::Snapshot().enabled==bit&&!trial_cheats::Snapshot().pending);
+    fail_save=false;
+    assert(trial_cheats::Toggle(index,current));Step();
+    assert(!TrialCorpseShield&&!trial_cheats::CorpseShieldEnabled()&&saves==2);
+    assert(!trial_cheats::Snapshot().enabled&&events.empty());
+
+    TrialCorpseShield=true;trial_cheats::Initialize();Step();
+    assert(trial_cheats::CorpseShieldEnabled()&&trial_cheats::Snapshot().enabled==bit);
+    TrialCorpseShield=false;trial_cheats::Initialize();
 }
 }
 int main(){
-    cheat_test::Parity();cheat_test::StaleRequests();cheat_test::PermissionAndReset();
+    cheat_test::Parity();cheat_test::StaleRequests();cheat_test::PermissionAndReset();cheat_test::CustomOption();
     std::puts("Cheats: profile-shared native toggles, discovery, sound refresh, stale contexts, permissions and reset policy passed");
 }

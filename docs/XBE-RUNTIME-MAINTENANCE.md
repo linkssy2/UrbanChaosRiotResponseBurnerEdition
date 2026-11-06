@@ -1,5 +1,21 @@
 # Burner Edition: current runtime
 
+## Release 0.14 preparation (November 6)
+
+The post-0.13 changes are prepared together as 0.14: 16:10 display support,
+controller-only deadzones and reorganized settings, latched ragdoll dragging,
+and the optional native Burner body shield including static first-mission table
+pickups. Details and scoped acceptance are in `DISPLAY-AND-CONTROLLER-SETTINGS.md`,
+`RAGDOLL-DRAG.md` and `CORPSE-SHIELD.md`.
+
+Paired packages and checks belong in `build/release-0.14`; source closure and
+release notes belong in `publication/0.14`. Published 0.13 remains unchanged.
+The existing 0.09 HD download is compatible and is not repackaged. Release notes
+are the release body, not a separate asset. Logging remains opt-in; developer
+probes, personal state and original disc assets are excluded from the packages.
+Static pickup placement/collection and live Proton gameplay remain unverified.
+Preparation does not authorize publication.
+
 ## Release 0.13 preparation
 
 The November 5 post-0.12 changes below are being prepared together as 0.13.
@@ -2511,3 +2527,31 @@ black-border bounds and stretches the remaining picture to the display. See the
 November 5 Fill stretch section above for the current behavior and the November
 4 audit for source provenance. No mode crops scene content. Only Fill stretch
 changes proportions; unverified custom-film borders are not guessed per frame.
+
+## November 6: native body shield and head/chest grabs
+
+The accepted limb-drag response is retained. Head (native body 8) and chest
+(body 4) now accept the same held Interact grab/release gesture. The compiled
+input/physics fixture passes; live acceptance of the two new targets is pending.
+
+The body-shield follow-up replaces bounded equipment springs with an independent
+original-engine ragdoll held only at its chest. Its shared-world update runs once
+per physics step, with separate ownership for both players. Native collision
+exclusion applies only to the holder. Display and physics use original scale.
+The generated recipe also fixes double-transformed visibility bounds responsible
+for the reported flicker. See `docs/CORPSE-SHIELD.md` for verified seams, lifetime
+hooks, asset derivation and the boundary between offline checks and live evidence.
+
+Private receipts belong in `build/body-shield-native-20261106`. Pair Windows and
+Linux/Proton packages from one checked runtime and source manifest; never include
+original model archives, personal state or diagnostic logging in those packages.
+This candidate is not a published release or a live Proton verification.
+
+The following bash investigation is recorded in
+`build/body-shield-bash-20261106`. A held actor-less native ragdoll could be the
+first hit of the holder's original melee query: property `0x18` filters physical
+contacts but not ray queries. The correction excludes only the current holder's
+validated clone at the original ray predicate's accept path. Keep limb collision
+IDs, world contacts and all original damage/push logic. See
+`docs/CORPSE-SHIELD.md`; the asset recipe stays unchanged. Native filter and
+ownership checks do not establish live bash acceptance or Proton compatibility.

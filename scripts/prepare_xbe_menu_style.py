@@ -26,5 +26,5 @@ def prepare(area):
     fixture=fixture.replace('/* GAME_PATH */','L"'+(area/'assets').as_posix()+'"')
     (area/'src/compat/test_menu_style.cpp').write_text(fixture)
     return {'ui_sha256':hashlib.sha256(ui.encode()).hexdigest(),
-            'sizes':[[640,480],[1920,1080],[2560,1440]],
+            'sizes':[[640,480],[1280,800],[1920,1080],[2560,1440],[2560,1600]],
             'scope':'actual ImGui geometry/input with user font archives; no scene or GPU parity claim'}

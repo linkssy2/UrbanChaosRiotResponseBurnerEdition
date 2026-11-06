@@ -1,6 +1,10 @@
 // Urban Chaos profile remapping over TGP482's input::Pad. Device discovery,
 // polling and rumble stay in the maintained XboxXBERecomp input backend.
-struct UCRRControllerConfig {unsigned binding[24][2]{},deadzone[2]{};};
+#include <cmath>
+struct UCRRControllerConfig {
+    unsigned binding[24][2]{},deadzone[2]{}; // Legacy additional input filter.
+    unsigned stick_deadzone[2]{31,31}; // 31 keeps the original native response.
+};
 static UCRRControllerConfig controller_config;
 static SRWLOCK controller_lock=SRWLOCK_INIT;
 static INIT_ONCE controller_once=INIT_ONCE_STATIC_INIT;
@@ -28,6 +32,8 @@ static BOOL CALLBACK controller_load(PINIT_ONCE,PVOID,PVOID*){
         for(unsigned stick=0;stick<2;++stick){
             wchar_t key[32];swprintf(key,32,L"Deadzone%u",stick);
             loaded.deadzone[stick]=trial_input_profile::Read(path,L"Controller",key,0,30);
+            swprintf(key,32,L"StickDeadzone%u",stick);
+            loaded.stick_deadzone[stick]=trial_input_profile::Read(path,L"Controller",key,31,31);
         }
     }
     controller_config=loaded;controller_publish();return TRUE;
@@ -52,20 +58,59 @@ static int controller_strength(const input::Pad& pad,unsigned source){
 static void controller_strengths(const input::Pad* pad,int values[24]){
     for(unsigned source=1;source<=24;++source)values[source-1]=controller_strength(*pad,source);
 }
+static bool controller_axis_response(const input::Pad& pad,const UCRRControllerConfig& profile,
+                                     unsigned axis,float minimum,float gain,float& result){
+    const unsigned pair=16+axis*2;
+    bool configured=false;
+    for(unsigned direction=0;direction<2;++direction)for(unsigned source:profile.binding[pair+direction])
+        if(source>=17&&source<=24&&profile.stick_deadzone[(source-17)/4]<=30)configured=true;
+    if(!configured)return false;
+    // Descriptor calibration is native: preserve its outer endpoint. Filtering
+    // the bound physical sources here also handles swapped/mixed stick bindings.
+    if(!std::isfinite(minimum)||!std::isfinite(gain)||gain<=0)return false;
+    const float maximum=minimum+1.f/gain;
+    if(!std::isfinite(maximum)||maximum<=.3f||maximum>1.f)return false;
+    auto strength=[&](unsigned source){
+        int value=controller_strength(pad,source);
+        float threshold=minimum,endpoint=32768.f;
+        if(source>=17&&source<=24){
+            const unsigned stick=(source-17)/4,physical_axis=(source-17)/2;
+            const int axes[]={pad.lx,pad.ly,pad.rx,pad.ry};
+            if(axes[physical_axis]>0)endpoint=32767.f;
+            if(profile.stick_deadzone[stick]<=30)threshold=profile.stick_deadzone[stick]/100.f;
+            else {
+                const int legacy=int(profile.deadzone[stick])*32768/100;
+                if(legacy)value=value<=legacy?0:(value-legacy)*32768/(32768-legacy);
+            }
+        }
+        const float magnitude=value/endpoint;
+        return magnitude<=threshold?0.f:(magnitude-threshold)/(maximum-threshold);
+    };
+    float mapped[2]{};
+    for(unsigned direction=0;direction<2;++direction)
+        mapped[direction]=std::max(strength(profile.binding[pair+direction][0]),strength(profile.binding[pair+direction][1]));
+    result=axis%2?mapped[0]-mapped[1]:mapped[1]-mapped[0];
+    return true;
+}
 static void controller_apply_profile(input::Pad* pad,const UCRRControllerConfig* profile){
     if(controller_identity(*profile))return;
     const auto original=*pad;
-    auto strength=[&](unsigned source){
+    auto strength=[&](unsigned source,bool axis_destination){
         int value=controller_strength(original,source);
         if(source>=17&&source<=24){
-            const int threshold=int(profile->deadzone[(source-17)/4])*32768/100;
+            const unsigned stick=(source-17)/4;
+            // Keep the Original axis sample for keyboard/mouse ownership. The
+            // configured native response uses the cached pre-remap controller
+            // sample, bypassing this legacy filter when the controller owns it.
+            const unsigned percent=axis_destination||profile->stick_deadzone[stick]==31?profile->deadzone[stick]:profile->stick_deadzone[stick];
+            const int threshold=int(percent)*32768/100;
             if(threshold)value=value<=threshold?0:(value-threshold)*32768/(32768-threshold);
         }
         return value;
     };
     int mapped[24]{};
     for(unsigned action=0;action<24;++action)
-        mapped[action]=std::max(strength(profile->binding[action][0]),strength(profile->binding[action][1]));
+        mapped[action]=std::max(strength(profile->binding[action][0],action>=16),strength(profile->binding[action][1],action>=16));
     pad->buttons=0;
     for(unsigned action=0;action<8;++action){
         pad->analog[action]=uint8_t((mapped[action]*255+16384)/32768);
