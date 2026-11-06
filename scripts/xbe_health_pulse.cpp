@@ -12,14 +12,14 @@ struct PulseSnapshot {
     std::array<float,4> color{};
     std::array<float,17> descriptor{};
     float fill_x=0,fill_y=0;
-    uint32_t owner=0,actor=0,sample_owner=0,color_owner=0,sprite=0;
+    uint32_t owner=0,actor=0,actor_owner=0,sample_owner=0,color_owner=0,sprite=0,slot=0;
 };
 struct TraceHistory {
-    uint32_t owner=0,actor=0,sample_owner=0,color_owner=0;
+    uint32_t owner=0,actor=0,actor_owner=0,sample_owner=0,color_owner=0;
     float elapsed=0,sweep=0;
     bool bar_started=false;
 };
-static thread_local TraceHistory trace;
+static thread_local std::array<TraceHistory,2> traces;
 
 // 76A50 supplies its own colour to the 53-column heartbeat. That borrowed
 // pointer identifies the player health owner without a global/stale HUD cache.
@@ -33,7 +33,8 @@ static bool CapturePulse(X86Context& ctx,uint8_t* base,PulseSnapshot& out) {
     const uint32_t health=color-0x10;
     if(!TrialGuestReadable(health,0x50)||word(health)!=0x453550) return false;
     const uint32_t actor=word(health+4),fill=word(health+0xc),sprites=word(beat+0x6c);
-    if(!TrialGuestReadable(actor,0x58)||word(actor+0x54)!=word(beat+8)||
+    if(!TrialGuestReadable(actor,0x36c)||word(actor)!=0x46fbe8||word(actor+0x368)>1||
+       word(actor+0x54)!=word(beat+8)||
        word(beat+8)==0xffffffff||!TrialGuestReadable(fill,0x18)||word(fill)!=0x4531c0||
        !TrialGuestReadable(sprites,8)||!TrialGuestReadable(ctx.ebp,12)) return false;
     const uint32_t sprite=word(sprites+4),descriptor=word(ctx.ebp+8);
@@ -42,7 +43,8 @@ static bool CapturePulse(X86Context& ctx,uint8_t* base,PulseSnapshot& out) {
        word(word(sprite)+8)!=0x7b180||!TrialGuestReadable(descriptor,0x44)||
        !TrialGuestReadable(samples,53*4)||!TrialGuestReadable(colors,53*16)||
        ctx.esp>0xffffff2bu||!TrialGuestReadable(ctx.esp+0x90,0x44)) return false;
-    out.owner=beat;out.actor=word(beat+8);out.sample_owner=samples;out.color_owner=colors;
+    out.owner=beat;out.actor=word(beat+8);out.actor_owner=actor;out.slot=word(actor+0x368);
+    out.sample_owner=samples;out.color_owner=colors;
     out.sweep=real(beat+0x5c);out.elapsed=real(beat+0x74);out.health=real(beat+0x14);
     out.extent=real(fill+8);out.fraction=real(health+0x4c);out.sprite=sprite;
     out.fill_x=real(descriptor)+54;out.fill_y=real(descriptor+4)+14;
@@ -66,9 +68,11 @@ static bool CapturePulse(X86Context& ctx,uint8_t* base,PulseSnapshot& out) {
 }
 
 static void AdvanceTrace(TraceHistory& h,const PulseSnapshot& s){
-    if(h.owner!=s.owner||h.actor!=s.actor||h.sample_owner!=s.sample_owner||h.color_owner!=s.color_owner||
+    if(h.owner!=s.owner||h.actor!=s.actor||h.actor_owner!=s.actor_owner||
+       h.sample_owner!=s.sample_owner||h.color_owner!=s.color_owner||
        s.elapsed<h.elapsed||s.elapsed-h.elapsed>1.f){
-        h={};h.owner=s.owner;h.actor=s.actor;h.sample_owner=s.sample_owner;h.color_owner=s.color_owner;
+        h={};h.owner=s.owner;h.actor=s.actor;h.actor_owner=s.actor_owner;
+        h.sample_owner=s.sample_owner;h.color_owner=s.color_owner;
     }else if(s.elapsed>h.elapsed&&s.sweep<h.sweep){
         // Start the small bar highlight when the original monitor reaches its
         // right edge. The same source sweep drives it; drawing owns no clock.
@@ -102,10 +106,14 @@ void TrialHealthPulse(X86Context& ctx,uint8_t* base) {
     } restore{ctx,ctx,_mm_getcsr()};
     _mm_setcsr(0x1f80);
     PulseSnapshot s;
-    if(!CapturePulse(ctx,base,s)||ctx.esp<0x10100){if(trace.owner==ctx.esi)trace={};return;}
+    if(!CapturePulse(ctx,base,s)||ctx.esp<0x10100){
+        for(auto& trace:traces)if(trace.owner==ctx.esi)trace={};
+        return;
+    }
     const uint32_t scratch=(ctx.esp-0x80)&~15u;
     if(!TrialGuestReadable(scratch-0x100,0x180))return;
-    LifelinePulse(s,trace,[&](const std::array<float,17>& d){
+    // Alternating split-screen draws must not restart the other player's sweep.
+    LifelinePulse(s,traces[s.slot],[&](const std::array<float,17>& d){
         std::memcpy(base+scratch,d.data(),0x44);
         ctx.esp=scratch;ctx.ecx=s.sprite;
         kernel::CallGuest(ctx,0x7b180,{scratch});

@@ -20,6 +20,7 @@ README-linux.txt. This wrapper does not set up the Steam Linux Runtime container
   ./burner.sh voices "/path/to/Urban Chaos PS2 Europe.iso"
   ./burner.sh status
   ./burner.sh diagnostics [on|off]
+  ./burner.sh startup [on|off]
   ./burner.sh check-updates
   ./burner.sh update
   ./burner.sh recover-update
@@ -36,6 +37,8 @@ single installed Proton in the main Steam library is selected automatically.
 For a nonstandard Steam installation, also set BURNER_STEAM to its folder.
 Spanish voices require your European multilingual PS2 ISO (SLES-53991).
 Import your Xbox game first, then select Spanish after importing the voices.
+Startup on skips intro videos and Press Start to profile selection next launch.
+It defaults to off; mission videos are unchanged.
 This runs the Windows game through Proton; it is not a native Linux port.
 HELP
 }
@@ -49,6 +52,7 @@ case "$action" in
     play|status|verify|auto-setup|check-updates|update|recover-update) [[ $# == 0 ]] || fail "$action does not take arguments." ;;
     language) [[ $# -le 1 ]] || fail 'language accepts one language name.' ;;
     diagnostics) [[ $# -le 1 ]] || fail 'diagnostics accepts on or off.' ;;
+    startup) [[ $# -le 1 ]] || fail 'startup accepts on or off.' ;;
     *) usage >&2; fail "Unknown command: $action" ;;
 esac
 
@@ -67,6 +71,10 @@ fi
 logging=''
 if [[ $action == diagnostics && $# == 1 ]]; then
     case "$1" in on|off) logging=$1 ;; *) fail 'Choose diagnostics on or off.' ;; esac
+fi
+skip_startup=''
+if [[ $action == startup && $# == 1 ]]; then
+    case "$1" in on|off) skip_startup=$1 ;; *) fail 'Choose skip startup on or off.' ;; esac
 fi
 
 # Resolve the script itself so a desktop symlink keeps the real package/prefix.
@@ -158,6 +166,7 @@ if [[ -n $input ]]; then
 fi
 if [[ -n $language ]]; then args+=(--language "$language"); fi
 if [[ -n $logging ]]; then args+=(--logging "$logging"); fi
+if [[ -n $skip_startup ]]; then args+=(--skip-startup "$skip_startup"); fi
 [[ $action != play ]] || args[0]=launch
 run_worker() {
     "$proton" waitforexitandrun "$win_root\\tools\\python\\python.exe" -B "$win_root\\tools\\import_game.py" "${args[@]}"

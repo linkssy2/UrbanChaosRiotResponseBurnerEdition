@@ -5,7 +5,7 @@ neighboring Darkwatch launcher's `release_check`, `release_download`,
 `release_update` and independent Windows recovery bootstrap. No Darkwatch game
 assets or runtime code are involved.
 
-Windows: **Manage > Check for updates**, review the offered version, confirm.
+Windows: **Manage > Updates > Check for updates**, review the offered version, confirm.
 The launcher downloads in the background with Cancel available, verifies the
 archive, exits for its independent updater, then reopens. Play updates the
 existing selected runtime through the normal installation worker.

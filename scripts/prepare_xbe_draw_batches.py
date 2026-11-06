@@ -111,7 +111,7 @@ if __name__ == '__main__':
         assert draw.count('++CurrentFrame().draw_batch_draws;') == 1
         split = function(changed, 'void D3D12Backend::MaybeSplitDrawBatch(')
         assert split.index('Submit(false);') < split.index('next->Reset(')
-        assert all(term not in split for term in ('WaitFence', 'alloc->Reset', '.used', '.srv', '.clear()', 'geometry_reuse_'))
+        assert all(term not in split for term in ('WaitFence', 'alloc->Reset', '.used', '.srv', '.clear()'))
         assert changed.count('UseFrameDrawList(f);') == 2
         try:
             transform(changed)

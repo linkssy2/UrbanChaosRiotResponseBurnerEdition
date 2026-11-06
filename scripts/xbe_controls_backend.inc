@@ -15,11 +15,13 @@ static bool aim_loaded[2]{};
 static unsigned aim_mode[2]{},scope_zoom[2][2][2]{},zoom_sensitivity[2]{100,100};
 static bool actions_loaded[2]{};
 static unsigned walk_mode[2]{},walk_binding[2][2][2]{},hud_binding[2][2][2]{};
+static unsigned movement_inertia[2]{1,1};
 static void LoadActions(unsigned player){
     if(actions_loaded[player])return;actions_loaded[player]=true;
     wchar_t path[MAX_PATH];if(!controller_path(path))return;
     const wchar_t* section=player?L"PlayerActions2":L"PlayerActions";
     walk_mode[player]=trial_input_profile::Read(path,section,L"WalkMode",0,1);
+    movement_inertia[player]=trial_input_profile::Read(path,section,L"MovementInertia",1,1);
     for(unsigned device=player;device<2;++device)for(unsigned slot=0;slot<2;++slot){
         wchar_t key[32];
         for(unsigned action=0;action<2;++action){
@@ -182,7 +184,7 @@ Draft Snapshot(unsigned player){
     LoadActions(player);
     if(player){
         LoadSecond();LoadHealth(1);LoadAim(1);auto d=Defaults();
-        d.walk_mode=walk_mode[player];std::memcpy(d.walk_binding,walk_binding[player],sizeof(d.walk_binding));std::memcpy(d.hud_binding,hud_binding[player],sizeof(d.hud_binding));
+        d.walk_mode=walk_mode[player];d.movement_inertia=movement_inertia[player];std::memcpy(d.walk_binding,walk_binding[player],sizeof(d.walk_binding));std::memcpy(d.hud_binding,hud_binding[player],sizeof(d.hud_binding));
         d.zoom_sensitivity=zoom_sensitivity[1];d.aim_mode=aim_mode[1];std::memcpy(d.scope_zoom[1],scope_zoom[1][1],sizeof(d.scope_zoom[1]));
         std::memcpy(d.health_pack[1],health_binding[1][1],sizeof(d.health_pack[1]));
         std::memcpy(d.controller,second_controller.binding,sizeof(d.controller));
@@ -191,7 +193,7 @@ Draft Snapshot(unsigned player){
         d.spin_mode=second_spin_mode;std::memcpy(d.spin_binding[1],second_spin_binding,sizeof(second_spin_binding));return d;
     }
     keyboard_init();controller_init();Draft d;LoadAim(0);
-    d.walk_mode=walk_mode[player];std::memcpy(d.walk_binding,walk_binding[player],sizeof(d.walk_binding));std::memcpy(d.hud_binding,hud_binding[player],sizeof(d.hud_binding));
+    d.walk_mode=walk_mode[player];d.movement_inertia=movement_inertia[player];std::memcpy(d.walk_binding,walk_binding[player],sizeof(d.walk_binding));std::memcpy(d.hud_binding,hud_binding[player],sizeof(d.hud_binding));
     d.zoom_sensitivity=zoom_sensitivity[0];d.aim_mode=aim_mode[0];std::memcpy(d.scope_zoom,scope_zoom[0],sizeof(d.scope_zoom));
     LoadSpin();LoadFirearm();LoadHealth(0);d.spin_mode=spin_mode;std::memcpy(d.spin_binding,spin_binding,sizeof(spin_binding));
     std::memcpy(d.health_pack,health_binding[0],sizeof(d.health_pack));
@@ -265,6 +267,7 @@ static bool Save(const Draft& d,unsigned player){
     }
     const wchar_t* actions_section=player?L"PlayerActions2":L"PlayerActions";
     swprintf(value,32,L"%u",d.walk_mode);ok=ok&&WritePrivateProfileStringW(actions_section,L"WalkMode",value,temp);
+    swprintf(value,32,L"%u",d.movement_inertia);ok=ok&&WritePrivateProfileStringW(actions_section,L"MovementInertia",value,temp);
     for(unsigned device=player;device<2;++device)for(unsigned slot=0;slot<2;++slot)for(unsigned action=0;action<2;++action){
         wchar_t key[32];swprintf(key,32,L"%s%u_%u",action?L"Hud":L"Walk",device,slot);
         swprintf(value,32,L"%u",(action?d.hud_binding:d.walk_binding)[device][slot]);
@@ -281,6 +284,7 @@ bool Apply(const Draft& d,std::string& error,unsigned player){
     if(d.spin_mode>1){error="Invalid pistol spin mode.";return false;}
     if(d.aim_mode>1){error="Invalid aiming mode.";return false;}
     if(d.walk_mode>1){error="Invalid walking mode.";return false;}
+    if(d.movement_inertia>1){error="Invalid movement inertia.";return false;}
     for(unsigned action=0;action<2;++action)for(unsigned slot=0;slot<2;++slot){
         const auto& binding=action?d.hud_binding:d.walk_binding;
         if((!player&&!keyboard_valid(binding[0][slot]))||binding[1][slot]>24){error="Invalid walk or HUD binding.";return false;}
@@ -301,7 +305,7 @@ bool Apply(const Draft& d,std::string& error,unsigned player){
     std::lock_guard guard(input_lock);
     if(!player){keyboard_init();controller_init();}
     if(!Save(d,player)){error="Could not save controls. Your previous bindings are unchanged.";return false;}
-    actions_loaded[player]=true;walk_mode[player]=d.walk_mode;
+    actions_loaded[player]=true;walk_mode[player]=d.walk_mode;movement_inertia[player]=d.movement_inertia;
     for(unsigned device=player;device<2;++device){
         std::memcpy(walk_binding[player][device],d.walk_binding[device],sizeof(d.walk_binding[device]));
         std::memcpy(hud_binding[player][device],d.hud_binding[device],sizeof(d.hud_binding[device]));
@@ -354,6 +358,10 @@ bool ScopeZoomDown(bool keyboard,const input::Pad& p,unsigned player,bool mouse_
 unsigned WalkMode(unsigned player){
     if(player>1)return 0;
     std::lock_guard guard(input_lock);LoadActions(player);return walk_mode[player];
+}
+unsigned MovementInertia(unsigned player){
+    if(player>1)return 1;
+    std::lock_guard guard(input_lock);LoadActions(player);return movement_inertia[player];
 }
 bool WalkDown(bool keyboard,const input::Pad& p,unsigned player,bool mouse_active){
     if(player>1||(player&&keyboard))return false;

@@ -42,35 +42,39 @@ def _check_destination(path):
         return
     if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or
             getattr(info, 'st_file_attributes', 0) & getattr(stat, 'FILE_ATTRIBUTE_REPARSE_POINT', 0x400)):
-        raise ValueError('The setup error file must not be a link or special file.')
+        raise ValueError('The error file must not be a link or special file.')
 
 
-def report_error(root, action, error):
-    """Keep the original error even if the package cannot receive a report.
-
-    Resolve the caller's package root once, then atomically replace a checked
-    regular leaf. Never create or write through a rejected GameData path.
-    """
-    message = str(action) + ' failed: ' + str(error)
+def write_report(destination, payload):
+    """Atomically replace a checked regular leaf with the caller's bounded report."""
     temporary = None
     try:
-        root = Path(root).resolve(strict=True)
-        destination = root / ERROR_FILE
+        destination = Path(destination)
+        root = destination.parent.resolve(strict=True)
+        destination = root / destination.name
         _check_destination(destination)
-        payload = (message + '\n').encode('utf8', 'replace')[:MAX_ERROR_BYTES]
-        payload = payload.decode('utf8', 'ignore').encode('utf8')
-        descriptor, name = tempfile.mkstemp(prefix='.setup-error-', dir=root)
+        descriptor, name = tempfile.mkstemp(prefix='.error-', dir=root)
         temporary = Path(name)
         with os.fdopen(descriptor, 'wb') as output:
             output.write(payload)
         _check_destination(destination)
         os.replace(temporary, destination)
-        return message + '\n\nDetails saved to: ' + str(destination)
-    except Exception as failure:
-        return message + '\n\nCould not save setup details: ' + str(failure)
+        return destination
     finally:
         if temporary is not None:
             try:
                 temporary.unlink(missing_ok=True)
             except OSError:
                 pass
+
+
+def report_error(root, action, error):
+    """Keep the original error even if the package cannot receive a report."""
+    message = str(action) + ' failed: ' + str(error)
+    try:
+        payload = (message + '\n').encode('utf8', 'replace')[:MAX_ERROR_BYTES]
+        payload = payload.decode('utf8', 'ignore').encode('utf8')
+        destination = write_report(Path(root) / ERROR_FILE, payload)
+        return message + '\n\nDetails saved to: ' + str(destination)
+    except Exception as failure:
+        return message + '\n\nCould not save setup details: ' + str(failure)

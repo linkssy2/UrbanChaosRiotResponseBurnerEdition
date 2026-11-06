@@ -1,5 +1,478 @@
 # Burner Edition: current runtime
 
+## Release 0.13 preparation
+
+The November 5 post-0.12 changes below are being prepared together as 0.13.
+Versioned Windows and Linux/Proton archives, source closure, update-preservation
+checks and their receipts belong in `build/release-0.13` and `publication/0.13`.
+The existing 0.09 HD game texture download is retained unchanged. Release notes
+are the release body, not a separate downloadable asset. Preparation does not
+authorize publication or establish new live Windows/Proton gameplay acceptance.
+
+## Co-op hazard ownership and waiting messages (November 5, 0.13)
+
+The user's Canals clip shows P1 standing in ambulance fire without losing
+health, while P2 loses health in the same fire. P1 subsequently takes other
+damage, so the evidence does not support general invulnerability. Retail
+`1726C4 -> 128F0 -> 4A780` increments the player count but overwrites the single
+ID at manager `+834`; `4ACD0` ignores its requested index. With P2 registered
+last, the original FXFire, FXElectricity and FireDamageSphere loops therefore
+visit P2 twice and miss P1. Repeated visits also affect the native burn cooldown.
+
+The shared correction replaces only the returned ID at the three verified
+hazard lookup callers, for a validated active co-op pair. Original damage,
+distance/obstruction checks, immunity and cooldown handling remain in place.
+Unrelated singleton lookups and single-player retain their original behavior.
+Collision-driven FireJet uses a different actor-targeted route and is not
+rewritten by this fix.
+
+The clip also shows a persistent P1 "Waiting for partner" message through
+movement and P2's down/revive cycle. Conversation records kept an old wait when
+retail busy/condition branches bypassed admission, after revival during speech,
+or after the recorded behavior/NPC became invalid. Waiting and skip publication
+are now renewed by each update; invalid records are retired with identity-safe
+cleanup of their owned control locks. Genuine script-completion waits still
+require both living players within the authored NPC range. No script is skipped
+and no message timeout is used to conceal a pending transition.
+
+Private evidence and regression receipts are in `build/coop-wait-fire-20261105`.
+The three waiting histories fail with the preceding producer and pass with the
+correction while executing the original guest conversation machine. These
+offline checks do not establish final live Canals or Proton acceptance. The user
+subsequently confirmed that the waiting message clears and fire damages both
+players in the staged Windows runtime
+`c17f0760fae5c4bac885941d5de6a9c664f91018a7582bb4c4aa8df9bc2f7d0b`.
+Electrical hazards and live Proton remain covered only by offline checks.
+
+## Co-op aiming blur isolation (November 5, 0.13)
+
+The normal aiming effect previously merged both players' zoom pulses into one
+shared blur descriptor, then copied and composited the whole scene. The shared
+runtime now records each zoom pulse's owner while retaining the original pulse
+timing, allocation, deletion and global publication. Ordinary split-screen
+passes select the current camera's pulses plus the shared effects; single-player
+and full-screen cinematic passes retain the original aggregate.
+
+The original depth blur crops its source and final quad to the owning view.
+The first candidate's live test failed: both cameras entered the effect with
+a full-screen device viewport. Its assumed half-height viewport caused both
+source-crop paths to reject, despite correct pulse ownership. Player 2 renders
+last, explaining why its full-screen effect visibly changed Player 1's view.
+The correction derives scene dimensions from the validated original downsample
+quad, whose extents come from the backbuffer description. It accepts either the
+full scene or the matching owned viewport, and keeps incoming viewport restoration
+separate from the crop. The recorded full-screen case is now a regression for
+both owners; unrelated effects and malformed geometry retain their original path.
+The original scratch textures and Gaussian filter remain; vertical filter taps
+compensate for placing a half-height scene in the full scratch. A narrowly
+qualified source-copy shader clamps samples to the owning view's actual GPU
+pixel centres, including when a render-scale change is pending. Its bounds are
+captured with the queued draw. Both ordinary and upscaled box-filter sampling
+clamp each tap, preserving the original weights and colour scaling. Other shader source and cache identities remain
+unchanged. This does not replace the separate downed-player blur or change aim,
+reticles, FOV, game assets or logging settings.
+
+Trace, prior runtime and verification receipts belong in
+`build/coop-aim-blur-20261105`. Native pulse/queue and geometry fixtures, GPU pixel
+checks, production integration and live acceptance are separate gates. The
+Windows and Proton candidates must use the same corrected runtime. The user
+confirmed that zoom blur no longer crosses views in the normal Windows candidate
+`fd05224da7eb8fb2b7d4b02a23a246024d53f8ea255eed2e9651ad4bb40761cf`.
+Live Proton gameplay remains untested.
+
+The native pulse/queue and geometry regressions passed, including original
+lifecycle/CPU/FP parity, owner changes, exception cleanup and cinematic
+transitions. The production shader/constants passed 54 GPU pixel cases on each
+of Windows hardware and WARP, with both owners, five render scales, three
+aspect ratios, odd host heights and negative leakage witnesses. These GPU checks
+use D3D11 to execute the shared generated shader; they do not establish live
+D3D12 or Proton gameplay acceptance. Full release-build and paired-package
+receipts are recorded separately under `build/release-0.13`. The failed candidate's
+bounded owner/render trace and follow-up checks are preserved in
+`build/coop-aim-blur-followup-20261105`; the subsequent user confirmation above
+applies to this corrected candidate, not the failed one.
+The follow-up passed 38 original-quad and invalid-state cases, native pulse/queue
+tests, delayed draw-state replay, and 54 GPU sampling cases each on hardware and
+WARP. These include the recorded full-screen viewport for both owners.
+
+## Canals reverse-side road railing (November 5, 0.13)
+
+The reported opening camera crosses behind one-sided strips in the original
+Canals road-edge mesh. A census of all 3,403 authored geometry batches found
+22 coplanar strip triangles, all facing the same direction, in two batches.
+Their texture and vertex alpha are opaque. No opposite strip faces were found.
+This establishes an exposed authored-geometry limitation, not a proven change
+from the original console rendering.
+
+The first repair admitted only the ordinary texture pass. Its hardware/WARP
+coverage fixture passed, but the user then observed transparent-looking metal.
+That fixture used an opaque test shader without depth and missed the original
+multipass contract: `99240 -> 977A0 -> BB870 -> 8FF30` supplies ambient RGB and
+depth, then `96BE0` multiplies the texture into existing RGB with `DST_COLOR/ZERO`
+and no depth writes. Culling the first pass therefore textures scenery behind
+the strip. This is not texture alpha: the installed HD replacement's 43,695
+valid texels are opaque across all mip levels; zero-alpha block padding is
+outside the image.
+
+The correction admits both original shader pairs for the same two exact
+position/index streams. The added prepass requires its exact position-only
+declaration, depth writes, RGB writes and disabled blending. Shadow/depth-only
+uses remain excluded; alpha and all blend/depth state remain unchanged. The
+regression must exercise the original shaders and multipass composition, with
+background independence and depth occlusion as well as coverage. Private
+evidence is in `build/rail-opacity-20261105`. Fixture bytes are derived locally
+from the user's original game files and are not distributed. Live corrected
+Canals cutscene and Proton acceptance remain separate requirements.
+
+The revised fixture passed on hardware and WARP: two of 3,403 batches per
+original shader pair, 3,248 negative guards, and 21,920 formerly background-
+dependent pixels. Corrected pixels no longer depend on background color;
+farther geometry is occluded and nearer geometry stays visible. Front-side,
+unrelated geometry and framebuffer alpha are unchanged. These are D3D11 pixel
+tests with controlled geometry projection, not live D3D12 cutscene acceptance.
+
+## Helper-tip alignment (November 5, 0.13)
+
+The native helper-text queue discards the widened HUD descriptor, leaving its
+fixed 4:3 coordinates behind while the orders icons follow the view center.
+The shared help draw now retains that center-relative horizontal offset in
+single-player and each co-op view. Choose Heal, Display Orders, weapon hints
+and other tips using this queue move together with their mouse/key/controller
+glyphs. Existing co-op vertical placement, text wrapping, fades and input
+ownership remain intact; projected target brackets and menu text use separate
+paths. No new setting, asset replacement or logging is introduced.
+
+The native help-queue fixture samples short and long lines across five aspect
+ratios, both co-op draw orders and single-player/shared-cinematic guards.
+Evidence and the prior implementation are in `build/heal-prompt-layout-20261105`.
+Its font boundary uses measured-size test boxes; final localized appearance and
+live Proton remain separate verification requirements.
+
+## Maintained-code audit (November 5, 0.13)
+
+See `docs/CODE-AUDIT-0.13.md` for scope, fixes, cleanup and verification limits.
+The audit separates co-op health-bar history, completes Controls Defaults for
+Walk/HUD bindings, and reuses checked atomic crash reporting. Empty geometry
+wrappers and the rejected brightness experiment are removed; generated-tree
+cleanup, upload alignment, failure handling and opt-in support logs remain.
+Original experiment sources and detailed coverage are preserved privately in
+`build/code-audit-20261105`. Rebuild and refresh both unpublished packages and
+their source archive after these changes; old preparation hashes are superseded.
+
+## Movement inertia and launcher layout (November 5, post-0.12)
+
+Controls adds per-player **Movement inertia**, default On. Off uses the resolved
+directional targets at the native BF2C8 seam instead of their smoothed outputs.
+Starting, stopping and reversing input respond immediately; maximum speed, Walk,
+crouch/equipment restrictions and downstream movement physics remain original.
+Only valid, living, owned main-player actors in ordinary movement are eligible.
+Pause, special movement, ladders and invalid state retain the original path.
+No sprint, deadzone changes, new assets or runtime logging were added.
+
+The native-context fixture passed 48 default/reference comparisons, then checked
+immediate directional changes, analog input, Walk/crouch, co-op ownership,
+frame-rate changes, impulses and guards. Controls, co-op controls/input, graphics
+input, menu, language and aim-mode regressions passed. Evidence and source hashes
+are under `build/movement-inertia-20261105`.
+
+The existing WinForms launcher now groups Manage into Settings, Game Files,
+Add-ons, Updates and Support. Explicit table rows/columns keep navigation and
+action buttons consistently sized at minimum/default sizes and scaled layouts.
+A separate flexible spacer prevents Support from consuming the remaining height.
+The artwork frame fits the full cover at its original proportions, without
+cropping. Play and Manage have matching size. Backend setup/update behavior and
+saved language/startup choices are retained.
+
+The launcher fixture passed grouped navigation, scaled layouts, keyboard focus,
+worker failure/cancellation recovery, saved choices and real Windows argument
+round trips. All seven final offscreen page renders were visually reviewed.
+These establish layout checks, not final live desktop or Proton acceptance;
+desktop control was left with the user. Live movement feel remains unverified.
+
+The Windows and Linux/Proton test folders share 333 identical payload files,
+runtime SHA-256 `f1ca7faab58020fa4334d3957637b6b1a547cc2e3c2cf03806caf47367af955b`
+and launcher SHA-256 `49874a91b3a75c0bf9a22bbf7d7f47e312fc44a176f19d4a9965c0ab57a43501`.
+Package/setup and Linux-wrapper checks passed; three Linux-only checks were
+skipped on Windows. Live Proton remains unverified. The private imported play
+folder received the same payload while preserving settings and Skip Startup.
+It is not a distributable package. Nothing was published or version-bumped.
+
+## Startup option and health-upgrade HUD fade (November 5, post-0.12)
+
+Launcher Manage adds **Skip Startup**, default Off. Its validated local saved
+choice alone enables `UCRR_SKIP_STARTUP=1` in the game process; inherited probe
+flags remain cleared. Windows Setup and Linux/Proton Setup share the control;
+the Linux shell alternative is `./burner.sh startup on` or `off`. Toggling it
+preserves an unsaved language selection. Run/sprint and dead zones are unchanged.
+
+When enabled, only the four exact unopened startup movie/successor pairs are
+skipped. Their original factories still initialize the frontend and their
+destructors retain normal object cleanup without closing an unopened global
+decoder. The direct-profile refinement retains the original loading/fade gate,
+then runs `271E80 -> 271C00` through its shared frontend-bank and controller
+initialization. Only that armed startup call redirects at `271CCD` to the
+original `2717B0` profile factory, before the Press Start tree is constructed.
+The original output pair, controller association and profile/storage admission
+remain intact. It does not select a profile. Outgoing skipped movies stay
+unopened until their normal cleanup. Mission films, looping backgrounds, held
+skip controls and later title visits retain their existing behavior. The native
+update/destructor/factory fixture verifies these boundaries and input handoff.
+Direct startup needs a fresh live check; the earlier user confirmation covered
+the automatic Press Start acceptance, not an absent intermediate screen.
+
+The running game and splash window classes already requested icon resource 1,
+but the game executable contained no icon resource. The maintained build now
+embeds the launcher's existing `burner.ico` at that ID. No window ownership,
+renderer or input behavior changes. A read-only post-build check compares each
+embedded image with the source icon and exercises the production Windows icon
+lookup. The same executable ships for Proton; desktop/taskbar appearance on each
+platform remains a separate live check. Private evidence for both refinements
+is in `build/startup-direct-profile-20261105`.
+
+The user's video also shows a dark health-upgrade divider alone before the HUD
+appears. Both native marker loops used fixed opacity `0x55`, ignoring the HUD
+descriptor's fade. The shared leaf now scales only this alpha by the descriptor
+alpha; black color, geometry, upgrade count and draw routing remain unchanged.
+The 168 original/fixed loop/resume cases traverse the original sprite queue,
+covering tiers, descriptor fades, single-player and split-screen origins, CPU/FP
+state and memory guards. Existing parent-HUD fade and health-pack checks passed.
+
+Evidence is in `build/health-marker-reveal-20261105` and
+`build/hud-startup-options-20261105`. Release-profile runtime, launcher UI,
+package/setup, Linux wrapper, menu, settings, view layout and FMV checks passed.
+The launcher fixture now runs under the normal WinForms message loop; its prior
+ad-hoc-loop teardown failure is preserved with the failed check records.
+The Windows/Proton candidates share the same runtime and payload manifests.
+No release was published and no game or HD texture assets changed. The user
+subsequently confirmed both startup skipping and the corrected HUD reveal work
+in the staged Windows candidate. Launcher Manage was also observed with its
+saved toggle visible. This is user-reported gameplay acceptance, not an agent
+frame comparison. Live Proton remains unverified.
+
+## Live audio selection clarification (November 5, post-0.12)
+
+In-game Stereo, 5.1 and 7.1 changes already apply during playback. The Audio
+footer now states this explicitly in English and Spanish instead of presenting
+the separate Windows speaker-layout restart advice as a general requirement.
+The mixer samples the saved selection once per 480-frame block; the endpoint's
+fixed channel capacity and queued audio stay intact. Selecting a wider mode than
+the device supports retains the existing fallback and Active output display.
+No device recreation, voice reset or added runtime logging was introduced.
+Changing the operating system's speaker configuration is a separate operation.
+
+The production mixer regression now switches eight times with a looping source
+and a three-packet stream at 2/6/8-channel capacities. Positions, ownership and
+ordered packet completion requests match the unchanged reference mixer. The
+production output-worker fixture verifies mode changes without source-voice
+recreation or queued-buffer modification, including endpoint fallback/failures.
+The actual menu fixture verifies immediate active-mode changes. These checks,
+audio routing/configuration/loop tests, language/settings tests and 800 original
+FMV draw cases passed. Physical surround audibility is not established by them.
+
+Evidence is in `build/audio-live-switch-20261105`. Windows and Linux/Proton test
+packages share 333 identical payload files and runtime SHA-256
+`e8dea628957e1da4d52a7cb5db15dd4f72a5134bae77f87ad1658a3f40ac6e32`.
+Setup and Linux-wrapper checks passed; three Linux-only checks were skipped on
+Windows. Live Proton and physical surround remain unverified. The private test
+folder preserves the user's settings, including `fmv_scale=2` (Fill stretch),
+and the accepted corpse-retention and convulsion changes. Nothing was published.
+The private launcher started the matching runtime with Fill stretch selected;
+the Rocksteady intro was visibly rendering before handoff to the user. Launch
+identity and settings are recorded in this candidate's `sessions` directory.
+
+## Forever regional-cleanup correction (November 5, post-0.12)
+
+The shared character, persistent-character and general deletion-region updates
+now respect Forever for killed NPCs with a valid owned ragdoll. The all-level
+asset census found 129 instances across 17 of 27 ENT files; all three classes
+dispatch through the same two corrected routines. There are no level IDs,
+coordinate exceptions or asset edits in this fix. This closes a verified bypass
+of the timer/count policy. The user subsequently visited the same reported area
+on Windows and confirmed that the corpses did not unload. This is user-reported
+visual acceptance; no before/after actor capture establishes the original trigger.
+
+Selection checks run after native containment, at 1C9CB7 and 1B3CE9; bodies
+outside a volume do not incur the extra ownership search. Queue-drain guards at
+1C9DB2 and 1B3D35 handle IDs queued before death or before Forever was selected.
+Both generated general-region entries are covered. Protected IDs are removed
+from the queue normally, while persistent scans do not re-enqueue them. Original
+script update and region deactivation continue. Default and More retain their
+existing regional behavior. There is no per-frame allocation or added logging.
+
+Eligibility requires an original NPC class, native killed flag (not knockout
+alone), finite nonpositive health, and its current physics-interface handle
+resolving to an active retained ragdoll. Living/injured/knocked-out actors, props,
+foreign actors and already explicitly removed actors are not protected. Direct
+mission removals remain original. Checkpoint/level reset destroys actor lists
+through the independent 208D90 teardown, so Forever does not retain the old world
+across restarts. Evidence and boundary reviews are under
+`build/corpse-retention-20261105/fix-review`.
+
+The release-profile runtime and six regressions passed: original regional loops
+and queue compaction, persistent scans, native/overflow bodies, all retention
+modes, dead-after-KO, invalid ownership, CPU/FP state, explicit removal, pool
+teardown, death convulsions, contacts, recovery, co-op death/revive and health packs.
+The level/source/build receipts are in `build/corpse-retention-fix-20261105`.
+Windows and Linux/Proton test packages share 333 identical payload files and
+runtime SHA-256 `76573c347277ce1fc6f11b16750ace62be3c0f10db23bcf8d6fb0f4d2127f49a`.
+Setup and wrapper checks passed; three Linux-only checks were skipped on Windows.
+The private imported play folder is updated, but is not a distributable package.
+Accepted convulsions and FMV Fill stretch are preserved. The runtime was launched
+for the user's Windows test, with video observed before handoff. User acceptance
+is recorded under `sessions/user-20261105-134140`; no release was published.
+Other levels and live Proton corpse retention remain unverified.
+Retaining more corpses can increase memory/physics cost, as with the existing
+Forever setting. No new HD pack is required.
+
+## FMV Fill stretch candidate (November 5, post-0.12)
+
+Graphics adds **Fill stretch** as saved `fmv_scale=2`. It uses the exact
+all-frame black-row bounds from the existing 42-movie audit and maps the remaining
+picture to the full display. It stretches proportions rather than cutting scene
+content. Existing Fill (0, still default) retains its proportional fit and four-row
+margin; Original aspect ratio (1) retains the complete encoded frame. News and
+unknown films stretch their complete frame; unverified custom-film borders are
+not automatically guessed. Menu movies and the alternate 448-line draw are unchanged.
+Windows and Linux/Proton use the same runtime change. Verification is recorded in
+`build/fmv-stretch-20261105`; no game launch or live Proton acceptance is implied.
+The release-profile build and 800 original-guest FMV draw cases passed, including
+4:3 through 32:9, source coordinates, existing modes and background movies.
+Settings persistence, actual menu navigation, Spanish, skip input and health-pack
+regressions passed. Clean Windows and Linux/Proton test packages contain 333
+identical shared files; their setup and wrapper checks passed (three Linux-only
+checks skipped on Windows). The imported private play folder has the same new
+runtime. Accepted revision 8 convulsions are retained. Nothing was launched or
+published, and no new movie assets or HD texture pack are required.
+
+## Death convulsion candidate (November 5, post-0.12)
+
+The user visually accepted revision 4's enemy convulsions on Windows, then
+requested stronger variation, short bursts with pauses and an On/Off switch.
+Revision 5 added **Graphics > Death convulsions**, beside Ragdoll amount, default
+On. The shared setting covers killed enemies and downed co-op partners. Apply
+saves `death_convulsions`; Off cancels active reactions, and re-enabling admits
+later deaths rather than restarting expired effects. The row uses the existing
+save/discard/failed-save rollback behavior and includes Spanish text.
+
+The user rejected revision 5's appearance as repeated leg/foot kicking.
+Revision 6 uses all eleven authored joints: spine, hips, chest, knees, shoulders,
+neck and elbows. Three 0.38-0.56-second bursts share a 7-9 Hz contraction rhythm
+with small variations in joint phase/strength, separated by quiet intervals.
+Timing and strength vary deterministically by actor identity without touching
+gameplay RNG. The reaction retains its 5.4-second maximum and starts after 0.6
+seconds. Knee/elbow travel is much smaller; torso/shoulder motion now participates
+and neck motion is deliberately limited. Equal and opposite angular impulses
+pass through the original wake and inertia routines; the native solver still
+controls joint limits and contacts. The reflected ragdoll basis uses planeAxis
+at data +0x20, not its pivot at +0x10; hinges retain axle +0x30.
+There is no added linear impulse, per-frame allocation, logging or asset dependency.
+
+The user described revision 6's whole-body motion as almost perfect and requested
+slightly stronger bursts. Revision 7 raises spine, chest, hip and shoulder travel
+by 15%, and their angular speed ceiling from 8 to 9 radians/second. Knees, elbows,
+neck, burst timing and acceleration bounds retain revision 6's values. The guarded
+build, existing 30-360 FPS fixtures, native contact/recovery checks, co-op revival
+and settings/menu regressions passed. Paired clean Windows/Proton packages and
+the private play folder were staged and launched for user testing.
+
+After revision 7, the user requested another 30% increase and explicit head spasms.
+Revision 8 multiplies travel, speed and acceleration ceilings by 1.3 relative to
+revision 7. The neck's base travel increases from 0.045 to 0.10 radians and its
+base speed ceiling from 2 to 5 radians/second, before the shared multiplier.
+Burst cadence, gaps, native joint limits and paired-impulse conservation remain.
+The fixture verifies head rotation in both directions with 19-20 reversals at
+30-360 FPS for both enemy and downed-player admission; this is fixed-pose impulse
+evidence, not live head-animation acceptance. The stronger isolated-hinge travel
+budget is 1.3 times its previous bound; joint overshoot bounds are unchanged.
+All existing regressions and paired setup/wrapper audits passed. The user then
+visually accepted revision 8's convulsions and confirmed the On/Off toggle works
+on Windows. Downed co-op appearance and Proton remain separately unverified.
+There is no new asset pack or publication.
+
+The initial revision 5 sharper-burst fixture exposed joint overshoot. The current
+hinge controller retains a full step of braking distance before either joint
+limit, bounded angular speed/acceleration and a smoothed burst envelope. Negative
+results remain in `revision5/test-burst-initial-failure.log` and
+`revision5/test-envelope-failure.log`; the bounds checks were not relaxed.
+
+Admission follows native ragdoll activation at 2A6119, and updates run before
+native pose writeback at 2A5E7C. Both generated entry/resume copies are patched
+reversibly, with original-byte and generated-body witnesses. NPC transition
+2AC0D0 gets its actor from the capsule proxy's virtual +0C: constructor 2BA430
+stores the actor at +10, vtable 48F578 selects 290010, which returns that actor.
+The original `enemy of player` query excludes allies, and positive-health or
+knocked-out NPCs are not admitted. Co-op admission uses the existing downed-body
+identity; revival, actor/model reuse and world changes cancel the effect.
+
+The maintained build includes `test_death_spasm`, executing the original
+angular-impulse, wake and boolean-property wrapper with explicit fixture
+boundaries for property lookup and already-awake islands. It checks elapsed-time
+behavior at 30/60/120/240/360 FPS, balanced angular momentum, untouched linear
+velocity, CPU/FP preservation, eligibility, expiry, revival and reuse. Revision 6's
+60 straight/folded, enemy/downed, actor-identity and frame-rate cases produce
+18-26 isolated-hinge direction reversals, with peak travel of 0.168-0.439 radians
+(revision 5 was 0.916-1.020). Ten further cases load all eleven original authored
+constraints, transforms and anisotropic inertias and verify angular responses in
+all twelve body sections, including torso and pelvis. Those poses are held fixed
+to check impulse injection, not simulated world contacts. Separate checks cover
+variation, quiet intervals, toggle cancellation, persistent settings and failed saves.
+The actual ImGui fixture checks mouse/controller operation with original fonts,
+Spanish and centered ultrawide layouts. Existing
+force/contact/recovery, co-op death/revive, health-pack and
+downed-camera regressions also passed. These checks do not establish the visible
+contraction strength or combined live contact behavior.
+
+Evidence is under `build/death-spasm-20261104`. The user saw no visible spasm in
+three earlier candidates; those are negative visual results, not accepted fixes.
+Revision 3's bounded read-only capture recorded 15 complete reactions and changing
+joint angles, including elbows/knees resting at their upper limits. These samples
+do not isolate the effect from falling/settling. The user clarified that they want
+obvious repeated convulsions; revision 4 is the first visually accepted effect.
+Revision 8's `verification.json` pins its normal executable and matching symbols;
+`staging-check.json` records matching Windows and Linux/Proton test payloads,
+shared manifests and separate setup/wrapper checks. Both use the same runtime;
+Proton is not native Linux. The user accepted revision 6's whole-body motion on
+Windows, subject to the requested small strength increase. Downed co-op appearance
+and live Proton behavior have not been separately confirmed. Nothing has been published.
+The imported private play folder contains copied user/game data and must never
+be distributed as a release ZIP. The separate clean Windows-test/Linux-Proton-test
+folders passed allowlist and original-payload audits. No new HD pack is needed.
+The accepted runtime and matching symbols remain in `revision4/normal`, and
+revision 5 remains in `revision5/normal` for comparison. Revision 6's shared
+runtime SHA-256 is `7877c4d0f66d7fa52c63441b236db580d0458c78e0d6bc31783e8f9d70400dcd`.
+That visually accepted whole-body candidate is preserved in `revision6/normal`.
+Revision 7's shared runtime SHA-256 is
+`fa9ef27b365df124a06eb18f0211af9fb1528fdaf47c4326ea7d2dc9c42e7d8a`.
+It is preserved with its symbols in `revision7/normal`. Revision 8's shared runtime
+SHA-256 is `4e1a7e9aee854a95e31dda457b1bf9bd4a47cc06fe839867b58acab3c1615558`.
+
+Before the regional-cleanup correction above, the Forever-corpse report remained
+unresolved. Native cleanup and expanded
+pool regressions pass, but no instrumented deletion/release requests occurred in
+the latest Hope Street capture. That does not establish corpse retention in the
+reporter's container area. Mission-directed removal has not been disabled.
+The November 5 offline audit confirms retention code matches published 0.12,
+traces the NPC's separate missing-handle removal query through the expanded pool,
+and reruns retention, contact and recovery fixtures successfully. Findings and
+original-code trace are in `build/corpse-retention-20261105`. No game was launched
+and no cause or fix for the reporter's disappearance is claimed.
+
+The follow-up original-byte and authored-level audit confirmed a separate
+level-driven bypass: CharacterDeletionRegion update 1C9BF0 (also used by the
+persistent variant) can select retained registered corpses and sends removal
+flag 1 at 1C9DB6 without consulting Forever. World update 208F80 subsequently
+deactivates and destroys those actors. Eastside Dockyard (4-01), the likely but
+unconfirmed screenshot mission, has three such regions with progression-script
+activations; one covers authored ladder/container-area positions. Its separate
+DeleteCharacters script is checkpoint-restart cleanup. The all-level census
+found 129 general/character/persistent deletion regions in 17 of 27 ENT files.
+Original/prepared Dockyard data match and all its script streams decode fully.
+Evidence is under `build/corpse-retention-20261105/{caller-audit,level-audit}`.
+This proves a route around the setting, not the reporter's exact actor/trigger.
+Archived same-owner physics samples also show substantial descent while still
+simulated, without identifying whether a surface was crossed. No game was
+launched, production behavior changed or new package produced for this audit.
+
 ## 0.12 release review (November 4)
 
 The review against published 0.11 found a mouse-coordinate regression in the
@@ -2033,8 +2506,8 @@ controller symbol. Controller mode retains its original/remapped symbols.
 ## FMV framing
 
 Graphics `fmv_scale` defaults to proportional Fill (0); Original aspect ratio
-(1) preserves the complete encoded frame. See the November 4 audit above for
-movie bounds, source provenance and verification. This supersedes the November 1
-full-frame stretched Fill behavior. Neither mode crops scene content or stretches
-proportions. Fit can leave bars; there is no per-frame automatic crop or movie
-re-encode, and this does not add an ultrawide game viewport.
+(1) preserves the complete encoded frame. Fill stretch (2) uses the verified
+black-border bounds and stretches the remaining picture to the display. See the
+November 5 Fill stretch section above for the current behavior and the November
+4 audit for source provenance. No mode crops scene content. Only Fill stretch
+changes proportions; unverified custom-film borders are not guessed per frame.

@@ -246,6 +246,49 @@ class SourceSetupTests(unittest.TestCase):
             worker.launch(self.data)
         self.assertNotIn('UCRR_GAME_ISO', seen[-1]['env'])
 
+    def test_crash_report_rejects_linked_files_without_losing_exit_code(self):
+        self.setup()
+        report = self.data / 'last-error.txt'
+        external = self.root / 'unrelated-save'
+        external.write_bytes(b'preserve unrelated data')
+        os.link(external, report)
+        process = SimpleNamespace(stderr=io.BytesIO(b'fixture crash'), wait=lambda: 0xc0000005)
+        with patch.object(worker.subprocess, 'Popen', return_value=process):
+            with self.assertRaisesRegex(RuntimeError, '0xc0000005.*must not be a link'):
+                worker.launch(self.data)
+        self.assertEqual(external.read_bytes(), b'preserve unrelated data')
+        report.unlink()
+        report.write_bytes(b'previous report')
+        original_lstat = Path.lstat
+        def linked_report(path, *args, **kwargs):
+            if path == report:
+                return SimpleNamespace(st_mode=stat.S_IFLNK, st_nlink=1)
+            return original_lstat(path, *args, **kwargs)
+        process.stderr = io.BytesIO(b'fixture crash')
+        with patch.object(Path, 'lstat', linked_report), \
+                patch.object(worker.subprocess, 'Popen', return_value=process):
+            with self.assertRaisesRegex(RuntimeError, '0xc0000005.*must not be a link'):
+                worker.launch(self.data)
+        self.assertEqual(report.read_bytes(), b'previous report')
+        self.assertFalse(list(self.data.glob('.error-*')))
+
+    def test_crash_report_write_failure_preserves_exit_code_and_previous_details(self):
+        self.setup()
+        report = self.data / 'last-error.txt'
+        report.write_bytes(b'previous report')
+        original_replace = os.replace
+        def failed_report(source, target):
+            if Path(target) == report:
+                raise PermissionError('fixture read-only report')
+            return original_replace(source, target)
+        process = SimpleNamespace(stderr=io.BytesIO(b'fixture crash'), wait=lambda: 0xc0000005)
+        with patch.object(os, 'replace', failed_report), \
+                patch.object(worker.subprocess, 'Popen', return_value=process):
+            with self.assertRaisesRegex(RuntimeError, '0xc0000005.*fixture read-only report'):
+                worker.launch(self.data)
+        self.assertEqual(report.read_bytes(), b'previous report')
+        self.assertFalse(list(self.data.glob('.error-*')))
+
     def test_status_and_actions_share_selection(self):
         code, rows = self.command('status')
         self.assertEqual(code, 2)

@@ -107,12 +107,14 @@ int main(int argc,char**){
         {"unknown",0,0},{"pal_dolby",0,0},
     };
     unsigned cases=0;
-    for(const auto& movie:movies)for(float aspect:{4.f/3.f,16.f/9.f,21.f/9.f,3440.f/1440.f,32.f/9.f})for(unsigned mode:{0u,1u,2u}){
+    for(const auto& movie:movies)for(float aspect:{4.f/3.f,16.f/9.f,21.f/9.f,3440.f/1440.f,32.f/9.f})for(unsigned mode:{0u,1u,2u,3u}){
         trial_graphics::aspect=aspect;trial_graphics::mode=mode;Open(movie.name);
-        const float top=mode==0?float(movie.top):0,bottom=mode==0?float(movie.bottom):0;
+        const float top=mode==0?float(movie.top):mode==2&&movie.top?float(movie.top+4):0;
+        const float bottom=mode==0?float(movie.bottom):mode==2&&movie.bottom?float(movie.bottom+4):0;
         const double source_height=480-top-bottom,display=aspect;
         const double scale=(std::min)(480*display/640,480/source_height);
-        const float w=float(640*scale*640/(480*display)),h=float(source_height*scale);
+        const float w=mode==2?640:float(640*scale*640/(480*display));
+        const float h=mode==2?480:float(source_height*scale);
         const float x0=(640-w)/2,y0=(480-h)/2;
         const auto fitted=Draw(argc>1);Corners(x0,640-x0,y0,480-y0,top,bottom);
         assert(std::memcmp(&original,&fitted,sizeof(original))==0);
@@ -127,7 +129,8 @@ int main(int argc,char**){
             const float screen_w=screen_h*float(display);
             const float sx=(points[0].x-points[1].x)*screen_w/640/640;
             const float sy=(points[2].y-points[1].y)*screen_h/480/float(source_height);
-            assert(Near(sx,sy));
+            if(mode==2){assert(Near(sx,screen_w/640)&&Near(sy,screen_h/float(source_height)));}
+            else assert(Near(sx,sy));
         }
         ++cases;
     }
@@ -135,7 +138,7 @@ int main(int argc,char**){
     Open("unknown");Draw();Corners(80,560,0,480);assert(clears==1);
     for(const char* name: {"fe_bk1","fe_mp","gamelogo","splash"}){
         Open(name);
-        for(float aspect:{16.f/9.f,21.f/9.f,32.f/9.f})for(unsigned mode:{0u,1u}){
+        for(float aspect:{16.f/9.f,21.f/9.f,32.f/9.f})for(unsigned mode:{0u,1u,2u}){
             trial_graphics::aspect=aspect;trial_graphics::mode=mode;Draw();
             const float x=320*(1-(16.f/9.f)/aspect);
             Corners(x,640-x,0,480);assert(clears==unsigned(x>0));
@@ -156,6 +159,7 @@ int main(int argc,char**){
     Open("dolby");const unsigned previous=_mm_getcsr();_mm_setcsr(0x7f80);
     Draw();assert(_mm_getcsr()==0x7f80);_mm_setcsr(previous);
     trial_graphics::mode=1;_mm_setcsr(0x7f80);Draw();assert(_mm_getcsr()==0x7f80);_mm_setcsr(previous);
+    trial_graphics::mode=2;_mm_setcsr(0x7f80);Draw();assert(_mm_getcsr()==0x7f80);_mm_setcsr(previous);
     // Invalid texture coordinates and unreadable storage must remain untouched.
     const auto layout=trial_fmv::Geometry(trial_fmv::Classify("dolby"),16.f/9.f,0);
     for(unsigned invalid=0;invalid<5;++invalid){
@@ -167,5 +171,5 @@ int main(int argc,char**){
         const X86Context saved=c;TrialFmvTexcoord(c,g_base,layout);mem::denied=0xffffffff;
         assert(std::memcmp(before.data(),g_base+stack,12)==0&&std::memcmp(&saved,&c,sizeof(c))==0);
     }
-    std::printf("FMV: %u original-guest draw cases; proportional Fill/Original through 32:9, four output sizes, UV/ABI, clear ordering, backgrounds, guards and lifecycle passed\n",cases);
+    std::printf("FMV: %u original-guest draw cases; Fill/Original/Fill stretch through 32:9, four output sizes, UV/ABI, clear ordering, backgrounds, guards and lifecycle passed\n",cases);
 }

@@ -18,7 +18,7 @@ static constexpr uint32_t p1=0x600000,p2=0x602000,behavior=0x604000,npc=0x605000
     test_world=0x607000,manager=0x609000,proxy=0x60a000,fade=0x60b000,event_root=0x60c000,
     events=0x60d000,animation=0x60e000,stack=0x700000;
 uint32_t TrialCoopPlayer(unsigned slot){return slot==0?p1:slot==1?p2:0;}
-static bool candidate=true,keyboard_mode=true,faces[2]{true,true},pressed[2]{},skip_edge[2]{},playing=false,busy=false,flags_ready=true,fail_position=false;
+static bool candidate=true,keyboard_mode=true,faces[2]{true,true},pressed[2]{},skip_edge[2]{},playing=false,busy=false,flags_ready=true,fail_position=false,fail_lock=false;
 static unsigned speech_starts=0,script_calls=0,transitions=0,fade_calls=0,query_ports[2]{};
 static uint32_t last_property_owner=0;
 int xbox_KeyboardMode(){return keyboard_mode;}
@@ -91,6 +91,7 @@ X86_FUNC(sub_000325A0){
     ctx.esp+=8;
 }
 X86_FUNC(sub_001F90A0){
+    if(fail_lock)throw std::runtime_error("lock boundary");
     assert(ctx.ecx==events&&R32(ctx.esp+8)==0x95&&R32(ctx.esp+16)==1);
     const auto owner=R32(ctx.esp+4);assert(owner==11||owner==22);
     X86Context event=ctx;event.ecx=owner==11?p1:p2;event.esp=ctx.esp-64;
@@ -105,7 +106,7 @@ namespace kernel {
 static void Seed(){
     std::memset(g_base+0x600000,0,0x100000);TrialCoopInteractionReset();trial_coop::Reset();trial_coop::Request();trial_coop::ResourcesReady(true);trial_coop::SetActive(true);candidate=true;
     keyboard_mode=true;faces[0]=faces[1]=true;pressed[0]=pressed[1]=skip_edge[0]=skip_edge[1]=false;
-    playing=busy=fail_position=false;flags_ready=true;speech_starts=script_calls=transitions=fade_calls=query_ports[0]=query_ports[1]=0;
+    playing=busy=fail_position=fail_lock=false;flags_ready=true;speech_starts=script_calls=transitions=fade_calls=query_ports[0]=query_ports[1]=0;
     for(unsigned i=0;i<2;++i){const auto p=i?p2:p1;W32(p,0x46fbe8);W32(p+0x54,i?22:11);W32(p+0x368,i);G<float>(p+0x9c)=1000;G<float>(p+0x40)=float(i*10);}
     W32(0x51c4dc,test_world);W32(test_world,0x60f000);W32(0x60f008,0xf0001);W32(manager+0x834,22);
     W32(behavior,0x471060);W32(behavior+0x54,33);W32(behavior+0x50,66);W32(behavior+0xd0,controller);W32(behavior+0xd4,npc);
@@ -130,7 +131,7 @@ static void CallBoundary(){
         assert(call.c.edx==c.edx&&call.c.ebx==c.ebx&&call.c.esi==c.esi&&call.c.edi==c.edi&&call.c.ebp==c.ebp);
     }
 }
-static void Tick(){auto c=Context();if(candidate)CoopConversation(c,g_base);else OriginalConversation(c,g_base);assert(c.esp==stack+8&&c.esi==0x1234&&c.edi==0x9876&&c.ebx==0x7777&&c.ebp==0x8888);}
+static void Tick(uint32_t subject=behavior){auto c=Context();c.ecx=subject;if(candidate)CoopConversation(c,g_base);else OriginalConversation(c,g_base);assert(c.esp==stack+8&&c.esi==0x1234&&c.edi==0x9876&&c.ebx==0x7777&&c.ebp==0x8888);}
 static void Ownership(){
     // Negative witness: native manager points at P2, so P1 looking at an NPC
     // cannot start a talk while P2 looks away. The candidate admits either.
@@ -194,7 +195,8 @@ static void Admission(){
     Tick();assert(TrialCoopInteractionPlayer(g_base,behavior)==2&&!g_base[p1+0x202]&&g_base[p2+0x202]);
     Seed();trial_coop::SetActive(false);Tick();assert(R32(behavior+0x158)==2&&g_base[p2+0x202]&&!g_base[p1+0x202]&&fade_calls>0);
     Seed();assert(interactions::Pair(g_base)); // Establish the current world before filling its record table.
-    for(unsigned i=0;i<interactions::records.size();++i)interactions::records[i].behavior=0x610000+i*0x200;
+    for(unsigned i=0;i<interactions::records.size();++i){const uint32_t p=0x610000+i*0x200;
+        std::memcpy(g_base+p,g_base+behavior,0x15c);W32(p+0x54,100+i);assert(interactions::Find(g_base,p,true));}
     Tick();assert(R32(behavior+0x158)==0&&!g_base[p1+0x202]&&!g_base[p2+0x202]); // exhaustion cannot fall back to native ownership
 }
 static void SkipAndTurn(){
@@ -229,4 +231,91 @@ static void LifecycleAndSafety(){
     X86Context untouched{};untouched.eax=777;TrialCoopInteractionLookup(untouched,g_base);assert(untouched.eax==777);
     TrialCoopInteractionReset();assert(!TrialCoopInteractionSnapshot(0).skip&&!TrialCoopInteractionSnapshot(1).waiting);
 }
-int main(){CallBoundary();Ownership();RendezvousRecovery();Admission();SkipAndTurn();LifecycleAndSafety();std::puts("PASS production CallGuest return/restore ABI and stale EAX isolation, original NPC range/facing and conversation lifecycle, either actor initiation, original per-actor lock/unlock, independent input/skip/turn target, partner-free movement with deferred script commitment, owner released to revive/retrieve a missing partner without repeated speech, native single-player fallback, abort/down/revive/reset, context/stack/MXCSR guards; live dialogue visuals pending");}
+static void WaitingAdmission(){
+    for(bool blocked_by_busy:{false,true}){
+        Seed();faces[1]=false;G<float>(p2+0x40)=1000;Tick();
+        assert(R32(behavior+0x158)==0&&TrialCoopInteractionSnapshot(0).waiting);
+        // These retail branches bypass Begin entirely after its previous wait.
+        busy=blocked_by_busy;flags_ready=blocked_by_busy;G<float>(p2+0x40)=0;
+        for(unsigned i=0;i<8;++i){Tick();assert(!TrialCoopInteractionSnapshot(0).waiting);}
+        assert(R32(behavior+0x158)==0&&!script_calls&&!speech_starts&&!g_base[p1+0x202]);
+        busy=false;flags_ready=true;Tick();assert(R32(behavior+0x158)==2&&g_base[p1+0x202]);
+    }
+    Seed();faces[1]=false;G<float>(p2+0x40)=1000;Tick();
+    faces[0]=false;Tick();assert(!TrialCoopInteractionSnapshot(0).waiting&&R32(behavior+0x158)==0);
+}
+static void WaitingRevival(){
+    for(unsigned owner=0;owner<2;++owner){
+        Seed();faces[1-owner]=false;Tick();Tick();Tick();
+        const auto actor=owner?p2:p1;assert(playing&&R32(behavior+0x158)==3);
+        G<float>(actor+0x9c)=0;W32(actor+0x170,12);Tick();assert(TrialCoopInteractionSnapshot(owner).waiting);
+        G<float>(actor+0x9c)=1000;W32(actor+0x170,0);
+        for(unsigned i=0;i<8;++i){Tick();assert(!TrialCoopInteractionSnapshot(owner).waiting);}
+        assert(playing&&R32(behavior+0x158)==3&&script_calls==1&&speech_starts==1&&g_base[actor+0x202]);
+        // The same live owner must still wait at the real completion boundary.
+        const auto partner=owner?p1:p2;G<float>(partner+0x40)=1000;playing=false;
+        for(unsigned i=0;i<8;++i){Tick();assert(TrialCoopInteractionSnapshot(owner).waiting&&R32(behavior+0x158)==3);}
+        G<float>(partner+0x40)=0;Tick();assert(!TrialCoopInteractionSnapshot(owner).waiting&&script_calls==2);
+    }
+}
+static constexpr uint32_t other_behavior=0x610000,other_controller=0x611000,other_npc=0x612000;
+static void OtherConversation(){
+    std::memcpy(g_base+other_behavior,g_base+behavior,0x15c);W32(other_behavior+0x54,55);W32(other_behavior+0x50,77);
+    std::memcpy(g_base+other_controller,g_base+controller,0x20);W32(other_controller+0xc,other_npc);
+    std::memcpy(g_base+other_npc,g_base+npc,0x15c);W32(other_npc+0x54,66);
+    W32(other_behavior+0xd0,other_controller);W32(other_behavior+0xd4,other_npc);
+    W32(other_behavior+0x158,0);g_base[other_behavior+0x129]=0;
+}
+static void WaitingRecords(){
+    for(unsigned invalid=0;invalid<5;++invalid){
+        Seed();faces[1]=false;G<float>(p2+0x40)=1000;Tick();assert(TrialCoopInteractionSnapshot(0).waiting);
+        OtherConversation();busy=true;
+        if(invalid==0)W32(npc+0x5c,1);
+        if(invalid==1)W32(behavior+0x5c,1);
+        if(invalid==2)W32(controller+0xc,other_npc);
+        if(invalid==3)W32(npc+0x54,99);
+        if(invalid==4)W32(behavior+0x54,99);
+        // The retired conversation never updates again; another real guest
+        // update must stop aggregating its stale publication and reclaim it.
+        for(unsigned i=0;i<8;++i)Tick(other_behavior);
+        assert(!TrialCoopInteractionSnapshot(0).waiting&&!TrialCoopInteractionSnapshot(1).waiting);
+        for(const auto& r:interactions::records)assert(r.behavior!=behavior);
+        assert(!script_calls&&!speech_starts&&!g_base[p1+0x202]&&!g_base[p2+0x202]);
+    }
+    for(unsigned replacement=0;replacement<3;++replacement){
+        Seed();faces[1]=false;Tick();assert(g_base[p1+0x202]&&g_base[behavior+0x129]);
+        OtherConversation();busy=true;g_base[behavior+0x148]=1;g_base[p2+0x202]=1;
+        if(replacement==0)W32(npc+0x5c,1); // Same behavior still owns the old lock.
+        if(replacement==1)W32(behavior+0x54,99); // Reused object: no old unlock is authorized.
+        if(replacement==2){
+            W32(npc+0x5c,1);W32(other_behavior+0x158,3);g_base[other_behavior+0x129]=1;playing=true;
+            auto* current=interactions::Find(g_base,other_behavior,true);assert(current);current->slot=0;
+        }
+        const auto scripts=script_calls,speech=speech_starts;Tick(other_behavior);
+        assert(bool(g_base[p1+0x202])==(replacement!=0)&&g_base[p2+0x202]);
+        assert(bool(g_base[behavior+0x129])==(replacement==1));
+        if(replacement!=1)assert(!g_base[behavior+0x148]);
+        assert(script_calls==scripts&&speech_starts==speech);
+        if(replacement==2)assert(TrialCoopInteractionPlayer(g_base,other_behavior)==1&&g_base[other_behavior+0x129]);
+    }
+    Seed();faces[1]=false;Tick();OtherConversation();busy=true;W32(npc+0x5c,1);fail_lock=true;
+    auto c=Context();c.ecx=other_behavior;const auto before=c;const auto csr=_mm_getcsr();
+    std::array<uint8_t,4096> saved{};std::memcpy(saved.data(),g_base+stack-4096,saved.size());
+    interactions::lookup_owner=p2;
+    try{TrialCoopInteractionScope scoped(c,g_base);assert(false);}catch(const std::runtime_error&){}
+    assert(!interactions::scope&&interactions::lookup_owner==p2&&!std::memcmp(&c,&before,sizeof c));
+    assert(_mm_getcsr()==csr&&!std::memcmp(saved.data(),g_base+stack-4096,saved.size()));
+    interactions::lookup_owner=0;fail_lock=false;Tick(other_behavior);assert(!g_base[p1+0x202]);
+}
+int main(int argc,char** argv){
+    if(argc==2){
+        if(!std::strcmp(argv[1],"--waiting-admission"))WaitingAdmission();
+        else if(!std::strcmp(argv[1],"--waiting-revival"))WaitingRevival();
+        else if(!std::strcmp(argv[1],"--waiting-records"))WaitingRecords();
+        else assert(false);
+        std::puts("PASS selected original-guest waiting lifecycle regression");return 0;
+    }
+    assert(argc==1);CallBoundary();Ownership();RendezvousRecovery();Admission();SkipAndTurn();LifecycleAndSafety();
+    WaitingAdmission();WaitingRevival();WaitingRecords();
+    std::puts("PASS production CallGuest return/restore ABI and stale EAX isolation, original NPC range/facing and conversation lifecycle, either actor initiation, original per-actor lock/unlock, independent input/skip/turn target, partner-free movement with deferred script commitment, owner released to revive/retrieve a missing partner without repeated speech, current-update waiting after busy/condition/revival branches, stale record retirement and owned-lock/replacement guards, native single-player fallback, abort/down/revive/reset, context/stack/MXCSR guards; live dialogue visuals pending");
+}

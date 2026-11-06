@@ -34,6 +34,12 @@ manager, message, choices and Back callback. Original modal callbacks and sounds
 remain active. Controller mode returns the original modal. Regression fixtures
 execute all three confirmation paths and test stale actions and device switching.
 
+Controller Info retains its original diagram and Back callback. Its validated
+276010 draw/update marks the screen as a menu, allowing the existing right-click
+Back adapter to work without remapping gameplay input. Health-pack overlays hide
+whenever the frontend publishes an original screen, pause scope or transition,
+even if there are no replacement rows. They resume after the manager clears.
+
 Movie progress observes the original update delta. A PC hold lasts 0.65 seconds;
 release or focus loss cancels it, and a held input cannot skip the next movie.
 Only exact supported movie names qualify; backgrounds and the title screen do not.

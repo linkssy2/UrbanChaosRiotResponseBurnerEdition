@@ -26,6 +26,7 @@ std::recursive_mutex input_lock;
 trial_intro::Gate intro_gate;
 trial_input::MenuKeyTaps menu_key_taps;
 bool click_pending=false,test_focused=true,test_graphics=false;
+bool menu_right_pending=false;
 bool focused(){return test_focused;}
 bool TrialGraphicsOpen(){return test_graphics;}
 trial_intro::TitleGate title_gate;
@@ -33,15 +34,58 @@ unsigned title_finishes=0;
 }
 void TrialTitleContext(bool eligible){title_gate.Context(eligible&&test_focused&&!test_graphics);}
 bool TrialTitleTake(){return title_gate.Take()&&test_focused&&!test_graphics;}
-void TrialTitleFinish(){++title_finishes;title_gate.Context(false);}
+void TrialGraphicsInputChanged(){++title_finishes;menu_key_taps.Clear();}
 // GENERATED_HOST
 #include "../common/xbe_intro_skip.cpp"
+#ifdef UC_TEST_PREVIOUS_STARTUP
+// Link the saved producer against this same generated original-factory fixture.
+bool TrialStartupProfile(X86Context&,uint8_t*){return false;}
+#endif
 
 static constexpr uint32_t screen=0x600000,stack=0x700000;
 static unsigned opens,closes,draws,original_queries;
 static bool eof,original_held;
+static constexpr uint32_t controller=0x603000,title_root=0x604000,profile_root=0x605000;
+static unsigned bank_calls,controller_resets,successors,title_parts,title_widgets;
+static unsigned profile_checks,profile_builds,alternate_builds,profile_refreshes;
+static unsigned title_presentations,profile_presentations,movie_deletes;
+static std::array<unsigned,64> factory_events{};
+static unsigned factory_event_count;
+static uint32_t allocation=0x610000;
+static bool controller_valid,profile_available=true,transition_ready=true;
+static void FactoryEvent(unsigned event){assert(factory_event_count<factory_events.size());factory_events[factory_event_count++]=event;}
+X86_FUNC(sub_002717B0);
+X86_FUNC(sub_00271C00);
+X86_FUNC(sub_00271E80);
+X86_FUNC(sub_00271810);
+X86_FUNC(sub_0027CA20);
+X86_FUNC(sub_002845B0);
+X86_FUNC(sub_00064E30);
+static void FixturePair(X86Context& ctx,uint32_t object,uint32_t kind=1){
+    const auto out=R32(ctx.esp+4);W32(out,object);W32(out+4,kind);ctx.eax=out;ctx.esp+=4;
+}
+static void TitlePart(X86Context& ctx){++title_parts;FixturePair(ctx,title_root);}
 [[noreturn]] void x86_trap(X86Context&,uint32_t,const char*){std::abort();}
-void x86_icall(X86Context& ctx,uint8_t*,uint32_t address){
+void x86_resume(X86Context&,uint8_t*,const X86Resume&){std::abort();}
+void x86_icall(X86Context& ctx,uint8_t* base,uint32_t address){
+    switch(address){
+    case 0x271e80:sub_00271E80(ctx,base);return;
+    case 0x271810:sub_00271810(ctx,base);return;
+    case 0x27ca20:sub_0027CA20(ctx,base);return;
+    case 0x2831a0:++alternate_builds;FactoryEvent(6);FixturePair(ctx,profile_root,7);return;
+    case 0xf0002:ctx.eax=controller_valid;ctx.esp+=4;return;
+    case 0xf0003:++title_presentations;ctx.eax=0;ctx.esp+=12;return;
+    case 0xf0004:++profile_presentations;ctx.eax=0;ctx.esp+=12;return;
+    case 0xf0005:{
+        // The real outgoing movie update and original transition-completion byte.
+        const uint32_t context=R32(ctx.esp+8);g_base[R32(context+0x10)]=transition_ready;
+        extern void FixtureMovie(X86Context&,uint8_t*);FixtureMovie(ctx,base);return;
+    }
+    case 0xf0006:{
+        ++movie_deletes;extern void FixtureMovieDestroy(X86Context&,uint8_t*);
+        FixtureMovieDestroy(ctx,base);return;
+    }
+    }
     assert(address==0xf0001&&R32(ctx.esp+12)==1);
     assert(R32(ctx.esp+4)<4);++original_queries;
     x87_push(ctx,original_held?1.:0.);ctx.esp+=16;
@@ -59,11 +103,44 @@ X86_FUNC(sub_00018CE0){std::abort();}
 X86_FUNC(sub_002D6322){std::abort();}
 // GENERATED_QUERY
 // GENERATED_MOVIE
+void FixtureMovie(X86Context& ctx,uint8_t* base){__imp__sub_00272BB0(ctx,base);}
+// GENERATED_DESTROY
+void FixtureMovieDestroy(X86Context& ctx,uint8_t* base){__imp__sub_00272FE0(ctx,base);ctx.esp+=4;}
 X86_FUNC(sub_002745F0){ctx.eax=original_held;ctx.esp+=4;}
-X86_FUNC(sub_00064E30){ctx.eax=2;ctx.esp+=4;}
 X86_FUNC(sub_00058000){std::abort();}
 X86_FUNC(sub_00057FC0){ctx.esp+=4;}
 // GENERATED_TITLE
+
+X86_FUNC(sub_00208980){
+    assert(R32(ctx.esp+4)==0x485f00&&R32(ctx.esp+8)==0);++bank_calls;FactoryEvent(1);
+    ctx.eax=0x601600;ctx.esp+=12;
+}
+X86_FUNC(sub_00258800){TitlePart(ctx);}
+X86_FUNC(sub_00273030){TitlePart(ctx);}
+X86_FUNC(sub_00273700){TitlePart(ctx);}
+X86_FUNC(sub_00266EE0){TitlePart(ctx);}
+X86_FUNC(sub_00258B60){TitlePart(ctx);}
+X86_FUNC(sub_00266EA0){TitlePart(ctx);}
+X86_FUNC(sub_00284860){TitlePart(ctx);}
+X86_FUNC(sub_00259CD0){TitlePart(ctx);}
+X86_FUNC(sub_002D57FB){
+    assert(R32(ctx.esp+4)==0x20);
+    if(R32(ctx.esp+20)==0x2717b0)++title_widgets;
+    ctx.eax=allocation;allocation+=0x40;ctx.esp+=4;
+}
+X86_FUNC(sub_0027E2B0){ctx.esp+=4;}
+X86_FUNC(sub_00258430){++profile_refreshes;ctx.esp+=4;}
+X86_FUNC(sub_00064A50){
+    assert(R32(ctx.esp+4)==0x51d498);++profile_checks;FactoryEvent(4);
+    W32(0x51d498,0);ctx.eax=profile_available;ctx.esp+=4;
+}
+X86_FUNC(sub_00285B80){
+    assert(R32(ctx.esp+8)==0x271810&&R32(ctx.esp+12)==0x284490);
+    ++profile_builds;FactoryEvent(5);FixturePair(ctx,profile_root,7);
+}
+X86_FUNC(sub_002743B0){ctx.esp+=4;}
+X86_FUNC(sub_002743D0){ctx.esp+=4;}
+// GENERATED_FACTORIES
 
 static void Seed(const char* name="dolby",unsigned flags=4){
     std::memset(g_base+screen,0,0x48);W32(screen,0x489020);
@@ -72,6 +149,7 @@ static void Seed(const char* name="dolby",unsigned flags=4){
     W32(0x5096e0,0x601000);W32(0x601000+0x28,0x601100);g_base[0x601100+0x3b]=15;
     W32(0x51c4dc,0x601200);W32(0x601200,0x601300);W32(0x601300+8,0xf0001);
     // GENERATED_CONSTANTS
+    W32(0x4e836c,2);
     eof=false;
 }
 static uint32_t Tick(float dt){
@@ -221,4 +299,179 @@ static void Title(){
     W32(screen+8,0x2717b0);original_held=true;
     assert(tick()==0x2717b0&&title_finishes==2); // Retail controller action still works.
 }
-int main(){MenuTapHandoff();Lifecycle();Guards();HoldChecks();Title();std::puts("intro/title: original delays/fades/ABI, fresh title presses, controller action and menu handoff passed");}
+static void Startup(){
+    assert(!StartupOption(nullptr));
+    for(const char* value:{"","0","true","yes","01","1 "," 1","10","-1"})assert(!StartupOption(value));
+    assert(StartupOption("1"));
+    startup_pending=true;intro_gate={};title_gate={};original_held=false;
+    opens=closes=draws=original_queries=title_finishes=0;
+    for(auto& owner:skipped_startup)owner=0;
+    constexpr const char* names[]={"dolby","EidosLogo","RockLogo","intro_12_edit"};
+    constexpr uint32_t next[]={0x2723b0,0x272380,0x2722f0,0x271e80};
+    intro_gate.Key(1,true,true);std::array<uint8_t,8> analog{};intro_gate.Pad(1,16,analog,true);
+    for(unsigned i=0;i<4;++i){
+        Seed(names[i]);W32(screen+4,next[i]);W32(0x5154bc,0x12345678);W32(0x519e20,0x87654321);
+        menu_key_taps.Event('F',true,false,true);menu_key_taps.Event('F',false,false,true);click_pending=true;
+        std::array<uint8_t,0x48> before;std::memcpy(before.data(),g_base+screen,before.size());
+        assert(Tick(0)==next[i]&&!std::memcmp(before.data(),g_base+screen,before.size()));
+        assert(!opens&&!closes&&!draws&&!original_queries&&!intro_gate.owner&&!click_pending);
+        assert(intro_gate.OwnsPad(0)&&intro_gate.OwnsPad(1));
+        menu_key_taps.Begin();assert(!menu_key_taps.Retained('F'));menu_key_taps.End();
+        X86Context c{};c.ecx=screen;c.esp=stack;c.esi=0x11223344;c.fs_base=0x602000;
+        W32(stack,0xabcdef01);W32(stack+4,0x13572468);W32(c.fs_base,0x24681357);
+        __imp__sub_00272FE0(c,g_base);
+        assert(c.esp==stack+4&&c.esi==0x11223344&&R32(c.fs_base)==0x24681357);
+        assert(R32(stack)==0xabcdef01&&R32(stack+4)==0x13572468&&R32(screen)==0x450708);
+        assert(!closes&&!skipped_startup[i]&&R32(0x5154bc)==0x12345678&&R32(0x519e20)==0x87654321);
+    }
+    // Strict movie identity and state guards leave the guest and input untouched.
+    for(unsigned variant=0;variant<13;++variant){
+        Seed();X86Context c{};c.ecx=screen;c.esp=stack;c.eax=0x12345678;
+        mem::denied=0xffffffff;
+        switch(variant){
+        case 0:W32(screen+4,0x271e80);break;
+        case 1:g_base[screen+0x15]=1;break;
+        case 2:g_base[screen+0x16]=1;break;
+        case 3:g_base[screen+0x17]=1;break;
+        case 4:g_base[screen+0x18]=1;break;
+        case 5:W32(screen+0x10,1);break;
+        case 6:W32(screen+0x44,0x271e80);break;
+        case 7:W32(screen,0x489024);break;
+        case 8:std::strcpy(reinterpret_cast<char*>(g_base+screen+0x24),"intro_1");break;
+        case 9:mem::denied=screen;break;
+        case 10:c.esp=0xfffffff8;break;
+        case 11:mem::denied=stack;break;
+        }
+        const auto saved=c;const auto gate=intro_gate;
+        assert(!TrialStartupMovie(c,variant==12?nullptr:g_base));
+        assert(!std::memcmp(&c,&saved,sizeof(c))&&!std::memcmp(&gate,&intro_gate,sizeof(gate)));
+    }
+    mem::denied=0xffffffff;
+    for(const char* name:{"intro_1","intro_13","fe_bk1","gamelogo"}){Seed(name);assert(Tick(0)==0&&g_base[screen+0x16]);}
+    // Only a skipped instance omits close; normal/opened movies keep retail cleanup.
+    Seed();X86Context destroy{};destroy.ecx=screen;destroy.esp=stack;destroy.fs_base=0x602000;
+    const unsigned before_close=closes;__imp__sub_00272FE0(destroy,g_base);assert(closes==before_close+1);
+    intro_gate={};Seed();assert(Tick(0)==0x2723b0);g_base[screen+0x16]=1;
+    destroy.ecx=screen;destroy.esp=stack;__imp__sub_00272FE0(destroy,g_base);
+    assert(closes==before_close+2&&!skipped_startup[0]);
+    startup_pending=false;
+    Seed();assert(Tick(0)==0&&g_base[screen+0x16]); // Later matching movies play normally.
+    std::puts("startup movies: strict opt-in, exact unopened chain and original destructor/stack guards passed");
+}
+
+static void FactorySeed(bool enabled=true){
+    std::memset(g_base+0x601000,0,0x800);std::memset(g_base+controller,0,0x28);
+    Seed();startup_pending=enabled;intro_gate={};title_gate={};menu_key_taps.Clear();
+    for(auto& owner:skipped_startup)owner=0;
+    opens=closes=draws=original_queries=title_finishes=0;
+    bank_calls=controller_resets=successors=title_parts=title_widgets=0;
+    profile_checks=profile_builds=alternate_builds=profile_refreshes=0;
+    title_presentations=profile_presentations=movie_deletes=factory_event_count=0;
+    controller_valid=false;profile_available=true;transition_ready=true;allocation=0x610000;
+    W32(0x5150b4,0x601400);W32(0x601400+0x144,0);
+    W32(0x601500,0x601580);W32(0x601580+0xec,0xf0002);
+    W32(title_root,0x604100);W32(0x604104,0xf0003);
+    W32(profile_root,0x605100);W32(0x605104,0xf0004);
+    W32(0x489020,0xf0006);W32(0x489024,0xf0005);
+    W32(0x51d2f4,3);g_base[0x51d5a4]=1;g_base[0x51d5a5]=0;g_base[0x5010e8]=0;
+    g_base[0x601018]=9;g_base[0x51d295]=1;W32(0x4e8358,1);
+    // GENERATED_FACTORY_DATA
+}
+static void ArmProfile(){
+    Seed("intro_12_edit");W32(screen+4,0x271e80);
+    assert(Tick(0)==0x271e80&&!opens&&!draws);
+}
+static void Construct(uint32_t factory){
+    X86Context c{};c.ecx=controller;c.esp=stack;c.fs_base=0x602000;
+    c.ebx=0x12345678;c.esi=0x23456789;c.edi=0x3456789a;c.ebp=0x456789ab;
+    W32(c.fs_base,0x87654321);W32(stack,0xabcdef01);W32(stack+4,factory);W32(stack+8,0x13572468);
+    sub_002727E0(c,g_base);
+    assert(c.eax==controller&&c.esp==stack+8&&c.ebx==0x12345678&&c.esi==0x23456789&&c.edi==0x3456789a&&c.ebp==0x456789ab);
+    assert(R32(c.fs_base)==0x87654321&&R32(stack)==0xabcdef01&&R32(stack+8)==0x13572468);
+    assert(R32(controller)==0x489008&&!R32(controller+0xc)&&R32(controller+0x10)==1&&!g_base[controller+0x14]);
+}
+static void ControllerTick(){
+    X86Context c{};c.ecx=controller;c.esp=stack;c.fs_base=0x602000;
+    c.ebx=0x12345678;c.esi=0x23456789;c.edi=0x3456789a;c.ebp=0x456789ab;
+    W32(c.fs_base,0x87654321);W32(stack,0xabcdef01);G<float>(stack+4)=.016f;W32(stack+8,0x13572468);
+    sub_00272870(c,g_base);
+    assert(c.esp==stack+8&&c.ebx==0x12345678&&c.esi==0x23456789&&c.edi==0x3456789a&&c.ebp==0x456789ab);
+    assert(R32(c.fs_base)==0x87654321&&R32(stack)==0xabcdef01&&R32(stack+8)==0x13572468);
+}
+static void DirectProfile(){
+    // The first installed/presented tree is the original profile result. These
+    // assertions fail against the saved old producer before any title update.
+    for(unsigned device=0;device<3;++device)for(unsigned session=0;session<2;++session){
+        FactorySeed();ArmProfile();g_base[0x601000]=uint8_t(session);
+        if(device)W32(0x601400+0x144,0x601500);controller_valid=device==2;
+        menu_right_pending=true;menu_key_taps.Event('F',true,false,true);menu_key_taps.Event('F',false,false,true);
+        Construct(0x271e80);
+        assert(title_parts==0&&title_widgets==0&&title_presentations==0);
+        assert(bank_calls==1&&controller_resets==unsigned(device!=2)&&successors==1);
+        assert(R32(controller+4)==profile_root&&R32(controller+8)==7);
+        assert(!startup_pending&&title_finishes==1&&!menu_right_pending&&R32(0x51d2f4)==0);
+        assert(!g_base[0x51d295]&&g_base[0x5010e8]==1&&g_base[0x601018]==1);
+        assert(profile_checks==unsigned(!session)&&profile_builds==unsigned(!session)&&alternate_builds==session);
+        assert(profile_refreshes==session&&g_base[0x5154bc]==unsigned(!session));
+        unsigned at=0;assert(factory_events[at++]==1);
+        if(device!=2)assert(factory_events[at++]==2);
+        assert(factory_events[at++]==3);
+        if(session)assert(factory_events[at++]==6);
+        else{assert(factory_events[at++]==4);assert(factory_events[at++]==5);}
+        assert(at==factory_event_count);
+        menu_key_taps.Begin();assert(!menu_key_taps.Retained('F'));menu_key_taps.End();
+        ControllerTick();assert(profile_presentations==1&&!title_presentations);
+        // Back from profiles still constructs both authored Start/A widgets.
+        Construct(0x271810);
+        assert(title_parts>0&&title_widgets==2&&successors==1&&R32(controller+4)==title_root);
+        ControllerTick();assert(title_presentations==1);
+    }
+    FactorySeed(false);Construct(0x271e80); // Disabled setting keeps retail startup.
+    assert(title_widgets==2&&title_parts>0&&!successors&&!profile_builds&&!title_finishes);
+    FactorySeed();ArmProfile();Construct(0x271810); // Armed, but wrong factory caller.
+    assert(title_widgets==2&&title_parts>0&&!successors&&startup_pending&&!title_finishes);
+    // Original storage admission can produce its warning instead of profiles.
+    FactorySeed();ArmProfile();profile_available=false;Construct(0x271e80);
+    assert(profile_checks==1&&!profile_builds&&profile_refreshes==1&&successors==1&&!title_widgets);
+    assert(g_base[0x51d5a5]==1); // Original one-time storage check state retained.
+    std::puts("direct profile: original init/order, output-pair, storage branches, zero title creation, disabled/later title passed");
+}
+static void StartupTransition(){
+    FactorySeed();Seed("intro_12_edit");W32(screen+4,0x271e80);
+    std::array<uint8_t,0x48> before;std::memcpy(before.data(),g_base+screen,before.size());
+    for(unsigned state:{0u,1u,4u}){
+        W32(0x4e836c,state);
+        assert(Tick(.016f)==0&&startup_pending&&!opens&&!closes&&!draws);
+        assert(!std::memcmp(before.data(),g_base+screen,before.size()));
+    }
+    mem::denied=0x4e8000;assert(Tick(0)==0);mem::denied=0xffffffff;
+    W32(0x4e836c,3);
+    W32(controller,0x489008);W32(controller+4,screen);W32(controller+8,1);W32(controller+0x10,1);
+    transition_ready=false;ControllerTick();
+    assert(!startup_pending&&successors==1&&R32(controller+4)==screen&&R32(controller+0xc)==profile_root);
+    assert(g_base[controller+0x14]&&!title_parts&&!title_widgets&&!opens&&!closes&&!movie_deletes);
+    for(unsigned frame=0;frame<5;++frame)ControllerTick();
+    assert(successors==1&&!opens&&!closes&&!draws&&R32(controller+4)==screen);
+    // A reopened or mutated instance cannot inherit the outgoing-movie grace.
+    for(unsigned variant=0;variant<3;++variant){
+        X86Context c{};c.ecx=screen;c.esp=stack;
+        if(variant==0)g_base[screen+0x16]=1;
+        if(variant==1)W32(screen+4,0x2723b0);
+        if(variant==2)W32(screen,0x489024);
+        const auto saved=c;assert(!TrialStartupMovie(c,g_base)&&!std::memcmp(&c,&saved,sizeof(c)));
+        std::memcpy(g_base+screen,before.data(),before.size());
+    }
+    transition_ready=true;ControllerTick();
+    assert(movie_deletes==1&&!closes&&!skipped_startup[3]&&R32(controller+4)==profile_root&&R32(controller+8)==7);
+    ControllerTick();assert(profile_presentations==1&&!title_presentations&&!opens);
+    Seed("intro_12_edit");W32(screen+4,0x271e80);assert(Tick(0)==0&&opens==1); // Reused address is a new movie.
+    std::puts("startup transition: original readiness gate, pending/current lifecycle and exact outgoing-instance cleanup passed");
+}
+int main(int argc,char** argv){
+    assert(startup_pending==StartupOption(std::getenv("UCRR_SKIP_STARTUP")));startup_pending=false;
+    if(argc==2&&!std::strcmp(argv[1],"--direct-profile")){DirectProfile();return 0;}
+    if(argc==2&&!std::strcmp(argv[1],"--startup-transition")){StartupTransition();return 0;}
+    MenuTapHandoff();Lifecycle();Guards();HoldChecks();Title();Startup();
+    DirectProfile();StartupTransition();
+    std::puts("intro/title: original delays/fades/ABI, fresh title presses, controller action and menu handoff passed");
+}

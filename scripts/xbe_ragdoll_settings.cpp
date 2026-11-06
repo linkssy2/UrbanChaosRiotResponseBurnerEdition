@@ -88,6 +88,31 @@ float TrialRagdollSeconds(){const auto mode=Mode();return mode==2?std::numeric_l
 bool TrialRagdollKeepUnseen(float seconds){const auto mode=Mode();return mode==2||(mode==1&&seconds<=120.f);}
 uint32_t TrialRagdollRetireCount(uint32_t original,uint32_t dead){const auto mode=Mode();return mode==2?0:mode==1?(dead>32?dead-32:0):original;}
 
+bool TrialRagdollKeepRegionalCorpse(const uint8_t* base,uint32_t actor){
+    if(Mode()!=2||!base||!Span(actor,0x19c)||!Span(pool,48)||!base[initialized])return false;
+    const auto word=[&](uint32_t p){uint32_t v;std::memcpy(&v,base+p,4);return v;};
+    const uint32_t type=word(actor);
+    if((type!=0x45c770&&type!=0x47bf50)||word(actor+0x54)==UINT32_MAX||
+       (word(actor+0x5c)&1)||!(word(actor+0x198)&1))return false;
+    struct Restore {unsigned csr=_mm_getcsr();~Restore(){_mm_setcsr(csr);}} restore;
+    float health;std::memcpy(&health,base+actor+0x9c,4);
+    if(!std::isfinite(health)||health>0)return false;
+    const uint32_t owner=word(actor+0x118);
+    if(!Span(owner,16)||word(owner)!=0x48e6e0)return false;
+    const uint32_t data=word(owner+12);
+    if(!Span(data,0x54))return false;
+    const uint32_t handle=word(data+0x50);
+    if(handle==UINT32_MAX)return false;
+    // Protect only a killed NPC's owned body; explicit removal flags, living
+    // actors, knocked-out actors and world teardown retain their original rules.
+    for(size_t i=0;i<Count();++i){
+        const Slot slot=Read(i);
+        if(slot.id==handle)return Span(slot.body,0xa0)&&word(slot.body)==0x48dd60&&
+            word(slot.body+0x1c)&&word(slot.body+0x20);
+    }
+    return false;
+}
+
 bool TrialRagdollWorldPosition(const uint8_t* base,uint32_t handle,float (&position)[3]){
     if(!base||handle==UINT32_MAX||!Span(pool,48)||!base[initialized])return false;
     const auto word=[&](uint32_t p){uint32_t v;std::memcpy(&v,base+p,4);return v;};

@@ -1,6 +1,6 @@
 # Optional diagnostic logging
 
-In **Burner Edition Setup → Manage**, turn **Diagnostic Logging** on before
+In **Burner Edition Setup → Manage → Support**, turn **Diagnostic Logging** on before
 reproducing a problem. It applies to subsequent setup actions and the next game
 session. Use **Open Logs** afterward and share the relevant files manually.
 

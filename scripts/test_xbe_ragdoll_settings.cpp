@@ -42,6 +42,13 @@ X86_EXTERN_FUNC(sub_00089AB0);X86_EXTERN_FUNC(sub_00089E80);X86_EXTERN_FUNC(sub_
 X86_EXTERN_FUNC(sub_002BA100);X86_EXTERN_FUNC(sub_002BA020);X86_EXTERN_FUNC(sub_002B9F40);
 X86_EXTERN_FUNC(sub_002B9130);X86_EXTERN_FUNC(sub_002B8C00);X86_EXTERN_FUNC(sub_002B9080);X86_EXTERN_FUNC(sub_002B90B0);
 X86_EXTERN_FUNC(sub_002B8650);X86_EXTERN_FUNC(sub_002B8B70);X86_EXTERN_FUNC(sub_002B8BA0);
+X86_EXTERN_FUNC(sub_001C9BF0);X86_EXTERN_FUNC(sub_001B3C40);X86_EXTERN_FUNC(sub_001B3CAD);
+X86_EXTERN_FUNC(sub_0020A140);
+static constexpr uint32_t kRegion=0x670000,kQueue=0x671000,kActor=0x680000;
+static constexpr uint32_t kCharacterManager=0x665000,kIterator=0x660000,kChunk=0x661000,kShape=0x667000;
+static std::vector<uint32_t> region_actors,region_removed;
+static unsigned region_appended,region_queries,region_updates,region_deactivations;
+static bool region_contains=true;
 [[noreturn]] void x86_trap(X86Context&,uint32_t,const char*){if(expect_trap)throw std::runtime_error("expected trap");std::abort();}
 void x86_resume(X86Context&,uint8_t*,const X86Resume&){std::abort();}
 X86_FUNC(sub_002D57FB){
@@ -87,6 +94,37 @@ X86_FUNC(sub_000958B0){
 X86_FUNC(sub_00095090){
     assert(ctx.ecx==kRenderList&&render_wrappers.erase(X86_MEM32(ctx.esp+4))==1);ctx.esp+=8;
 }
+// The fixture executes the complete original region loops. Manager enumeration,
+// spatial containment, vector growth and world-membership removal are modeled
+// service boundaries, rather than claiming an executed mission or renderer.
+X86_FUNC(sub_0002F090){assert(ctx.ecx==kCharacterManager);ctx.eax=uint32_t(region_actors.size());ctx.esp+=4;}
+X86_FUNC(sub_0002F570){
+    assert(ctx.ecx==kCharacterManager);auto i=X86_MEM32(ctx.esp+4);assert(i<region_actors.size());
+    ctx.eax=R32(region_actors[i]+0x54);ctx.esp+=8;
+}
+X86_FUNC(sub_001F8FC0){
+    const auto id=X86_MEM32(ctx.esp+4);ctx.eax=0;
+    for(auto actor:region_actors)if(R32(actor+0x54)==id){ctx.eax=actor;break;}ctx.esp+=4;
+}
+X86_FUNC(sub_0021F210){assert(ctx.ecx==kShape&&X86_MEM32(ctx.esp+4));++region_queries;ctx.eax=region_contains;ctx.esp+=8;}
+X86_FUNC(sub_00012390){
+    const auto end=R32(ctx.ecx+8),limit=R32(ctx.ecx+12);assert(end>=kQueue&&end+4<=limit);
+    W32(end,R32(X86_MEM32(ctx.esp+4)));W32(ctx.ecx+8,end+4);++region_appended;ctx.esp+=8;
+}
+X86_FUNC(sub_002D5990){
+    const auto dst=X86_MEM32(ctx.esp+4),src=X86_MEM32(ctx.esp+8),size=X86_MEM32(ctx.esp+12);
+    assert(dst>=kQueue&&src>=kQueue&&dst+size<=kQueue+256&&src+size<=kQueue+256);
+    std::memmove(base+dst,base+src,size);ctx.eax=dst;ctx.esp+=4;
+}
+X86_FUNC(sub_00207F00){assert(ctx.ecx==kWorld);region_removed.push_back(X86_MEM32(ctx.esp+4));ctx.esp+=8;}
+X86_FUNC(sub_00207B40){assert(ctx.ecx==kWorld);ctx.eax=kIterator;ctx.esp+=4;}
+X86_FUNC(sub_002084E0){assert(ctx.ecx==kWorld);ctx.eax=kShape;ctx.esp+=8;}
+X86_FUNC(sub_00210FB0){ctx.eax=kShape;ctx.esp+=4;}
+X86_FUNC(sub_002175A0){assert(ctx.ecx==kRegion&&X86_MEM32(ctx.esp+4)==0&&X86_MEM32(ctx.esp+8)==1);ctx.esp+=12;}
+X86_FUNC(sub_00218C40){assert(ctx.ecx==kRegion);++region_updates;ctx.esp+=4;}
+X86_FUNC(sub_0004A840){std::abort();} // Optional native LoS filter is left disabled in this modeled volume.
+X86_FUNC(sub_0004ACD0){std::abort();}
+X86_FUNC(sub_000E05C0){std::abort();}
 void x86_icall(X86Context& ctx,uint8_t* base,uint32_t fn){
     switch(fn){
     case 0x2d57fb:sub_002D57FB(ctx,base);break;
@@ -105,6 +143,7 @@ void x86_icall(X86Context& ctx,uint8_t* base,uint32_t fn){
     case 0xf1000024:assert(X86_MEM32(ctx.esp+4)==1);++action_destroyed;ctx.esp+=8;break;
     case 0xf1000010:ctx.eax=0x12345678;ctx.esp+=8;break; // Registered controller token.
     case 0xf1000000:assert(X86_MEM32(ctx.esp+4)==1);++destroyed;ctx.esp+=8;break;
+    case 0xf1000030:assert(ctx.ecx==kRegion);++region_deactivations;ctx.esp+=4;break;
     default:std::abort();
     }
     if(clobber_host_call){
@@ -113,6 +152,7 @@ void x86_icall(X86Context& ctx,uint8_t* base,uint32_t fn){
     }
 }
 // GENERATED_ORIGINAL
+// GENERATED_REGIONS
 
 using Function=void(*)(X86Context&,uint8_t*);
 static uint32_t Run(Function f,std::initializer_list<uint32_t> args={}){
@@ -408,6 +448,111 @@ static void WorldPositionRegression(){
     Run(sub_002A6850,{5});float position[3]{};assert(!TrialRagdollWorldPosition(g_base,5,position));
     Run(sub_002A5030);assert(extra.empty());
 }
+static void RegionActor(unsigned index,uint32_t table=0x45c770,uint32_t flags=1,float health=0.f){
+    const auto actor=kActor+index*0x400,owner=0x6c0000+index*0x100,data=0x6d0000+index*0x100;
+    W32(actor,table);W32(actor+0x54,100+index);W32(actor+0x5c,0x2000);
+    W32(actor+0x198,flags);G<float>(actor+0x9c)=health;W32(actor+0x118,owner);
+    W32(owner,0x48e6e0);W32(owner+0x0c,data);W32(data+0x50,index);
+    const auto body=Lookup(index);assert(body);W32(body,0x48dd60);W32(body+0x1c,0x6e0000+index*0x100);W32(body+0x20,kWorld);
+}
+static void RegionSetup(uint32_t mode,bool characters,bool persistent=false,unsigned count=1){
+    // Allocate native and overflow bodies before setting the requested policy.
+    Setup(2);for(unsigned i=0;i<count;++i)assert(Acquire()==i);trial_graphics::mode=mode;
+    region_actors.clear();region_removed.clear();region_appended=region_queries=region_updates=region_deactivations=0;
+    region_contains=true;W32(0x51c4dc,kWorld);W32(0x50971c,kCharacterManager);W32(0x48dd60,0xf1000000);
+    W32(kRegion,0x666000);W32(0x666024,0xf1000030);W32(kRegion+0x50,UINT32_MAX);
+    for(unsigned i=0;i<count;++i){RegionActor(i);region_actors.push_back(kActor+i*0x400);}
+    if(characters){
+        G<uint8_t>(kRegion+0xd0)=persistent;W32(kRegion+0xd4,kShape);G<uint8_t>(kRegion+0xe0)=1;
+    }else{W32(kRegion+0xd0,kShape);G<uint8_t>(kRegion+0xdc)=1;}
+    const auto vector=kRegion+(characters?0xe4:0xe0);
+    W32(vector+4,kQueue);W32(vector+8,kQueue);W32(vector+12,kQueue+256);
+    W32(kIterator+0x20,count?kChunk:0);W32(kChunk,kChunk+0x100);W32(kChunk+4,0);
+    for(unsigned i=0;i<count;++i){
+        const auto node=kChunk+0x100+i*16,entry=kChunk+0x500+i*8;
+        W32(node,entry);W32(node+4,i+1<count?node+16:0);W32(entry+4,region_actors[i]);
+    }
+}
+static void RegionRun(bool characters,bool interior=false){
+    if(!interior){ObjectCall(characters?sub_001C9BF0:sub_001B3C40,kRegion);return;}
+    // Resume 1B3CAD with the stack and iterator produced by 1B3C40's prologue.
+    X86Context c{};c.esp=kStack-0x24;c.fs_base=kFs;c.esi=kRegion;c.ebp=kChunk;c.ebx=kChunk+0x100;
+    W32(c.esp,102);W32(c.esp+4,101);W32(c.esp+8,104);W32(c.esp+12,103);W32(kStack,0xfeefee);
+    sub_001B3CAD(c,g_base);
+    assert(c.esp==kStack+4&&c.ebp==102&&c.ebx==101&&c.esi==103&&c.edi==104);
+}
+static void RegionCleanup(){Run(sub_002A5030);assert(extra.empty());}
+static void RegionalRetentionRegression(){
+    for(unsigned route=0;route<4;++route){
+        const bool characters=route<2,persistent=route==1,interior=route==3;
+        for(uint32_t mode:{0u,1u,2u}){
+            RegionSetup(mode,characters,persistent);RegionRun(characters,interior);
+            assert(region_removed.size()==(mode==2?0u:1u)&&region_appended==(mode==2?0u:1u));
+            assert(bool(R32(kActor+0x5c)&1)==(mode!=2)&&region_updates==1);RegionCleanup();
+        }
+        // Both retail NPC classes, including killed-after-KO, are corpses.
+        for(auto table:{0x45c770u,0x47bf50u})for(auto flags:{1u,5u})for(float health:{0.f,-25.f}){
+            RegionSetup(2,characters,persistent);RegionActor(0,table,flags,health);RegionRun(characters,interior);
+            assert(region_removed.empty()&&!region_appended);RegionCleanup();
+        }
+        // Living, merely knocked-out/stunned, unrelated props, and unowned or
+        // stale ragdolls continue through original regional cleanup.
+        for(unsigned kind=0;kind<11;++kind){
+            RegionSetup(2,characters,persistent);
+            if(kind==0)RegionActor(0,0x45c770,0,100.f);
+            if(kind==1)RegionActor(0,0x45c770,4,0.f);
+            if(kind==2)RegionActor(0,0x123456,1,0.f);
+            if(kind==3)W32(kActor+0x118,0);
+            if(kind==4)W32(0x6d0050,UINT32_MAX);
+            if(kind==5)W32(0x6d0050,7777);
+            if(kind==6)W32(Lookup(0)+0x20,0);
+            if(kind==7)G<float>(kActor+0x9c)=NAN;
+            if(kind==8)RegionActor(0,0x45c770,1,1.f);
+            if(kind==9)G<float>(kActor+0x9c)=INFINITY;
+            if(kind==10)W32(Lookup(0)+0x1c,0);
+            RegionRun(characters,interior);assert(region_removed.size()==1&&region_appended==1);RegionCleanup();
+        }
+        RegionSetup(2,characters,persistent);RegionActor(0,0x45c770,0,100.f);region_contains=false;
+        RegionRun(characters,interior);assert(region_removed.empty()&&region_appended==0&&region_queries==1);RegionCleanup();
+        RegionSetup(2,characters,persistent);region_contains=false;
+        RegionRun(characters,interior);assert(region_removed.empty()&&region_appended==0&&region_queries==1);RegionCleanup();
+        // A queued ID must be reconsidered after the setting or actor state
+        // changed. The skipped entry is still removed from the pending queue.
+        for(uint32_t mode:{0u,1u,2u}){
+            RegionSetup(mode,characters,false);G<uint8_t>(kRegion+(characters?0xe0:0xdc))=0;
+            const auto end=kRegion+(characters?0xec:0xe8);W32(kQueue,100);W32(end,kQueue+4);
+            RegionRun(characters);assert(R32(end)==kQueue&&region_appended==0);
+            assert(region_removed.size()==(mode==2?0u:1u));RegionCleanup();
+        }
+        RegionSetup(0,characters,false,3);RegionActor(1,0x45c770,0,100.f);
+        G<uint8_t>(kRegion+(characters?0xe0:0xdc))=0;
+        const auto end=kRegion+(characters?0xec:0xe8);
+        for(unsigned i=0;i<3;++i)W32(kQueue+4*i,100+i);W32(end,kQueue+12);
+        trial_graphics::mode=2; // Forever enabled after this queue was selected.
+        RegionRun(characters);assert(R32(end)==kQueue+8&&R32(kQueue)==101&&R32(kQueue+4)==102);
+        assert(region_removed.empty());
+        RegionRun(characters);assert(R32(end)==kQueue+4&&R32(kQueue)==102);
+        assert(region_removed==std::vector<uint32_t>{101});
+        RegionRun(characters);assert(R32(end)==kQueue&&region_removed.size()==1&&region_appended==0);
+        RegionCleanup();
+    }
+    // A persistent region rescans every update: protected corpses must never
+    // accumulate in its one-entry-per-update deletion queue, including overflow.
+    RegionSetup(2,true,true,8);for(unsigned pass=0;pass<120;++pass){RegionRun(true);assert(R32(kRegion+0xec)==kQueue);}
+    assert(region_appended==0&&region_queries==960&&region_removed.empty());
+    // The read-only predicate must preserve caller rounding and sticky flags,
+    // including malformed health, and never veto an existing explicit removal.
+    const auto saved_csr=_mm_getcsr();_mm_setcsr(0x7fa1);
+    assert(TrialRagdollKeepRegionalCorpse(g_base,kActor)&&_mm_getcsr()==0x7fa1);
+    W32(kActor+0x9c,0x7f800001); // Signaling NaN; no state may escape the query.
+    assert(!TrialRagdollKeepRegionalCorpse(g_base,kActor)&&_mm_getcsr()==0x7fa1);
+    G<float>(kActor+0x9c)=0;W32(kActor+0x5c,0x2001);
+    assert(!TrialRagdollKeepRegionalCorpse(g_base,kActor)&&_mm_getcsr()==0x7fa1);
+    _mm_setcsr(saved_csr);W32(kActor+0x5c,0x2000);
+    // Explicit nonregional removal still reaches original20A140 even inForever.
+    ObjectCall(sub_0020A140,kActor,{1},8);assert((R32(kActor+0x5c)&1)&&region_removed==std::vector<uint32_t>{100});
+    RegionCleanup();
+}
 int main(){
     // Unlike the runtime CallGuest convenience API, this bridge also restores
     // flags, XMM and host rounding state after a gameplay-time clone callback.
@@ -448,7 +593,8 @@ int main(){
     Setup(0);W32(0x51da70,UINT32_MAX-1);assert(Acquire()==UINT32_MAX-1);assert(Acquire()==UINT32_MAX);
     assert(!Lookup(UINT32_MAX));assert(Acquire()==0&&Lookup(0));Run(sub_002A5030);
     WorldPositionRegression();
+    RegionalRetentionRegression();
     ObjectPoolRegression();
     LayerRegression();OtherPoolProfiles();RendererAdmissionRegression();
-    std::puts("Ragdoll retention passed: original shadow/Layer underflow witnesses, renderer admission beyond256 through all four original factories, original unlink/destructor reuse, other capacity queries, all modes, cleanup and OOM passed");
+    std::puts("Ragdoll retention passed: regional corpse guards through original character/persistent/general loops, interior entry and queue draining, explicit removal preserved, original shadow/Layer underflow witnesses, renderer admission beyond256, original unlink/destructor reuse, all modes, cleanup and OOM passed");
 }

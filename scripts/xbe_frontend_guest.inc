@@ -62,6 +62,11 @@ extern "C" uint32_t TrialFrontendWarningText(uint8_t* base,uint32_t key,uint32_t
 }
 static uint32_t frontend_name_owner,frontend_name_cancel;
 static uint64_t frontend_name_cancel_epoch;
+static void FrontendControllerInfoEnter(){
+    // The original controller diagram has no list to enable native menu Back.
+    if(hf_settled()&&menu_pointer_readable(g_ecx,0x14)&&MEM32(g_ecx)==0x4896F4)
+        menu_seen=1;
+}
 // The title's delete callback uses the global selected slot. Retain the exact
 // slot record while its original confirmation child is active, so a stale
 // click can never target a newly selected or replaced profile.

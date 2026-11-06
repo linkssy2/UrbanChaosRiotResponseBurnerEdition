@@ -10,3 +10,4 @@ bool TrialRetainedObjectPoolFull(uint32_t owner,bool full);
 float TrialRagdollSeconds();
 bool TrialRagdollKeepUnseen(float seconds);
 uint32_t TrialRagdollRetireCount(uint32_t original,uint32_t dead);
+bool TrialRagdollKeepRegionalCorpse(const uint8_t*,uint32_t actor);

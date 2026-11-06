@@ -47,6 +47,7 @@ int TrialGuestHook(X86Context& ctx,uint8_t* base,unsigned op){
     case 38:FrontendObjectivesEnter();break;
     case 39:FrontendObjectivesLeave();break;
     case 40:FrontendObjectivesInput();break;
+    case 41:FrontendControllerInfoEnter();break;
     case 36:{
         spin_button=false;
         if(menu_pointer_readable(g_esi,0x80c)&&menu_pointer_readable(g_esp+8,8)&&

@@ -37,20 +37,20 @@ const char* const control_help[]={
     "Hold and drag toward a teammate order or help option, then release. Mouse wheel cannot be held."};
 
 unsigned ControlsBase(){return controls_device?24:25;}
-unsigned ControlsProfileStart(){return ControlsBase()+(controls_device?9:14);}
+unsigned ControlsProfileStart(){return ControlsBase()+(controls_device?10:15);}
 unsigned ControlsCount(){return ControlsProfileStart()+7;}
 bool ControlsProfile(unsigned action){return action>=ControlsProfileStart();}
 const char* profile_names[]={"Vibration","Invert stick look","Auto-centre","Crouch mode","Thumbstick layout","Horizontal stick sensitivity","Vertical stick sensitivity"};
 const char* profile_help[]={"Controller vibration.","Reverse vertical stick aiming; raw mouse aiming is unchanged.","Use the original automatic camera centring.","Choose hold or toggle for crouching.","Standard or Legacy movement and aiming sticks.","Original horizontal stick sensitivity; mouse sensitivity is separate.","Original vertical stick sensitivity; mouse sensitivity is separate."};
 unsigned ControlsAction(unsigned row){
-    static constexpr unsigned keyboard[]={0,28,7,11,31,32,6,30,34,1,2,29,3,4,5,25,26,18,19,16,17,10,36,37,27,33,35,22,23,20,21,24,12,13,14,15,8,9,38};
-    static constexpr unsigned controller[]={0,7,11,27,28,6,26,1,2,3,4,5,24,25,18,19,16,17,10,30,31,29,22,23,20,21,12,13,14,15,8,9,32};
+    static constexpr unsigned keyboard[]={0,28,7,11,31,32,6,30,34,1,2,29,3,4,5,25,26,18,19,16,17,10,36,37,39,27,33,35,22,23,20,21,24,12,13,14,15,8,9,38};
+    static constexpr unsigned controller[]={0,7,11,27,28,6,26,1,2,3,4,5,24,25,18,19,16,17,10,30,31,33,29,22,23,20,21,12,13,14,15,8,9,32};
     return row<ControlsProfileStart()?(controls_device?controller[row]:keyboard[row]):row;
 }
 const char* ControlsGroup(unsigned row){
     if(row>=ControlsProfileStart())return "CONTROLLER SETTINGS";
-    if(row>=(controls_device?30u:36u))return "MENU CONTROLS";
-    if(row>=(controls_device?26u:31u))return "TEAMMATE ORDERS";
+    if(row>=(controls_device?31u:37u))return "MENU CONTROLS";
+    if(row>=(controls_device?27u:32u))return "TEAMMATE ORDERS";
     if(row>=(controls_device?14u:17u))return "MOVEMENT / AIMING";
     return "COMBAT / INTERACTION";
 }
@@ -61,15 +61,16 @@ bool ControlsHealthPack(unsigned action){return action==ControlsBase()+(controls
 bool ControlsAimMode(unsigned action){return action==ControlsBase()+(controls_device?3:6);}
 bool ControlsScopeZoom(unsigned action){return action==ControlsBase()+(controls_device?4:7);}
 bool ControlsZoomSensitivity(unsigned action){return action==ControlsBase()+(controls_device?5:10);}
-bool ControlsWalk(unsigned action){return action==ControlsProfileStart()-3;}
-bool ControlsWalkMode(unsigned action){return action==ControlsProfileStart()-2;}
-bool ControlsHud(unsigned action){return action==ControlsProfileStart()-1;}
+bool ControlsWalk(unsigned action){return action==ControlsProfileStart()-4;}
+bool ControlsWalkMode(unsigned action){return action==ControlsProfileStart()-3;}
+bool ControlsHud(unsigned action){return action==ControlsProfileStart()-2;}
+bool ControlsMovementInertia(unsigned action){return action==ControlsProfileStart()-1;}
 bool ControlsMouseInvert(unsigned action){return !controls_device&&action==ControlsBase()+8;}
-unsigned ControlsSlots(unsigned action){if(ControlsProfile(action)||ControlsAimMode(action)||ControlsWalkMode(action)||ControlsMouseInvert(action))return 1;return !controls_device&&(action==0||ControlsInteract(action))?1:2;}
+unsigned ControlsSlots(unsigned action){if(ControlsProfile(action)||ControlsAimMode(action)||ControlsWalkMode(action)||ControlsMovementInertia(action)||ControlsMouseInvert(action))return 1;return !controls_device&&(action==0||ControlsInteract(action))?1:2;}
 bool ControlsMouseSensitivity(unsigned action);
 bool ControlsLookSlider(unsigned action){return ControlsMouseSensitivity(action)||ControlsZoomSensitivity(action);}
-const char* ControlsName(unsigned action){if(ControlsWalk(action))return "Walk";if(ControlsWalkMode(action))return "Walking mode";if(ControlsHud(action))return "Toggle HUD";if(ControlsZoomSensitivity(action))return "Zoom sensitivity";if(ControlsHealPartner(action))return "Heal Partner";if(ControlsMouseInvert(action))return "Invert mouse look";if(ControlsAimMode(action))return "Aiming mode";if(ControlsScopeZoom(action))return "Cycle scope zoom";if(ControlsHealthPack(action))return "Use health pack";if(ControlsProfile(action))return profile_names[action-ControlsProfileStart()];if(ControlsInteract(action))return "Interact / dialogue skip";if(ControlsPreviousFirearm(action))return "Previous Firearm";if(!controls_device&&action==2)return "Next Firearm";if(!controls_device&&action==0)return "Reload";if(ControlsMouseSensitivity(action))return "Mouse sensitivity";return action<ControlsBase()?control_names[action]:action==ControlsBase()?"Pistol spin mode":"Pistol spin button";}
-const char* ControlsHelp(unsigned action){if(ControlsWalk(action))return "Move slowly using this input. Walking mode chooses Hold or Toggle.";if(ControlsWalkMode(action))return "Hold Walk to move slowly, or press once to toggle walking. Opening a menu cancels walking.";if(ControlsHud(action))return "Show or hide gameplay HUD for this player. Menus remain visible.";if(ControlsZoomSensitivity(action))return "Look speed while zoomed, for this player only. 100% keeps the current speed; lower values aim more slowly.";if(ControlsHealPartner(action))return "Use your pack to heal or revive the nearby partner you are facing. Living partners have no healing prompt.";if(ControlsMouseInvert(action))return "Reverse vertical mouse aiming. Stick aiming and mouse orders are unchanged.";if(ControlsAimMode(action))return "Toggle preserves the original zoom cycle. Hold needs a held key or button. Use Cycle scope zoom to change rifle magnification.";if(ControlsScopeZoom(action))return "In Hold mode, change rifle magnification while aiming. Assign a separate input; does not zoom out.";if(ControlsHealthPack(action))return controls_device?"Controller: double-tap D-pad Down to heal yourself; hold Down while facing your partner to heal or revive them. Collect more packs from medics.":"Use a stored health pack, or revive a nearby downed partner. Collect more from a medic while supplies last.";if(ControlsProfile(action))return profile_help[action-ControlsProfileStart()];if(ControlsInteract(action))return "Use nearby objects and skip dialogue. This key is displayed in interaction prompts.";if(ControlsPreviousFirearm(action))return "Equip or select the previous available firearm.";if(!controls_device&&action==2)return "Equip or select the next available firearm.";if(!controls_device&&action==0)return "Reload your weapon without activating nearby objects.";if(ControlsMouseSensitivity(action))return "Mouse look speed: 100% is the default. Lower is slower; independent of Windows pointer speed and stick sensitivity.";return action<ControlsBase()?control_help[action]:action==ControlsBase()?"Original gesture: rotate the stick or move the mouse in two full circles. Button press: use your assigned input.":"Used in Button press mode. Runs the original pistol spin and next-kill slow-motion reward.";}
+const char* ControlsName(unsigned action){if(ControlsMovementInertia(action))return "Movement inertia";if(ControlsWalk(action))return "Walk";if(ControlsWalkMode(action))return "Walking mode";if(ControlsHud(action))return "Toggle HUD";if(ControlsZoomSensitivity(action))return "Zoom sensitivity";if(ControlsHealPartner(action))return "Heal Partner";if(ControlsMouseInvert(action))return "Invert mouse look";if(ControlsAimMode(action))return "Aiming mode";if(ControlsScopeZoom(action))return "Cycle scope zoom";if(ControlsHealthPack(action))return "Use health pack";if(ControlsProfile(action))return profile_names[action-ControlsProfileStart()];if(ControlsInteract(action))return "Interact / dialogue skip";if(ControlsPreviousFirearm(action))return "Previous Firearm";if(!controls_device&&action==2)return "Next Firearm";if(!controls_device&&action==0)return "Reload";if(ControlsMouseSensitivity(action))return "Mouse sensitivity";return action<ControlsBase()?control_names[action]:action==ControlsBase()?"Pistol spin mode":"Pistol spin button";}
+const char* ControlsHelp(unsigned action){if(ControlsMovementInertia(action))return "Keep the original movement build-up. Off makes movement input respond immediately.";if(ControlsWalk(action))return "Move slowly using this input. Walking mode chooses Hold or Toggle.";if(ControlsWalkMode(action))return "Hold Walk to move slowly, or press once to toggle walking. Opening a menu cancels walking.";if(ControlsHud(action))return "Show or hide gameplay HUD for this player. Menus remain visible.";if(ControlsZoomSensitivity(action))return "Look speed while zoomed, for this player only. 100% keeps the current speed; lower values aim more slowly.";if(ControlsHealPartner(action))return "Use your pack to heal or revive the nearby partner you are facing. Living partners have no healing prompt.";if(ControlsMouseInvert(action))return "Reverse vertical mouse aiming. Stick aiming and mouse orders are unchanged.";if(ControlsAimMode(action))return "Toggle preserves the original zoom cycle. Hold needs a held key or button. Use Cycle scope zoom to change rifle magnification.";if(ControlsScopeZoom(action))return "In Hold mode, change rifle magnification while aiming. Assign a separate input; does not zoom out.";if(ControlsHealthPack(action))return controls_device?"Controller: double-tap D-pad Down to heal yourself; hold Down while facing your partner to heal or revive them. Collect more packs from medics.":"Use a stored health pack, or revive a nearby downed partner. Collect more from a medic while supplies last.";if(ControlsProfile(action))return profile_help[action-ControlsProfileStart()];if(ControlsInteract(action))return "Use nearby objects and skip dialogue. This key is displayed in interaction prompts.";if(ControlsPreviousFirearm(action))return "Equip or select the previous available firearm.";if(!controls_device&&action==2)return "Equip or select the next available firearm.";if(!controls_device&&action==0)return "Reload your weapon without activating nearby objects.";if(ControlsMouseSensitivity(action))return "Mouse look speed: 100% is the default. Lower is slower; independent of Windows pointer speed and stick sensitivity.";return action<ControlsBase()?control_help[action]:action==ControlsBase()?"Original gesture: rotate the stick or move the mouse in two full circles. Button press: use your assigned input.":"Used in Button press mode. Runs the original pistol spin and next-kill slow-motion reward.";}
 bool ControlsMouseSensitivity(unsigned action){return !controls_device&&action==ControlsBase()+2;}
 unsigned& ControlsBinding(unsigned action,unsigned slot){
     if(ControlsWalk(action))return controls_draft.walk_binding[controls_device][slot];
@@ -123,7 +124,7 @@ bool ControlsOverlap(unsigned a,unsigned b){
 void ControlsAssign(bool replace){
     const unsigned action=unsigned(controls_capture_action);
     if(replace)for(unsigned i=0;i<ControlsCount();++i)for(unsigned slot=0;slot<ControlsSlots(i);++slot)
-        if(i!=ControlsBase()&&!ControlsAimMode(i)&&!ControlsWalkMode(i)&&!ControlsMouseInvert(i)&&!ControlsLookSlider(i)&&!ControlsProfile(i)&&(i!=action||slot!=controls_slot)&&ControlsOverlap(ControlsBinding(i,slot),controls_candidate))ControlsBinding(i,slot)=0;
+        if(i!=ControlsBase()&&!ControlsAimMode(i)&&!ControlsWalkMode(i)&&!ControlsMovementInertia(i)&&!ControlsMouseInvert(i)&&!ControlsLookSlider(i)&&!ControlsProfile(i)&&(i!=action||slot!=controls_slot)&&ControlsOverlap(ControlsBinding(i,slot),controls_candidate))ControlsBinding(i,slot)=0;
     ControlsBinding(action,controls_slot)=controls_candidate;
     ControlsCancelCapture();message="Binding changed. Select Apply to save.";
     ++navigation_generation;frontend_events=0;
@@ -136,7 +137,7 @@ void ControlsCandidate(unsigned source){
         trial_controls::BeginCapture(controls_device,controls_player);return;
     }
     controls_candidate=source;controls_conflict_action=-1;
-    if(source)for(unsigned action=0;action<ControlsCount();++action)if(action!=ControlsBase()&&!ControlsAimMode(action)&&!ControlsWalkMode(action)&&!ControlsMouseInvert(action)&&!ControlsLookSlider(action)&&!ControlsProfile(action)&&action!=unsigned(controls_capture_action))
+    if(source)for(unsigned action=0;action<ControlsCount();++action)if(action!=ControlsBase()&&!ControlsAimMode(action)&&!ControlsWalkMode(action)&&!ControlsMovementInertia(action)&&!ControlsMouseInvert(action)&&!ControlsLookSlider(action)&&!ControlsProfile(action)&&action!=unsigned(controls_capture_action))
         for(unsigned slot=0;slot<ControlsSlots(action);++slot)if(ControlsOverlap(source,ControlsBinding(action,slot)))controls_conflict_action=int(action);
     if(controls_conflict_action<0)ControlsAssign(false);
     else{++navigation_generation;frontend_events=0;}
@@ -144,6 +145,7 @@ void ControlsCandidate(unsigned source){
 void ControlsBegin(unsigned action,unsigned slot){
     if(ControlsProfile(action))return;
     if(ControlsWalkMode(action)){controls_draft.walk_mode^=1;message="Walking mode changed. Apply to save.";return;}
+    if(ControlsMovementInertia(action)){controls_draft.movement_inertia^=1;message="Movement inertia changed. Apply to save.";return;}
     if(ControlsMouseInvert(action)){controls_draft.invert_mouse^=1;message="Mouse look inversion changed. Apply to save.";return;}
     if(ControlsAimMode(action)){controls_draft.aim_mode^=1;message="Aiming mode changed. Apply to save.";return;}
     if(slot>=ControlsSlots(action))slot=0;
@@ -278,7 +280,7 @@ void ControlsUi(const ImGuiViewport* view,bool paused){
         canvas.Text(group,61,118,11,muted);canvas.Center("PRIMARY",337,118,115,11,muted);canvas.Center("SECONDARY",465,118,115,11,muted);
         if(ready&&(events&64)&&focus>=1&&focus<=count*2){
             const auto action=ControlsAction(start+(focus-1)/2);
-            if(action!=ControlsBase()&&!ControlsAimMode(action)&&!ControlsWalkMode(action)&&!ControlsMouseInvert(action)&&!ControlsLookSlider(action)&&!ControlsProfile(action)){
+            if(action!=ControlsBase()&&!ControlsAimMode(action)&&!ControlsWalkMode(action)&&!ControlsMovementInertia(action)&&!ControlsMouseInvert(action)&&!ControlsLookSlider(action)&&!ControlsProfile(action)){
                 ControlsBinding(action,(focus-1)%2)=0;message="Binding cleared. Apply to save.";
             }
         }
@@ -295,6 +297,12 @@ void ControlsUi(const ImGuiViewport* view,bool paused){
             if(ControlsWalkMode(action)){
                 const unsigned index=1+row*2,values[]={0,1};const char* names[]={"Hold","Toggle"};
                 SettingChoice(canvas,"Walking mode",controls_draft.walk_mode,values,names,index,focus,
+                    focus==index?(left?-1:right||accept?1:0):0,y-index*16,16);
+                continue;
+            }
+            if(ControlsMovementInertia(action)){
+                const unsigned index=1+row*2,values[]={0,1};const char* names[]={"Off","On"};
+                SettingChoice(canvas,"Movement inertia",controls_draft.movement_inertia,values,names,index,focus,
                     focus==index?(left?-1:right||accept?1:0):0,y-index*16,16);
                 continue;
             }
@@ -360,6 +368,10 @@ void ControlsUi(const ImGuiViewport* view,bool paused){
                 else{std::memcpy(controls_draft.keyboard,defaults.keyboard,sizeof(defaults.keyboard));std::memcpy(controls_draft.previous_firearm,defaults.previous_firearm,sizeof(defaults.previous_firearm));controls_draft.sensitivity=defaults.sensitivity;controls_draft.invert_mouse=defaults.invert_mouse;}
                 controls_draft.spin_mode=0;std::fill(std::begin(controls_draft.spin_binding[controls_device]),std::end(controls_draft.spin_binding[controls_device]),0u);
                 controls_draft.zoom_sensitivity=defaults.zoom_sensitivity;
+                controls_draft.walk_mode=defaults.walk_mode;
+                std::memcpy(controls_draft.walk_binding[controls_device],defaults.walk_binding[controls_device],sizeof(defaults.walk_binding[controls_device]));
+                std::memcpy(controls_draft.hud_binding[controls_device],defaults.hud_binding[controls_device],sizeof(defaults.hud_binding[controls_device]));
+                controls_draft.movement_inertia=defaults.movement_inertia;
                 controls_draft.aim_mode=0;std::fill(std::begin(controls_draft.scope_zoom[controls_device]),std::end(controls_draft.scope_zoom[controls_device]),0u);
                 std::memcpy(controls_draft.health_pack[controls_device],defaults.health_pack[controls_device],sizeof(defaults.health_pack[controls_device]));
                 if(!controls_device)std::memcpy(controls_draft.heal_partner,defaults.heal_partner,sizeof(defaults.heal_partner));

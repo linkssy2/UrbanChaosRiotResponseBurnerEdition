@@ -16,6 +16,22 @@ OBJECT_ENTRIES={
     0x238440:(116,'e87da8fd42f7907730765dbe99698ec5c658b603081440e6651061bef1d2f465'),
     0x2384f0:(38,'8ba1e43f36bb3e584810f2e25306d13703c842700e55d315b4369767081346f4'),
 }
+REGION_WITNESS={
+    0x1c9bf0:(551,'1307c092da1954f0c214db942ff300512ec52a29459ec31160b2cd194be3e19f'),
+    0x1b3c40:(339,'9b2a222db0c53bba45faabbac0470e2bc3f1eb23688da3da1b1a6d532366d27d'),
+    0x20a140:(44,'1e10ebe7bace41a062c8fcfbcfe07b8c3f630df35adc6462db30dd55047f38af'),
+    0x218120:(7,'c9af73197615758bcbfce6464123bda69bcd94dae6cc0bde4066de331201cee1'),
+    0x38c66:(34,'83d2534a15b2153c03610b400b79c1099ac9a13dfce8d24ac3c4e75549f53d40'),
+    0x3862c:(24,'800d75359be584a63075516ebf0e41851c55cb743925652f3d2558d177872dea'),
+    0xdf445:(19,'3146b6df7888d8c57077a336107422704b271339f4ddfbc7b4e5578d782ccd9e'),
+    0x2ab0f0:(32,'ac2100e50c1b0ee423fb0fd67d313287cefbe4d90e0810d451269409f73cce07'),
+    0x2ac124:(26,'0395561d3b2c8697b78e289bf5f7aa2d968f5ea66018062677b51c8928dd937e'),
+    0x2a603c:(12,'9a7025036890a948da891187daf56d12c960abf5c22de16fb966436b4916b42b'),
+    0x2a610d:(12,'431fa148b6db221df9d4e083e290c788321f8ccfc135c87d9acd00624879b760'),
+    0x45c770:(152,'dcd205402cfac7f7db3cc9a8ee0f380e285dde5f5c1c63f04c52e8a9f0793579'),
+    0x47bf50:(152,'125c85e1e22754668acedb03977e18418fafe899a59e70b2d49c0ef9b8ada931'),
+    0x48e6e0:(160,'380f08c3dff2ea9b17a13b73357fb57cfc40259b002684a5e3b7078148a67849'),
+}
 OBJECT_WITNESS={
     0x3aa5c0:(166,'6d232c34ff6d2f1d101502468f39471c5cd0cb2bfafb3f684759482caebc7f08'),
     0x2a59a3:(85,'432854e98979c1d693613418ef56b5172ba99b5bab294e175716be2860cb5270'),
@@ -69,7 +85,9 @@ def prepare(area):
     def image(va,size):
         s=next(s for s in sections if s[1]<=va and va+size<=s[1]+s[4]);at=s[3]+va-s[1]
         return xbe[at:at+size]
-    for va,(size,digest) in (ENTRIES|OBJECT_ENTRIES|OBJECT_WITNESS).items():assert hashlib.sha256(image(va,size)).hexdigest()==digest,hex(va)
+    for va,(size,digest) in (ENTRIES|OBJECT_ENTRIES|OBJECT_WITNESS|REGION_WITNESS).items():assert hashlib.sha256(image(va,size)).hexdigest()==digest,hex(va)
+    for table,target in ((0x47bca8,0x1c9bf0),(0x46bc88,0x1c9bf0),(0x478af8,0x1b3c40)):
+        assert image(table+0x30,4)==struct.pack('<I',target)
     name=b'Body::ManualBlobShadow\0'
     assert image(0x48f4f0,len(name))==name
     assert image(0x455dc0,len(b'Okre::SlimlineRenderers\0'))==b'Okre::SlimlineRenderers\0'
@@ -80,6 +98,24 @@ def prepare(area):
         assert image(va,len(bytes.fromhex(data)))==bytes.fromhex(data),hex(va)
     include='#include "xbe_ragdoll_settings.h"'
     def header(s):return s if include in s else once(s,'#include "x86_recomp_shared.h"','#include "x86_recomp_shared.h"\n'+include)
+    regions=[]
+    for unit,entries,hooks in (
+        (45,(0x1c9bf0,),((0x1c9cb7,'edi',0x1c9d6c),(0x1c9db2,'eax',0x1c9dbb))),
+        (43,(0x1b3c40,0x1b3cad),((0x1b3ce9,'edi',0x1b3cb0),(0x1b3d35,'eax',0x1b3d3e))),
+    ):
+        path=area/f'generated/game/x86_recomp.{unit}.cpp';source=header(path.read_text())
+        # Check only contained actors. Exclude corpses when scanning AND drain queued
+        # IDs normally, so persistent regions cannot accumulate skipped corpses.
+        for va,register,target in hooks:
+            anchor=f'\t// {va:08X} '
+            hook=f'\tif(TrialRagdollKeepRegionalCorpse(base,ctx.{register}))goto loc_{target:08X};\n'
+            source=source.replace(hook,'')
+            assert source.count(anchor)==len(entries),hex(va)
+            source=source.replace(anchor,hook+anchor)
+        path.write_text(source)
+        regions.extend(body(source,a).replace('__imp__sub_','sub_',1)for a in entries)
+    flags=(area/'generated/game/x86_recomp.52.cpp').read_text()
+    regions.append(body(flags,0x20a140).replace('__imp__sub_','sub_',1))
     path=area/'generated/game/x86_recomp.71.cpp';pool=header(path.read_text())
     for va in ENTRIES:
         old=f'X86_FUNC(__imp__sub_{va:08X}) {{\n'
@@ -131,6 +167,6 @@ def prepare(area):
     unseen=npc[npc.index('\t// 0003CBC6 movss'):npc.index('\t// 0003CBD4 mov edx')]
     constants='\n'.join(f'W32(0x{a:x},0x{struct.unpack("<I",image(a,4))[0]:x});'for a in (0x44c13c,0x44e11c,0x44bf94))
     fixture=(local/'test_xbe_ragdoll_settings.cpp').read_text()
-    for marker,content in [('// GENERATED_ORIGINAL',generated),('// GENERATED_RETIRE',retire),('// GENERATED_AGE',age_test),('// GENERATED_UNSEEN',unseen),('// GENERATED_CONSTANTS',constants)]:
+    for marker,content in [('// GENERATED_ORIGINAL',generated),('// GENERATED_REGIONS','\n'.join(regions)),('// GENERATED_RETIRE',retire),('// GENERATED_AGE',age_test),('// GENERATED_UNSEEN',unseen),('// GENERATED_CONSTANTS',constants)]:
         assert fixture.count(marker)==1;fixture=fixture.replace(marker,content,1)
     (area/'src/compat/test_ragdoll_settings.cpp').write_text(fixture)

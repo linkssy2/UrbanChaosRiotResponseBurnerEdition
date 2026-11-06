@@ -10,6 +10,10 @@
 #include <vector>
 #include "cpu/x86_ops.h"
 #include "xbe_ragdoll_recovery.h"
+#include "xbe_death_spasm.cpp"
+namespace trial_graphics {bool DeathConvulsions(){std::abort();}}
+bool TrialCoopImmediateRagdoll(const uint8_t*,uint32_t){std::abort();}
+bool TrialCoopKeepDownedBody(const uint8_t*,uint32_t){std::abort();}
 alignas(16) static std::array<uint8_t,0xa00000> memory{},initial{},expected{};
 constexpr uint32_t DATA=0x600000,CONTEXT=0x610000,ACC=0x620000,TRANSFORM=0x630000,
     CURSOR=0x640000,ROWS=0x650000,OPS=0x660000,RUNTIME=0x670000,CFG=0x690000,IMP=0x691000,
@@ -85,10 +89,17 @@ static void Build(X86Context& c,unsigned kind,bool fixed){
 }
 static void Compare(unsigned kind,float fps,unsigned iterations,unsigned side,const uint8_t* authored){
     auto start=Setup(kind,fps,iterations,side,authored);initial=memory;
+    float spasm_angle=0;
+    if(kind==2){
+        std::memcpy(B()+A+0x10,B()+TRANSFORM,48);std::memcpy(B()+BODY_B+0x10,B()+TRANSFORM+256,48);
+        spasm_angle=HingeAngle(B(),A,BODY_B,DATA);initial=memory;
+    }
     // Independent reference: original builders with the 60 Hz inverse substep,
     // retaining actual elapsed time, friction, mass, pose and warm-start state.
     if(fps>60&&side<2)Float(CONTEXT+4,60.f/Real(CONTEXT+16));
     auto want=start;Build(want,kind,false);Put(CONTEXT+4,U32(initial.data()+CONTEXT+4));expected=memory;
+    // Native atan approximation and the spasm's geometric angle must agree.
+    if(kind==2)assert(std::fabs(std::remainder(spasm_angle-Real(RUNTIME+0x38),6.2831853f))<.003f);
     memory=initial;auto got=start;Build(got,kind,true);
     if(memory!=expected){
         for(unsigned p=DATA;p<memory.size();++p)if(memory[p]!=expected[p]){std::fprintf(stderr,"row mismatch kind%u fps%.0f iter%u at%x\n",kind,fps,iterations,p);break;}

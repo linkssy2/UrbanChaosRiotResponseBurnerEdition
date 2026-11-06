@@ -21,6 +21,7 @@ if __name__ == '__main__':
 import shader_seed
 import spanish_text
 import diagnostics
+import setup_feedback
 
 from disc import Disc, XisoError, BLOCK, sha, supported_hash, progress, check_cancel, safe_name
 
@@ -358,7 +359,7 @@ def import_iso(iso_path, data, cancel, *, direct=False):
             raise ValueError('Keep the source ISO outside the managed installed folder before selecting it.')
         source = iso_path.stat()
         marker = {'version': 1, 'disc_manifest': sha(ROOT / 'tools/disc-manifest.json'),
-                  'files': len(required), 'importer': 'burner-xbe-0.12',
+                  'files': len(required), 'importer': 'burner-xbe-0.13',
                   'source_mode': 'iso' if direct else 'extracted'}
         if direct:
             marker.update(iso_path=str(iso_path), iso_size=source.st_size,
@@ -434,7 +435,8 @@ def ready(data):
 
 def installation_status(data):
     result = {'ready': False, 'source_mode': '', 'iso_path': '', 'data': str(data),
-              'message': 'Select your supported Xbox ISO or an existing installation.'}
+              'message': 'Select your supported Xbox ISO or an existing installation.',
+              'skip_startup': skip_startup_enabled()}
     result.update(diagnostics.status(ROOT))
     try:
         record = source_record(data)
@@ -727,6 +729,49 @@ def language_settings(data, selected=None):
     return {'language':current,'spanish_available':available}
 
 
+def startup_path():
+    path = ROOT / 'GameData/.skip-startup'
+    unlinked_path(path, root=ROOT)
+    if path.exists():
+        info = path.stat()
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            raise ValueError('The startup preference must be a regular, unlinked file.')
+    return path
+
+
+def skip_startup_enabled():
+    try:
+        path = startup_path()
+        return path.is_file() and path.stat().st_size == 2 and path.read_bytes() == b'1\n'
+    except (OSError, ValueError):
+        return False
+
+
+def startup_settings(value=None):
+    if value is not None:
+        if value not in ('on', 'off'):
+            raise ValueError('Choose skip startup on or off.')
+        path = startup_path()
+        if value == 'off':
+            path.unlink(missing_ok=True)
+        else:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            temporary = path.with_name('.skip-startup-' + uuid.uuid4().hex)
+            unlinked_path(temporary, root=ROOT)
+            created = False
+            try:
+                with temporary.open('xb') as stream:
+                    created = True
+                    stream.write(b'1\n')
+                os.replace(temporary, path)
+            finally:
+                if created:
+                    temporary.unlink(missing_ok=True)
+    enabled = skip_startup_enabled()
+    return {'skip_startup': enabled, 'message': 'Skip startup is ' + ('on' if enabled else 'off') +
+            '. Applies next game session. When on, skips intro videos and Press Start to profile selection; mission videos are unchanged.'}
+
+
 def launch(data, language=None, *, interactive=False):
     """Keep new runtime settings/hdd separate; diagnostic environment never leaks in."""
     unlinked_path(data, root=data)
@@ -786,6 +831,8 @@ def launch(data, language=None, *, interactive=False):
     env['UCRR_GAME_ASSETS'] = str(data / 'installed/game_files')
     if state['source_mode'] == 'iso':
         env['UCRR_GAME_ISO'] = state['iso_path']
+    if skip_startup_enabled():
+        env['UCRR_SKIP_STARTUP'] = '1'
     # Only the saved launcher choice enables public logging, never inherited probes.
     session = diagnostics.Session(ROOT, 'game', diagnostics.GAME_LIMIT)
     if session.stream is not None:
@@ -818,22 +865,25 @@ def launch(data, language=None, *, interactive=False):
         report = data / 'last-error.txt'
         header = ('Version: ' + info['version'] + '\nExit code: ' + hex(code & 0xffffffff) +
                   '\nRuntime SHA256: ' + info['files'][RUNTIME_NAME] + '\n')
-        report.write_bytes(header.encode('utf-8') + b''.join(tail))
-        raise RuntimeError('The game closed unexpectedly (code ' + hex(code & 0xffffffff) +
-                           '). Error details were saved to ' + str(report))
+        message = 'The game closed unexpectedly (code ' + hex(code & 0xffffffff) + ').'
+        try:
+            setup_feedback.write_report(report, header.encode('utf-8') + b''.join(tail))
+            message += ' Error details were saved to ' + str(report)
+        except Exception as failure:
+            message += ' Could not save error details: ' + str(failure)
+        raise RuntimeError(message)
 
 
 def main():
-    import setup_feedback
-
     class SetupParser(argparse.ArgumentParser):
         def error(self, message):
             raise ValueError(message)
 
     parser = SetupParser()
-    parser.add_argument('action', choices=['import', 'use-iso', 'use-installation', 'verify', 'auto-setup', 'status', 'launch', 'textures', 'voices', 'language', 'diagnostics', 'check-updates', 'update'])
+    parser.add_argument('action', choices=['import', 'use-iso', 'use-installation', 'verify', 'auto-setup', 'status', 'launch', 'textures', 'voices', 'language', 'diagnostics', 'startup', 'check-updates', 'update'])
     parser.add_argument('--launcher-pid', type=int)
     parser.add_argument('--logging', choices=['on', 'off'])
+    parser.add_argument('--skip-startup', choices=['on', 'off'])
     parser.add_argument('--data', type=Path)
     parser.add_argument('--installation', type=Path)
     parser.add_argument('--iso', type=Path)
@@ -856,12 +906,13 @@ def main():
             if args.interactive:
                 setup_feedback.notify(state['message'])
             return 0
-        data = ROOT / 'GameData' if action == 'use-installation' else selected_data(args.data)
+        data = ROOT / 'GameData' if action in ('use-installation', 'startup') else selected_data(args.data)
         if args.interactive and action in ('import', 'use-iso', 'textures', 'voices'):
             setup_feedback.notify('Press OK to start ' + {'import': 'ISO import.', 'use-iso': 'direct ISO setup. Keep the ISO in place for future play.',
                 'textures': 'HD texture installation.', 'voices': 'Spanish voice installation.'}[action] +
                 '\n\nThis can take several minutes. Leave Steam running; another message will confirm success or explain any error.')
-        read_only = action == 'status' or (action == 'language' and args.language is None)
+        read_only = (action == 'status' or (action == 'language' and args.language is None) or
+                     (action == 'startup' and args.skip_startup is None))
         with ExitStack() as locks:
             if not read_only:
                 locks.enter_context(setup_lock(ROOT))
@@ -906,6 +957,8 @@ def main():
                 state = diagnostics.configure(ROOT, args.logging) if args.logging is not None else diagnostics.status(ROOT)
                 diagnostics.start(ROOT, action)
                 print(json.dumps(state))
+            elif action == 'startup':
+                print(json.dumps(startup_settings(args.skip_startup)))
             elif action in ('import', 'use-iso'):
                 if args.iso is None or args.cancel is None:
                     raise ValueError('Import requires an ISO and cancellation path.')
@@ -957,6 +1010,7 @@ def main():
                 'textures': 'HD textures installed successfully. Restore the normal play command in Steam.',
                 'voices': 'Spanish voices installed. Select Spanish, then restore the normal play command in Steam.',
                 'diagnostics': 'Diagnostic logging is ' + ('on' if diagnostics.enabled(ROOT) else 'off') + '. Applies to the next game session. Local logs: ' + str(ROOT / 'GameData/logs'),
+                'startup': startup_settings()['message'],
                 'language': 'Language settings are ready. Restore the normal play command in Steam.'}[action])
         return 0
     except Exception as error:

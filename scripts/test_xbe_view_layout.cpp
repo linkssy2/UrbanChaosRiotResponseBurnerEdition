@@ -39,6 +39,7 @@ static bool sample_notice=false,reward_notice=false;
 static constexpr uint32_t notice_tween=0x6d000,notice_owner=0x6d100;
 static constexpr uint32_t help_queue=0x62000,help_tween=0x62100,help_head=0x62300,help_node=0x62400;
 static bool sample_help=false,throw_help=false;
+static float help_text_width=80;
 X86_FUNC(sub_00077450);
 X86_FUNC(sub_00072200);
 X86_FUNC(sub_002739A0);
@@ -187,12 +188,12 @@ X86_FUNC(sub_00018CE0){
     assert(sample_help);
     if(throw_help)throw 1;
     const float x=Real(base,ctx.esp+8),y=Real(base,ctx.esp+12);
-    Put(base,0x62600,x);Put(base,0x62604,y);Put(base,0x62608,x+80);Put(base,0x6260c,y+12);
+    Put(base,0x62600,x);Put(base,0x62604,y);Put(base,0x62608,x+help_text_width);Put(base,0x6260c,y+12);
     W(base,0x62610,0xffffffffu);
     X86Context q=ctx;q.esp=0x6c000;
     W(base,q.esp,0);W(base,q.esp+4,0x62600);W(base,q.esp+8,0x62608);W(base,q.esp+12,0x62610);
     sub_000656D0(q,base);
-    assert(Real(base,0x62600)==x&&Real(base,0x62604)==y&&Real(base,0x62608)==x+80&&Real(base,0x6260c)==y+12);
+    assert(Real(base,0x62600)==x&&Real(base,0x62604)==y&&Real(base,0x62608)==x+help_text_width&&Real(base,0x6260c)==y+12);
     ctx.esp+=32;
 }
 // GENERATED_REWARD_DRAW
@@ -340,7 +341,7 @@ static void CheckCoopHelp(uint8_t* b){
     W(b,help_queue+8,help_head);W(b,help_queue+12,1);Put(b,help_queue+16,.016f);
     W(b,help_head,help_node);W(b,help_node,help_head);W(b,help_node+4,help_head);W(b,help_node+8,help_tween);
     W(b,help_tween,0x48905c);W(b,0x489060,0x273860);Put(b,help_tween+8,1);b[help_tween+0x1c]=0;
-    Put(b,help_tween+0x20,450);Put(b,help_tween+0x24,220);Put(b,help_tween+0x38,1);
+    Put(b,help_tween+0x24,220);Put(b,help_tween+0x38,1);
     W(b,help_tween+0x60,0xffffffffu);Put(b,help_tween+0xac,50);Put(b,help_tween+0xb0,590);
     W(b,0x62500,0x62540);W(b,0x62574,0x701012);
     for(unsigned slot=0;slot<2;++slot){
@@ -348,9 +349,12 @@ static void CheckCoopHelp(uint8_t* b){
         RegisterPlayer(b,actor,slot,100+slot,200+slot);W(b,actor,0x46fbe8);W(b,actor+0x300,root);
     }
     sample_help=true;unsigned cases=0;
-    for(bool reverse:{false,true})for(unsigned index=0;index<2;++index)for(float aspect:{4.f/3.f,16.f/9.f,21.f/9.f,3440.f/1440.f,32.f/9.f})for(unsigned mode:{0u,1u,2u}){
+    for(bool reverse:{false,true})for(unsigned index=0;index<2;++index)for(float aspect:{4.f/3.f,16.f/9.f,21.f/9.f,3440.f/1440.f,32.f/9.f})for(unsigned mode:{0u,1u,2u})for(float width:{80.f,160.f,210.f}){
         const unsigned slot=reverse?1-index:index;const float top=float(slot)*240;
         trial_coop::active=mode!=0;presentation=mode;trial_graphics::wide=aspect>1.5f;trial_graphics::aspect_override=aspect;
+        // 140680 right-aligns measured helper lines against the native X590
+        // anchor. Exercise different line widths without changing font size.
+        help_text_width=width;Put(b,help_tween+0x20,590-width);
         W(b,root+4,coop_players[slot]);
         X86Context c{};c.ecx=root;c.esp=0x70000;const uint32_t d=c.esp+16;
         Put(b,d,0);Put(b,d+4,mode==1?top:0);Put(b,d+8,640);Put(b,d+12,mode==1?top+240:480);
@@ -364,11 +368,21 @@ static void CheckCoopHelp(uint8_t* b){
         assert(original[1]==219.5f&&original[3]==231.5f); // Negative witness: P2 is still in P1's half.
         const float dy=mode==1?top-120:0;
         assert(fixed[1]==original[1]+dy&&fixed[3]==original[3]+dy);
-        assert(fixed[0]==original[0]&&fixed[2]==original[2]);
+        const bool player_view=mode==1||(mode==0&&slot==0);
+        assert(h.root_==(player_view?root:0));
+        if(player_view){
+            const float center=319.5f,scale=h.scale_;
+            assert(std::abs(fixed[0]-(center+(270-width)*scale))<.0002f);
+            assert(std::abs(fixed[2]-(center+270*scale))<.0002f);
+            assert(std::abs((fixed[2]-fixed[0])-width*scale)<.0002f);
+            assert(fixed[0]>center); // Even the longest sampled line stays right of the orders center.
+            assert(std::abs((fixed[0]-original[0])-320*(1-scale))<.0002f);
+            if(aspect==16.f/9.f&&width==210)assert(original[0]<center&&fixed[0]>center);
+        }else assert(fixed==original); // Foreign single-player slot and shared cinematics keep their placement.
         if(mode==1)assert(fixed[1]>=top&&fixed[3]<top+240);
         assert(Word(b,help_tween+0x20)==tween_before[0]&&Word(b,help_tween+0x24)==tween_before[1]);
         for(unsigned i=0;i<4;++i)assert(Word(b,d+i*4)==descriptor[i]);
-        if(mode==1){
+        if(player_view){
             X86Context q{};q.ecx=help_queue;q.esp=0x71000;W(b,q.esp+4,d);
             {TrialHudHelpScope good(q,b);assert(h.help_);
                 q.ecx=help_queue+0x10;{TrialHudHelpScope unrelated(q,b);assert(!h.help_);}assert(h.help_);
@@ -378,9 +392,10 @@ static void CheckCoopHelp(uint8_t* b){
                 W(b,quad.esp+8,0x62608);W(b,0x62604,0x7fc01234);
                 {TrialHudQuadScope invalid(quad,b);assert(Real(b,0x62600)==450&&Word(b,0x62604)==0x7fc01234);}
             }assert(!h.help_);
-            W(b,six+4,help_queue+0x10);assert(draw(true)[1]==original[1]);W(b,six+4,help_queue);
-            W(b,d+4,0x7fc01234);assert(draw(true)[1]==original[1]);W(b,d+4,descriptor[1]);
-            Put(b,d+4,top+240);assert(draw(true)[1]==original[1]);W(b,d+4,descriptor[1]);
+            W(b,six+4,help_queue+0x10);assert(draw(true)==original);W(b,six+4,help_queue);
+            W(b,d+4,0x7fc01234);assert(draw(true)==original);W(b,d+4,descriptor[1]);
+            Put(b,d+4,mode==1?top+240:480);assert(draw(true)==original);W(b,d+4,descriptor[1]);
+            h.notification_=true;assert(draw(true)==draw(false));h.notification_=false;
             throw_help=true;bool threw=false;try{draw(true);}catch(int){threw=true;}
             throw_help=false;assert(threw&&!h.help_&&hud==&h);
         }
@@ -390,8 +405,8 @@ static void CheckCoopHelp(uint8_t* b){
     X86Context q{};q.ecx=help_queue;q.esp=0x71000;W(b,q.esp,0);W(b,q.esp+4,0x70010);
     queued_borders.clear();sub_00077570(q,b);
     assert(q.esp==0x71008&&queued_borders.size()==1&&queued_borders[0][1]==219.5f);
-    sample_help=false;trial_coop::active=false;presentation=0;trial_graphics::wide=true;trial_graphics::aspect_override=0;
-    std::printf("PASS %u native help queue/text-draw cases; per-view glyph placement/restoration, original negative witness; font shaping/artwork remain live verification\n",cases);
+    sample_help=false;help_text_width=80;trial_coop::active=false;presentation=0;trial_graphics::wide=true;trial_graphics::aspect_override=0;
+    std::printf("PASS %u native help queue/text-draw cases; centered width-relative anchors, per-view placement/restoration, original negative witness; font shaping/artwork remain live verification\n",cases);
 }
 
 static void CheckCoopHud(uint8_t* b){

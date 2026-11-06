@@ -20,6 +20,7 @@
 #include <smmintrin.h>
 #include "gpu/shaders.h"
 #include "gpu/vertex.h"
+#include "xbe_coop_aim_blur_sample.h"
 using namespace gpu;
 
 struct GuestExtent { uint32_t w, h; };
@@ -114,9 +115,6 @@ struct Extension {
         ++serial; vsc[0][0]+=float(serial);ext[0]=float(serial);ext[1]=float(blend);
     }
 };
-struct Geometry {
-    template<class F> auto Get(const void*,uint32_t,F make){return make();}
-};
 constexpr uint32_t kSrvCount=64,kSamplerCount=64;
 struct BackendFixture {
     using Alloc=UploadArena::Allocation;
@@ -139,7 +137,6 @@ struct BackendFixture {
     void CreateHeap(D3D12_DESCRIPTOR_HEAP_TYPE,uint32_t,bool,ComPtr<MockHeap>& out){out.value=std::make_shared<MockHeap>(MockHeap{(++generation)*0x100000});}
     Alloc Upload(uint64_t size,uint64_t align){return arena.Upload(size,align);}
     D3D12_GPU_DESCRIPTOR_HANDLE Gpu(MockHeap* heap,uint32_t slot,uint32_t inc){return {heap->base+uint64_t(slot)*inc};}
-    Geometry geometry_reuse_;
     Extension* ext_=nullptr;
     float fog=1,light=2,transform=3,texture=4,analytic=5;
     DrawShaders shaders{};
@@ -263,6 +260,7 @@ struct Sink {
         const auto& wanted=expected.at(revisions.size());
         assert(!std::memcmp(s.vsc.data(),wanted.vsc.data(),sizeof(s.vsc)));
         assert(s.viewport.x==wanted.viewport.x&&s.viewport.y==wanted.viewport.y);
+        assert(s.uc_coop_blur_view==wanted.uc_coop_blur_view);
         baseline.Guest(s);candidate.Guest(s,revision);
         assert(baseline.commands.snapshots.back()==candidate.commands.snapshots.back());
         revisions.push_back(revision);
@@ -306,6 +304,8 @@ void ReplayConstants(){
     r.Queue(s);r.Queue(s);r.Drain();
     assert(r.sink.revisions[0]==1&&r.sink.revisions[1]==1);
     assert(r.sink.candidate.vsc_comparisons==0);
+    for(unsigned owner:{1u,2u,0u}){s.uc_coop_blur_view=owner;r.Queue(s);}
+    s.uc_coop_blur_view=2;r.Drain();s.uc_coop_blur_view=0;
     // Every float's exact bits reach the final upload, including both ends of each block.
     for(unsigned i=0;i<192*4;++i){
         const uint32_t bits=0x3f000000u+i;
@@ -365,7 +365,25 @@ void ReplayConstants(){
     std::printf("VSC replay: %zu delayed draws match original bytes; unchanged revisions skip comparison; direct/extension/reset/wrap fallbacks verified\n",r.sink.revisions.size());
 }
 
+void GeometrySnapshots(){
+    after::D3D12Backend b;State s=Upper();
+    std::array<float,9> vertices={0,0,0,1,0,0,0,1,0};
+    std::array<uint16_t,3> indices={2,1,0};
+    b.assembled.buffers[0]={reinterpret_cast<const uint8_t*>(vertices.data()),sizeof(vertices),12};
+    b.assembled.index_src=indices.data();b.assembled.index_count=3;b.assembled.index16=true;
+    b.Guest(s);const auto original=b.commands.snapshots.back();
+    const auto vb=b.commands.vertices[0];const auto ib=b.commands.index;
+    assert(vb.BufferLocation%16==0&&ib.BufferLocation%16==0);
+    vertices[4]=7;indices[1]=2;b.Guest(s);
+    assert(b.commands.snapshots.back()!=original);
+    assert(std::memcmp(b.arena.Data(vb.BufferLocation,vb.SizeInBytes),vertices.data(),sizeof(vertices))!=0);
+    assert(std::memcmp(b.arena.Data(ib.BufferLocation,ib.SizeInBytes),indices.data(),sizeof(indices))!=0);
+    vertices[4]=0;indices[1]=1;b.Guest(s);assert(b.commands.snapshots.back()==original);
+    NewList(b);b.Guest(s);assert(b.commands.snapshots.back()==original);
+}
+
 int main(){
+    GeometrySnapshots();
     ReplayConstants();
     before::D3D12Backend baseline;after::D3D12Backend candidate;
     Scenario(baseline);Scenario(candidate);

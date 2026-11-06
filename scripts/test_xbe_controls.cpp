@@ -44,6 +44,7 @@ int main(){
     assert(defaults.heal_partner[0]=='U'&&!defaults.heal_partner[1]);
     assert(!defaults.aim_mode&&!defaults.scope_zoom[0][0]&&!defaults.scope_zoom[1][0]);
     assert(!defaults.invert_mouse&&defaults.zoom_sensitivity==100);
+    assert(defaults.movement_inertia==1&&trial_controls::MovementInertia()==1&&trial_controls::MovementInertia(1)==1);
     assert(trial_controls::ZoomSensitivity()==100&&trial_controls::ZoomSensitivity(1)==100);
     assert(GetFileAttributesW(profile)==INVALID_FILE_ATTRIBUTES);
     assert(trial_controls::Apply(defaults,error));
@@ -58,6 +59,7 @@ int main(){
     changed.previous_firearm[0]=VK_XBUTTON2;changed.previous_firearm[1]='B';
     changed.health_pack[0][0]='K';changed.health_pack[1][0]=10;
     changed.heal_partner[0]='L';changed.walk_mode=1;changed.walk_binding[0][0]='Z';changed.hud_binding[0][0]='I';
+    changed.movement_inertia=0;
     changed.zoom_sensitivity=45;changed.aim_mode=1;changed.scope_zoom[0][0]='T';changed.scope_zoom[0][1]=256;changed.scope_zoom[1][0]=11;
     assert(trial_controls::Apply(changed,error));
     assert(Same(changed,trial_controls::Snapshot()));
@@ -68,6 +70,7 @@ int main(){
     assert(GetPrivateProfileIntW(L"Graphics",L"Resolution",0,profile)==2560);
     assert(GetPrivateProfileIntW(L"Firearms",L"Previous0",0,profile)==VK_XBUTTON2);
     assert(GetPrivateProfileIntW(L"Firearms",L"Previous1",0,profile)=='B');
+    assert(GetPrivateProfileIntW(L"PlayerActions",L"MovementInertia",99,profile)==0&&trial_controls::MovementInertia()==0);
     keyboard_defaults(&keyboard_config);controller_defaults(&controller_config);
     assert(keyboard_load(nullptr,nullptr,nullptr));assert(controller_load(nullptr,nullptr,nullptr));
     mouse_sensitivity=GetPrivateProfileIntW(L"Graphics",L"MouseSensitivity",400,profile);
@@ -78,6 +81,7 @@ int main(){
     trial_controls::aim_loaded[0]=false;
     trial_controls::partner_loaded=false;trial_controls::actions_loaded[0]=false;
     assert(Same(changed,trial_controls::Snapshot()));
+    assert(trial_controls::MovementInertia()==0&&trial_controls::MovementInertia(1)==1);
     keys['Z']=true;assert(trial_controls::WalkMode()==1&&trial_controls::WalkDown(true,input::Pad{})&&!trial_controls::WalkDown(true,input::Pad{},1));keys['Z']=false;
     keys['I']=true;assert(trial_controls::HudToggleDown(true,input::Pad{})&&!trial_controls::HudToggleDown(true,input::Pad{},1));keys['I']=false;
     assert(trial_controls::AimMode()==1&&trial_controls::ZoomSensitivity()==45);
@@ -88,12 +92,14 @@ int main(){
     wchar_t kept[32];GetPrivateProfileStringW(L"Other",L"Unrelated",L"",kept,32,profile);assert(!wcscmp(kept,L"keep"));
     fail_replace=true;assert(!trial_controls::Apply(defaults,error)&&!error.empty());
     assert(Same(changed,trial_controls::Snapshot()));
+    assert(trial_controls::MovementInertia()==0&&GetPrivateProfileIntW(L"PlayerActions",L"MovementInertia",99,profile)==0);
     assert(GetPrivateProfileIntW(L"KeyboardMouse",L"Binding4_0",0,profile)=='G');
     assert(GetPrivateProfileIntW(L"Controller",L"Binding0_0",0,profile)==4);
     fail_replace=false;
     {auto bad=changed;bad.spin_mode=2;assert(!trial_controls::Apply(bad,error));
      for(unsigned zoom:{0u,201u}){bad=changed;bad.zoom_sensitivity=zoom;assert(!trial_controls::Apply(bad,error));}
      bad=changed;bad.aim_mode=2;assert(!trial_controls::Apply(bad,error));
+     bad=changed;bad.movement_inertia=2;assert(!trial_controls::Apply(bad,error));
      bad=changed;bad.invert_mouse=2;assert(!trial_controls::Apply(bad,error));
      for(unsigned source:{unsigned(VK_ESCAPE),unsigned(VK_LWIN),258u}){
          bad=changed;bad.scope_zoom[0][0]=source;assert(!trial_controls::Apply(bad,error));}
@@ -174,6 +180,9 @@ int main(){
     assert(GetPrivateProfileIntW(L"AimPlayer2",L"ScopeZoom1_0",0,profile)==10);
     assert(GetPrivateProfileIntW(L"AimPlayer2",L"ZoomSensitivity",0,profile)==130);
     assert(trial_controls::ZoomSensitivity(1)==130&&trial_controls::ZoomSensitivity()==first.zoom_sensitivity);
+    trial_controls::actions_loaded[1]=false;
+    assert(trial_controls::MovementInertia(1)==1&&trial_controls::MovementInertia()==0);
+    assert(GetPrivateProfileIntW(L"PlayerActions2",L"MovementInertia",99,profile)==1);
     p={};p.connected=true;p.analog[1]=255;auto first_pad=p;trial_controls::Remap(first_pad);
     trial_controls::Remap(p,1);assert(p.analog[0]==255&&!p.analog[1]);
     assert(!first_pad.analog[0]&&first_pad.analog[1]==255);
@@ -204,8 +213,9 @@ int main(){
     auto invalid_pad=p;trial_controls::Remap(invalid_pad,2);assert(!std::memcmp(&p,&invalid_pad,sizeof(p)));
     assert(!trial_controls::SpinMode(2)&&!trial_controls::SpinButtonDown(false,p,2));
     assert(!trial_controls::AimMode(2)&&!trial_controls::ScopeZoomDown(false,p,2));
+    assert(trial_controls::MovementInertia(2)==1);
     const trial_controls::Draft empty{};assert(Same(empty,trial_controls::Snapshot(2)));
-    for(unsigned bad=0;bad<7;++bad){
+    for(unsigned bad=0;bad<8;++bad){
         auto d=second;
         if(bad==0)d.controller[0][0]=25;
         if(bad==1)d.deadzone[0]=31;
@@ -214,6 +224,7 @@ int main(){
         if(bad==4)d.walk_mode=2;
         if(bad==5)d.walk_binding[1][0]=25;
         if(bad==6)d.hud_binding[1][0]=25;
+        if(bad==7)d.movement_inertia=2;
         assert(!trial_controls::Apply(d,error,1)&&Same(second,trial_controls::Snapshot(1)));
     }
     for(unsigned i=0;i<7;++i){
@@ -223,6 +234,18 @@ int main(){
     // Saving Player 1 cannot overwrite Player 2, including after a process reload.
     assert(trial_controls::Apply(defaults,error));trial_controls::second_loaded=false;
     assert(Same(second,trial_controls::Snapshot(1)));
+    for(unsigned value:{0u,1u}){
+        auto edited=second;edited.movement_inertia=value;
+        assert(trial_controls::Apply(edited,error,1));
+        trial_controls::actions_loaded[1]=false;
+        assert(trial_controls::MovementInertia(1)==value&&trial_controls::Snapshot(1).movement_inertia==value);
+        assert(GetPrivateProfileIntW(L"PlayerActions2",L"MovementInertia",99,profile)==value);
+        assert(trial_controls::MovementInertia()==1&&GetPrivateProfileIntW(L"PlayerActions",L"MovementInertia",99,profile)==1);
+        auto failed=edited;failed.movement_inertia=1-value;fail_replace=true;
+        assert(!trial_controls::Apply(failed,error,1));fail_replace=false;
+        trial_controls::actions_loaded[1]=false;
+        assert(trial_controls::MovementInertia(1)==value);
+    }
     assert(WritePrivateProfileStringW(L"ControllerPlayer2",L"Binding0_0",L"25",profile));
     assert(WritePrivateProfileStringW(L"ControllerPlayer2",L"Deadzone0",L"31",profile));
     assert(WritePrivateProfileStringW(L"PistolSpinPlayer2",L"Mode",L"2",profile));
@@ -243,6 +266,15 @@ int main(){
         assert(WritePrivateProfileStringW(L"AimPlayer2",L"ScopeZoom1_0",malformed,profile));
         trial_controls::aim_loaded[1]=false;const auto parsed=trial_controls::Snapshot(1);
         assert(!parsed.aim_mode&&parsed.scope_zoom[1][0]==(!wcscmp(malformed,L"2")?2u:0u));
+        for(unsigned player:{0u,1u}){
+            assert(WritePrivateProfileStringW(player?L"PlayerActions2":L"PlayerActions",L"MovementInertia",malformed,profile));
+            trial_controls::actions_loaded[player]=false;
+            assert(trial_controls::MovementInertia(player)==1&&trial_controls::Snapshot(player).movement_inertia==1);
+        }
+    }
+    for(unsigned player:{0u,1u}){
+        assert(WritePrivateProfileStringW(player?L"PlayerActions2":L"PlayerActions",L"MovementInertia",nullptr,profile));
+        trial_controls::actions_loaded[player]=false;assert(trial_controls::MovementInertia(player)==1);
     }
     assert(trial_controls::Apply(defaults,error,1));
     assert(WritePrivateProfileStringW(L"HealthPacks",nullptr,nullptr,profile));

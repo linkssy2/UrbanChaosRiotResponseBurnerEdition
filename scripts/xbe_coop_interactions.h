@@ -24,5 +24,5 @@ public:
 private:
     X86Context& context_;uint8_t* base_;
     TrialCoopInteractionScope* previous_;
-    uint32_t behavior_=0,id_=0,previous_lookup_=0;bool qualified_=false;
+    uint32_t behavior_=0,previous_lookup_=0;bool qualified_=false;
 };

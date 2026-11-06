@@ -8,7 +8,6 @@ def transform(source):
     source=once(source,'#include "core/diag.h"','#include "core/diag.h"\n#include "xbe_frame_reuse.h"')
     source=once(source,'    Alloc Upload(uint64_t size, uint64_t align = 256);',
         '''    uc_frame_reuse::Qualification<PixelKey> fog_qualification_;
-    uc_frame_reuse::Geometry<Alloc> geometry_reuse_;
     ComPtr<ID3D12Resource> sync_readback_;
     uint64_t sync_readback_bytes_=0;
     Alloc Upload(uint64_t size, uint64_t align = 256);''')
@@ -24,19 +23,9 @@ def transform(source):
         smooth_tone=(fog_bits&1)!=0;''')
     source=once(source,'        auto check=PixelHlsl(pk);analytic_fog=AnalyticFogShader(check);',
         '        analytic_fog=(fog_bits&2)!=0;')
-    source=once(source,'        Alloc vb = Upload(b.bytes, 16);\n        std::memcpy(vb.cpu, b.src, b.bytes);',
-        '''        Alloc vb=geometry_reuse_.Get(b.src,b.bytes,[&]{
-            Alloc result=Upload(b.bytes,16);
-            std::memcpy(result.cpu,b.src,b.bytes);return result;
-        });''')
-    source=once(source,'        Alloc ib = Upload(ibytes, 4);\n        std::memcpy(ib.cpu, a.index_src, ibytes);',
-        '''        Alloc ib=geometry_reuse_.Get(a.index_src,ibytes,[&]{
-            Alloc result=Upload(ibytes,16);
-            std::memcpy(result.cpu,a.index_src,ibytes);return result;
-        });''')
-    # Both mid-frame synchronous submission and normal frame reuse invalidate offsets.
-    assert source.count('f.used = 0;')==2
-    source=source.replace('f.used = 0;', 'f.used = 0;\n    geometry_reuse_.Reset();')
+    # Keep direct snapshots; the former geometry cache had no useful reuse.
+    source=once(source,'        Alloc ib = Upload(ibytes, 4);',
+        '        Alloc ib = Upload(ibytes, 16);')
     old=function(source,'bool D3D12Backend::ReadBack(')
     new=once(old,'    ComPtr<ID3D12Resource> rb;', '    // Previous synchronous readback completed before this buffer can be reused.\n    auto& rb=sync_readback_;')
     new=once(new,'''    if (FAILED(dev_->CreateCommittedResource(&hp, D3D12_HEAP_FLAG_NONE, &bd, D3D12_RESOURCE_STATE_COPY_DEST, nullptr,
@@ -254,8 +243,8 @@ def upload_spill(source):
         uc_frame_reuse::UploadSpill spill;
         std::array<ComPtr<ID3D12Resource>,uc_frame_reuse::UploadSpill::page_count> spill_resources;
         std::array<uint8_t*,uc_frame_reuse::UploadSpill::page_count> spill_maps{};''')
-    assert source.count('geometry_reuse_.Reset();')==2
-    source=source.replace('geometry_reuse_.Reset();','geometry_reuse_.Reset();\n    f.spill.Reset();')
+    assert source.count('f.used = 0;')==2
+    source=source.replace('f.used = 0;','f.used = 0;\n    f.spill.Reset();')
     source=once(source,'    if (CurrentFrame().used > kUploadSize - kUploadReserve) Submit(true);',
         '    if (CurrentFrame().spill.Exhausted()) Submit(true);')
     source=once(source,'    // past the ring every upload is a buffer of its own: seconds lost on a frame that draws a whole level once',

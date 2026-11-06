@@ -304,15 +304,15 @@ static void OpenGraphics(const TrialFrontendFrame& f){
         CHECK(hits[i].b.x==432.f*output.width/640.f);
         if(i)CHECK(hits[i].a.y>=hits[i-1].b.y-.1f);
     }
-    Click(f.source.count);CHECK(PanelOpen());CHECK(hits.size()==23);
-    for(unsigned i=0;i<20;++i){
+    Click(f.source.count);CHECK(PanelOpen());CHECK(hits.size()==24);
+    for(unsigned i=0;i<21;++i){
         CHECK(hits[i].name=="setting");
         CHECK(hits[i].b.y<=364*output.height/480.f+.1f);
         if(i)CHECK(hits[i-1].b.y<=hits[i].a.y+.1f);
     }
 }
 static void ChangeSetting(unsigned index){
-    CHECK(reticle_page?(index<5&&hits.size()==6):(index<20&&hits.size()==23));auto r=hits[index];
+    CHECK(reticle_page?(index<5&&hits.size()==6):(index<21&&hits.size()==24));auto r=hits[index];
     // Click the actual row's right-arrow side, using recorded production bounds.
     ClickPoint(r.b.x-15*float(output.width)/640,(r.a.y+r.b.y)*.5f);
 }
@@ -436,8 +436,25 @@ static void CheckHealthPackHud(){
         for(float opacity:{1.f,.5f,0.f,.5f,1.f}){
             health_status[0].opacity=opacity;DrawFrame();CheckHealthPackIcons(hud,false);
         }
+        // Original Controller Info has a screen identity but no replacement rows.
+        for(int player:{-1,0,1})for(int device:{0,1}){
+            trial_coop::SetActive(player>=0);trial_coop::ResetPauseOwner();keyboard_mode=device;
+            coop_presentation=player>=0?1:0;
+            if(player>=0){trial_coop::pause_state.Sample(false,false);
+                trial_coop::pause_state.Sample(player==0,player==1);trial_coop::pause_state.Consume(true);trial_coop::pause_state.Enter();}
+            TrialFrontendFrame info{};info.source.screen=0x601000;info.source.epoch=1;
+            for(unsigned state:{0u,0x80000000u,unsigned(UC_HF_TRANSITION),0x80000000u|UC_HF_TRANSITION}){
+                info.source.source_kind=state;info.source.screen=state&UC_HF_TRANSITION?0:0x601000;
+                TrialFrontendPublish(info);DrawFrame();
+                CHECK(!hud->Active&&hits.empty()&&revive_records.empty()&&countdown_records.empty());
+            }
+            trial_coop::ResetPauseOwner();TrialFrontendPublish({});DrawFrame();
+            CHECK(hud->Active);CheckHealthPackIcons(hud,player>=0);
+        }
+        keyboard_mode=1;
     }
     health_status[0]=health_status[1]={};coop_presentation=0;trial_coop::Reset();live.hd_ui=previous_hd;trial_graphics::aspect_override=previous_aspect;DrawFrame();
+    std::puts("PASS health HUD: hidden on original screens/transitions for single-player and both co-op owners, restored on return to gameplay");
 }
 static unsigned HealthSymbol(unsigned slot,const float (&uv)[4]){
     const auto* hud=ImGui::FindWindowByName("Stored health packs");CHECK(hud&&hud->Active);
@@ -962,7 +979,7 @@ static void CheckControls(const TrialFrontendFrame& options){
     CHECK(&ControlsBinding(2,0)!=&ControlsBinding(29,0));
     CHECK(&ControlsBinding(29,1)==&controls_draft.previous_firearm[1]);
     CHECK(std::strcmp(ControlsGroup(16),"COMBAT / INTERACTION")==0&&std::strcmp(ControlsGroup(17),"MOVEMENT / AIMING")==0);
-    CHECK(std::strcmp(ControlsGroup(31),"TEAMMATE ORDERS")==0&&std::strcmp(ControlsGroup(36),"MENU CONTROLS")==0);
+    CHECK(std::strcmp(ControlsGroup(32),"TEAMMATE ORDERS")==0&&std::strcmp(ControlsGroup(37),"MENU CONTROLS")==0);
     CHECK(ControlsAction(7)==30&&ControlsHealthPack(30));
     CHECK(&ControlsBinding(30,0)==&controls_draft.health_pack[0][0]);
     CHECK(ControlsAction(8)==34&&ControlsHealPartner(34)&&ControlsSlots(34)==2);
@@ -973,7 +990,7 @@ static void CheckControls(const TrialFrontendFrame& options){
         if(device)CHECK(std::strcmp(ControlsName(2),"Firearms")==0&&!ControlsPreviousFirearm(29));
     }
     controls_device=0;CHECK(ControlsAction(0)==0&&ControlsAction(1)==28);
-    CHECK(ControlsAction(25)==33&&ControlsMouseInvert(33)&&ControlsSlots(33)==1);
+    CHECK(ControlsAction(26)==33&&ControlsMouseInvert(33)&&ControlsSlots(33)==1);
     CHECK(std::strcmp(ControlsName(33),"Invert mouse look")==0);
 
     CHECK(!ControlsDirty());
@@ -983,6 +1000,69 @@ static void CheckControls(const TrialFrontendFrame& options){
         trial_controls::capture.Sample(controls_device?0:value,controls_device?value:0,true);
         DrawFrame();Settle();
     };
+    for(unsigned page:{0u,1u,2u}){
+        controls_device=page?1:0;controls_player=page==2;ControlsReadDraft();
+        const auto other=trial_controls::Snapshot(1-controls_player);
+        const unsigned row=controls_device?21:24,action=controls_device?33:39;
+        CHECK(ControlsMovementInertia(action)&&ControlsSlots(action)==1&&ControlsAction(row)==action);
+        CHECK(ControlsWalk(ControlsAction(row-2))&&ControlsWalkMode(ControlsAction(row-1)));
+        CHECK(!std::strcmp(ControlsName(action),"Movement inertia")&&!std::strcmp(ControlsGroup(row),"MOVEMENT / AIMING"));
+        controls_scroll=row;Settle();CHECK(controls_draft.movement_inertia==1);
+        Click(1);CHECK(controls_draft.movement_inertia==1&&controls_capture_action<0);
+        const auto hit=hits[1];ClickPoint(hit.b.x-35*float(output.width)/640,(hit.a.y+hit.b.y)/2);
+        CHECK(!controls_draft.movement_inertia&&ControlsDirty()&&controls_capture_action<0);
+        frontend_events=64;DrawFrame();CHECK(!controls_draft.movement_inertia);
+        fail_apply=true;footer(0);fail_apply=false;
+        CHECK(ControlsDirty()&&trial_controls::Snapshot(controls_player).movement_inertia==1);
+        footer(1);CHECK(controls_draft.movement_inertia==1&&!ControlsDirty());
+        controls_scroll=row;Settle();Click(1);
+        frontend_events=16;DrawFrame();CHECK(!controls_draft.movement_inertia&&controls_capture_action<0);
+        frontend_events=32;DrawFrame();CHECK(controls_draft.movement_inertia==1);
+        Key(ImGuiKey_Enter);CHECK(!controls_draft.movement_inertia);
+        footer(0);CHECK(!ControlsDirty()&&!trial_controls::Snapshot(controls_player).movement_inertia);
+        footer(2);CHECK(controls_draft.movement_inertia==1&&ControlsDirty());
+        footer(1);CHECK(!controls_draft.movement_inertia&&!ControlsDirty());
+        const auto unchanged=trial_controls::Snapshot(1-controls_player);
+        CHECK(!std::memcmp(&other,&unchanged,sizeof(other)));
+        footer(2);footer(0);CHECK(trial_controls::Snapshot(controls_player).movement_inertia==1);
+    }
+    // Defaults must include newer actions, preserve the other device/player,
+    // and remain a draft until the same footer's Apply action is selected.
+    for(unsigned page:{0u,1u,2u}){
+        controls_device=page?1:0;controls_player=page==2;ControlsReadDraft();Settle();
+        const auto original=trial_controls::Snapshot(controls_player);
+        const auto other=trial_controls::Snapshot(1-controls_player);
+        controls_draft.walk_mode=1;
+        for(unsigned device=0;device<2;++device){
+            controls_draft.walk_binding[device][0]=device?22:'B';
+            controls_draft.walk_binding[device][1]=device?23:'N';
+            controls_draft.hud_binding[device][0]=device?20:'M';
+            controls_draft.hud_binding[device][1]=device?21:'O';
+        }
+        footer(0);CHECK(!ControlsDirty());
+        const auto custom=trial_controls::Snapshot(controls_player);
+        const auto defaults=trial_controls::Defaults();
+        footer(2);
+        CHECK(ControlsDirty()&&controls_draft.walk_mode==defaults.walk_mode);
+        CHECK(!std::memcmp(controls_draft.walk_binding[controls_device],defaults.walk_binding[controls_device],sizeof(defaults.walk_binding[0])));
+        CHECK(!std::memcmp(controls_draft.hud_binding[controls_device],defaults.hud_binding[controls_device],sizeof(defaults.hud_binding[0])));
+        CHECK(!std::memcmp(controls_draft.walk_binding[1-controls_device],custom.walk_binding[1-controls_device],sizeof(defaults.walk_binding[0])));
+        CHECK(!std::memcmp(controls_draft.hud_binding[1-controls_device],custom.hud_binding[1-controls_device],sizeof(defaults.hud_binding[0])));
+        auto live=trial_controls::Snapshot(controls_player);
+        CHECK(!std::memcmp(&live,&custom,sizeof(live)));
+        footer(1);CHECK(!ControlsDirty()&&controls_draft.walk_mode==1);
+        CHECK(!std::memcmp(controls_draft.walk_binding,custom.walk_binding,sizeof(custom.walk_binding)));
+        CHECK(!std::memcmp(controls_draft.hud_binding,custom.hud_binding,sizeof(custom.hud_binding)));
+        footer(2);footer(0);CHECK(!ControlsDirty());
+        live=trial_controls::Snapshot(controls_player);
+        CHECK(live.walk_mode==defaults.walk_mode);
+        CHECK(!std::memcmp(live.walk_binding[controls_device],defaults.walk_binding[controls_device],sizeof(defaults.walk_binding[0])));
+        CHECK(!std::memcmp(live.hud_binding[controls_device],defaults.hud_binding[controls_device],sizeof(defaults.hud_binding[0])));
+        const auto unchanged=trial_controls::Snapshot(1-controls_player);
+        CHECK(!std::memcmp(&other,&unchanged,sizeof(other)));
+        (controls_player?trial_controls::second_controls:trial_controls::live_controls)=original;
+    }
+    controls_device=controls_player=0;ControlsReadDraft();Settle();
     // Aim mode never enters binding capture, participates in saving/defaults,
     // and its separate scope input clears real conflicting bindings only.
     CHECK(ControlsAimMode(31)&&ControlsScopeZoom(32)&&ControlsSlots(31)==1);
@@ -1026,7 +1106,7 @@ static void CheckControls(const TrialFrontendFrame& options){
     // actions but not the hold-and-drag orders action.
     Click(1);trial_controls::capture.Sample(0,0,true);trial_controls::capture.Wheel(256);DrawFrame();Settle();
     CHECK(controls_draft.keyboard[0][0]==256&&ControlsDirty());footer(1);CHECK(!ControlsDirty());
-    controls_scroll=31;Settle();
+    controls_scroll=32;Settle();
     CHECK(ControlsAction(controls_scroll)==24);Click(1);CHECK(controls_capture_action==24);
     trial_controls::capture.Sample(0,0,true);trial_controls::capture.Wheel(257);DrawFrame();Settle();
     CHECK(controls_capture_action==24&&trial_controls::CaptureWaiting()&&!ControlsDirty());
@@ -1041,7 +1121,7 @@ static void CheckControls(const TrialFrontendFrame& options){
     Click(3);CHECK(controls_capture_action==26);source('P');
     CHECK(controls_draft.spin_binding[0][0]=='P');
     footer(1);CHECK(!ControlsDirty()); // Discard restores mode and button together.
-    controls_scroll=24;Settle();
+    controls_scroll=25;Settle();
     CHECK(controls_draft.sensitivity==400);
     const auto slider=hits[1];const float slider_y=(slider.a.y+slider.b.y)*.5f;
     Move(418*output.width/640.f,slider_y);ImGui::GetIO().AddMouseButtonEvent(0,true);DrawFrame();
@@ -1051,7 +1131,7 @@ static void CheckControls(const TrialFrontendFrame& options){
     CHECK(controls_draft.sensitivity==1);Key(ImGuiKey_LeftArrow);CHECK(controls_draft.sensitivity==1);
     Key(ImGuiKey_RightArrow);CHECK(controls_draft.sensitivity==2);
     Key(ImGuiKey_Tab);Key(ImGuiKey_Enter);CHECK(trial_controls::live_controls.sensitivity==2&&!ControlsDirty());
-    controls_scroll=25;Settle();const unsigned stick_invert=profile_draft[1];
+    controls_scroll=26;Settle();const unsigned stick_invert=profile_draft[1];
     CHECK(!controls_draft.invert_mouse);Click(1);
     CHECK(!controls_draft.invert_mouse&&controls_capture_action<0); // Label click selects; arrows/value edit.
     auto toggle_mouse=[&](){const auto row=hits[1];ClickPoint(row.b.x-35*float(output.width)/640,(row.a.y+row.b.y)/2);};
@@ -1061,8 +1141,8 @@ static void CheckControls(const TrialFrontendFrame& options){
     footer(0);CHECK(trial_controls::live_controls.invert_mouse==1&&!ControlsDirty());
     footer(2);CHECK(!controls_draft.invert_mouse&&ControlsDirty());
     footer(1);CHECK(controls_draft.invert_mouse==1&&!ControlsDirty());
-    controls_scroll=25;Settle();toggle_mouse();footer(0);CHECK(!trial_controls::live_controls.invert_mouse&&!ControlsDirty());
-    controls_scroll=26;Settle();CHECK(ControlsZoomSensitivity(ControlsAction(26)));
+    controls_scroll=26;Settle();toggle_mouse();footer(0);CHECK(!trial_controls::live_controls.invert_mouse&&!ControlsDirty());
+    controls_scroll=27;Settle();CHECK(ControlsZoomSensitivity(ControlsAction(27)));
     CHECK(controls_draft.zoom_sensitivity==100);
     auto zoom_slider=hits[1];const float zoom_y=(zoom_slider.a.y+zoom_slider.b.y)/2;
     Move(418*output.width/640.f,zoom_y);ImGui::GetIO().AddMouseButtonEvent(0,true);DrawFrame();
@@ -1116,7 +1196,7 @@ static void CheckControls(const TrialFrontendFrame& options){
     CHECK(!TrialControlsProfile(stale,true)&&stale[5]==75); // A changed profile rejects a queued write.
     TrialControlsProfile(snapshot,true);ControlsReadDraft();Close();Settle();
     open();controls_device=1;controls_player=1;ControlsReadDraft();Settle();
-    CHECK(ControlsCount()==40&&ControlsProfileStart()==33&&ControlsHealthPack(26));
+    CHECK(ControlsCount()==41&&ControlsProfileStart()==34&&ControlsHealthPack(26));
     const auto first_profile=trial_controls::live_controls;
     CHECK(ControlsWalk(30)&&ControlsWalkMode(31)&&ControlsHud(32));
     ControlsBegin(31,1);CHECK(controls_draft.walk_mode==1&&controls_capture_action<0);
@@ -1176,7 +1256,7 @@ static void CheckPerPlayerSettings(){
             const bool apply_before=profile_apply;
             const unsigned binding=controls_draft.controller[0][0]==22?23:22;
             controls_draft.controller[0][0]=binding;
-            if(player){CHECK(ControlsCount()==40);profile_draft[1]^=1;profile_draft[5]=23;}
+            if(player){CHECK(ControlsCount()==41);profile_draft[1]^=1;profile_draft[5]=23;}
             CHECK(ControlsDirty());fail_apply=true;CHECK(!ControlsApply());fail_apply=false;CHECK(ControlsDirty());
             CHECK(ControlsApply());
             if(player)CHECK(profile_apply==apply_before&&!std::memcmp(native_before,profile_live,sizeof(native_before))&&!std::memcmp(pending_before,profile_pending,sizeof(pending_before)));
@@ -1441,14 +1521,21 @@ static void CheckSize(unsigned width,unsigned height){
     auto options=MakeList(3);OpenGraphics(options);unsigned before=applied;ChangeSetting(3);CHECK(Dirty());CHECK(live.settings.render_percent==100);
     sample_support=2|(1u<<4);ChangeSetting(9);CHECK(draft.msaa==4&&live.msaa==1);
     sample_support=2|(1u<<2)|(1u<<4);
-    Click(20);CHECK(applied==before+1&&live.settings.render_percent==125&&live.msaa==4&&!Dirty());
+    Click(21);CHECK(applied==before+1&&live.settings.render_percent==125&&live.msaa==4&&!Dirty());
     ChangeSetting(10);ChangeSetting(11);ChangeSetting(12);ChangeSetting(13);ChangeSetting(13);
     CHECK(!draft.scenery&&!draft.characters&&draft.character_quality==1&&draft.ragdolls==2&&Dirty());
     CHECK(live.scenery&&live.characters&&live.character_quality==0&&live.ragdolls==0);
-    CHECK(hits.size()==23&&draft.ragdolls==2);Click(20);
+    CHECK(hits.size()==24&&draft.ragdolls==2);Click(21);
     CHECK(applied==before+2&&!live.scenery&&!live.characters&&live.character_quality==1&&live.ragdolls==2&&!Dirty());
-    ChangeSetting(13);CHECK(Dirty());Click(21);CHECK(!Dirty()&&draft.ragdolls==2);
-    ChangeSetting(14);CHECK(draft.fov!=53&&live.fov==53&&Dirty());
+    ChangeSetting(13);CHECK(Dirty());Click(22);CHECK(!Dirty()&&draft.ragdolls==2);
+    // The shared convulsion toggle uses the same transactional Apply policy.
+    CHECK(draft.death_convulsions&&live.death_convulsions);
+    ChangeSetting(14);CHECK(!draft.death_convulsions&&live.death_convulsions&&Dirty());
+    fail_apply=true;Click(21);fail_apply=false;CHECK(Dirty()&&live.death_convulsions);
+    Click(22);CHECK(draft.death_convulsions&&!Dirty());
+    ChangeSetting(14);Click(21);CHECK(!live.death_convulsions&&!Dirty());
+    ChangeSetting(14);Click(21);CHECK(live.death_convulsions&&!Dirty());
+    ChangeSetting(15);CHECK(draft.fov!=53&&live.fov==53&&Dirty());
     // Both real tracks drag/clamp without touching committed settings before Apply.
     auto drag=[&](unsigned row,float start,float end){
         const auto hit=hits[row];const float y=(hit.a.y+hit.b.y)*.5f;
@@ -1456,11 +1543,11 @@ static void CheckSize(unsigned width,unsigned height){
         Move(end*width/640.f,y);DrawFrame();
         ImGui::GetIO().AddMouseButtonEvent(0,false);Settle();
     };
-    drag(14,470,600);CHECK(draft.fov==90&&live.fov==53);
-    drag(14,470,300);CHECK(draft.fov==40&&live.fov==53);
-    drag(14,470,492.4f);CHECK(draft.fov==70&&live.fov==53);
+    drag(15,470,600);CHECK(draft.fov==90&&live.fov==53);
+    drag(15,470,300);CHECK(draft.fov==40&&live.fov==53);
+    drag(15,470,492.4f);CHECK(draft.fov==70&&live.fov==53);
     CHECK(draft.reticle_scale==100&&live.reticle_scale==100);
-    ChangeSetting(16);CHECK(reticle_page&&hits.size()==6);
+    ChangeSetting(17);CHECK(reticle_page&&hits.size()==6);
     drag(0,470,600);CHECK(draft.reticle_scale==200&&live.reticle_scale==100);
     drag(0,470,300);CHECK(draft.reticle_scale==50&&live.reticle_scale==100);
     drag(0,470,500.67f);CHECK(draft.reticle_scale==150&&live.reticle_scale==100);
@@ -1474,58 +1561,62 @@ static void CheckSize(unsigned width,unsigned height){
     KeyEvent(ImGuiKey_LeftArrow,false);Settle();CHECK(draft.reticle_scale==145);
     Key(ImGuiKey_RightArrow);CHECK(draft.reticle_scale==150);
     RightClick();CHECK(!reticle_page&&PanelOpen());
-    Click(20);CHECK(live.fov==70&&live.reticle_scale==150&&!Dirty());
-    ChangeSetting(16);ChangeSetting(0);CHECK(draft.reticle_scale==155&&live.reticle_scale==150&&Dirty());
+    Click(21);CHECK(live.fov==70&&live.reticle_scale==150&&!Dirty());
+    ChangeSetting(17);ChangeSetting(0);CHECK(draft.reticle_scale==155&&live.reticle_scale==150&&Dirty());
     RightClick();CHECK(!reticle_page&&PanelOpen());
-    Click(22);CHECK(confirm_back);Click(2);CHECK(PanelOpen()&&Dirty());
-    Click(21);CHECK(draft.reticle_scale==150&&live.reticle_scale==150&&!Dirty());
+    Click(23);CHECK(confirm_back);Click(2);CHECK(PanelOpen()&&Dirty());
+    Click(22);CHECK(draft.reticle_scale==150&&live.reticle_scale==150&&!Dirty());
     // Weapon FOV is independent of the world camera, with the same Apply policy.
     CHECK(draft.weapon_fov==100&&live.weapon_fov==100);
-    drag(17,470,600);CHECK(draft.weapon_fov==150&&live.weapon_fov==100&&draft.fov==70);
-    drag(17,470,300);CHECK(draft.weapon_fov==50&&live.weapon_fov==100&&draft.fov==70);
-    drag(17,470,511);CHECK(draft.weapon_fov==125&&live.weapon_fov==100);
-    fail_apply=true;Click(20);fail_apply=false;CHECK(Dirty()&&live.weapon_fov==100);
-    Click(21);CHECK(!Dirty()&&draft.weapon_fov==100);
-    ChangeSetting(17);CHECK(draft.weapon_fov==105&&Dirty());Click(22);CHECK(confirm_back);
-    Click(2);CHECK(PanelOpen()&&Dirty());Click(20);
+    drag(18,470,600);CHECK(draft.weapon_fov==150&&live.weapon_fov==100&&draft.fov==70);
+    drag(18,470,300);CHECK(draft.weapon_fov==50&&live.weapon_fov==100&&draft.fov==70);
+    drag(18,470,511);CHECK(draft.weapon_fov==125&&live.weapon_fov==100);
+    fail_apply=true;Click(21);fail_apply=false;CHECK(Dirty()&&live.weapon_fov==100);
+    Click(22);CHECK(!Dirty()&&draft.weapon_fov==100);
+    ChangeSetting(18);CHECK(draft.weapon_fov==105&&Dirty());Click(23);CHECK(confirm_back);
+    Click(2);CHECK(PanelOpen()&&Dirty());Click(21);
     CHECK(live.weapon_fov==105&&live.fov==70&&!Dirty());
     // Movie scaling follows the same staged Apply, failure and Discard policy.
     CHECK(draft.fmv_scale==0&&live.fmv_scale==0);
-    ChangeSetting(19);CHECK(draft.fmv_scale==1&&live.fmv_scale==0&&Dirty());
+    ChangeSetting(20);CHECK(draft.fmv_scale==1&&live.fmv_scale==0&&Dirty());
     Key(ImGuiKey_LeftArrow);CHECK(draft.fmv_scale==0&&!Dirty());
     Key(ImGuiKey_RightArrow);CHECK(draft.fmv_scale==1&&live.fmv_scale==0&&Dirty());
-    fail_apply=true;Click(20);fail_apply=false;CHECK(Dirty()&&live.fmv_scale==0);
-    Click(21);CHECK(!Dirty()&&draft.fmv_scale==0);
-    ChangeSetting(19);Click(22);CHECK(confirm_back);Click(2);CHECK(PanelOpen()&&Dirty());
-    Click(20);CHECK(live.fmv_scale==1&&!Dirty());
-    ChangeSetting(19);Click(21);CHECK(draft.fmv_scale==1&&live.fmv_scale==1&&!Dirty());
+    fail_apply=true;Click(21);fail_apply=false;CHECK(Dirty()&&live.fmv_scale==0);
+    Click(22);CHECK(!Dirty()&&draft.fmv_scale==0);
+    ChangeSetting(20);Click(23);CHECK(confirm_back);Click(2);CHECK(PanelOpen()&&Dirty());
+    Click(21);CHECK(live.fmv_scale==1&&!Dirty());
+    ChangeSetting(20);Click(22);CHECK(draft.fmv_scale==1&&live.fmv_scale==1&&!Dirty());
+    ChangeSetting(20);CHECK(draft.fmv_scale==2&&live.fmv_scale==1&&Dirty());
+    fail_apply=true;Click(21);fail_apply=false;CHECK(Dirty()&&live.fmv_scale==1);
+    Click(21);CHECK(live.fmv_scale==2&&!Dirty());
+    ChangeSetting(20);CHECK(draft.fmv_scale==0);Click(22);CHECK(draft.fmv_scale==2&&!Dirty());
     // HD changes use the same staged save/discard/back policy, including failures.
-    CHECK(!live.hd_ui);ChangeSetting(15);CHECK(draft.hd_ui&&Dirty()&&!live.hd_ui);
-    fail_apply=true;Click(20);fail_apply=false;CHECK(draft.hd_ui&&Dirty()&&!live.hd_ui);
-    Click(21);CHECK(!draft.hd_ui&&!Dirty());
-    ChangeSetting(15);Click(22);CHECK(confirm_back&&hits.size()==3);
+    CHECK(!live.hd_ui);ChangeSetting(16);CHECK(draft.hd_ui&&Dirty()&&!live.hd_ui);
+    fail_apply=true;Click(21);fail_apply=false;CHECK(draft.hd_ui&&Dirty()&&!live.hd_ui);
+    Click(22);CHECK(!draft.hd_ui&&!Dirty());
+    ChangeSetting(16);Click(23);CHECK(confirm_back&&hits.size()==3);
     Click(2);CHECK(PanelOpen()&&draft.hd_ui&&Dirty());
-    Click(22);Click(1);CHECK(!PanelOpen()&&!live.hd_ui);
+    Click(23);Click(1);CHECK(!PanelOpen()&&!live.hd_ui);
     OpenGraphics(options);CHECK(!draft.hd_ui&&!Dirty());
-    ChangeSetting(15);Click(20);CHECK(live.hd_ui&&!Dirty());
-    ChangeSetting(15);Click(21);CHECK(live.hd_ui&&draft.hd_ui&&!Dirty());
+    ChangeSetting(16);Click(21);CHECK(live.hd_ui&&!Dirty());
+    ChangeSetting(16);Click(22);CHECK(live.hd_ui&&draft.hd_ui&&!Dirty());
     // One Fog control covers all four effective modes. Mouse edits stay in the
     // draft, and failed Apply rolls back the three compatible config keys.
     CHECK(TrialDistanceFog&&!TrialSmoothFog&&TrialFogDistanceMode==0);
     ChangeSetting(8);CHECK(draft_fog_mode==2&&!TrialSmoothFog&&Dirty());
-    Click(21);CHECK(draft_fog_mode==1&&TrialDistanceFog&&!Dirty());
-    ChangeSetting(8);Click(20);CHECK(TrialDistanceFog&&TrialFogDistanceMode==0&&TrialSmoothFog&&!Dirty());
-    ChangeSetting(8);Click(20);CHECK(TrialDistanceFog&&TrialFogDistanceMode==1&&!TrialSmoothFog&&!Dirty());
-    ChangeSetting(8);fail_apply=true;Click(20);fail_apply=false;
+    Click(22);CHECK(draft_fog_mode==1&&TrialDistanceFog&&!Dirty());
+    ChangeSetting(8);Click(21);CHECK(TrialDistanceFog&&TrialFogDistanceMode==0&&TrialSmoothFog&&!Dirty());
+    ChangeSetting(8);Click(21);CHECK(TrialDistanceFog&&TrialFogDistanceMode==1&&!TrialSmoothFog&&!Dirty());
+    ChangeSetting(8);fail_apply=true;Click(21);fail_apply=false;
     CHECK(TrialDistanceFog&&TrialFogDistanceMode==1&&!TrialSmoothFog&&draft_fog_mode==0&&Dirty());
-    Click(20);CHECK(!TrialDistanceFog&&TrialFogDistanceMode==0&&!TrialSmoothFog&&!Dirty());
-    ChangeSetting(8);Click(20);CHECK(TrialDistanceFog&&TrialFogDistanceMode==0&&!TrialSmoothFog&&!Dirty());
-    ChangeSetting(8);Click(22);CHECK(confirm_back&&hits.size()==3);
-    Key(ImGuiKey_Escape);Settle();CHECK(!confirm_back&&PanelOpen()&&Dirty()&&hits.size()==23);
-    CHECK(draft_fog_mode==2&&!TrialSmoothFog);Click(21);CHECK(!Dirty());
-    ChangeSetting(6);CHECK(Dirty()&&message.empty());Click(22);CHECK(confirm_back&&hits.size()==3);
-    Key(ImGuiKey_Escape);Settle();CHECK(!confirm_back&&PanelOpen()&&Dirty()&&hits.size()==23);
-    Click(22);CHECK(confirm_back&&hits.size()==3);Click(1);CHECK(!PanelOpen());
+    Click(21);CHECK(!TrialDistanceFog&&TrialFogDistanceMode==0&&!TrialSmoothFog&&!Dirty());
+    ChangeSetting(8);Click(21);CHECK(TrialDistanceFog&&TrialFogDistanceMode==0&&!TrialSmoothFog&&!Dirty());
+    ChangeSetting(8);Click(23);CHECK(confirm_back&&hits.size()==3);
+    Key(ImGuiKey_Escape);Settle();CHECK(!confirm_back&&PanelOpen()&&Dirty()&&hits.size()==24);
+    CHECK(draft_fog_mode==2&&!TrialSmoothFog);Click(22);CHECK(!Dirty());
+    ChangeSetting(6);CHECK(Dirty()&&message.empty());Click(23);CHECK(confirm_back&&hits.size()==3);
+    Key(ImGuiKey_Escape);Settle();CHECK(!confirm_back&&PanelOpen()&&Dirty()&&hits.size()==24);
+    Click(23);CHECK(confirm_back&&hits.size()==3);Click(1);CHECK(!PanelOpen());
     CHECK(live.settings.render_percent==125&&live.settings.fps_cap==60);CheckStrip(options.source.count+3);
 
     // A fresh controller Back reaches the open page; its held repeat cannot
@@ -1540,7 +1631,7 @@ static void CheckSize(unsigned width,unsigned height){
     // RMB has the same Back policy as Q/Escape, including dirty confirmation.
     OpenGraphics(options);ChangeSetting(3);RightClick();CHECK(confirm_back&&PanelOpen()&&Dirty());
     RightClick();CHECK(!confirm_back&&PanelOpen()&&Dirty());
-    Click(20);CHECK(!Dirty());
+    Click(21);CHECK(!Dirty());
     ImGui::GetIO().AddMouseButtonEvent(1,true);DrawFrame();CHECK(!PanelOpen());
     Settle();EmptyAction(); // held closing click cannot back out of Options too
     ImGui::GetIO().AddMouseButtonEvent(1,false);Settle();EmptyAction();
@@ -1549,8 +1640,8 @@ static void CheckSize(unsigned width,unsigned height){
         Publish(page);RightClick();action=Take();CHECK(action.kind==UC_HF_BACK);EmptyAction();
     }
 
-    OpenGraphics(options);CHECK(!live.world_textures);trial_graphics::textures_available=false;ChangeSetting(18);CHECK(!draft.world_textures&&!Dirty());trial_graphics::textures_available=true;ChangeSetting(18);CHECK(draft.world_textures&&Dirty()&&!live.world_textures);
-    Click(21);CHECK(!draft.world_textures&&!Dirty());ChangeSetting(18);Click(20);CHECK(live.world_textures&&!Dirty());Close();
+    OpenGraphics(options);CHECK(!live.world_textures);trial_graphics::textures_available=false;ChangeSetting(19);CHECK(!draft.world_textures&&!Dirty());trial_graphics::textures_available=true;ChangeSetting(19);CHECK(draft.world_textures&&Dirty()&&!live.world_textures);
+    Click(22);CHECK(!draft.world_textures&&!Dirty());ChangeSetting(19);Click(21);CHECK(live.world_textures&&!Dirty());Close();
     // Show all 17 unlocked slots in the recorded original order. The fixture
     // validates host hit regions/actions; original badge pixels are guest-owned.
     auto levels=MakeList(1);levels.list_kind=0;levels.source.kind=UC_HF_LEVELS;levels.source.count=17;levels.source.level_actions=3;
@@ -1583,9 +1674,11 @@ static void CheckSize(unsigned width,unsigned height){
     // Select a known row with mouse once, then operate entirely by controller.
     Move(0,0);ClickPoint(hits[7].a.x+2,hits[7].a.y+2);const bool old_fps=draft_fps;
     pad(8);CHECK(draft_fps!=old_fps);pad(4);CHECK(draft_fps==old_fps);
-    for(unsigned i=0;i<8;++i)pad(2); // FPS row 7 -> HD UI row 15.
+    for(unsigned i=0;i<7;++i)pad(2); // FPS row 7 -> Death convulsions row 14.
+    pad(8);CHECK(!draft.death_convulsions&&live.death_convulsions&&Dirty());
+    pad(4);CHECK(draft.death_convulsions);pad(2);pad(2); // World FOV -> HD UI.
     const bool old_hd=live.hd_ui;pad(8);CHECK(draft.hd_ui!=old_hd&&live.hd_ui==old_hd&&Dirty());
-    pad(2); // Reticle row 16, then Weapon FOV row 17.
+    pad(2); // Reticle row 17, then Weapon FOV row 18.
     const auto old_reticle=live.reticle_scale;pad(8);
     CHECK(reticle_page&&draft.reticle_scale==old_reticle);pad(8);
     CHECK(draft.reticle_scale==old_reticle+5&&live.reticle_scale==old_reticle&&Dirty());
@@ -1630,7 +1723,7 @@ static void CheckSize(unsigned width,unsigned height){
     TrialFrontendPublish(moving_options);DrawFrame();CHECK(!PanelOpen()&&hits.size()==options.source.count+3);
     TrialFrontendPublish({});DrawFrame();CHECK(hits.empty()&&!TrialGraphicsOpen());
     // Render, effects, world/weapon FOV, FMV scaling, HD, four fog modes, RMB flow, controller Apply.
-    CHECK(applied==before+13);
+    CHECK(applied==before+16);
     std::printf("PASS %ux%u: menu strips, profile targets, typed names, 17 level hits, draft/apply/discard, release gates and stale screen revocation\n",width,height);
 }
 static void CheckHealthOptions(){
@@ -1695,7 +1788,7 @@ static void CheckUltrawideMenus(){
         const auto aspect_row=hits[2];
         ClickPoint(left+391*scale,(aspect_row.a.y+aspect_row.b.y)*.5f);
         CHECK(draft.aspect==old);
-        const auto slider=hits[14];const float y=(slider.a.y+slider.b.y)*.5f;
+        const auto slider=hits[15];const float y=(slider.a.y+slider.b.y)*.5f;
         Move(left+418*scale,y);ImGui::GetIO().AddMouseButtonEvent(0,true);DrawFrame();
         CHECK(draft.fov==40);
         Move(left+480*scale,y);CHECK(draft.fov==65);
@@ -1763,10 +1856,10 @@ int main(){
             for(unsigned m=1;m<=3;++m){
                 auto row=hits[page.source.count];
                 ClickPoint(row.b.x-10*output.width/640.f,(row.a.y+row.b.y)/2);
-                CHECK(trial_audio::requested==m%3&&TrialSoundOutput==m%3);EmptyAction();
+                CHECK(trial_audio::requested==m%3&&TrialSoundOutput==m%3&&trial_audio::Active()==m%3);EmptyAction();
             }
             TrialFrontendPad(0,0,0,0,0);Settle();TrialFrontendPad(8,0,0,0,0);Settle();
-            CHECK(trial_audio::requested==1);EmptyAction();
+            CHECK(trial_audio::requested==1&&trial_audio::Active()==1);EmptyAction();
             TrialFrontendPad(0,0,0,0,0);Settle();TrialFrontendPad(0,0,255,0,0);Settle();
             action=Take();CHECK(action.kind==UC_HF_BACK);
             TrialFrontendPad(0,0,0,0,0);Settle();
@@ -1775,7 +1868,7 @@ int main(){
         keyboard_mode=1;
     }
     std::printf("UI totals: input changes=%u, applies=%u, frames=%u\n",input_changes,applied-before_ui,frames);
-    CHECK(input_changes>10&&applied==before_ui+39&&frames>100);
+    CHECK(input_changes>10&&applied==before_ui+48&&frames>100);
     CheckHealthOptions();
     CheckPerPlayerSettings();
     CheckOwnedPauseNavigation();
@@ -1795,18 +1888,23 @@ int main(){
     CheckUltrawideMenus();
     trial_language::active=4;
     CHECK(std::strcmp(trial_language::Ui("Controls"),"Controles")==0);
+    CHECK(std::strcmp(trial_language::Ui("Movement inertia"),"Inercia de movimiento")==0);
+    CHECK(std::strcmp(trial_language::Ui("Keep the original movement build-up. Off makes movement input respond immediately."),
+        "Conserva la aceleraci\xc3\xb3n gradual original. Desactivada, el movimiento responde de inmediato.")==0);
     CHECK(std::strcmp(trial_language::Ui("Next Firearm"),"Siguiente arma de fuego")==0);
     CHECK(std::strcmp(trial_language::Ui("Previous Firearm"),"Arma de fuego anterior")==0);
     CHECK(std::strcmp(trial_language::Ui("Equip or select the next available firearm."),"Equipa o selecciona la siguiente arma de fuego disponible.")==0);
     CHECK(std::strcmp(trial_language::Ui("Equip or select the previous available firearm."),"Equipa o selecciona el arma de fuego anterior disponible.")==0);
     CHECK(std::strcmp(trial_language::Ui("FMV scaling"),"Escala de v\xc3\xad" "deos")==0);
     CHECK(std::strcmp(trial_language::Ui("Fill"),"Llenar")==0);
+    CHECK(std::strcmp(trial_language::Ui("Death convulsions"),"Convulsiones al morir")==0);
     CHECK(std::strcmp(trial_language::Ui("Original aspect ratio"),"Proporciones originales")==0);
+    CHECK(std::strcmp(trial_language::Ui("Fill stretch"),"Llenar estirando")==0);
     CHECK(std::strcmp(trial_language::Ui("Nick Mason"),"Nick Mason")==0);
     for(const auto size:{app::Mode{640,480},app::Mode{1920,1080},app::Mode{2560,1440}}){
         output=size;auto page=MakeList(3);Publish(page);
         Click(page.source.count);CHECK(PanelOpen());
-        CHECK(hits.size()==23);
+        CHECK(hits.size()==24);
         for(const auto& hit:hits)CHECK(hit.a.x>=0&&hit.b.x<=float(output.width)+1);
         RightClick();CHECK(!PanelOpen());EmptyAction();
     }
@@ -1815,16 +1913,16 @@ int main(){
             output=size;trial_language::active=language;auto page=MakeList(3);Publish(page);
             Click(page.source.count);CHECK(PanelOpen());settings_player=player;ReadDraft();Settle();
             const auto before=trial_graphics::Snapshot(player),other=trial_graphics::Snapshot(1-player);
-            ChangeSetting(16);CHECK(reticle_page&&hits.size()==6);
+            ChangeSetting(17);CHECK(reticle_page&&hits.size()==6);
             for(const auto& hit:hits)CHECK(hit.a.x>=0&&hit.b.x<=float(output.width)+1&&hit.a.y>=0&&hit.b.y<=float(output.height));
             for(unsigned i=0;i<4;++i){
                 const auto old=draft.reticle_colors[i];ChangeSetting(i+1);
                 CHECK(draft.reticle_colors[i]==(old+1)%std::size(trial_graphics::ReticlePalette));
             }
             CHECK(Dirty()&&trial_graphics::Snapshot(player).reticle_colors==before.reticle_colors);
-            RightClick();CHECK(PanelOpen()&&!reticle_page&&hits.size()==23);
+            RightClick();CHECK(PanelOpen()&&!reticle_page&&hits.size()==24);
             CHECK(Apply()&&!Dirty()&&trial_graphics::Snapshot(1-player).reticle_colors==other.reticle_colors);
-            ChangeSetting(16);CHECK(reticle_page);ChangeSetting(1);ReadDraft();CHECK(!Dirty());
+            ChangeSetting(17);CHECK(reticle_page);ChangeSetting(1);ReadDraft();CHECK(!Dirty());
             Click(5);CHECK(!reticle_page&&PanelOpen());RightClick();CHECK(!PanelOpen());EmptyAction();
         }
     trial_language::active=0;

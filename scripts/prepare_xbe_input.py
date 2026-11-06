@@ -31,6 +31,7 @@ def prepare():
     seams['000C6554']=(37,'000C6617')
     seams['0025C721']=(32,'')
     seams['0025C8A3']=(33,'')
+    seams['00276010']=(41,'')
     for p in (AREA/'generated/game').glob('x86_recomp.*.cpp'):
         text=p.read_text();backup=backups/p.name
         if 'TrialGuestHook' in text:

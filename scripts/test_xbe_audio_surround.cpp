@@ -35,7 +35,8 @@ static uint32_t FramesOf(const Voice& v,uint32_t bytes){return v.tag==0x69?bytes
 // GENERATED_LEVELS
 // GENERATED_SAMPLE
 static unsigned completed;
-static void Complete(Voice&,Packet&,uint32_t){++completed;}
+static std::vector<uint32_t> completed_packets;
+static void Complete(Voice&,Packet& packet,uint32_t){++completed;completed_packets.push_back(packet.context);}
 static void Deactivate(Voice& v){v.sync=false;if(v.active)v.active=v.paused=v.ending=false;}
 // GENERATED_RENDER_BEFORE
 // GENERATED_RENDER_AFTER
@@ -52,8 +53,51 @@ static Voice Make(unsigned channels=1){
     return v;
 }
 static void StateEqual(const std::map<uint32_t,Voice>& expected){
+    assert(g_voices.size()==expected.size());
     for(auto& [id,v]:g_voices){const auto& e=expected.at(id);
-        assert(v.pos==e.pos&&v.playing==e.playing&&v.active==e.active&&v.packets.size()==e.packets.size());
+        assert(v.pos==e.pos&&v.playing==e.playing&&v.active==e.active&&v.paused==e.paused&&v.sync==e.sync&&v.ending==e.ending);
+        assert(v.refs==e.refs&&v.output==e.output&&v.data==e.data&&v.owned==e.owned&&v.callback==e.callback&&v.context==e.context);
+        assert(v.packets.size()==e.packets.size());
+        for(size_t i=0;i<v.packets.size();++i){const auto& a=v.packets[i];const auto& b=e.packets[i];
+            assert(a.data==b.data&&a.size==b.size&&a.used==b.used&&a.completed_ptr==b.completed_ptr&&a.status_ptr==b.status_ptr&&a.context==b.context);
+        }
+    }
+}
+static void LiveSwitches(){
+    using namespace trial_audio;
+    constexpr unsigned modes[]={Stereo,Surround51,Surround71,Stereo,Surround71,Surround51,Stereo,Surround71};
+    auto loop=Make();loop.is3d=true;loop.p[0]=10;loop.p[2]=-4;loop.min_dist=100;loop.pos=19.25;loop.freq=44100;
+    auto stream=loop;stream.obj=2;stream.stream=stream.active=stream.ending=true;stream.pos=0;stream.freq=0;
+    stream.callback=0x1234;stream.context=0x5678;
+    stream.packets={{0x3000,1800,0x8000,0x8010,11},{0x3708,1800,0x8004,0x8014,22},{0x3e10,1800,0x8008,0x8018,33}};
+    for(unsigned i=0;i<2700;++i)W16(0x3000+2*i,4096);
+    const std::map<uint32_t,Voice> initial={{1,loop},{2,stream}};
+    std::vector<std::map<uint32_t,Voice>> states;
+    std::vector<std::vector<uint32_t>> completions;
+    std::vector<float> before(480*2);
+    g_voices=initial;completed=0;completed_packets.clear();
+    for(unsigned mode:modes){
+        (void)mode;RenderBefore(before.data(),480);states.push_back(g_voices);completions.push_back(completed_packets);
+    }
+    assert((completed_packets==std::vector<uint32_t>{11,22,33}));
+    for(unsigned channels:{2u,6u,8u}){
+        output_channels=channels;g_voices=initial;completed=0;completed_packets.clear();
+        std::vector<float> out(480*channels+2,123.f);std::string message;unsigned block=0;
+        for(unsigned mode:modes){
+            assert(Apply(mode,message)&&requested==mode);
+            Render(out.data()+1,480);StateEqual(states[block]);
+            assert(completed_packets==completions[block++]&&completed==completed_packets.size());
+            assert(out.front()==123&&out.back()==123);
+            float energy[8]{};
+            for(unsigned frame=0;frame<480;++frame)for(unsigned channel=0;channel<channels;++channel){
+                const float sample=out[1+frame*channels+channel];assert(std::isfinite(sample)&&std::abs(sample)<=1);
+                energy[channel]+=sample*sample;
+            }
+            assert(energy[0]+energy[1]>0&&energy[2]==0&&energy[3]==0);
+            const unsigned active=Active(mode,channels);
+            assert((energy[4]+energy[5]>0)==(active!=Stereo));
+            assert((energy[6]+energy[7]>0)==(active==Surround71));
+        }
     }
 }
 static void Parity(std::map<uint32_t,Voice> initial){
@@ -87,6 +131,7 @@ int main(){
     for(unsigned m=0;m<3;++m){assert(Apply(m,message)&&app::saved==m&&requested==m);Initialize();assert(requested==m);}
     app::fail_save=true;assert(!Apply(0,message)&&TrialSoundOutput==2&&requested==2);app::fail_save=false;
     assert(!Apply(999,message)&&TrialSoundOutput==2&&app::saves==3);
+    LiveSwitches();
     for(unsigned channels:{1u,2u}){
         auto v=Make(channels);Parity({{1,v}});
         v.is3d=true;v.p[0]=4;v.p[2]=-7;Parity({{1,v}});
@@ -130,5 +175,5 @@ int main(){
     g_voices.at(1).output=999;SurroundLevels(g_voices.at(1),true,b);
     for(auto& row:b)for(float gain:row)assert(gain==0);
     auto spread=RearSpread(NAN,0);assert(spread[0]==1&&spread[1]==0);
-    std::puts("PASS: persisted modes/failure rollback; exact stereo PCM/ADPCM; 2/6/8 frame bounds, clocks and streams; 361 directions; 7.1 energy; direct centre/LFE; listener and nested MIXIN routing");
+    std::puts("PASS: persisted modes/failure rollback; consecutive live switches preserve voices, cursors and packet completion order; exact stereo PCM/ADPCM; 2/6/8 frame bounds, clocks and streams; 361 directions; 7.1 energy; direct centre/LFE; listener and nested MIXIN routing");
 }

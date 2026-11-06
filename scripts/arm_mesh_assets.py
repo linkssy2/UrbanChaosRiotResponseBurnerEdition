@@ -1,5 +1,4 @@
 """Read-only arm mesh oracle using the original A6220 stream/palette layout."""
-import math
 import struct
 
 from native_scene_checks.inspect_scene import Reader

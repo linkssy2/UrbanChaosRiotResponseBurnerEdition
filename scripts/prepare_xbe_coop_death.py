@@ -87,7 +87,7 @@ def prepare(area):
         assert hashlib.sha256(xbe[start:start+size]).hexdigest()==digest,hex(va)
     for name in ('xbe_coop_death.h','xbe_coop_death.cpp'):
         (area/'src/common'/name).write_text((local/name).read_text())
-    include='#include "xbe_coop_death.h"\n';chunks={};extracted=''
+    include='#include "xbe_coop_death.h"\n';extracted=''
     for chunk,seams in HOOKS.items():
         path=area/f'generated/game/x86_recomp.{chunk}.cpp'
         source=path.read_text().replace(include,'')
@@ -105,7 +105,7 @@ def prepare(area):
         for unit,first,last,_,name in REGIONS:
             if unit==chunk:extracted+=fixture('Coop'+name,section(source,first,last))
         source=source.replace('#include "x86_recomp_shared.h"\n','#include "x86_recomp_shared.h"\n'+include,1)
-        path.write_text(source);chunks[chunk]=source
+        path.write_text(source)
     test=(local/'test_xbe_coop_death.cpp').read_text()
     assert test.count('// ORIGINAL_DEATH_REGIONS')==1
     test=test.replace('// ORIGINAL_DEATH_REGIONS',extracted)

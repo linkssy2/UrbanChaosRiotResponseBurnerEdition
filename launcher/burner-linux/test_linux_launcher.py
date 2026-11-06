@@ -87,6 +87,7 @@ esac
         self.assertIn('SLES-53991', result.stdout)
         self.assertIn('use-iso', result.stdout)
         self.assertIn('use-installation', result.stdout)
+        self.assertIn('startup [on|off]', result.stdout)
         self.assertIn('is not required', result.stdout)
         self.assertFalse((self.root / '.proton').exists())
 
@@ -191,7 +192,8 @@ esac
                      ('use-iso',), ('use-iso', 'missing.iso'), ('use-installation',),
                      ('use-installation', 'missing'), ('verify', 'extra'), ('auto-setup', 'extra'),
                      ('textures', 'one', 'two'), ('voices',), ('voices', 'missing.iso'),
-                     ('voices', 'one', 'two'), ('language', 'unknown'), ('play', 'extra')]:
+                     ('voices', 'one', 'two'), ('language', 'unknown'), ('play', 'extra'),
+                     ('startup', 'bad'), ('startup', 'on', 'off')]:
             with self.subTest(args=args):
                 result = self.run_script(*args)
                 self.assertNotEqual(result.returncode, 0)
@@ -310,6 +312,16 @@ esac
         self.assertEqual(result.returncode,7)
         self.assertIn('after-cap',result.stderr)
         self.assertEqual(max(p.stat().st_size for p in (data/'logs').glob('proton-*.log')),8388608)
+
+    def test_startup_choice_routes_to_shared_worker(self):
+        for value in (None, 'on', 'off'):
+            if self.log.exists():
+                self.log.unlink()
+            result = self.run_script('startup', *([] if value is None else [value]))
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(self.calls()[-1][7:], ['startup'] +
+                             ([] if value is None else ['--skip-startup', value]))
+            self.assertFalse((self.root / 'GameData').exists())
 
     def test_existing_prefix_file_is_never_replaced(self):
         prefix = self.root / '.proton'

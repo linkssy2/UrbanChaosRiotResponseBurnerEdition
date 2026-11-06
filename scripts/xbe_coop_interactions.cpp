@@ -59,12 +59,16 @@ bool Behavior(const uint8_t* b,uint32_t p){
     return TrialGuestReadable(controller,0x20)&&TrialGuestReadable(actor,0x15c)&&
         Word(b,controller+0xc)==actor&&Word(b,actor+0x54)!=0xffffffffu&&!(Word(b,actor+0x5c)&1);
 }
+bool Identity(const uint8_t* b,const Record& r){
+    return TrialGuestReadable(r.behavior,0x15c)&&Word(b,r.behavior)==0x471060&&
+        Word(b,r.behavior+0x54)==r.id&&Word(b,r.behavior+0x50)==r.source;
+}
+bool Valid(const uint8_t* b,const Record& r){
+    return Identity(b,r)&&Behavior(b,r.behavior)&&Word(b,r.behavior+0xd4)==r.actor&&Word(b,r.actor+0x54)==r.actor_id;
+}
 Record* Find(const uint8_t* b,uint32_t p,bool create=false){
+    for(auto& r:records)if(r.behavior==p)return Valid(b,r)?&r:nullptr;
     if(!Behavior(b,p))return nullptr;
-    for(auto& r:records)if(r.behavior==p){
-        if(r.id==Word(b,p+0x54)&&r.source==Word(b,p+0x50)&&r.actor==Word(b,p+0xd4)&&r.actor_id==Word(b,r.actor+0x54))return &r;
-        r={};
-    }
     if(create)for(auto& r:records)if(!r.behavior){r.behavior=p;r.id=Word(b,p+0x54);r.source=Word(b,p+0x50);r.actor=Word(b,p+0xd4);r.actor_id=Word(b,r.actor+0x54);return &r;}
     return nullptr;
 }
@@ -107,6 +111,21 @@ void Lock(Call& call,Record& r,bool value){
     call.Run(0x1f90a0,events,{ids[r.slot],Word(call.b,0x4f9f20),call.sp+128,1,call.sp+132});
     call.b[r.behavior+0x129]=value?1:0;
 }
+void Prune(const X86Context& c,uint8_t* b){
+    HostRestore host;
+    for(auto& r:records)if(r.behavior&&!Valid(b,r)){
+        // An invalid NPC/controller can leave its still-identical behavior's
+        // lock behind. Never unlock a replacement or another live dialogue.
+        if(Identity(b,r)&&Current(b,r)&&b[r.behavior+0x129]){
+            bool another=false;
+            for(const auto& other:records)if(&other!=&r&&other.slot==r.slot&&other.behavior&&Valid(b,other)&&b[other.behavior+0x129]){another=true;break;}
+            b[r.behavior+0x148]=0;
+            if(another)b[r.behavior+0x129]=0;
+            else{Call call(c,b);Lock(call,r,false);}
+        }
+        r={};
+    }
+}
 }
 using namespace interactions;
 
@@ -123,14 +142,21 @@ void TrialCoopInteractionInput(X86Context& c,uint8_t* b){
     if(scope&&player&&TrialGuestReadable(c.esp,12)){const uint32_t port=player-1;std::memcpy(b+c.esp,&port,4);}
 }
 TrialCoopInteractionScope::TrialCoopInteractionScope(X86Context& c,uint8_t* b):context_(c),base_(b),previous_(scope){
-    previous_lookup_=lookup_owner;lookup_owner=0;scope=this;
-    if(Pair(b)&&Behavior(b,c.ecx)&&Stack(c)&&(Find(b,c.ecx)||Word(b,c.ecx+0x158)==0)){behavior_=c.ecx;id_=Word(b,behavior_+0x54);qualified_=true;}
+    previous_lookup_=lookup_owner;
+    if(Pair(b)&&Stack(c)){
+        Prune(c,b);
+        if(Behavior(b,c.ecx)&&(Find(b,c.ecx)||Word(b,c.ecx+0x158)==0)){behavior_=c.ecx;qualified_=true;}
+    }
+    lookup_owner=0;scope=this;
 }
 TrialCoopInteractionScope::~TrialCoopInteractionScope(){scope=previous_;lookup_owner=previous_lookup_;Publish();}
 bool TrialCoopInteractionScope::Update(){
     HostRestore preserve;
     if(!qualified_)return true;
     auto* r=Find(base_,behavior_);if(!r)return true;
+    // Retail busy/condition/speech branches can bypass Begin and Commit.
+    // Only a wait reached by this update may keep publishing the message.
+    r->waiting=false;r->skip=false;
     if(Current(base_,*r)){
         lookup_owner=players[r->slot];
         if(!Alive(base_,lookup_owner)){

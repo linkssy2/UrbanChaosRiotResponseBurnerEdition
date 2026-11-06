@@ -86,14 +86,14 @@ void x86_icall(X86Context& ctx,uint8_t* base,uint32_t address) {
 }
 
 static X86Context Reset() {
-    memory.fill(0);draws.clear();requests.clear();backgrounds.clear();fills.clear();calls=0;mem::denied=0xffffffff;trace={};
+    memory.fill(0);draws.clear();requests.clear();backgrounds.clear();fills.clear();calls=0;mem::denied=0xffffffff;traces={};
     W32(beat,0x452f90);W32(beat+4,53);W32(beat+8,44);W32(beat+0x10,health+0x10);
     G<float>(beat+0x14)=1000;G<float>(beat+0x60)=.15f;W32(beat+0x6c,sprites);
     W32(beat+0x64,samples);W32(beat+0x68,colors);
     W32(beat+0xc,background);W32(background,bvtable);W32(bvtable+8,0xf0003);
     W32(health,0x453550);W32(health+4,actor);W32(health+0xc,fill);G<float>(health+0x4c)=1;
     const float rgba[]={157.f/255,219.f/255,64.f/255,1};std::memcpy(HostPtr(health+0x10),rgba,16);
-    W32(actor+0x54,44);W32(fill,0x4531c0);G<float>(fill+8)=220;
+    W32(actor,0x46fbe8);W32(actor+0x368,0);W32(actor+0x54,44);W32(fill,0x4531c0);G<float>(fill+8)=220;
     for(unsigned i=0;i<53;++i)W32(sprites+i*4,sprite);
     W32(sprite,svtable);W32(svtable+8,0x7b180);W32(sprite+4,123);
     W32(fill+4,fillchild);G<float>(fill+0x10)=1;G<float>(fill+0x14)=1;
@@ -111,7 +111,7 @@ static X86Context Reset() {
     ctx.xmm[7].u[2]=0x87654321;ctx.st[7]=42;return ctx;
 }
 static void Invoke(X86Context& ctx) {
-    const auto saved=ctx;std::array<uint8_t,0x5400> owners{};
+    const auto saved=ctx;std::array<uint8_t,0x14000> owners{};
     std::memcpy(owners.data(),HostPtr(beat),owners.size());
     std::array<uint8_t,0x210> stack{};std::memcpy(stack.data(),HostPtr(ctx.esp),stack.size());
     _mm_setcsr(0x5f80);draws.clear();requests.clear();calls=0;TrialHealthPulse(ctx,g_base);
@@ -181,14 +181,14 @@ static void SpriteChecks(){
     }
     assert(bar_line);
     // Damage/healing clips only the additive short line.
-    assert(trace.bar_started);G<float>(health+0x4c)=.01f;
+    assert(traces[0].bar_started);G<float>(health+0x4c)=.01f;
     Invoke(ctx);assert(draws.size()==1);for(const auto& d:draws)assert(d.right<=104.5f);
     G<float>(health+0x4c)=1;Invoke(ctx);
     // No permanent baseline is emitted before the original source wraps.
     ctx=Reset();G<float>(beat+0x5c)=52.5f/53;G<float>(beat+0x74)=2;
     Invoke(ctx);assert(draws.empty());
     G<float>(beat+0x5c)=0;G<float>(beat+0x74)=2.04f;Invoke(ctx);
-    assert(trace.bar_started&&draws.size()==1&&draws[0].left==102.5f&&draws[0].right==108.5f);
+    assert(traces[0].bar_started&&draws.size()==1&&draws[0].left==102.5f&&draws[0].right==108.5f);
     assert(draws[0].top==46.5f&&draws[0].bottom==49.5f);
     auto frozen=draws;Invoke(ctx);assert(draws.size()==frozen.size());
     assert(!std::memcmp(draws.data(),frozen.data(),draws.size()*sizeof(Draw)));
@@ -201,10 +201,43 @@ static void SpriteChecks(){
     for(unsigned i=0;i<53;++i)G<float>(colors+i*16+12)=0;
     Invoke(ctx);assert(draws.size()==1);
     G<float>(beat+0x74)=0;G<float>(beat+0x5c)=0;std::memset(HostPtr(samples),0,53*4);
-    Invoke(ctx);assert(!trace.bar_started&&draws.empty());
-    W32(beat+8,45);W32(actor+0x54,45);Invoke(ctx);assert(trace.actor==45&&!trace.bar_started);
+    Invoke(ctx);assert(!traces[0].bar_started&&draws.empty());
+    W32(beat+8,45);W32(actor+0x54,45);Invoke(ctx);assert(traces[0].actor==45&&!traces[0].bar_started);
     std::memcpy(HostPtr(0x609000),HostPtr(beat),0x7c);ctx.esi=0x609000;
-    Invoke(ctx);assert(trace.owner==0x609000&&!trace.bar_started);
+    Invoke(ctx);assert(traces[0].owner==0x609000&&!traces[0].bar_started);
+}
+
+static void InterleavedPlayerChecks(){
+    auto first=Reset(),second=first;
+    constexpr uint32_t second_beat=beat+0x10000,second_health=health+0x10000,second_actor=actor+0x10000;
+    std::memcpy(HostPtr(second_beat),HostPtr(beat),0x7c);
+    std::memcpy(HostPtr(second_health),HostPtr(health),0x50);
+    std::memcpy(HostPtr(second_actor),HostPtr(actor),0x36c);
+    W32(second_beat+0x10,second_health+0x10);W32(second_health+4,second_actor);
+    W32(second_beat+8,45);W32(second_actor+0x54,45);W32(second_actor+0x368,1);
+    second.esi=second_beat;
+    // Each native heartbeat reaches the end then wraps, interleaved exactly as
+    // the two player HUDs render. Neither draw may reset the other's history.
+    for(uint32_t owner:{beat,second_beat}){G<float>(owner+0x74)=2;G<float>(owner+0x5c)=.99f;}
+    Invoke(first);assert(draws.empty());Invoke(second);assert(draws.empty());
+    for(uint32_t owner:{beat,second_beat}){G<float>(owner+0x74)=2.04f;G<float>(owner+0x5c)=0;}
+    Invoke(first);assert(draws.size()==1);Invoke(second);assert(draws.size()==1);
+    assert(traces[0].bar_started&&traces[1].bar_started);
+    // A null or companion owner clears only its own previously admitted trace.
+    W32(health+4,0);Invoke(first);assert(draws.empty()&&!traces[0].owner);
+    Invoke(second);assert(draws.size()==1&&traces[1].bar_started);
+    W32(health+4,actor);Invoke(first);assert(draws.empty());
+    // Reusing a player slot/ID with a different actor cannot inherit a sweep.
+    constexpr uint32_t replacement=actor+0xc000;
+    std::memcpy(HostPtr(replacement),HostPtr(second_actor),0x36c);
+    W32(second_health+4,replacement);Invoke(second);assert(draws.empty());
+    assert(traces[1].actor_owner==replacement&&!traces[1].bar_started);
+    W32(replacement,0);Invoke(second);assert(draws.empty()&&!traces[1].owner);
+    W32(replacement,0x46fbe8);W32(replacement+0x368,2);Invoke(second);assert(draws.empty());
+    W32(replacement+0x368,1);Invoke(second);assert(draws.empty());
+    G<float>(second_beat+0x5c)=.99f;G<float>(second_beat+0x74)=2.1f;Invoke(second);
+    G<float>(second_beat+0x5c)=0;G<float>(second_beat+0x74)=2.14f;Invoke(second);assert(draws.size()==1);
+    W32(second_beat+0x68,colors+0x400);Invoke(second);assert(draws.empty());
 }
 
 static void OriginalDrawChecks(){
@@ -238,7 +271,7 @@ static void OriginalDrawChecks(){
         assert(retail.esp==initial.esp+8&&retail.ebp==initial.ebp);
         assert(!std::memcmp(owners.data(),HostPtr(beat),owners.size()));
         // Give the additive seam a real source wrap only in the settled case.
-        trace={};if(elapsed>2){auto s=Snapshot(initial);s.elapsed=2;s.sweep=.99f;Policy(s,trace);}
+        traces={};if(elapsed>2){auto s=Snapshot(initial);s.elapsed=2;s.sweep=.99f;Policy(s,traces[0]);}
         std::memcpy(HostPtr(0x6ff000),stack.data(),stack.size());
         draws.clear();requests.clear();backgrounds.clear();calls=0;_mm_setcsr(0x1f80);
         auto hooked=initial;HookedHeartbeat(hooked,g_base);
@@ -256,7 +289,7 @@ static void OriginalDrawChecks(){
 }
 
 int main() {
-    ClockChecks();SpriteChecks();OriginalDrawChecks();
+    ClockChecks();SpriteChecks();InterleavedPlayerChecks();OriginalDrawChecks();
     for(unsigned bad=0;bad<19;++bad){auto ctx=Reset();
         G<float>(beat+0x74)=2;G<float>(beat+0x5c)=.99f;Invoke(ctx);
         G<float>(beat+0x74)=2.04f;G<float>(beat+0x5c)=0;Invoke(ctx);assert(draws.size()==1);
@@ -283,5 +316,5 @@ int main() {
         }
         Invoke(ctx);assert(draws.empty()&&!calls);
     }
-    std::puts("health trace: all 52 original ECG requests, frame and fill preserved; at most one additive source-synchronized highlight; damage, pause/reset, slide/alpha and original sprite/context ABI passed");
+    std::puts("health trace: all 52 original ECG requests, frame and fill preserved; at most one additive source-synchronized highlight; interleaved co-op ownership/replacement, damage, pause/reset, slide/alpha and original sprite/context ABI passed");
 }

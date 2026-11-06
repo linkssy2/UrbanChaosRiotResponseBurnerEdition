@@ -35,7 +35,8 @@ static TrialFrontendNameActionData name_queued;
 bool TrialFrontendTakeName(TrialFrontendNameActionData& a){if(!name_queued.identity.kind)return false;a=name_queued;name_queued={};return true;}
 static unsigned pointer_reads;
 int ucrr_host_menu_pointer(float*,float*,int*){++pointer_reads;return 0;}
-void ucrr_host_menu_mode(int){}
+static int host_menu_mode;
+void ucrr_host_menu_mode(int mode){host_menu_mode=mode;}
 uint64_t ucrr_host_menu_milliseconds(){return 1000;}
 void TrialFrontendPublish(const TrialFrontendFrame& f){
     published=f;
@@ -61,6 +62,7 @@ static unsigned profile_hover_sounds,profile_back_sounds;
 static bool profile_child_active;
 static bool delete_fixture;
 static bool pause_fixture;
+static bool controller_info_fixture,controller_info_back;
 static unsigned pause_texts,pause_separators,pause_backdrops;
 static unsigned deleted_profiles,deleted_index,profile_rebuilds;
 X86_EXTERN_FUNC(__imp__sub_0025A310);
@@ -229,6 +231,7 @@ int TrialGuestHook(X86Context& ctx,uint8_t* base,unsigned op){
     case 21:return ucrr_menu_profile_hover();
     case 22:ucrr_menu_profile_bounds();return 0;
     case 23:ucrr_menu_profile_leave();return 0;
+    case 41:FrontendControllerInfoEnter();return 0;
     default:assert(false);return 0;
     }
 }
@@ -254,7 +257,11 @@ X86_FUNC(sub_002D666E){x87_push(ctx,std::floor(X86_MEMF64(ctx.esp+4)));ctx.esp+=
 X86_FUNC(sub_00259690){__imp__sub_00259690(ctx,base);profile_post_fade=X86_MEMF32(ctx.esp+12);}
 X86_FUNC(sub_00259790){ctx.esp+=4;}
 X86_FUNC(sub_00284330){__imp__sub_00284330(ctx,base);}
-X86_FUNC(sub_002745F0){ctx.eax=menu_special_query()?1:0;ctx.esp+=4;}
+X86_FUNC(sub_002745F0){
+    if(controller_info_fixture){assert(X86_MEM32(ctx.esp)==0x276723&&X86_MEM32(ctx.esp+4)==0x17);ctx.eax=controller_info_back;}
+    else ctx.eax=menu_special_query()?1:0;
+    ctx.esp+=4;
+}
 X86_FUNC(sub_00274300){ctx.esp+=4;}
 X86_FUNC(sub_00274320){ctx.esp+=8;}
 X86_FUNC(sub_002835E0){
@@ -289,6 +296,89 @@ X86_FUNC(sub_00258D40){__imp__sub_00258D40(ctx,base);}
 X86_FUNC(sub_00258DF0){assert(delete_fixture||pause_fixture);__imp__sub_00258DF0(ctx,base);}
 // ORIGINAL_PROFILE_PATH
 // ORIGINAL_PROFILE_DELETE_PATH
+
+// Execute the original diagram and Back consumer. Font/device/sound services
+// are fixture boundaries; the diagram's loops, quad, stack and callback are real.
+static unsigned controller_info_labels;
+X86_EXTERN_FUNC(__imp__sub_00276240);
+X86_FUNC(sub_00276240){__imp__sub_00276240(ctx,base);}
+X86_FUNC(sub_002584C0){assert(controller_info_fixture);x87_push(ctx,0.);ctx.esp+=4;}
+X86_FUNC(sub_002762A0){assert(controller_info_fixture);++controller_info_labels;ctx.esp+=4;}
+X86_FUNC(sub_002D6780){ctx.eax=uint32_t(int32_t(X87_ST(0)));x87_pop(ctx);ctx.esp+=4;}
+X86_FUNC(sub_000643E0){assert(controller_info_fixture);ctx.eax=0x674000;ctx.esp+=4;}
+X86_FUNC(sub_00064E30){assert(controller_info_fixture);ctx.eax=2;ctx.esp+=4;}
+X86_FUNC(sub_00274740){assert(false);}
+X86_FUNC(sub_00058000){assert(false);}
+X86_FUNC(sub_002084E0){assert(false);}
+X86_FUNC(sub_002107F0){assert(false);}
+X86_FUNC(sub_0004A840){assert(false);}
+X86_FUNC(sub_0004ACD0){assert(false);}
+X86_FUNC(sub_001F7AA0){assert(false);}
+// The title-start hooks do not own this diagram's Back listener; their title
+// identity/input behavior is exercised by test_intro_skip.
+void TrialTitleUpdate(X86Context&,uint8_t*){}
+void TrialTitleAccept(X86Context&,uint8_t*){}
+// ORIGINAL_CONTROLLER_INFO_PATH
+static void CheckControllerInfo(){
+    const auto saved=context;
+    const auto saved_back_sounds=profile_back_sounds;
+    controller_info_fixture=true;
+    constexpr uint32_t diagram=0x670000,manager=0x671000,screen=0x672000,back=0x673000;
+    MEM32(diagram)=0x4896F4;MEM32(diagram+4)=0;MEM32(diagram+8)=0;
+    MEM32(diagram+12)=7;MEM32(diagram+16)=1;
+    MEM32(manager+4)=screen;MEM32(screen)=0x4877FC;MEM8(manager+0x14)=0;
+    MEM32(back)=0x489974;MEM32(back+4)=0x17;MEM32(back+12)=0;
+    MEM32(back+16)=0x4509A8;MEM32(back+20)=0;MEM32(back+24)=0;MEMF(back+28)=0;
+    MEM32(0x5096E0)=0x676000;MEM8(0x676000)=0;
+    MEMF(0x44C174)=0;MEMF(0x4505CC)=255;
+    MEMF(0x5015B4)=560;MEMF(0x5015B8)=320;MEMF(0x5015BC)=320;MEMF(0x5015C0)=240;
+    auto run=[](uint32_t owner,bool draw){
+        context.esp=0x700000;context.ecx=owner;
+        context.esp-=4;MEM32(context.esp)=0x675000;
+        context.esp-=4;MEMF(context.esp)=1.f/60;
+        context.esp-=4;MEM32(context.esp)=0xFEEDFACE;
+        const uint32_t ebx=context.ebx,ebp=context.ebp,esi=context.esi,edi=context.edi;
+        if(draw)__imp__sub_00276010(context,ram);else __imp__sub_00276690(context,ram);
+        assert(context.esp==0x700000&&context.ebx==ebx&&context.ebp==ebp&&context.esi==esi&&context.edi==edi);
+        return context.eax;
+    };
+    for(bool paused:{false,true}){
+        MEM32(manager+8)=paused?0x12:0;hf_pause_manager=paused?manager:0;
+        menu_pointer_begin(manager);GraphicsMenuBegin();
+        assert(!menu_seen);profile_quads.clear();controller_info_labels=0;
+        assert(run(diagram,true)==0&&menu_seen);
+        menu_pointer_end();GraphicsMenuEnd();
+        assert(host_menu_mode&&menu_render_count==0&&menu_target_count==0);
+        assert(published.source.screen==screen&&published.source.kind==0&&!TrialFrontendSupported(published));
+        assert(bool(published.source.source_kind&0x80000000u)==paused);
+        assert(profile_quads.size()==1&&profile_quads[0].texture==7&&controller_info_labels==18);
+        assert(profile_quads[0].x==40&&profile_quads[0].y==80&&profile_quads[0].right==600&&profile_quads[0].bottom==400);
+        MEM32(back+8)=paused?0x2675C0:0x271F50;
+        const auto sounds=profile_back_sounds;
+        controller_info_back=false;assert(run(back,false)==0&&profile_back_sounds==sounds);
+        controller_info_back=true;assert(run(back,false)==MEM32(back+8)&&profile_back_sounds==sounds+1);
+        controller_info_back=false;assert(run(back,false)==0&&profile_back_sounds==sounds+1);
+        // The production manager destructor clears even an unsupported native
+        // screen and its pause bit before gameplay HUD/input resume.
+        g_ecx=manager;ucrr_menu_manager_destroy();
+        assert(!host_menu_mode&&!published.source.screen&&!published.source.source_kind&&!hf_pause_manager);
+    }
+    // No generic manager-presence gate: unrelated objects, stale managers and
+    // transition frames cannot turn gameplay/startup into native menu input.
+    for(unsigned invalid=0;invalid<5;++invalid){
+        MEM32(manager+4)=screen;MEM8(manager+0x14)=0;MEM32(diagram)=0x4896F4;
+        menu_pointer_begin(manager);GraphicsMenuBegin();g_ecx=diagram;
+        if(invalid==0)MEM32(diagram)=0x489974;
+        if(invalid==1)g_ecx=sizeof(storage)-8;
+        if(invalid==2)MEM8(manager+0x14)=1;
+        if(invalid==3)MEM32(manager+4)=screen+0x100;
+        if(invalid==4)MEM32(manager+4)=0;
+        TrialGuestHook(context,ram,41);assert(!menu_seen);
+        menu_pointer_end();GraphicsMenuEnd();assert(!host_menu_mode);
+    }
+    g_ecx=manager;ucrr_menu_manager_destroy();controller_info_fixture=false;
+    profile_back_sounds=saved_back_sounds;context=saved;
+}
 
 namespace controller_fixture {
 // The production pad function runs unchanged. Only its shared UI state and
@@ -410,7 +500,11 @@ static void CheckManagerHandoff(){
     }
     Frame(0x51D29C);MEM32(0x600004)=0;menu_pointer_end();
     assert(!presentation.visible&&!TrialFrontendSupported(published));
+    assert(!published.source.screen);
     MEM32(0x600004)=0x601000;
+    Frame(0x51CFA4);assert(published.source.source_kind&0x80000000u);
+    g_ecx=0x600000;ucrr_menu_manager_destroy();
+    assert(!published.source.screen&&!published.source.source_kind&&!hf_pause_manager&&!host_menu_mode);
 }
 static uint32_t ProfileFrame(){
     menu_pointer_begin(0x600000);g_ecx=0x640000;g_esp=0x700000;profile_quads.clear();
@@ -796,6 +890,7 @@ int main(){
         queued={s.epoch-1,s.screen,s.owner,s.rows[0].row,0,UC_HF_ACTIVATE};ucrr_menu_list_hover();assert(MEM32(selector)==1);
     }
     CheckManagerHandoff();
+    CheckControllerInfo();
     Frame(0x51D308);assert(!TrialFrontendSupported(published));
     unsigned reads=pointer_reads;g_ecx=g_esi=0x602000;ucrr_menu_list_enter();ucrr_menu_list_hover();assert(pointer_reads==reads+1);
     Frame(0x51D29C);MEM8(0x600014)=1;menu_pointer_begin(0x600000);GraphicsMenuBegin();

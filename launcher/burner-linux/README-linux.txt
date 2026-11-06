@@ -1,4 +1,4 @@
-Urban Chaos: Riot Response - Burner Edition 0.12
+Urban Chaos: Riot Response - Burner Edition 0.13
 EXPERIMENTAL LINUX / PROTON PACKAGE
 
 This runs the same Windows x64 game through Proton; this is not a native port.
@@ -60,6 +60,21 @@ add-ons stay there and are reused without copying. Keep that folder available.
 The selected installation is shared by subsequent play, language, texture and
 voice operations. Do not manually add --data unless intentionally overriding
 that selection for one command.
+
+OPTIONAL STARTUP SKIP
+Skip Startup defaults to OFF. To skip intro videos and Press Start directly to
+profile selection, temporarily set the same Steam shortcut's Launch Options to:
+  -B "tools/import_game.py" startup --skip-startup on --interactive
+
+Press Play and acknowledge the message, then restore the normal launch command.
+Use off instead of on to restore the original startup. Mission videos are
+unchanged. The choice is saved in this launcher's GameData/.skip-startup, even
+when another installation is selected. Saves and game settings stay untouched.
+The terminal alternative is ./burner.sh startup on (or off); startup with no
+argument shows the saved choice. The Windows Setup menu through Proton has the
+same SKIP STARTUP toggle under MANAGE > Settings. Its grouped Settings, Game files,
+Add-ons, Updates and Support sections are shared with the Windows launcher;
+the Steam commands and terminal alternative below remain available.
 
 OPTIONAL DIAGNOSTIC LOGGING
 Logging is off by default. Before reproducing a problem, temporarily set the
@@ -211,6 +226,7 @@ From the extracted package folder:
   bash burner.sh textures "/path/to/HD-Game-Textures.zip"
   bash burner.sh voices "/path/to/European PS2.iso"
   bash burner.sh language spanish
+  bash burner.sh startup on
   bash burner.sh status
   bash burner.sh --help
 

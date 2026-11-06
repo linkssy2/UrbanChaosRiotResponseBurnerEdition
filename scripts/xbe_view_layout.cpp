@@ -259,7 +259,7 @@ TrialHudInsetScope::~TrialHudInsetScope(){
 TrialHudHelpScope::TrialHudHelpScope(const X86Context& c,const uint8_t* b):layout_(hud),previous_(hud?hud->help_:false){
     if(!hud)return;
     hud->help_=false;
-    if(!b||!hud->split_||hud->notification_||c.esp>0xfffffffbu||!TrialGuestReadable(c.esp+4,4))return;
+    if(!b||!hud->root_||hud->notification_||c.esp>0xfffffffbu||!TrialGuestReadable(c.esp+4,4))return;
     // 70D90 attaches exactly one help queue to the six-child branch of this
     // actor's HUD. An unrelated queue must not inherit the enclosing owner.
     const uint32_t main=Word(b,hud->root_+8);
@@ -270,8 +270,9 @@ TrialHudHelpScope::TrialHudHelpScope(const X86Context& c,const uint8_t* b):layou
     const uint32_t d=Word(b,c.esp+4);
     if(!TrialGuestReadable(d,16))return;
     Arithmetic arithmetic;
-    const float top=Real(b,d+4),bottom=Real(b,d+12),origin=float(hud->slot_)*240;
-    if(!std::isfinite(top)||!std::isfinite(bottom)||top<origin||bottom>origin+240||bottom<=top)return;
+    const float top=Real(b,d+4),bottom=Real(b,d+12),origin=hud->split_?float(hud->slot_)*240:0;
+    const float height=hud->split_?240.f:480.f;
+    if(!std::isfinite(top)||!std::isfinite(bottom)||top<origin||bottom>origin+height||bottom<=top)return;
     hud->help_=true;
 }
 TrialHudHelpScope::~TrialHudHelpScope(){if(layout_)layout_->help_=previous_;}
@@ -360,13 +361,12 @@ TrialHudQuadScope::TrialHudQuadScope(const X86Context& c,uint8_t* b):base_(b){
     if(hud->help_){
         if((uint64_t(a)+8>z&&uint64_t(z)+8>a)||
            !std::isfinite(Real(b,a+4))||!std::isfinite(Real(b,z+4)))return;
-        // 1407F0 starts the help lines at Y220 on a 480-high canvas; 77570
-        // discards the descriptor before 273860 submits their text. Retain
-        // that position relative to each view's center and the native size.
-        const float dy=float(hud->slot_)*240-120;
+        // 77570 discards the descriptor: retain each help line's offset from
+        // the view center, as the descriptor-positioned order icons already do.
+        const float dx=320/hud->scale_-320,dy=hud->split_?float(hud->slot_)*240-120:0;
         const uint32_t addresses[]={a,a+4,z,z+4};
-        const float values[]={trial_view::HudX(Real(b,a),hud->scale_),Real(b,a+4)+dy,
-            trial_view::HudX(Real(b,z),hud->scale_),Real(b,z+4)+dy};
+        const float values[]={trial_view::HudX(Real(b,a)+dx,hud->scale_),Real(b,a+4)+dy,
+            trial_view::HudX(Real(b,z)+dx,hud->scale_),Real(b,z+4)+dy};
         for(unsigned i=0;i<4;++i){address_[i]=addresses[i];original_[i]=Word(b,addresses[i]);Put(b,addresses[i],values[i]);}
         return;
     }

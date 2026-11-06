@@ -103,7 +103,7 @@ bool Dirty() {
     return a.width!=b.width||a.height!=b.height||a.display_mode!=b.display_mode||
         a.render_percent!=b.render_percent||a.vsync!=b.vsync||a.fps_cap!=b.fps_cap||a.aniso!=b.aniso||
         draft.fov!=live.fov||draft.weapon_fov!=live.weapon_fov||draft.fmv_scale!=live.fmv_scale||draft.aspect!=live.aspect||draft.msaa!=live.msaa||draft.scenery!=live.scenery||
-        draft.characters!=live.characters||draft.character_quality!=live.character_quality||
+        draft.characters!=live.characters||draft.character_quality!=live.character_quality||draft.death_convulsions!=live.death_convulsions||
         draft.world_textures!=live.world_textures||draft.ragdolls!=live.ragdolls||draft.hd_ui!=live.hd_ui||draft.reticle_scale!=live.reticle_scale||draft.reticle_colors!=live.reticle_colors||draft_fps!=TrialShowFps||draft_fog_mode!=FogMode();
 }
 void Close() {
@@ -837,7 +837,7 @@ void OriginalSettingsUi(const TrialFrontendFrame& f,const ImGuiViewport* view,bo
         if(ready&&delta)trial_audio::Apply((mode+(delta>0?1u:2u))%3,message);
         char status[160];std::snprintf(status,sizeof(status),"%s: %s",trial_language::Ui("Active output"),trial_language::Ui(trial_audio::Name(trial_audio::Active())));
         canvas.Text(status,61,350,12,white,520,false,false);
-        canvas.Text(message.empty()?"Configure your device speakers first. Restart after changing the device layout.":message.c_str(),61,370,11,muted,520);
+        canvas.Text(message.empty()?"Changes apply immediately. Surround requires a device configured for 5.1 or 7.1.":message.c_str(),61,370,11,muted,520);
     }
     const char* labels[]={"Back"};const bool enabled[]={true};
     RowStrip(canvas,labels,enabled,1,398,focus==count?0:1,
@@ -935,8 +935,8 @@ void SettingsUi(const ImGuiViewport* view,bool paused){
         }
         RowStrip(canvas,labels,nullptr,3,257,confirmation,[&](unsigned i){confirmation=i;},activate);
     }else{
-        constexpr unsigned rows=20,total=rows+3;
-        constexpr float top=73,step=14.5f;
+        constexpr unsigned rows=21,total=rows+3;
+        constexpr float top=73,step=13.8f;
         focus=std::min(focus,total-1);
         int delta=0;
         if(ready){
@@ -992,32 +992,34 @@ void SettingsUi(const ImGuiViewport* view,bool paused){
         SettingChoice(canvas,"Character lighting quality",draft.character_quality,qualities,quality_names,12,focus,keyboard_row==12?delta:0,top,step);
         const uint32_t amounts[]={0,1,2};const char* amount_names[]={"Default","More","Forever"};
         SettingChoice(canvas,"Ragdoll amount",draft.ragdolls,amounts,amount_names,13,focus,keyboard_row==13?delta:0,top,step);
-        SettingSlider(canvas,"Field of view (vertical)",draft.fov,40,90,1," degrees",14,focus,keyboard_row==14?delta:0,top,step);
-        SettingChoice(canvas,"HD HUD and menus",draft.hd_ui,flags,flag_names,15,focus,keyboard_row==15?delta:0,top,step);
-        if(SettingRow(canvas,"Reticle settings","Edit",16,focus,keyboard_row==16?delta:0,step,top)){
+        SettingChoice(canvas,"Death convulsions",draft.death_convulsions,flags,flag_names,14,focus,keyboard_row==14?delta:0,top,step);
+        SettingSlider(canvas,"Field of view (vertical)",draft.fov,40,90,1," degrees",15,focus,keyboard_row==15?delta:0,top,step);
+        SettingChoice(canvas,"HD HUD and menus",draft.hd_ui,flags,flag_names,16,focus,keyboard_row==16?delta:0,top,step);
+        if(SettingRow(canvas,"Reticle settings","Edit",17,focus,keyboard_row==17?delta:0,step,top)){
             reticle_page=true;reticle_focus=0;frontend_events=0;++navigation_generation;
         }
-        SettingSlider(canvas,"Weapon FOV",draft.weapon_fov,50,150,5,"%",17,focus,keyboard_row==17?delta:0,top,step);
+        SettingSlider(canvas,"Weapon FOV",draft.weapon_fov,50,150,5,"%",18,focus,keyboard_row==18?delta:0,top,step);
         const bool textures_available=trial_graphics::WorldTexturesAvailable();
         if(textures_available){
-            SettingChoice(canvas,"HD game textures",draft.world_textures,flags,flag_names,18,focus,keyboard_row==18?delta:0,top,step);
+            SettingChoice(canvas,"HD game textures",draft.world_textures,flags,flag_names,19,focus,keyboard_row==19?delta:0,top,step);
         }else{
-            const float y=top+18*step;ImGui::BeginDisabled();
+            const float y=top+19*step;ImGui::BeginDisabled();
             canvas.Hit("HD textures unavailable",50,y,540,step);
             const auto disabled=IM_COL32(111,116,112,160);
             canvas.Text("HD game textures",61,y+2,13,disabled,304);
             canvas.Text("Not installed",418,y+2,13,disabled,124);
             ImGui::EndDisabled();
         }
-        const uint32_t fmv_scales[]={0,1};const char* fmv_names[]={"Fill","Original aspect ratio"};
-        SettingChoice(canvas,"FMV scaling",draft.fmv_scale,fmv_scales,fmv_names,19,focus,keyboard_row==19?delta:0,top,step);
+        const uint32_t fmv_scales[]={0,1,2};const char* fmv_names[]={"Fill","Original aspect ratio","Fill stretch"};
+        SettingChoice(canvas,"FMV scaling",draft.fmv_scale,fmv_scales,fmv_names,20,focus,keyboard_row==20?delta:0,top,step);
         canvas.Line(60,364,520,IM_COL32(118,126,121,100));
-        canvas.Text(focus==19?(draft.fmv_scale==0?"Fill removes verified black borders without stretching. Some bars may remain.":"Original aspect ratio preserves the complete movie frame, including built-in borders."):
-                    focus==18?(textures_available?"Optional HD game texture pack. Keeps HUD and menus unchanged; uses more video memory.":"Not installed. Use Install HD Texture Pack in the launcher, then restart the game."):
-                    focus==17?"Weapon FOV: 100% is original. Changes the gun and hands; keeps the world view.":
-                    focus==16?"Change reticle size and colors for normal aim, enemies, friends and pistol spin.":
-                    focus==15?"Sharper original HUD, menus, text and prompts. Keeps the original layout.":
-                    focus==14?"Vertical FOV: 53 is original. Applies to gameplay; weapon zoom is preserved.":
+        canvas.Text(focus==20?(draft.fmv_scale==2?"Fill stretch removes verified black borders and stretches the picture to the screen without cropping it.":draft.fmv_scale==0?"Fill removes verified black borders without stretching. Some bars may remain.":"Original aspect ratio preserves the complete movie frame, including built-in borders."):
+                    focus==19?(textures_available?"Optional HD game texture pack. Keeps HUD and menus unchanged; uses more video memory.":"Not installed. Use Install HD Texture Pack in the launcher, then restart the game."):
+                    focus==18?"Weapon FOV: 100% is original. Changes the gun and hands; keeps the world view.":
+                    focus==17?"Change reticle size and colors for normal aim, enemies, friends and pistol spin.":
+                    focus==16?"Sharper original HUD, menus, text and prompts. Keeps the original layout.":
+                    focus==15?"Vertical FOV: 53 is original. Applies to gameplay; weapon zoom is preserved.":
+                    focus==14?"Brief convulsions on killed enemies and downed co-op partners.":
                     focus==2?"Aspect ratio changes take effect after restarting the game.":
                     focus==3?"Render scale changes the resolution of the 3D scene.":
                     focus==8?(draft_fog_mode==0?"Removes distance fog.":
@@ -1239,7 +1241,8 @@ void TrialGraphicsUi() {
         }
     }
     bool health_hud=false;
-    if(trial_coop::PauseOwner()<0&&!menu.kind&&!current&&!transition&&!TrialGraphicsOpen()&&!TrialIntroPlaying()){
+    if(trial_coop::PauseOwner()<0&&!frame.source.screen&&!(frame.source.source_kind&(0x80000000u|UC_HF_TRANSITION))&&
+       !menu.kind&&!current&&!transition&&!TrialGraphicsOpen()&&!TrialIntroPlaying()){
         const unsigned presentation=trial_coop::Active()?TrialCoopPresentation():0;
         const auto* hud_view=ImGui::GetMainViewport();
         if(presentation!=2&&hud_view->Size.x>0&&hud_view->Size.y>0){

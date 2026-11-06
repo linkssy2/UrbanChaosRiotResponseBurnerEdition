@@ -24,7 +24,8 @@ struct XAUDIO2_VOICE_STATE {uint32_t BuffersQueued=0;};
 struct XAUDIO2_BUFFER {uint32_t AudioBytes=0;const BYTE* pAudioData=nullptr;};
 static std::mutex lock;static std::condition_variable done_cv;static bool done;
 static unsigned mask,reject_above,fail_stage,width,submitted,mixed,sleeps,errors;
-static std::vector<unsigned> attempts;static std::deque<const float*> queued;static std::string order;
+struct Queued {const float* data;float value;};
+static std::vector<unsigned> attempts,modes;static std::deque<Queued> queued;static std::string order;
 #define LOGI(...) ((void)0)
 #define LOGE(...) (++errors)
 namespace uc_audio_trace {
@@ -36,18 +37,25 @@ static void Sleep(unsigned ms){assert(ms==2);++sleeps;}
 struct IXAudio2SourceVoice {
     HRESULT Start(){assert(trial_audio::output_channels==width);return fail_stage==4?failed:0;}
     void GetState(XAUDIO2_VOICE_STATE* st,unsigned){
-        if(queued.size()>=3&&sleeps){assert(queued.front()[0]>=1);queued.pop_front();}
+        if(queued.size()>=3&&sleeps){
+            const auto& q=queued.front();for(unsigned i=0;i<480*width;++i)assert(q.data[i]==q.value);
+            queued.pop_front();
+        }
         st->BuffersQueued=unsigned(queued.size());
     }
     HRESULT SubmitSourceBuffer(const XAUDIO2_BUFFER* b){
         assert(b->AudioBytes==480*width*4);const float* p=reinterpret_cast<const float*>(b->pAudioData);
-        assert(std::find(queued.begin(),queued.end(),p)==queued.end());
-        for(unsigned i=0;i<480*width;++i)assert(p[i]==float(mixed));
+        for(const auto& q:queued)assert(q.data!=p);
+        const float value=float(mixed*4+trial_audio::Active());
+        for(unsigned i=0;i<480*width;++i)assert(p[i]==value);
         trial_audio::requested=(submitted%3);assert(trial_audio::output_channels==width);
         if(submitted++==6)return failed;
-        queued.push_back(p);return 0;
+        queued.push_back({p,value});return 0;
     }
-    void DestroyVoice(){for(const float* p:queued)assert(p[0]>=1);queued.clear();order+='S';}
+    void DestroyVoice(){
+        for(const auto& q:queued)for(unsigned i=0;i<480*width;++i)assert(q.data[i]==q.value);
+        queued.clear();order+='S';
+    }
 };
 struct IXAudio2MasteringVoice {
     HRESULT GetChannelMask(DWORD* p){*p=mask;return fail_stage==5?failed:0;}
@@ -77,18 +85,26 @@ constexpr unsigned kRate=48000;
 // GENERATED_OUTPUT
 }
 static void Run(unsigned m,unsigned cap,unsigned fail){
-    mask=m;reject_above=cap;fail_stage=fail;done=false;width=submitted=mixed=sleeps=errors=0;attempts.clear();order.clear();
+    mask=m;reject_above=cap;fail_stage=fail;done=false;width=submitted=mixed=sleeps=errors=0;attempts.clear();modes.clear();order.clear();
     trial_audio::requested=2;
     audio::StartOutput([](float* out,unsigned frames){
         assert(frames==480&&trial_audio::output_channels==width);++mixed;
-        std::fill_n(out,frames*width,float(mixed));
+        modes.push_back(trial_audio::Active());
+        std::fill_n(out,frames*width,float(mixed*4+modes.back()));
     });
     {std::unique_lock guard(lock);assert(done_cv.wait_for(guard,std::chrono::seconds(3),[]{return done;}));}
     assert(errors==1&&queued.empty()&&trial_audio::output_channels==2);
     if(fail==1)assert(order=="IU"&&attempts.empty());
     else if(fail==2)assert(order=="IAU"&&attempts.empty());
     else if(fail==3)assert(order=="IMAU"&&mixed==0);
-    else {assert(order=="ISMAU");if(fail==4)assert(!mixed);else assert(mixed==7&&submitted==7&&sleeps>0);}
+    else {
+        assert(order=="ISMAU");
+        if(fail==4)assert(!mixed);
+        else {
+            assert(mixed==7&&submitted==7&&sleeps>0);
+            for(unsigned i=0;i<modes.size();++i)assert(modes[i]==trial_audio::Active(i?(i-1)%3:2,width));
+        }
+    }
     if(fail!=1&&fail!=2){
         unsigned wanted=fail==5?2:trial_audio::Capacity(mask);size_t n=0;
         while(true){assert(n<attempts.size()&&attempts[n++]==wanted);if((fail!=3&&wanted<=cap)||wanted==2)break;wanted=wanted==8?6:2;}
@@ -99,5 +115,5 @@ int main(){
     for(unsigned mask:{3u,0x33u,0x3fu,0x60fu,0xffu,0x63fu})Run(mask,8,0);
     Run(0x63f,6,0);Run(0x63f,2,0);Run(0x3f,2,0);
     for(unsigned failure=1;failure<=5;++failure)Run(0x63f,8,failure);
-    std::puts("PASS: production XAudio2 worker, 14 endpoint/failure cases, masks/float formats, 8-to-6-to-2 fallback, live mode switches, queue ownership and cleanup");
+    std::puts("PASS: production XAudio2 worker, 14 endpoint/failure cases, masks/float formats, 8-to-6-to-2 fallback, live mode switches without voice recreation, immutable queued audio and cleanup");
 }

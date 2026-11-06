@@ -19,12 +19,4 @@ public:
     }
 };
 
-// Canals reused less than 1% of geometry bytes: keeping a CPU shadow copied
-// nearly every stream twice. Upload each exact snapshot once instead; the
-// existing frame arena and fences still own its lifetime.
-template<class Allocation> class Geometry {
-public:
-    void Reset() {}
-    template<class Upload> Allocation Get(const void*,size_t,Upload upload) { return upload(); }
-};
 }
