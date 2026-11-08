@@ -40,6 +40,8 @@ bool spin_button_held[2]={true,true};
 TrialHealthPackGesture health_gesture[2];
 bool partner_key_held=false;
 int firearm_direction=0;
+thread_local int firearm_sample_direction=0;
+thread_local bool controller_reload_sample=false;
 float spin_x=0,spin_y=0;
 uint64_t spin_tick=0;
 unsigned order_phase=0,order_buttons=0,order_selection=0;
@@ -214,7 +216,7 @@ void TrialGraphicsInputChanged(){
     click_pending=false;dx=dy=0;
     spin_dx=spin_dy=0;spin_tick=0;spin_button_held[0]=spin_button_held[1]=true;
     for(unsigned slot=0;slot<2;++slot){health_gesture[slot].Reset();TrialHealthPackInput(slot,false,false);TrialAimInput(slot,false,false);TrialRagdollDragInput(slot,false);trial_player_actions::Cancel(slot);}
-    firearm_direction=0;
+    firearm_direction=firearm_sample_direction=0;controller_reload_sample=false;
     partner_key_held=false;
     order_phase=order_buttons=0;order_held=false;keyboard_wheel_clear();
     xbox_KeyboardConsumeMouseClick(1);
@@ -262,7 +264,7 @@ void TrialInputWindow(void* window){
     RAWINPUTDEVICE device{1,2,0,game_window};
     if(!RegisterRawInputDevices(&device,1,sizeof(device)))throw std::runtime_error("Raw mouse registration failed");
 }
-int TrialMouseActive(){std::lock_guard guard(input_lock);return captured&&focused()&&xbox_KeyboardMode();}
+int TrialMouseActive(){std::lock_guard guard(input_lock);return captured&&focused()&&(xbox_KeyboardMode()||(gameplay&&!menu_mode&&!TrialGraphicsOpen()&&!trial_coop::Active()&&trial_controls::MixedInput()));}
 void TrialGameplay(){
     std::lock_guard guard(input_lock);
     if(!gameplay){menu_key_taps.Clear();gameplay=true;menu_mode=false;PostMessage(game_window,kCapture,0,0);}
@@ -276,7 +278,9 @@ int TrialSpinSample(float* x,float* y,unsigned player){
     std::lock_guard guard(input_lock);
     if(player>1||(player&&!trial_coop::Active()))return 0;
     const bool keyboard=!player&&(trial_coop::Active()||xbox_KeyboardMode()!=0);
-    const bool down=trial_controls::SpinButtonDown(keyboard,last_pad[player],player);
+    const bool mixed=!player&&!trial_coop::Active()&&trial_controls::MixedInput();
+    const bool down=trial_controls::SpinButtonDown(keyboard,last_pad[player],player)||
+        (mixed&&trial_controls::SpinButtonDown(!keyboard,last_pad[player],player));
     const bool pressed=down&&!spin_button_held[player];spin_button_held[player]=down;
     if(!focused()||!gameplay||menu_mode||TrialGraphicsOpen()||(player&&TrialCoopPresentation()==2)){
         if(!player){spin_dx=spin_dy=0;spin_tick=0;}
@@ -286,7 +290,7 @@ int TrialSpinSample(float* x,float* y,unsigned player){
         if(!player){spin_dx=spin_dy=0;spin_tick=0;}
         *x=pressed?1.f:0.f;*y=0;return pressed?2:1;
     }
-    if(!keyboard)return 0;
+    if(!keyboard&&!mixed)return 0;
     const uint64_t now=GetTickCount64();
     if(spin_dx||spin_dy){
         const double length=std::hypot(double(spin_dx),double(spin_dy));
@@ -294,7 +298,9 @@ int TrialSpinSample(float* x,float* y,unsigned player){
     }
     spin_dx=spin_dy=0;
     // Bridge mouse polling gaps, but a stopped gesture expires promptly.
-    *x=spin_tick&&now-spin_tick<=80?spin_x:0;*y=spin_tick&&now-spin_tick<=80?spin_y:0;
+    const bool mouse_gesture=spin_tick&&now-spin_tick<=80;
+    if(mixed&&!mouse_gesture)return 0;
+    *x=mouse_gesture?spin_x:0;*y=mouse_gesture?spin_y:0;
     return 1;
 }
 void ucrr_host_menu_mode(int enabled){
@@ -340,10 +346,12 @@ void xbox_KeyboardSourceEvent(unsigned source,int down){
 void xbox_KeyboardWheel(int delta){if(captured)keyboard_wheel_record(delta);}
 void TrialInputPublish(){
     std::lock_guard guard(input_lock);
+    // Keep direction with the guest's sampled press, not a later connection poll.
+    firearm_direction=firearm_sample_direction;
     if(!focused()||!gameplay||menu_mode||TrialGraphicsOpen()||intro_gate.owner)trial_controls::SuspendControllerDeadzones();
     if(captured&&focused())keyboard_wheel_publish();else keyboard_wheel_clear();
     TrialConversationPublish(ActionSourceDown(1),focused()&&!TrialGraphicsOpen()&&!menu_mode);
-    TrialReloadPublish(ActionSourceDown(0),focused()&&!TrialGraphicsOpen()&&!menu_mode);
+    TrialReloadPublish(ActionSourceDown(0)||(controller_reload_sample&&!trial_coop::Active()&&trial_controls::MixedInput()),focused()&&!TrialGraphicsOpen()&&!menu_mode);
     if(!captured||!focused()){keyboard_wheel_clear();order_phase=order_buttons=0;order_held=false;return;}
     order_buttons=0;
     switch(order_phase){case 1:order_buttons=2;order_phase=2;break;case 2:order_phase=3;break;
@@ -424,7 +432,7 @@ void TrialInputPad(int port,input::Pad& pad){
     if(port<0||port>=4)return;
     trial_controls::BeginControllerSample(unsigned(port));
     const bool controller_connected=pad.connected;
-    if(port==0)firearm_direction=0;
+    if(port==0){firearm_sample_direction=0;controller_reload_sample=false;}
     // Revoke an old drag on unplug, while keeping P1 available to the keyboard.
     if(port<2&&last_pad[port].connected&&!controller_connected)TrialRagdollDragInput(port,false);
     last_pad[port]=pad;
@@ -531,11 +539,13 @@ void TrialInputPad(int port,input::Pad& pad){
     if(port==1&&controller_connected&&focused()&&gameplay&&!menu_mode&&!controls_capture[port].active&&trial_coop::Active())
         trial_controls::AllowControllerDeadzone(unsigned(port),15);
     if(port!=0||!focused())return;
+    controller_reload_sample=gameplay&&!menu_mode&&pad.analog[0]>30;
     if(pad.buttons||std::abs(int(pad.rx))>8689||std::abs(int(pad.ry))>8689)InterlockedExchange(&keyboard_mode,0);
     if(menu_key_update)menu_key_taps.GuestPortPolled(port);
     XBOX_GAMEPAD keys;
     const bool menu_keyboard=!menu_mode||xbox_KeyboardMode();
-    if(menu_keyboard)keyboard_apply_bindings(&keys,captured);
+    const unsigned keyboard_axes=menu_keyboard?keyboard_apply_bindings(&keys,captured):0;
+    const bool mixed=gameplay&&!menu_mode&&!trial_coop::Active()&&trial_controls::MixedInput();
     if(menu_mode&&menu_keyboard){const bool connected=pad.connected;pad={};pad.connected=connected;}
     keys.wButtons|=order_buttons;
     // Gameplay A is interaction; the qualified manual-reload query reads its own edge.
@@ -544,7 +554,7 @@ void TrialInputPad(int port,input::Pad& pad){
         const bool next=keys.bAnalogButtons[2]!=0,previous=trial_controls::PreviousFirearmDown(captured);
         const int direction=int(next)-int(previous);
         keys.bAnalogButtons[2]=direction?255:0;
-        firearm_direction=pad.analog[2]>30?1:direction;
+        firearm_sample_direction=pad.analog[2]>30?1:direction;
         if(previous)xbox_KeyboardNoteInput();
     }
     // CONTROL capped the title-facing stick magnitude in ucrr_host_stick_axis.
@@ -572,12 +582,11 @@ void TrialInputPad(int port,input::Pad& pad){
     if(menu_keyboard&&menu_right_back)keys.bAnalogButtons[1]=255;
     pad.buttons|=keys.wButtons;
     for(unsigned i=0;i<8;i++)pad.analog[i]=std::max(pad.analog[i],keys.bAnalogButtons[i]);
-    if(keys.sThumbLX)pad.lx=keys.sThumbLX;if(keys.sThumbLY)pad.ly=keys.sThumbLY;
-    if(keys.sThumbRX)pad.rx=keys.sThumbRX;if(keys.sThumbRY)pad.ry=keys.sThumbRY;
-    // Mouse/keyboard ownership excludes every controller axis, including drift
-    // on an unused axis or while opposite movement keys cancel each other.
+    if(keys.sThumbLX||(mixed&&(keyboard_axes&1)))pad.lx=keys.sThumbLX;if(keys.sThumbLY||(mixed&&(keyboard_axes&2)))pad.ly=keys.sThumbLY;
+    if(keys.sThumbRX||(mixed&&(keyboard_axes&4)))pad.rx=keys.sThumbRX;if(keys.sThumbRY||(mixed&&(keyboard_axes&8)))pad.ry=keys.sThumbRY;
+    // Mixed input preserves pad-owned axes; keyboard overrides never receive a stick curve.
     if(controller_connected&&gameplay&&!menu_mode&&!controls_capture[0].active)
-        trial_controls::AllowControllerDeadzone(0,TrialGameplayKeyboardMode()?0:15);
+        trial_controls::AllowControllerDeadzone(0,mixed?(15u&~keyboard_axes):(TrialGameplayKeyboardMode()?0:15));
 }
 int TrialFirearmDirection(){
     std::lock_guard guard(input_lock);

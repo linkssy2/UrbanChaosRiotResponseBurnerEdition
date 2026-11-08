@@ -1,5 +1,33 @@
 # Burner Edition: current runtime
 
+## Private firearm cycling and optional mixed input (November 7)
+
+Issue #27 reproduced offline with the production host input adapter and original
+retail firearm consumer: a connection-discovery poll could clear the direction
+after the guest cached a Previous press. With three eligible firearms, the
+resulting forward step looks like two backward steps. Direction is now sampled
+per thread and published with the guest input snapshot before wheel advancement.
+The old implementation fails the thread-interleaving regression; the corrected
+one passes 20 combined host/retail scenarios, including rebound keys. Evidence
+is in `build/issue27-firearm-audit` and `build/issue27-wheel-fix`.
+
+Issue #6 adds a default-Off Controller + mouse setting for single-player. Keep
+menu ownership and co-op physical-port routing unchanged. Mixed gameplay retains
+the native stick look and applies raw mouse once afterward; custom deadzones
+apply only to physical-controller-owned axes. The separate reload edge excludes
+keyboard Interact, and spin/conversation consumers accept either appropriate
+source. Do not force keyboard mode globally. Controls, menu, host input, spin and
+conversation fixtures cover defaults, saved state, device handoff and co-op
+isolation; private evidence is in `build/issue6-mixed-input`. Gameplay feel and
+live Windows/Proton acceptance remain separate from these offline checks.
+
+Graphics and Audio descriptions now reserve space above the frame's bottom
+border. The Graphics scrolling area and separator move with the help text so
+the last setting cannot overlap it. The existing menu fixture checks actual
+font/shadow bounds for Graphics, Audio and Controls, including English/Spanish,
+original/HD fonts and 4:3 through 32:9 layouts. Evidence belongs in
+`build/settings-help-layout-20261107`.
+
 ## Private gameplay blur option (November 7)
 
 Graphics > Gameplay blur is a default-On, saved shared setting for single-player

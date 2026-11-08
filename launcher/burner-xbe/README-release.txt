@@ -1,4 +1,4 @@
-Urban Chaos: Riot Response - Burner Edition 0.15
+Urban Chaos: Riot Response - Burner Edition 0.16
 
 Setup, controls, saves and update instructions: tools/README.md
 Linux / Proton instructions: tools/README-linux.md

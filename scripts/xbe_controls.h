@@ -14,6 +14,7 @@ struct Draft {
     unsigned zoom_sensitivity=100; // Percent of this player's existing zoomed look speed.
     unsigned walk_mode=0,walk_binding[2][2]{},hud_binding[2][2]{};
     unsigned movement_inertia=1;
+    unsigned mixed_input=0; // P1 only; simultaneous controller/mouse gameplay is opt-in.
     // Retail 63B70 defaults: vibration, invert, auto-centre, crouch, layout, X/Y.
     // P1 remains in the original saved profile; these values belong to P2 only.
     unsigned native_profile[7]{1,0,1,1,1,50,50};
@@ -40,6 +41,7 @@ bool HealPartnerDown(bool mouse_active=false);
 bool ScopeZoomDown(bool keyboard,const input::Pad&,unsigned player=0,bool mouse_active=false);
 unsigned WalkMode(unsigned player=0);
 unsigned MovementInertia(unsigned player=0);
+unsigned MixedInput();
 bool WalkDown(bool keyboard,const input::Pad&,unsigned player=0,bool mouse_active=false);
 bool HudToggleDown(bool keyboard,const input::Pad&,unsigned player=0,bool mouse_active=false);
 }

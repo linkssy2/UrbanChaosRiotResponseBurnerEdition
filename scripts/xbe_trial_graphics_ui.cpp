@@ -839,8 +839,8 @@ void OriginalSettingsUi(const TrialFrontendFrame& f,const ImGuiViewport* view,bo
         const int delta=SettingRow(canvas,"Speaker output",trial_audio::Name(mode),src.count,focus,direction,step,103);
         if(ready&&delta)trial_audio::Apply((mode+(delta>0?1u:2u))%3,message);
         char status[160];std::snprintf(status,sizeof(status),"%s: %s",trial_language::Ui("Active output"),trial_language::Ui(trial_audio::Name(trial_audio::Active())));
-        canvas.Text(status,61,350,12,white,520,false,false);
-        canvas.Text(message.empty()?"Changes apply immediately. Surround requires a device configured for 5.1 or 7.1.":message.c_str(),61,370,11,muted,520);
+        canvas.Text(status,61,337,12,white,520,false,false);
+        canvas.Text(message.empty()?"Changes apply immediately. Surround requires a device configured for 5.1 or 7.1.":message.c_str(),61,357,11,muted,520);
     }
     const char* labels[]={"Back"};const bool enabled[]={true};
     RowStrip(canvas,labels,enabled,1,398,focus==count?0:1,
@@ -942,7 +942,8 @@ void SettingsUi(const ImGuiViewport* view,bool paused){
     }else{
         constexpr unsigned rows=22,total=rows+3;
         constexpr unsigned order[]={0,1,2,5,6,7,20,3,4,9,8,21,10,11,12,19,13,14,15,18,16,17};
-        constexpr float top=78,bottom=358,step=18,heading=22;
+        // Reserve a help band inside the frame, including glyphs and shadows.
+        constexpr float top=78,bottom=344,step=18,heading=22;
         constexpr float extent=rows*step+3*heading,max_scroll=extent-(bottom-top);
         auto position=[&](unsigned row){return unsigned(std::find(std::begin(order),std::end(order),row)-std::begin(order));};
         auto row_y=[&](unsigned row){const auto i=position(row);return top+heading+i*step+(i>=7?heading:0)+(i>=18?heading:0);};
@@ -1069,7 +1070,7 @@ void SettingsUi(const ImGuiViewport* view,bool paused){
         canvas.Rect(607,top+24,2,bottom-top-48,IM_COL32(118,126,121,70));
         const float track=bottom-top-48,thumb=track*(bottom-top)/extent;
         canvas.Rect(605,top+24+(track-thumb)*scroll/max_scroll,6,thumb,muted);
-        canvas.Line(60,364,520,IM_COL32(118,126,121,100));
+        canvas.Line(60,350,520,IM_COL32(118,126,121,100));
         canvas.Text(focus==21?"Blur when aiming, firing, taking hits or downed. Applies to both co-op views.":
                     focus==20?(draft.fmv_scale==2?"Fill stretch removes verified black borders and stretches the picture to the screen without cropping it.":draft.fmv_scale==0?"Fill removes verified black borders without stretching. Some bars may remain.":"Original aspect ratio preserves the complete movie frame, including built-in borders."):
                     focus==19?(textures_available?"Optional HD game texture pack. Keeps HUD and menus unchanged; uses more video memory.":"Not installed. Use Install HD Texture Pack in the launcher, then restart the game."):
@@ -1089,7 +1090,7 @@ void SettingsUi(const ImGuiViewport* view,bool paused){
                     focus==12?"Simple reduces local light effects on world characters.":
                     focus==13?(draft.ragdolls==2?"Forever keeps bodies until mission exit; may reduce performance.":
                                "Default: 5 bodies / 30 seconds. More: 32 / 120 seconds."):
-                    "Select a setting, then use the arrows to change it.",61,371,11,muted,518);
+                    "Select a setting, then use the arrows to change it.",61,357,11,muted,518);
         const char* labels[]={"Apply","Discard changes","Back"};
         auto activate=[&](unsigned i){
             if(i==0)Apply();

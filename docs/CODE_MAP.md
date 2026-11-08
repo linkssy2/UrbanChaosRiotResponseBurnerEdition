@@ -1,4 +1,4 @@
-# Burner Edition 0.15 source map
+# Burner Edition 0.16 source map
 
 - `scripts/build_xbe_game_trial.py`: maintained build, preparation order and tests.
 - `scripts/prepare_xbe_*.py`: pinned transformations of the XboxXBERecomp runtime
@@ -6,6 +6,9 @@
 - `scripts/xbe_*.cpp`, `.h` and `.inc`: title adapters, renderer integration,
   PC menus, input, split-screen, health packs and targeted fixes.
 - `scripts/test_*` and check directories: contract/regression fixtures.
+- `scripts/xbe_trial_menu_input.cpp`, `xbe_controls*` and
+  `xbe_keyboard_bindings.inc`: published firearm direction, optional mixed
+  controller/mouse gameplay and separate co-op ownership.
 - `scripts/xbe_ragdoll_drag.*`: per-player held-Interact body dragging through
   the original input, collision query and physics-force paths.
 - `scripts/xbe_corpse_shield*` and `scripts/corpse_shield_assets.py`: the optional

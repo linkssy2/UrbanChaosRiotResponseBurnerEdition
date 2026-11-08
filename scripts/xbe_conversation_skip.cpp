@@ -4,6 +4,8 @@
 #include "xbe_input_memory.h"
 #include "xbe_conversation_skip.h"
 #include "xbe_coop_interactions.h"
+#include "xbe_controls.h"
+#include "xbe_coop.h"
 
 extern int xbox_KeyboardMode();
 namespace {
@@ -27,14 +29,16 @@ void TrialConversationPublish(bool down,bool enabled){
 
 bool TrialConversationQuery(X86Context& ctx,uint8_t* base){
     const unsigned player=TrialCoopInteractionPlayer(base,ctx.esi);
-    if(player==2||(player!=1&&!xbox_KeyboardMode())||!ConversationOwner(base,ctx.esi)||
+    const bool mixed=!trial_coop::Active()&&trial_controls::MixedInput();
+    if(player==2||(player!=1&&!xbox_KeyboardMode()&&!mixed)||!ConversationOwner(base,ctx.esi)||
        !TrialGuestReadable(ctx.esp,4))return false;
     const uint32_t caller=ConversationWord(base,ctx.esp);
     if((caller!=0x17c0d4&&caller!=0x17c26e&&caller!=0x17c315)||
        !base[ctx.esi+0x119]||!base[ctx.esi+0x148])return false;
     // Exact return boundary17BB73. Keep the original query's polling, volatile
     // state and stdcall cleanup; replace only its mode1 press-edge float result.
-    X87_ST(0)=pressed_f.load(std::memory_order_relaxed)?1.:0.;
+    const bool pressed=pressed_f.load(std::memory_order_relaxed);
+    if(pressed||!mixed)X87_ST(0)=pressed?1.:0.;
     return true;
 }
 
@@ -69,6 +73,7 @@ void TrialReloadPublish(bool down,bool enabled){
 }
 void TrialReloadQuery(X86Context& ctx,uint8_t* base){
     // Only the original ManualReload query; automatic empty-magazine reload is unchanged.
-    if(xbox_KeyboardMode()&&TrialGuestReadable(ctx.esi,0x36c)&&ConversationWord(base,ctx.esi+0x368)==0)
+    const bool mixed=!trial_coop::Active()&&trial_controls::MixedInput();
+    if((xbox_KeyboardMode()||mixed)&&TrialGuestReadable(ctx.esi,0x36c)&&ConversationWord(base,ctx.esi+0x368)==0)
         X87_ST(0)=pressed_reload.load(std::memory_order_relaxed)?1.:0.;
 }

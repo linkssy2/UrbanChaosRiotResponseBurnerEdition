@@ -38,18 +38,21 @@ const char* const control_help[]={
 
 unsigned ControlsBase(){return controls_device?24:25;}
 unsigned ControlsProfileStart(){return ControlsBase()+(controls_device?10:15);}
-unsigned ControlsCount(){return controls_device?43:41;}
-bool ControlsProfile(unsigned action){return action>=ControlsProfileStart();}
-bool ControlsDeadzone(unsigned action){return controls_device&&action>=ControlsProfileStart()+7;}
+bool ControlsMixedInput(unsigned action){return action==47;}
+unsigned ControlsCount(){return (controls_device?43:41)+(controls_player?0:1);}
+bool ControlsProfile(unsigned action){return !ControlsMixedInput(action)&&action>=ControlsProfileStart();}
+bool ControlsDeadzone(unsigned action){return controls_device&&ControlsProfile(action)&&action>=ControlsProfileStart()+7;}
 const char* profile_names[]={"Vibration","Invert stick look","Auto-centre","Crouch mode","Thumbstick layout","Horizontal stick sensitivity","Vertical stick sensitivity"};
 const char* profile_help[]={"Controller vibration.","Reverse vertical stick aiming; raw mouse aiming is unchanged.","Use the original automatic camera centring.","Choose hold or toggle for crouching.","Standard or Legacy movement and aiming sticks.","Original horizontal stick sensitivity; mouse sensitivity is separate.","Original vertical stick sensitivity; mouse sensitivity is separate."};
 unsigned ControlsAction(unsigned row){
     // Reorder only the display; saved action and native profile IDs stay stable.
+    if(!controls_player){if(!row)return 47;--row;}
     static constexpr unsigned keyboard[]={27,35,33,31,37,39,7,0,28,11,32,6,30,34,2,29,1,3,4,5,25,26,18,19,16,17,10,43,36,20,21,22,23,24,12,13,14,15,8,9,38};
     static constexpr unsigned controller[]={38,39,40,41,42,35,36,34,37,29,27,31,33,7,0,11,28,6,26,2,1,3,4,5,24,25,18,19,16,17,10,30,20,21,22,23,12,13,14,15,8,9,32};
     return controls_device?controller[row]:keyboard[row];
 }
 const char* ControlsGroup(unsigned row){
+    if(!controls_player){if(!row)return "INPUT SETTINGS";--row;}
     if(row>=(controls_device?40u:38u))return "MENU CONTROLS";
     if(row>=(controls_device?36u:33u))return "TEAMMATE ORDERS";
     if(row>=(controls_device?26u:22u))return "MOVEMENT / AIMING";
@@ -68,14 +71,14 @@ bool ControlsWalkMode(unsigned action){return action==ControlsProfileStart()-3;}
 bool ControlsHud(unsigned action){return action==ControlsProfileStart()-2;}
 bool ControlsMovementInertia(unsigned action){return action==ControlsProfileStart()-1;}
 bool ControlsMouseInvert(unsigned action){return !controls_device&&action==ControlsBase()+8;}
-unsigned ControlsSlots(unsigned action){if(ControlsProfile(action)||ControlsAimMode(action)||ControlsWalkMode(action)||ControlsMovementInertia(action)||ControlsMouseInvert(action))return 1;return !controls_device&&(action==0||ControlsInteract(action))?1:2;}
+unsigned ControlsSlots(unsigned action){if(ControlsMixedInput(action)||ControlsProfile(action)||ControlsAimMode(action)||ControlsWalkMode(action)||ControlsMovementInertia(action)||ControlsMouseInvert(action))return 1;return !controls_device&&(action==0||ControlsInteract(action))?1:2;}
 bool ControlsMouseSensitivity(unsigned action);
 bool ControlsLookSlider(unsigned action){return ControlsMouseSensitivity(action)||ControlsZoomSensitivity(action);}
-const char* ControlsName(unsigned action){if(ControlsDeadzone(action))return action==ControlsProfileStart()+7?"Left stick deadzone":"Right stick deadzone";if(ControlsMovementInertia(action))return "Movement inertia";if(ControlsWalk(action))return "Walk";if(ControlsWalkMode(action))return "Walking mode";if(ControlsHud(action))return "Toggle HUD";if(ControlsZoomSensitivity(action))return "Zoom sensitivity";if(ControlsHealPartner(action))return "Heal Partner";if(ControlsMouseInvert(action))return "Invert mouse look";if(ControlsAimMode(action))return "Aiming mode";if(ControlsScopeZoom(action))return "Cycle scope zoom";if(ControlsHealthPack(action))return "Use health pack";if(ControlsProfile(action))return profile_names[action-ControlsProfileStart()];if(ControlsInteract(action))return "Interact / dialogue skip";if(ControlsPreviousFirearm(action))return "Previous Firearm";if(!controls_device&&action==2)return "Next Firearm";if(!controls_device&&action==0)return "Reload";if(ControlsMouseSensitivity(action))return "Mouse sensitivity";return action<ControlsBase()?control_names[action]:action==ControlsBase()?"Pistol spin mode":"Pistol spin button";}
-const char* ControlsHelp(unsigned action){if(ControlsDeadzone(action))return "Ignore small stick movements. 0% responds immediately; Original keeps the original controller response. Applies to this player only.";if(ControlsMovementInertia(action))return "Keep the original movement build-up. Off makes movement input respond immediately.";if(ControlsWalk(action))return "Move slowly using this input. Walking mode chooses Hold or Toggle.";if(ControlsWalkMode(action))return "Hold Walk to move slowly, or press once to toggle walking. Opening a menu cancels walking.";if(ControlsHud(action))return "Show or hide gameplay HUD for this player. Menus remain visible.";if(ControlsZoomSensitivity(action))return "Look speed while zoomed, for this player only. 100% keeps the current speed; lower values aim more slowly.";if(ControlsHealPartner(action))return "Use your pack to heal or revive the nearby partner you are facing. Living partners have no healing prompt.";if(ControlsMouseInvert(action))return "Reverse vertical mouse aiming. Stick aiming and mouse orders are unchanged.";if(ControlsAimMode(action))return "Toggle preserves the original zoom cycle. Hold needs a held key or button. Use Cycle scope zoom to change rifle magnification.";if(ControlsScopeZoom(action))return "In Hold mode, change rifle magnification while aiming. Assign a separate input; does not zoom out.";if(ControlsHealthPack(action))return controls_device?"Controller: double-tap D-pad Down to heal yourself; hold Down while facing your partner to heal or revive them. Collect more packs from medics.":"Use a stored health pack, or revive a nearby downed partner. Collect more from a medic while supplies last.";if(ControlsProfile(action))return profile_help[action-ControlsProfileStart()];if(ControlsInteract(action))return "Use nearby objects and skip dialogue. This key is displayed in interaction prompts.";if(ControlsPreviousFirearm(action))return "Equip or select the previous available firearm.";if(!controls_device&&action==2)return "Equip or select the next available firearm.";if(!controls_device&&action==0)return "Reload your weapon without activating nearby objects.";if(ControlsMouseSensitivity(action))return "Mouse look speed: 100% is the default. Lower is slower; independent of Windows pointer speed and stick sensitivity.";return action<ControlsBase()?control_help[action]:action==ControlsBase()?"Original gesture: rotate the stick or move the mouse in two full circles. Button press: use your assigned input.":"Used in Button press mode. Runs the original pistol spin and next-kill slow-motion reward.";}
+const char* ControlsName(unsigned action){if(ControlsMixedInput(action))return "Controller + mouse";if(ControlsDeadzone(action))return action==ControlsProfileStart()+7?"Left stick deadzone":"Right stick deadzone";if(ControlsMovementInertia(action))return "Movement inertia";if(ControlsWalk(action))return "Walk";if(ControlsWalkMode(action))return "Walking mode";if(ControlsHud(action))return "Toggle HUD";if(ControlsZoomSensitivity(action))return "Zoom sensitivity";if(ControlsHealPartner(action))return "Heal Partner";if(ControlsMouseInvert(action))return "Invert mouse look";if(ControlsAimMode(action))return "Aiming mode";if(ControlsScopeZoom(action))return "Cycle scope zoom";if(ControlsHealthPack(action))return "Use health pack";if(ControlsProfile(action))return profile_names[action-ControlsProfileStart()];if(ControlsInteract(action))return "Interact / dialogue skip";if(ControlsPreviousFirearm(action))return "Previous Firearm";if(!controls_device&&action==2)return "Next Firearm";if(!controls_device&&action==0)return "Reload";if(ControlsMouseSensitivity(action))return "Mouse sensitivity";return action<ControlsBase()?control_names[action]:action==ControlsBase()?"Pistol spin mode":"Pistol spin button";}
+const char* ControlsHelp(unsigned action){if(ControlsMixedInput(action))return "Use controller and mouse together in single-player gameplay. Menus use the last active device.";if(ControlsDeadzone(action))return "Ignore small stick movements. 0% responds immediately; Original keeps the original controller response. Applies to this player only.";if(ControlsMovementInertia(action))return "Keep the original movement build-up. Off makes movement input respond immediately.";if(ControlsWalk(action))return "Move slowly using this input. Walking mode chooses Hold or Toggle.";if(ControlsWalkMode(action))return "Hold Walk to move slowly, or press once to toggle walking. Opening a menu cancels walking.";if(ControlsHud(action))return "Show or hide gameplay HUD for this player. Menus remain visible.";if(ControlsZoomSensitivity(action))return "Look speed while zoomed, for this player only. 100% keeps the current speed; lower values aim more slowly.";if(ControlsHealPartner(action))return "Use your pack to heal or revive the nearby partner you are facing. Living partners have no healing prompt.";if(ControlsMouseInvert(action))return "Reverse vertical mouse aiming. Stick aiming and mouse orders are unchanged.";if(ControlsAimMode(action))return "Toggle preserves the original zoom cycle. Hold needs a held key or button. Use Cycle scope zoom to change rifle magnification.";if(ControlsScopeZoom(action))return "In Hold mode, change rifle magnification while aiming. Assign a separate input; does not zoom out.";if(ControlsHealthPack(action))return controls_device?"Controller: double-tap D-pad Down to heal yourself; hold Down while facing your partner to heal or revive them. Collect more packs from medics.":"Use a stored health pack, or revive a nearby downed partner. Collect more from a medic while supplies last.";if(ControlsProfile(action))return profile_help[action-ControlsProfileStart()];if(ControlsInteract(action))return "Use nearby objects and skip dialogue. This key is displayed in interaction prompts.";if(ControlsPreviousFirearm(action))return "Equip or select the previous available firearm.";if(!controls_device&&action==2)return "Equip or select the next available firearm.";if(!controls_device&&action==0)return "Reload your weapon without activating nearby objects.";if(ControlsMouseSensitivity(action))return "Mouse look speed: 100% is the default. Lower is slower; independent of Windows pointer speed and stick sensitivity.";return action<ControlsBase()?control_help[action]:action==ControlsBase()?"Original gesture: rotate the stick or move the mouse in two full circles. Button press: use your assigned input.":"Used in Button press mode. Runs the original pistol spin and next-kill slow-motion reward.";}
 bool ControlsMouseSensitivity(unsigned action){return !controls_device&&action==ControlsBase()+2;}
 bool ControlsBindingAction(unsigned action){
-    return action!=ControlsBase()&&!ControlsAimMode(action)&&!ControlsWalkMode(action)&&
+    return !ControlsMixedInput(action)&&action!=ControlsBase()&&!ControlsAimMode(action)&&!ControlsWalkMode(action)&&
         !ControlsMovementInertia(action)&&!ControlsMouseInvert(action)&&!ControlsLookSlider(action)&&!ControlsProfile(action);
 }
 unsigned& ControlsBinding(unsigned action,unsigned slot){
@@ -149,6 +152,10 @@ void ControlsCandidate(unsigned source){
     else{++navigation_generation;frontend_events=0;}
 }
 void ControlsBegin(unsigned action,unsigned slot){
+    if(ControlsMixedInput(action)){
+        if(!controls_player){controls_draft.mixed_input^=1;message="Controller and mouse mode changed. Apply to save.";}
+        return;
+    }
     if(ControlsProfile(action))return;
     if(ControlsWalkMode(action)){controls_draft.walk_mode^=1;message="Walking mode changed. Apply to save.";return;}
     if(ControlsMovementInertia(action)){controls_draft.movement_inertia^=1;message="Movement inertia changed. Apply to save.";return;}
@@ -297,6 +304,12 @@ void ControlsUi(const ImGuiViewport* view,bool paused){
         for(unsigned row=0;row<count;++row){
             const unsigned action=ControlsAction(start+row);const float y=138+row*20.f;
             if(ControlsSlots(action)==1&&focus==2+row*2)focus=1+row*2;
+            if(ControlsMixedInput(action)){
+                const unsigned index=1+row*2,values[]={0,1};const char* names[]={"Off","On"};
+                SettingChoice(canvas,"Controller + mouse",controls_draft.mixed_input,values,names,index,focus,
+                    focus==index?(left?-1:right||accept?1:0):0,y-index*16,16);
+                continue;
+            }
             if(ControlsMouseInvert(action)){
                 const unsigned index=1+row*2,values[]={0,1};const char* names[]={"Off","On"};
                 SettingChoice(canvas,"Invert mouse look",controls_draft.invert_mouse,values,names,index,focus,
@@ -387,6 +400,7 @@ void ControlsUi(const ImGuiViewport* view,bool paused){
                 std::memcpy(controls_draft.walk_binding[controls_device],defaults.walk_binding[controls_device],sizeof(defaults.walk_binding[controls_device]));
                 std::memcpy(controls_draft.hud_binding[controls_device],defaults.hud_binding[controls_device],sizeof(defaults.hud_binding[controls_device]));
                 controls_draft.movement_inertia=defaults.movement_inertia;
+                if(!controls_player)controls_draft.mixed_input=defaults.mixed_input;
                 controls_draft.aim_mode=0;std::fill(std::begin(controls_draft.scope_zoom[controls_device]),std::end(controls_draft.scope_zoom[controls_device]),0u);
                 std::memcpy(controls_draft.health_pack[controls_device],defaults.health_pack[controls_device],sizeof(defaults.health_pack[controls_device]));
                 if(!controls_device)std::memcpy(controls_draft.heal_partner,defaults.heal_partner,sizeof(defaults.heal_partner));

@@ -13,6 +13,7 @@
 #include <cstring>
 #include <mutex>
 #include <string>
+#include <thread>
 #include "core/input.h"
 #include "xbe_controls.h"
 #include "xbe_health_packs.h"
@@ -550,6 +551,64 @@ static void CheckControllerKeyboardIsolation(){
     keyboard_defaults(&keyboard_config);trial_coop::Reset();ReleaseAll();
     puts("Controller deadzones: mouse/keyboard ownership, raw rotation, opposed keys and P2 isolation passed");
 }
+static void CheckMixedGameplay(){
+    using namespace trial_controls;
+    trial_coop::Reset();ReleaseAll();actions_loaded[0]=true;mixed_input=0;
+    gameplay=captured=true;menu_mode=false;intro_gate={};test_presentation=0;
+    keyboard_defaults(&keyboard_config);controller_defaults(&controller_config);
+    controller_config.stick_deadzone[0]=controller_config.stick_deadzone[1]=0;controller_publish();
+    input::Pad pad;pad.connected=true;pad.ly=24000;pad.rx=9000;pad.analog[7]=255;
+    RAWINPUT raw{};raw.header.dwType=RIM_TYPEMOUSE;raw.data.mouse.lLastX=100;raw.data.mouse.lLastY=50;
+    constexpr uint32_t actor=0x10000,axes=0x30000;
+    const auto angle=[](uint32_t offset)->float&{return *reinterpret_cast<float*>(mouse_guest+actor+offset);};
+    for(bool enabled:{false,true}){
+        mixed_input=enabled;dx=dy=0;order_held=false;mouse_sensitivity=400;mouse_invert=0;zoom_scale=1;
+        std::memset(mouse_guest,0,sizeof mouse_guest);
+        angle(0x37c)=1.5f;angle(0x688)=.2f;angle(0x68c)=.3f;
+        TestMouseMessage(WM_INPUT,reinterpret_cast<intptr_t>(&raw));
+        const auto result=Poll(0,pad);RegisterControllerAxes(axes);
+        assert(result.ly>0&&result.analog[7]==255&&!TrialGameplayKeyboardMode());
+        TestGuestMouse(actor);
+        assert(std::fabs(angle(0x688)-(enabled?.15f:.2f))<.000001f);
+        assert(std::fabs(angle(0x68c)-(enabled?.2f:.3f))<.000001f);
+        TestGuestMouse(actor);assert(std::fabs(angle(0x68c)-(enabled?.2f:.3f))<.000001f);
+    }
+    mixed_input=1;ReleaseAll();
+    // Every digitally-owned axis is excluded, even when opposing keys cancel to zero.
+    for(const char* keys:{"W","WS","AD","J","IK"}){
+        ReleaseAll();for(const char* key=keys;*key;++key)physical_keys[unsigned(*key)]=true;
+        XBOX_GAMEPAD keyboard;const unsigned mask=keyboard_apply_bindings(&keyboard,true);
+        assert(mask);const auto result=Poll(0,pad);RegisterControllerAxes(axes);
+        const SHORT key_axes[]={keyboard.sThumbLX,keyboard.sThumbLY,keyboard.sThumbRX,keyboard.sThumbRY};
+        const SHORT result_axes[]={result.lx,result.ly,result.rx,result.ry};
+        for(unsigned axis=0;axis<4;++axis){
+            float value=123;const bool applied=NativeControllerResponse(axes+4*axis,.4f,1.f/.45f,value);
+            assert(applied==!(mask&(1u<<axis)));
+            if(mask&(1u<<axis))assert(result_axes[axis]==key_axes[axis]);
+        }
+    }
+    ReleaseAll();physical_keys[VK_LBUTTON]=true;pad.buttons=128;pad.analog[7]=0;
+    const auto aim_fire=Poll(0,pad);assert((aim_fire.buttons&128)&&aim_fire.analog[7]==255);
+    // Remapped physical Reload and keyboard R work; keyboard Interact remains separate.
+    ReleaseAll();controller_config.binding[0][0]=2;controller_config.binding[0][1]=0;controller_publish();
+    pad={};pad.connected=true;pad.analog[1]=255;
+    Poll(0,pad);std::thread([]{Poll(0);}).join();TrialInputPublish();assert(reload_down);
+    Poll(0);TrialInputPublish();assert(!reload_down);
+    for(unsigned key:{unsigned('R'),unsigned('F')}){
+        physical_keys[key]=true;Poll(0);TrialInputPublish();
+        assert(reload_down==(key=='R'));physical_keys[key]=false;Poll(0);TrialInputPublish();
+    }
+    // Disabling the setting and the co-op route restore the existing device gates.
+    trial_coop::SetActive(true);ReleaseAll();second_controller.stick_deadzone[1]=0;pad.connected=true;pad.rx=10000;Poll(0,pad);
+    assert(!TrialMouseActive());RegisterControllerAxes(axes);xbox_KeyboardNoteInput();
+    float value=0;assert(!NativeControllerResponse(axes+8,.4f,1.f/.45f,value));
+    Poll(1,pad);RegisterControllerAxes(axes+0x100);assert(NativeControllerResponse(axes+0x108,.4f,1.f/.45f,value));
+    trial_coop::Reset();ReleaseAll();Poll(0,pad);test_focused=false;assert(!TrialMouseActive());
+    test_focused=true;menu_mode=true;assert(!TrialMouseActive());menu_mode=false;test_open=true;assert(!TrialMouseActive());
+    test_open=false;mixed_input=0;assert(!TrialMouseActive());
+    controller_defaults(&controller_config);controller_defaults(&second_controller);controller_publish();ReleaseAll();
+    puts("Mixed input: default parity, raw mouse plus pad, axis ownership, reload separation and co-op isolation passed");
+}
 static void CheckMenuDeviceHandoff(){
     trial_coop::Reset();ReleaseAll();menu_mode=true;gameplay=false;captured=false;intro_gate={};
     TrialGraphicsInputChanged();
@@ -637,24 +696,47 @@ int main(){
     gameplay=true;menu_mode=false;captured=true;ReleaseAll();
     trial_controls::firearm_loaded=true;trial_controls::previous_firearm[0]=257;
     trial_controls::previous_firearm[1]='B';
-    physical_keys['C']=true;assert(Poll(0).analog[2]==255&&TrialFirearmDirection()==1);ReleaseAll();
-    physical_keys['B']=true;assert(Poll(0).analog[2]==255&&TrialFirearmDirection()==-1);
-    assert(Poll(0).analog[2]==255&&TrialFirearmDirection()==-1);
-    physical_keys['C']=true;assert(Poll(0).analog[2]==0&&TrialFirearmDirection()==0);ReleaseAll();
+    const auto firearm_sample=[](input::Pad pad={}){auto result=Poll(0,pad);TrialInputPublish();return result;};
+    physical_keys['C']=true;assert(firearm_sample().analog[2]==255&&TrialFirearmDirection()==1);ReleaseAll();
+    physical_keys['B']=true;assert(firearm_sample().analog[2]==255&&TrialFirearmDirection()==-1);
+    assert(firearm_sample().analog[2]==255&&TrialFirearmDirection()==-1);
+    physical_keys['C']=true;assert(firearm_sample().analog[2]==0&&TrialFirearmDirection()==0);ReleaseAll();
     keyboard_wheel_record(-2*WHEEL_DELTA);
+    TrialInputPublish();
     for(unsigned pulse=0;pulse<2;++pulse){
-        TrialInputPublish();assert(Poll(0).analog[2]==255&&TrialFirearmDirection()==-1);
-        TrialInputPublish();assert(Poll(0).analog[2]==0&&TrialFirearmDirection()==0);
+        assert(firearm_sample().analog[2]==255&&TrialFirearmDirection()==-1);
+        // The guest already cached the press; later polls see the next wheel phase.
+        assert(Poll(0).analog[2]==0&&TrialFirearmDirection()==-1);
+        TrialInputPublish();assert(TrialFirearmDirection()==0);
     }
-    physical_keys['B']=true;test_focused=false;assert(Neutral(Poll(0))&&TrialFirearmDirection()==0);
-    test_focused=true;test_open=true;assert(Neutral(Poll(0))&&TrialFirearmDirection()==0);ReleaseAll();
-    menu_mode=true;physical_keys['B']=true;assert(Poll(0).analog[2]==0&&TrialFirearmDirection()==0);ReleaseAll();menu_mode=false;
+    // Connection discovery on another thread cannot replace a short rebound key sample.
+    physical_keys['B']=true;assert(Poll(0).analog[2]==255);
+    physical_keys['B']=false;
+    std::thread([]{assert(Poll(0).analog[2]==0);}).join();
+    TrialInputPublish();assert(TrialFirearmDirection()==-1);
+    std::thread([]{Poll(0);Poll(1);}).join();
+    assert(TrialFirearmDirection()==-1&&TrialFirearmDirection()==-1);
+    assert(firearm_sample().analog[2]==0&&TrialFirearmDirection()==0);
+    // Both wheel directions, including swapped bindings, use the same publication lifetime.
+    for(bool swapped:{false,true})for(int direction:{-1,1}){
+        keyboard_config.binding[2][1]=swapped?257:256;
+        trial_controls::previous_firearm[0]=swapped?256:257;
+        keyboard_wheel_record((swapped?-direction:direction)*WHEEL_DELTA);TrialInputPublish();
+        assert(firearm_sample().analog[2]==255&&TrialFirearmDirection()==direction);
+        std::thread([]{Poll(0);Poll(1);}).join();
+        assert(TrialFirearmDirection()==direction);
+        assert(firearm_sample().analog[2]==0&&TrialFirearmDirection()==0);
+    }
+    keyboard_config.binding[2][1]=0;trial_controls::previous_firearm[0]=257;
+    physical_keys['B']=true;test_focused=false;assert(Neutral(firearm_sample())&&TrialFirearmDirection()==0);
+    test_focused=true;test_open=true;assert(Neutral(firearm_sample())&&TrialFirearmDirection()==0);ReleaseAll();
+    menu_mode=true;physical_keys['B']=true;assert(firearm_sample().analog[2]==0&&TrialFirearmDirection()==0);ReleaseAll();menu_mode=false;
     input::Pad firearm_pad;firearm_pad.connected=true;firearm_pad.analog[2]=255;
-    physical_keys['B']=true;assert(Poll(0,firearm_pad).analog[2]==255&&TrialFirearmDirection()==1);ReleaseAll();
+    physical_keys['B']=true;assert(firearm_sample(firearm_pad).analog[2]==255&&TrialFirearmDirection()==1);ReleaseAll();
     trial_controls::previous_firearm[0]=VK_XBUTTON2;trial_controls::previous_firearm[1]=0;
-    physical_keys[VK_XBUTTON2]=true;captured=false;assert(Poll(0).analog[2]==0);captured=true;
-    assert(Poll(0).analog[2]==255&&TrialFirearmDirection()==-1);ReleaseAll();
-    trial_controls::previous_firearm[0]=0;physical_keys[VK_XBUTTON2]=true;assert(Poll(0).analog[2]==0);ReleaseAll();
+    physical_keys[VK_XBUTTON2]=true;captured=false;assert(firearm_sample().analog[2]==0);captured=true;
+    assert(firearm_sample().analog[2]==255&&TrialFirearmDirection()==-1);ReleaseAll();
+    trial_controls::previous_firearm[0]=0;physical_keys[VK_XBUTTON2]=true;assert(firearm_sample().analog[2]==0);ReleaseAll();
     trial_controls::previous_firearm[0]=257;
 
     // Only Interact reaches retail A during gameplay, including rebound keys.
@@ -1034,6 +1116,8 @@ int main(){
     }
     CheckControllerDeadzones();
     CheckControllerKeyboardIsolation();
+    CheckMixedGameplay();
+    trial_controls::mixed_input=1;CheckMenuDeviceHandoff();trial_controls::mixed_input=0;
     std::puts("graphics input: actual pad/keyboard ownership, focus, all ports, held keys/clicks/sticks and release handoff passed");
     HealthGestures();
     CheckPlayerActions();

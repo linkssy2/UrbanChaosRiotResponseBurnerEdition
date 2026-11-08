@@ -21,6 +21,8 @@ uint32_t TrialCoopPlayer(unsigned slot){return slot==0?p1:slot==1?p2:0;}
 static bool candidate=true,keyboard_mode=true,faces[2]{true,true},pressed[2]{},skip_edge[2]{},playing=false,busy=false,flags_ready=true,fail_position=false,fail_lock=false;
 static unsigned speech_starts=0,script_calls=0,transitions=0,fade_calls=0,query_ports[2]{};
 static uint32_t last_property_owner=0;
+static bool mixed_input=false;
+namespace trial_controls {unsigned MixedInput(){return mixed_input;}}
 int xbox_KeyboardMode(){return keyboard_mode;}
 #include "../common/xbe_coop_interactions.cpp"
 #include "../common/xbe_conversation_skip.cpp"
@@ -209,8 +211,8 @@ static void Admission(){
     Tick();assert(R32(behavior+0x158)==0&&!g_base[p1+0x202]&&!g_base[p2+0x202]); // exhaustion cannot fall back to native ownership
 }
 static void SkipAndTurn(){
-    for(unsigned owner=0;owner<2;++owner){
-        Seed();faces[1-owner]=false;Tick();Tick();Tick();
+    for(bool mixed:{false,true})for(unsigned owner=0;owner<2;++owner){
+        Seed();mixed_input=mixed;faces[1-owner]=false;Tick();Tick();Tick();
         G<float>(behavior+0x144)=2;keyboard_mode=owner==1; // global mode intentionally belongs to the other player
         TrialConversationPublish(true,true);skip_edge[0]=true;skip_edge[1]=false;
         Tick();if(owner==1)assert(R32(behavior+0x158)==3);else assert(R32(behavior+0x158)==4);
@@ -218,6 +220,7 @@ static void SkipAndTurn(){
         auto c=Context();c.esi=c.ecx=behavior;TrialCoopInteractionScope scoped(c,g_base);assert(scoped.Update());
         CoopTurn(c,g_base);assert(last_property_owner==(owner?22u:11u));
     }
+    mixed_input=false;
 }
 static void LifecycleAndSafety(){
     Seed();faces[1]=false;Tick();assert(g_base[p1+0x202]);

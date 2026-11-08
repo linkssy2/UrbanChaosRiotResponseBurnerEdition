@@ -136,7 +136,7 @@ void xbox_KeyboardActionLabel(unsigned action,char* destination,unsigned capacit
     std::snprintf(destination,capacity,"%s",xbox_KeyboardSourceName(source));
 }
 
-static void keyboard_apply_bindings(XBOX_GAMEPAD* pad,int mouse_active){
+static unsigned keyboard_apply_bindings(XBOX_GAMEPAD* pad,int mouse_active){
     keyboard_init();AcquireSRWLockShared(&keyboard_lock);
     const auto profile=keyboard_config;
     ReleaseSRWLockShared(&keyboard_lock);
@@ -155,13 +155,16 @@ static void keyboard_apply_bindings(XBOX_GAMEPAD* pad,int mouse_active){
         if(action<8)pad->bAnalogButtons[action]=255;
         else if(action<16)pad->wButtons|=controller_digital[action-8];
     }
+    unsigned axis_mask=0;
     SHORT* axes[]={&pad->sThumbLX,&pad->sThumbLY,&pad->sThumbRX,&pad->sThumbRY};
     for(unsigned axis=0;axis<4;++axis){
         const unsigned pair=16+axis*2;
         if(active[pair]||active[pair+1]){
+            axis_mask|=1u<<axis;
             const int difference=int(active[pair+1])-int(active[pair]);
             *axes[axis]=SHORT(32767*(axis%2?-difference:difference));
         }
     }
+    return axis_mask;
 }
 

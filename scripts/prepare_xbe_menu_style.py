@@ -17,6 +17,12 @@ def prepare(area):
     marker='        if(translate)text=trial_language::Ui(text);'
     assert observed.count(marker)==1
     observed=observed.replace(marker,marker+'\n        RecordMenuText(text);',1)
+    marker='        const auto p=Point(x,y);const float px=height*sy;'
+    assert observed.count(marker)==1
+    observed=observed.replace(marker,marker+'\n        const int text_vertex_start=draw->VtxBuffer.Size;',1)
+    marker='        draw->AddText(Font(title),px,p,color,text);'
+    assert observed.count(marker)==1
+    observed=observed.replace(marker,marker+'\n        RecordMenuTextBounds(text,p,draw,text_vertex_start);',1)
     marker='    void Selection(float x,float y,float width,float height){'
     assert observed.count(marker)==1
     observed=observed.replace(marker,marker+'\n        RecordMenuSelection(Point(x,y));',1)

@@ -30,6 +30,18 @@ struct HitRecord {std::string name;ImGuiID id;ImVec2 a,b;};
 static std::vector<HitRecord> hits;
 static std::vector<std::string> menu_text;
 static void RecordMenuText(const char* text){menu_text.emplace_back(text);}
+struct TextBounds {std::string text,window;ImVec2 anchor,minimum,maximum;};
+static std::vector<TextBounds> text_bounds;
+static void RecordMenuTextBounds(const char* text,ImVec2 anchor,const ImDrawList* draw,int first){
+    if(first==draw->VtxBuffer.Size)return;
+    TextBounds bounds{text,ImGui::GetCurrentWindow()->Name,anchor,draw->VtxBuffer[first].pos,draw->VtxBuffer[first].pos};
+    for(int i=first+1;i<draw->VtxBuffer.Size;++i){
+        const auto p=draw->VtxBuffer[i].pos;
+        bounds.minimum.x=std::min(bounds.minimum.x,p.x);bounds.minimum.y=std::min(bounds.minimum.y,p.y);
+        bounds.maximum.x=std::max(bounds.maximum.x,p.x);bounds.maximum.y=std::max(bounds.maximum.y,p.y);
+    }
+    text_bounds.push_back(std::move(bounds));
+}
 static std::vector<ImVec2> selections;
 static void RecordMenuSelection(ImVec2 p){selections.push_back(p);}
 struct ReviveRecord {unsigned slot,source;std::string binding,label;};
@@ -194,7 +206,7 @@ void TrialFrontendPad(uint32_t buttons,uint8_t confirm,uint8_t back,int16_t x,in
 static void DrawFrame(){
     unsigned profile_values[7];std::memcpy(profile_values,profile_live,sizeof(profile_values));
     TrialControlsProfile(profile_values,context.kind==3);
-    hits.clear();menu_text.clear();selections.clear();revive_records.clear();countdown_records.clear();preview_records.clear();auto& io=ImGui::GetIO();io.DisplaySize={float(output.width),float(output.height)};io.DeltaTime=1.f/60;
+    hits.clear();menu_text.clear();text_bounds.clear();selections.clear();revive_records.clear();countdown_records.clear();preview_records.clear();auto& io=ImGui::GetIO();io.DisplaySize={float(output.width),float(output.height)};io.DeltaTime=1.f/60;
     ImGui::NewFrame();TrialGraphicsUi();ImGui::Render();++frames;
     for(size_t i=0;i<hits.size();++i){
         const auto& h=hits[i];CHECK(h.a.x>=0&&h.a.y>=0&&h.b.x<=output.width+.1f&&h.b.y<=output.height+.1f);
@@ -1081,7 +1093,7 @@ static void CheckControls(const TrialFrontendFrame& options){
         EmptyAction();
     };
     trial_controls::live_controls=trial_controls::second_controls=trial_controls::Defaults();controls_device=controls_player=0;
-    open();CHECK(hits[1].name=="setting"&&ControlsMouseSensitivity(ControlsAction(0)));
+    open();CHECK(hits[1].name=="setting"&&ControlsMixedInput(ControlsAction(0))&&ControlsMouseSensitivity(ControlsAction(1)));
     CHECK(std::strcmp(ControlsName(0),"Reload")==0);
     CHECK(std::strcmp(ControlsName(28),"Interact / dialogue skip")==0);
     CHECK(&ControlsBinding(0,0)!=&ControlsBinding(28,0));
@@ -1098,8 +1110,9 @@ static void CheckControls(const TrialFrontendFrame& options){
     CHECK(display_row(34)==display_row(30)+1&&ControlsHealPartner(34)&&ControlsSlots(34)==2);
     CHECK(&ControlsBinding(34,0)==&controls_draft.heal_partner[0]);
     for(unsigned device=0;device<2;++device){
-        controls_device=device;CHECK(ControlsCount()==(device?43u:41u));bool seen[47]{};
-        for(unsigned row=0;row<ControlsCount();++row){const auto action=ControlsAction(row);CHECK(action<47&&!seen[action]);seen[action]=true;}
+        controls_device=device;CHECK(ControlsCount()==(device?44u:42u));bool seen[48]{};
+        for(unsigned row=0;row<ControlsCount();++row){const auto action=ControlsAction(row);CHECK(action<48&&!seen[action]);seen[action]=true;}
+        CHECK(seen[47]&&ControlsSlots(47)==1&&!ControlsBindingAction(47)&&!ControlsProfile(47)&&!ControlsDeadzone(47));
         for(unsigned action=0;action<(device?43u:40u);++action)CHECK(seen[action]);
         if(!device)for(unsigned action=40;action<47;++action)CHECK(seen[action]==(action==43));
         if(device)CHECK(std::strcmp(ControlsName(2),"Firearms")==0&&!ControlsPreviousFirearm(29));
@@ -1107,6 +1120,31 @@ static void CheckControls(const TrialFrontendFrame& options){
     controls_device=0;CHECK(display_row(28)==display_row(0)+1);
     CHECK(ControlsMouseInvert(33)&&ControlsSlots(33)==1);
     CHECK(std::strcmp(ControlsName(33),"Invert mouse look")==0);
+
+    for(unsigned device:{0u,1u}){
+        controls_device=device;ControlsReadDraft();Settle();
+        const auto other=trial_controls::Snapshot(1);
+        CHECK(!controls_draft.mixed_input&&!std::strcmp(ControlsName(47),"Controller + mouse"));
+        CHECK(!std::strcmp(ControlsGroup(display_row(47)),"INPUT SETTINGS"));
+        const auto hit=hits[control_hit(47)];
+        ClickPoint(hit.b.x-35*float(output.width)/640,(hit.a.y+hit.b.y)/2);
+        CHECK(controls_draft.mixed_input==1&&ControlsDirty()&&controls_capture_action<0);
+        keyboard_mode=0;frontend_events=64;DrawFrame();CHECK(controls_draft.mixed_input==1);
+        fail_apply=true;footer(0);fail_apply=false;
+        CHECK(ControlsDirty()&&!trial_controls::Snapshot().mixed_input);
+        footer(1);CHECK(!controls_draft.mixed_input&&!ControlsDirty());
+        control_hit(47);Click(1);Key(ImGuiKey_Enter);
+        CHECK(controls_draft.mixed_input==1&&controls_capture_action<0);
+        footer(0);CHECK(trial_controls::Snapshot().mixed_input==1&&!ControlsDirty());
+        footer(2);CHECK(!controls_draft.mixed_input&&ControlsDirty());
+        footer(1);CHECK(controls_draft.mixed_input==1&&!ControlsDirty());
+        control_hit(47);Click(1);keyboard_mode=0;frontend_events=16;DrawFrame();
+        CHECK(!controls_draft.mixed_input&&controls_capture_action<0);
+        keyboard_mode=0;frontend_events=32;DrawFrame();CHECK(controls_draft.mixed_input==1);
+        footer(2);footer(0);CHECK(!trial_controls::Snapshot().mixed_input&&!ControlsDirty());
+        const auto unchanged=trial_controls::Snapshot(1);CHECK(!std::memcmp(&other,&unchanged,sizeof(other)));
+    }
+    controls_device=0;ControlsReadDraft();Settle();
 
     CHECK(!ControlsDirty());
     unsigned native_before[7];std::memcpy(native_before,profile_draft,sizeof(native_before));
@@ -1391,6 +1429,8 @@ static void CheckControls(const TrialFrontendFrame& options){
     TrialControlsProfile(snapshot,true);ControlsReadDraft();Close();Settle();
     open();controls_device=1;controls_player=1;ControlsReadDraft();Settle();
     CHECK(ControlsCount()==43&&ControlsProfileStart()==34&&ControlsHealthPack(26));
+    for(unsigned row=0;row<ControlsCount();++row)CHECK(!ControlsMixedInput(ControlsAction(row)));
+    ControlsBegin(47,0);CHECK(!controls_draft.mixed_input&&!ControlsDirty()&&controls_capture_action<0);
     const auto first_profile=trial_controls::live_controls;
     CHECK(ControlsWalk(30)&&ControlsWalkMode(31)&&ControlsHud(32));
     ControlsBegin(31,1);CHECK(controls_draft.walk_mode==1&&controls_capture_action<0);
@@ -2203,6 +2243,73 @@ static void CheckViewControls(){
     TrialFrontendPublish({});TrialGraphicsMenuContext(0,0,0,0);Settle();Drain();
     puts("PASS View Controls: current bindings, read-only rows, mouse wheel/drag/footer, original Back identity, held/transition guards, both pause owners, Spanish and four aspect ratios");
 }
+static void CheckSettingsHelpBounds(const char* window){
+    const auto frame=trial_graphics::ViewBounds(float(output.width),float(output.height),true);
+    const float sx=frame.width/640.f,sy=frame.height/480.f;
+    std::vector<const TextBounds*> help;
+    const unsigned limit=std::strcmp(window,"Burner graphics")==0?1:2;
+    for(auto i=text_bounds.rbegin();i!=text_bounds.rend()&&help.size()<limit;++i)
+        if(i->window==window&&i->anchor.y>=frame.y+330*sy&&i->anchor.y<frame.y+379*sy)help.push_back(&*i);
+    CHECK(!help.empty());std::reverse(help.begin(),help.end());
+    const float help_top=help.front()->anchor.y;
+    float row_bottom=frame.y+73*sy,previous_bottom=0;unsigned lines=0;
+    for(const auto& h:hits)if(h.a.y>=frame.y+73*sy&&h.b.y<help_top)
+        row_bottom=std::max(row_bottom,h.b.y);
+    for(const auto& t:text_bounds)if(t.window==window){
+        if(t.anchor.y>=frame.y+73*sy&&t.anchor.y<help_top)row_bottom=std::max(row_bottom,t.maximum.y);
+        if(std::find(help.begin(),help.end(),&t)==help.end())continue;
+        // Inspect emitted foreground and shadow vertices, including the actual
+        // original/HD font metrics and translated text's width fitting.
+        CHECK(t.minimum.x>=frame.x+6*sx&&t.maximum.x<=frame.x+634*sx);
+        CHECK(t.maximum.y<=frame.y+(379-8)*sy);
+        CHECK(t.minimum.y>=row_bottom+8*sy);
+        CHECK(!lines||t.minimum.y>=previous_bottom+2*sy);
+        previous_bottom=t.maximum.y;++lines;
+    }
+    CHECK(lines>=1&&lines<=2);
+}
+static void CheckSettingsHelpLayout(){
+    const auto saved_output=output;const auto saved_live=live;
+    const unsigned saved_language=trial_language::active;
+    const bool saved_textures=trial_graphics::textures_available;
+    trial_coop::Reset();keyboard_mode=1;controls_player=0;
+    for(const auto size:{app::Mode{640,480},app::Mode{1280,800},app::Mode{2560,1440},app::Mode{3440,1440},app::Mode{5120,1440}})
+        for(unsigned language:{0u,4u})for(bool hd:{false,true}){
+            Close();output=size;trial_language::active=language;live.hd_ui=hd;
+            const auto frame=trial_graphics::ViewBounds(float(size.width),float(size.height),true);
+            const float sx=frame.width/640.f,sy=frame.height/480.f;
+            auto options=MakeList(3);Publish(options);Click(options.source.count);CHECK(PanelOpen());
+            for(unsigned variant=0;variant<4;++variant){
+                draft.fmv_scale=variant%3;draft.ragdolls=variant%3;draft_fog_mode=variant;
+                trial_graphics::textures_available=variant!=3;
+                for(unsigned row=0;row<22;++row){
+                    Move(0,0);const auto hit=GraphicsHit(row);
+                    Move(hit.a.x+3*sx,hit.a.y+3*sy);CheckSettingsHelpBounds("Burner graphics");
+                }
+            }
+            Close();trial_graphics::textures_available=saved_textures;
+            auto audio=MakeList(4);
+            for(unsigned i=0;i<audio.source.count;++i)audio.source.rows[i].actions=UC_HF_ROW_LEFT|UC_HF_ROW_RIGHT;
+            Publish(audio);message.clear();Settle();CheckSettingsHelpBounds("Original settings");
+            for(const char* status:{"Changes applied and saved.","Could not save settings."}){
+                message=status;Settle();CheckSettingsHelpBounds("Original settings");
+            }
+            Publish(options);Click(0);CHECK(PanelOpen()&&settings_page==1);
+            for(unsigned device=0;device<2;++device){
+                controls_device=device;ControlsReadDraft();Settle();
+                for(unsigned row=0;row<ControlsCount();++row){
+                    controls_scroll=std::min(row,ControlsCount()-8);Move(0,0);
+                    Move(frame.x+350*sx,frame.y+(141+(row-controls_scroll)*20)*sy);
+                    CheckSettingsHelpBounds("Burner controls");
+                }
+            }
+            Close();
+        }
+    trial_graphics::textures_available=saved_textures;live=saved_live;output=saved_output;
+    trial_language::active=saved_language;controls_device=controls_player=0;
+    TrialFrontendPublish({});TrialGraphicsMenuContext(0,0,0,0);Settle();Drain();
+    puts("PASS settings help glyphs: Graphics, Audio and all Controls descriptions clear rows and frame border; English/Spanish, original/HD fonts, 4:3, 16:10, 16:9, 21:9 and 32:9");
+}
 int main(){
     ImGui::CreateContext();auto& io=ImGui::GetIO();io.IniFilename=nullptr;io.LogFilename=nullptr;
     trial_coop::Reset();trial_coop::SetAvailable(false);
@@ -2293,9 +2400,13 @@ int main(){
     CheckDisplayAspectMenus();
     CheckMenuEdgeCoverage();
     CheckViewControls();
+    CheckSettingsHelpLayout();
     trial_language::active=4;
     CHECK(std::strcmp(trial_language::Ui("Controls"),"Controles")==0);
     CHECK(std::strcmp(trial_language::Ui("Movement inertia"),"Inercia de movimiento")==0);
+    CHECK(std::strcmp(trial_language::Ui("Controller + mouse"),"Mando + rat\xc3\xb3n")==0);
+    CHECK(std::strcmp(trial_language::Ui("Use controller and mouse together in single-player gameplay. Menus use the last active device."),
+        "Usa mando y rat\xc3\xb3n a la vez en partidas de un jugador. Los men\xc3\xbas usan el \xc3\xbaltimo dispositivo activo.")==0);
     CHECK(std::strcmp(trial_language::Ui("Keep the original movement build-up. Off makes movement input respond immediately."),
         "Conserva la aceleraci\xc3\xb3n gradual original. Desactivada, el movimiento responde de inmediato.")==0);
     CHECK(std::strcmp(trial_language::Ui("Next Firearm"),"Siguiente arma de fuego")==0);

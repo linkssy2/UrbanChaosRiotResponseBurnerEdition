@@ -1,6 +1,7 @@
 // The project's saved controls sit above the maintained runtime's input::Pad.
 #include "xbe_controller_bindings.inc"
 #include "xbe_controls.h"
+#include "xbe_coop.h"
 
 namespace trial_controls {
 static bool spin_loaded=false;
@@ -16,12 +17,14 @@ static unsigned aim_mode[2]{},scope_zoom[2][2][2]{},zoom_sensitivity[2]{100,100}
 static bool actions_loaded[2]{};
 static unsigned walk_mode[2]{},walk_binding[2][2][2]{},hud_binding[2][2][2]{};
 static unsigned movement_inertia[2]{1,1};
+static unsigned mixed_input=0;
 static void LoadActions(unsigned player){
     if(actions_loaded[player])return;actions_loaded[player]=true;
     wchar_t path[MAX_PATH];if(!controller_path(path))return;
     const wchar_t* section=player?L"PlayerActions2":L"PlayerActions";
     walk_mode[player]=trial_input_profile::Read(path,section,L"WalkMode",0,1);
     movement_inertia[player]=trial_input_profile::Read(path,section,L"MovementInertia",1,1);
+    if(!player)mixed_input=trial_input_profile::Read(path,section,L"MixedInput",0,1);
     for(unsigned device=player;device<2;++device)for(unsigned slot=0;slot<2;++slot){
         wchar_t key[32];
         for(unsigned action=0;action<2;++action){
@@ -93,9 +96,8 @@ bool NativeControllerResponse(uint32_t source,float minimum,float gain,float& va
     for(unsigned port=0;port<2;++port){
         const uint32_t offset=source-controller_axes[port];
         if(!controller_axes[port]||offset>=16||(offset&3)||!(controller_axis_mask[port]&(1u<<(offset/4))))continue;
-        // Mouse/key events can take P1 after its last pad poll. Recheck ownership
-        // at consumption so a cached controller mask cannot affect that frame.
-        if(!port&&InterlockedCompareExchange(&keyboard_mode,0,0))return false;
+        // Recheck handoff at consumption; mixed input keeps only sampled pad-owned axes.
+        if(!port&&InterlockedCompareExchange(&keyboard_mode,0,0)&&(!MixedInput()||trial_coop::Active()))return false;
         if(port){LoadSecond();return controller_axis_response(controller_original[port],second_controller,offset/4,minimum,gain,value);}
         controller_init();AcquireSRWLockShared(&controller_lock);
         const bool applied=controller_axis_response(controller_original[port],controller_config,offset/4,minimum,gain,value);
@@ -235,7 +237,7 @@ Draft Snapshot(unsigned player){
         std::memcpy(d.native_profile,second_profile,sizeof(d.native_profile));
         d.spin_mode=second_spin_mode;std::memcpy(d.spin_binding[1],second_spin_binding,sizeof(second_spin_binding));return d;
     }
-    keyboard_init();controller_init();Draft d;LoadAim(0);
+    keyboard_init();controller_init();Draft d;LoadAim(0);d.mixed_input=mixed_input;
     d.walk_mode=walk_mode[player];d.movement_inertia=movement_inertia[player];std::memcpy(d.walk_binding,walk_binding[player],sizeof(d.walk_binding));std::memcpy(d.hud_binding,hud_binding[player],sizeof(d.hud_binding));
     d.zoom_sensitivity=zoom_sensitivity[0];d.aim_mode=aim_mode[0];std::memcpy(d.scope_zoom,scope_zoom[0],sizeof(d.scope_zoom));
     LoadSpin();LoadFirearm();LoadHealth(0);d.spin_mode=spin_mode;std::memcpy(d.spin_binding,spin_binding,sizeof(spin_binding));
@@ -317,6 +319,7 @@ static bool Save(const Draft& d,unsigned player){
     const wchar_t* actions_section=player?L"PlayerActions2":L"PlayerActions";
     swprintf(value,32,L"%u",d.walk_mode);ok=ok&&WritePrivateProfileStringW(actions_section,L"WalkMode",value,temp);
     swprintf(value,32,L"%u",d.movement_inertia);ok=ok&&WritePrivateProfileStringW(actions_section,L"MovementInertia",value,temp);
+    if(!player){swprintf(value,32,L"%u",d.mixed_input);ok=ok&&WritePrivateProfileStringW(actions_section,L"MixedInput",value,temp);}
     for(unsigned device=player;device<2;++device)for(unsigned slot=0;slot<2;++slot)for(unsigned action=0;action<2;++action){
         wchar_t key[32];swprintf(key,32,L"%s%u_%u",action?L"Hud":L"Walk",device,slot);
         swprintf(value,32,L"%u",(action?d.hud_binding:d.walk_binding)[device][slot]);
@@ -334,6 +337,7 @@ bool Apply(const Draft& d,std::string& error,unsigned player){
     if(d.aim_mode>1){error="Invalid aiming mode.";return false;}
     if(d.walk_mode>1){error="Invalid walking mode.";return false;}
     if(d.movement_inertia>1){error="Invalid movement inertia.";return false;}
+    if(d.mixed_input>1||(player&&d.mixed_input)){error="Invalid controller and mouse mode.";return false;}
     for(unsigned action=0;action<2;++action)for(unsigned slot=0;slot<2;++slot){
         const auto& binding=action?d.hud_binding:d.walk_binding;
         if((!player&&!keyboard_valid(binding[0][slot]))||binding[1][slot]>24){error="Invalid walk or HUD binding.";return false;}
@@ -355,6 +359,7 @@ bool Apply(const Draft& d,std::string& error,unsigned player){
     if(!player){keyboard_init();controller_init();}else LoadSecond();
     if(!Save(d,player)){error="Could not save controls. Your previous bindings are unchanged.";return false;}
     actions_loaded[player]=true;walk_mode[player]=d.walk_mode;movement_inertia[player]=d.movement_inertia;
+    if(!player)mixed_input=d.mixed_input;
     for(unsigned device=player;device<2;++device){
         std::memcpy(walk_binding[player][device],d.walk_binding[device],sizeof(d.walk_binding[device]));
         std::memcpy(hud_binding[player][device],d.hud_binding[device],sizeof(d.hud_binding[device]));
@@ -411,6 +416,9 @@ unsigned WalkMode(unsigned player){
 unsigned MovementInertia(unsigned player){
     if(player>1)return 1;
     std::lock_guard guard(input_lock);LoadActions(player);return movement_inertia[player];
+}
+unsigned MixedInput(){
+    std::lock_guard guard(input_lock);LoadActions(0);return mixed_input;
 }
 bool WalkDown(bool keyboard,const input::Pad& p,unsigned player,bool mouse_active){
     if(player>1||(player&&keyboard))return false;

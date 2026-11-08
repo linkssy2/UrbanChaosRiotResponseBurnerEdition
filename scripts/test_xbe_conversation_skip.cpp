@@ -8,6 +8,7 @@
 #include <cstdlib>
 #include <cstring>
 #include "kernel/kernel.h"
+#include "xbe_coop.h"
 namespace kernel {
 static std::array<uint8_t,0x800000> memory{};
 uint8_t* g_base=memory.data();
@@ -18,6 +19,8 @@ static uint32_t denied=0xffffffff;
 bool IsCommitted(uint32_t page){return page<kernel::memory.size()&&page!=denied;}
 }
 static bool keyboard_mode=true,original_a_edge=false;
+static bool mixed_input=false;
+namespace trial_controls {unsigned MixedInput(){return mixed_input;}}
 static unsigned conversation_player=0;
 unsigned TrialCoopInteractionPlayer(const uint8_t*,uint32_t){return conversation_player;}
 int xbox_KeyboardMode(){return keyboard_mode;}
@@ -88,6 +91,24 @@ static void Queries(){
     auto before=ctx;assert(!TrialConversationQuery(ctx,g_base)&&!std::memcmp(&before,&ctx,sizeof(ctx)));
     W32(stack,0x17c0d4);mem::denied=stack;assert(!TrialConversationQuery(ctx,g_base));mem::denied=0xffffffff;
 }
+static void MixedQueries(){
+    mixed_input=true;trial_coop::SetActive(false);conversation_player=0;
+    for(bool keyboard:{false,true})for(bool f:{false,true})for(bool a:{false,true}){
+        keyboard_mode=keyboard;original_a_edge=a;Seed();
+        TrialConversationPublish(f,true);assert(Leaf(true)==(f||a));
+        TrialConversationPublish(f,true);assert(Leaf(true)==a); // Held F cannot repeat; native A still works.
+    }
+    // Enabling the preference never combines the two co-op players' skip input.
+    trial_coop::SetActive(true);Seed();keyboard_mode=true;conversation_player=2;
+    TrialConversationPublish(true,true);original_a_edge=false;assert(!Leaf(true));
+    original_a_edge=true;assert(Leaf(true));
+    conversation_player=1;keyboard_mode=false;TrialConversationPublish(false,true);
+    assert(!Leaf(true)); // P1 still needs its own F edge, not P2's A.
+    TrialConversationPublish(true,true);original_a_edge=false;assert(Leaf(true));
+    trial_coop::SetActive(false);conversation_player=0;mixed_input=false;
+    assert(!Leaf(true)); // Off restores the controller-only native result.
+    original_a_edge=true;assert(Leaf(true));keyboard_mode=true;
+}
 static void Publish(bool visible){
     g_base[owner+0x148]=visible;
     X86Context ctx{};ctx.esi=owner;ctx.esp=stack;W32(stack,0xabcdef01);
@@ -122,4 +143,25 @@ static void Reload(){
     W32(owner+0x368,1);X87_ST(0)=.75;TrialReloadQuery(ctx,g_base);assert(X87_ST(0)==.75);
     W32(owner+0x368,0);
 }
-int main(){Queries();Prompts();Reload();std::puts("PASS retail conversation skip delay/allow flag, F press-edge snapshot, repeated readers, release/repress, blocked holds, controller/original fallback, x87/stdcall stack, exact original HUD publication and teardown; no live claim");}
+static void MixedReload(){
+    mixed_input=true;trial_coop::SetActive(false);
+    X86Context ctx{};ctx.esi=owner;W32(owner+0x368,0);x87_push(ctx,1.);
+    for(bool keyboard:{false,true}){
+        keyboard_mode=keyboard;
+        // Publication contains keyboard Reload or source-specific controller A,
+        // never keyboard Interact, even though native guest A includes Interact.
+        TrialReloadPublish(false,true);X87_ST(0)=1.;TrialReloadQuery(ctx,g_base);assert(X87_ST(0)==0.);
+        TrialReloadPublish(true,true);X87_ST(0)=0.;TrialReloadQuery(ctx,g_base);assert(X87_ST(0)==1.);
+        TrialReloadPublish(true,true);TrialReloadQuery(ctx,g_base);assert(X87_ST(0)==0.);
+        TrialReloadPublish(false,false);TrialReloadPublish(true,false);TrialReloadPublish(true,true);
+        TrialReloadQuery(ctx,g_base);assert(X87_ST(0)==0.);
+    }
+    TrialReloadPublish(false,true);TrialReloadPublish(true,true);
+    W32(owner+0x368,1);X87_ST(0)=.75;TrialReloadQuery(ctx,g_base);assert(X87_ST(0)==.75);
+    trial_coop::SetActive(true);W32(owner+0x368,0);keyboard_mode=false;
+    X87_ST(0)=.75;TrialReloadQuery(ctx,g_base);assert(X87_ST(0)==.75);
+    keyboard_mode=true;TrialReloadQuery(ctx,g_base);assert(X87_ST(0)==1.);
+    trial_coop::SetActive(false);mixed_input=false;keyboard_mode=false;
+    X87_ST(0)=.75;TrialReloadQuery(ctx,g_base);assert(X87_ST(0)==.75);keyboard_mode=true;
+}
+int main(){Queries();MixedQueries();Prompts();Reload();MixedReload();std::puts("PASS retail conversation skip delay/allow flag, F press-edge snapshot, repeated readers, release/repress, blocked holds, controller/original fallback, opt-in mixed skip/reload and co-op isolation, x87/stdcall stack, exact original HUD publication and teardown; no live claim");}

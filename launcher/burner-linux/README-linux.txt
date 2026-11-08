@@ -1,4 +1,4 @@
-Urban Chaos: Riot Response - Burner Edition 0.15
+Urban Chaos: Riot Response - Burner Edition 0.16
 Experimental Linux / Proton package
 
 Open tools/README-linux.md for setup, play, updates and troubleshooting.

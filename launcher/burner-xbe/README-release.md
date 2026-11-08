@@ -1,4 +1,4 @@
-# Urban Chaos: Riot Response - Burner Edition 0.15
+# Urban Chaos: Riot Response - Burner Edition 0.16
 
 HD HUD is still a work in progress and has known prompt/display issues.
 Turn HD UI Off to use the original HUD, which works normally.
@@ -9,10 +9,10 @@ PC controls and menus. Original gameplay is statically recompiled from Xbox code
 XboxXBERecomp: https://github.com/TGP482/XboxXBERecomp
 
 ## This Update
-Adds the Gameplay blur toggle, improves menu/input behavior and rendering
-performance, extends body dragging to knocked-out enemies, and corrects graffiti
-opacity, environmental sound processing and health-pack use interrupted by a
-cutscene. See the release page for the complete change list:
+Fixes Previous Firearm sometimes cycling in the wrong direction, adds an optional
+Controller + mouse mode for single-player (Off by default), and keeps Graphics
+and Audio setting descriptions clear of the bottom frame.
+See the release page for the complete change list:
 https://github.com/linkssy2/UrbanChaosRiotResponseBurnerEdition/releases
 
 Co-op is experimental. Full-campaign progression, all character/action combinations,

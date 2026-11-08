@@ -11,7 +11,7 @@ namespace kernel {static std::array<uint8_t,0x800000> memory{};uint8_t* g_base=m
 using namespace kernel;
 static std::recursive_mutex input_lock;
 static bool keyboard=true,focus=true,gameplay=true,menu_mode=false,ui=false,button=false,coop=false;
-static bool second_button=false;static unsigned second_mode=0;
+static bool second_button=false,controller_button=false,mixed_input=false;static unsigned second_mode=0;
 static unsigned mode=0,spins=0;static uint64_t now=100;
 static unsigned presentation=0;
 static unsigned TrialCoopPresentation(){return presentation;}
@@ -21,7 +21,11 @@ static int last_pad[4]{};
 static bool focused(){return focus;}static bool TrialGraphicsOpen(){return ui;}
 static int xbox_KeyboardMode(){return keyboard;}static uint64_t GetTickCount64(){return now;}
 namespace trial_coop {bool Active(){return coop;}}
-namespace trial_controls {unsigned SpinMode(unsigned p){return p?second_mode:mode;}bool SpinButtonDown(bool,int,unsigned p){return p?second_button:button;}}
+namespace trial_controls {
+unsigned SpinMode(unsigned p){return p?second_mode:mode;}
+bool MixedInput(){return mixed_input;}
+bool SpinButtonDown(bool keys,int,unsigned p){return p?second_button:(keys?button:controller_button);}
+}
 static uint32_t TrialCoopPlayer(unsigned slot){return coop&&slot==1?0x600000:0;}
 // PRODUCTION_HOST_SAMPLE
 static bool menu_pointer_readable(uint32_t a,uint32_t n){return a>=0x10000&&uint64_t(a)+n<=memory.size();}
@@ -53,12 +57,64 @@ static void reset(){
     G<float>(0x44e548)=.9f;G<float>(0x4583dc)=12.566370964f;
     mode=0;keyboard=focus=gameplay=true;menu_mode=ui=button=blocked=false;pistol=true;
     spin_dx=spin_dy=0;spin_tick=0;spin_button_held[0]=spin_button_held[1]=true;spins=0;pad_x=pad_y=0;
-    coop=second_button=false;second_mode=presentation=0;
+    coop=second_button=controller_button=mixed_input=false;second_mode=presentation=0;
 }
 static void tick(){
     now+=8;X86Context c{};c.ecx=player;c.esp=stack;c.esi=0x12345678;c.ebx=0x87654321;
     W32(stack,0xabcdef01);__imp__sub_000C64D0(c,g_base);
     assert(c.esp==stack+4&&c.esi==0x12345678&&c.ebx==0x87654321);
+}
+static void CheckMixedInputSpin(){
+    // Device presentation must not exclude either source when mixed input is On.
+    for(bool mouse:{true,false})for(int direction:{-1,1}){
+        reset();mixed_input=true;keyboard=!mouse;
+        for(unsigned i=0;i<67;++i){
+            const double angle=direction*i*6.283185307179586/32;
+            if(mouse){spin_dx=long(std::cos(angle)*1000);spin_dy=long(-std::sin(angle)*1000);}
+            else{pad_x=float(std::cos(angle));pad_y=float(std::sin(angle));}
+            tick();if(i<=32)assert(!G<uint8_t>(0x51bdf4));
+        }
+        assert(G<uint8_t>(0x51bdf4)&&spins>0);
+    }
+    for(bool mixed:{false,true})for(bool owner:{false,true})for(bool keys:{false,true}){
+        reset();mixed_input=mixed;keyboard=owner;mode=1;tick();
+        bool& source=keys?button:controller_button;source=true;tick();
+        const unsigned expected=mixed||owner==keys?1:0;
+        assert(spins==expected);tick();assert(spins==expected);
+        source=false;tick();source=true;tick();assert(spins==2*expected);
+    }
+    // The two bindings form one held action, not two retriggering buttons.
+    reset();mixed_input=true;keyboard=false;mode=1;tick();button=true;tick();assert(spins==1);
+    controller_button=true;tick();assert(spins==1);button=false;tick();assert(spins==1);
+    controller_button=false;tick();controller_button=true;tick();assert(spins==2);
+
+    reset();mixed_input=true;keyboard=false;float x=0,y=0;
+    spin_dx=3;spin_dy=-4;
+    assert(TrialSpinSample(&x,&y,0)==1&&std::abs(x-.6f)<1e-6f&&std::abs(y-.8f)<1e-6f);
+    assert(!spin_dx&&!spin_dy);
+    now+=80;assert(TrialSpinSample(&x,&y,0)==1&&std::abs(x-.6f)<1e-6f);
+    ++now;assert(TrialSpinSample(&x,&y,0)==0); // Expired mouse yields to the native stick.
+    keyboard=true;assert(TrialSpinSample(&x,&y,0)==0); // Even with keyboard presentation.
+    mixed_input=false;assert(TrialSpinSample(&x,&y,0)==1&&x==0&&y==0);
+    keyboard=false;spin_dx=5;spin_dy=6;
+    assert(TrialSpinSample(&x,&y,0)==0&&spin_dx==5&&spin_dy==6); // Default-Off behavior.
+    for(unsigned guard=0;guard<4;++guard){
+        reset();mixed_input=true;keyboard=false;
+        if(guard==0)focus=false;if(guard==1)gameplay=false;
+        if(guard==2)menu_mode=true;if(guard==3)ui=true;
+        assert(TrialSpinSample(&x,&y,0)==1&&x==0&&y==0); // No native fallback through a guard.
+    }
+    // Co-op retains device ownership even if the saved mixed-input option is On.
+    reset();coop=mixed_input=true;keyboard=false;spin_dx=3;spin_dy=-4;
+    assert(TrialSpinSample(&x,&y,1)==0&&spin_dx==3&&spin_dy==-4);
+    assert(TrialSpinSample(&x,&y,0)==1&&!spin_dx&&!spin_dy);
+    reset();coop=mixed_input=true;keyboard=false;mode=second_mode=1;
+    assert(TrialSpinSample(&x,&y,0)==1);controller_button=true;
+    assert(TrialSpinSample(&x,&y,0)==1);button=true;
+    assert(TrialSpinSample(&x,&y,0)==2);
+    assert(TrialSpinSample(&x,&y,1)==1);second_button=true;
+    assert(TrialSpinSample(&x,&y,1)==2&&TrialSpinSample(&x,&y,1)==1);
+    std::puts("mixed-input spin: both gestures/bindings, ownership, hold edges, mouse expiry, gates and co-op isolation passed");
 }
 int main(){
     for(bool mouse:{true,false})for(int direction:{-1,1}){
@@ -110,5 +166,6 @@ int main(){
     assert(!spins&&!G<uint8_t>(0x51bdf4)); // Raw stick samples cannot bypass the cinematic gate.
     reset();coop=true;keyboard=false;spin_dx=500;spin_dy=100;tick();
     assert(spin_dx==0&&spin_dy==0); // P2 input-device activity cannot disable P1's mouse gesture.
+    CheckMixedInputSpin();
     std::puts("pistol spin: retail two-circle detector, both devices/directions, button edges, gameplay gates and original reward passed");
 }

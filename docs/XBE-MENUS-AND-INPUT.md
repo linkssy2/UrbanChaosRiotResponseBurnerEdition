@@ -27,6 +27,19 @@ uses the retail firearm selection loop, scoped to the player's explicit input.
 Controller selection, automatic switching, ammo checks and weapon ownership
 remain in the original path. The HUD's firearm shortcut continues to show Next.
 
+The firearm direction belongs to the guest input snapshot, not the latest host
+poll. Sample it on the polling thread and publish it at the port-zero input
+boundary before advancing the wheel pulse. Background connection checks must
+not replace a cached Previous press with the forward fallback (issue #27).
+
+Controls > Controller + mouse is optional and defaults Off. When enabled,
+single-player accepts controller movement/buttons and raw mouse aiming together;
+menus retain their last-active-device ownership. Keyboard-owned axes, including
+opposed keys, bypass controller deadzones. Reload keeps physical pad and keyboard
+sources separate from Interact, and either device can perform the pistol spin.
+Co-op routing remains keyboard/mouse for P1 and the controller for P2; the mixed
+policy is saved only in P1's `PlayerActions/MixedInput` setting.
+
 Pause confirmations share the native two-row mouse menu for checkpoint restart
 (2672A0), mission restart (267330), and Quit (267400). The shared callback/title
 allowlist is in `xbe_frontend.h`; guest qualification additionally checks the

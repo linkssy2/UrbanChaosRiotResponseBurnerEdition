@@ -381,7 +381,7 @@ def stage_tests(area,art):
     (out/'test_pc_prompts_orders.bin').write_bytes(orders)
     fixture=fixture.replace('/* INPUT_IMPLEMENTATION */',INPUT)
     keyboard=(ROOT/'scripts/xbe_keyboard_bindings.inc').read_text()
-    begin=keyboard.index('static void keyboard_apply_bindings(')
+    begin=keyboard.index('static unsigned keyboard_apply_bindings(')
     fixture=fixture.replace('/* ACTUAL_KEYBOARD_APPLY */',keyboard[begin:keyboard.index('\n}',begin)+2])
     source=strip_guest((area/'generated/game/x86_recomp.34.cpp').read_text())
     candidate,counts=transform_guest(source);assert counts==[0,4]

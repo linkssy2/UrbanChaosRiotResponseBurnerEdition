@@ -46,6 +46,7 @@ int main(){
     assert(!defaults.aim_mode&&!defaults.scope_zoom[0][0]&&!defaults.scope_zoom[1][0]);
     assert(!defaults.invert_mouse&&defaults.zoom_sensitivity==100);
     assert(defaults.movement_inertia==1&&trial_controls::MovementInertia()==1&&trial_controls::MovementInertia(1)==1);
+    assert(!defaults.mixed_input&&!trial_controls::MixedInput());
     assert(trial_controls::ZoomSensitivity()==100&&trial_controls::ZoomSensitivity(1)==100);
     assert(GetFileAttributesW(profile)==INVALID_FILE_ATTRIBUTES);
     assert(trial_controls::Apply(defaults,error));
@@ -61,6 +62,7 @@ int main(){
     changed.health_pack[0][0]='K';changed.health_pack[1][0]=10;
     changed.heal_partner[0]='L';changed.walk_mode=1;changed.walk_binding[0][0]='Z';changed.hud_binding[0][0]='I';
     changed.movement_inertia=0;
+    changed.mixed_input=1;
     changed.zoom_sensitivity=45;changed.aim_mode=1;changed.scope_zoom[0][0]='T';changed.scope_zoom[0][1]=256;changed.scope_zoom[1][0]=11;
     assert(trial_controls::Apply(changed,error));
     assert(Same(changed,trial_controls::Snapshot()));
@@ -72,6 +74,7 @@ int main(){
     assert(GetPrivateProfileIntW(L"Firearms",L"Previous0",0,profile)==VK_XBUTTON2);
     assert(GetPrivateProfileIntW(L"Firearms",L"Previous1",0,profile)=='B');
     assert(GetPrivateProfileIntW(L"PlayerActions",L"MovementInertia",99,profile)==0&&trial_controls::MovementInertia()==0);
+    assert(GetPrivateProfileIntW(L"PlayerActions",L"MixedInput",99,profile)==1&&trial_controls::MixedInput()==1);
     keyboard_defaults(&keyboard_config);controller_defaults(&controller_config);
     assert(keyboard_load(nullptr,nullptr,nullptr));assert(controller_load(nullptr,nullptr,nullptr));
     mouse_sensitivity=GetPrivateProfileIntW(L"Graphics",L"MouseSensitivity",400,profile);
@@ -83,6 +86,7 @@ int main(){
     trial_controls::partner_loaded=false;trial_controls::actions_loaded[0]=false;
     assert(Same(changed,trial_controls::Snapshot()));
     assert(trial_controls::MovementInertia()==0&&trial_controls::MovementInertia(1)==1);
+    assert(trial_controls::MixedInput()==1&&!trial_controls::Snapshot(1).mixed_input);
     keys['Z']=true;assert(trial_controls::WalkMode()==1&&trial_controls::WalkDown(true,input::Pad{})&&!trial_controls::WalkDown(true,input::Pad{},1));keys['Z']=false;
     keys['I']=true;assert(trial_controls::HudToggleDown(true,input::Pad{})&&!trial_controls::HudToggleDown(true,input::Pad{},1));keys['I']=false;
     assert(trial_controls::AimMode()==1&&trial_controls::ZoomSensitivity()==45);
@@ -94,6 +98,7 @@ int main(){
     fail_replace=true;assert(!trial_controls::Apply(defaults,error)&&!error.empty());
     assert(Same(changed,trial_controls::Snapshot()));
     assert(trial_controls::MovementInertia()==0&&GetPrivateProfileIntW(L"PlayerActions",L"MovementInertia",99,profile)==0);
+    assert(trial_controls::MixedInput()==1&&GetPrivateProfileIntW(L"PlayerActions",L"MixedInput",99,profile)==1);
     assert(GetPrivateProfileIntW(L"KeyboardMouse",L"Binding4_0",0,profile)=='G');
     assert(GetPrivateProfileIntW(L"Controller",L"Binding0_0",0,profile)==4);
     fail_replace=false;
@@ -101,6 +106,7 @@ int main(){
      for(unsigned zoom:{0u,201u}){bad=changed;bad.zoom_sensitivity=zoom;assert(!trial_controls::Apply(bad,error));}
      bad=changed;bad.aim_mode=2;assert(!trial_controls::Apply(bad,error));
      bad=changed;bad.movement_inertia=2;assert(!trial_controls::Apply(bad,error));
+     bad=changed;bad.mixed_input=2;assert(!trial_controls::Apply(bad,error));
      bad=changed;bad.invert_mouse=2;assert(!trial_controls::Apply(bad,error));
      for(unsigned source:{unsigned(VK_ESCAPE),unsigned(VK_LWIN),258u}){
          bad=changed;bad.scope_zoom[0][0]=source;assert(!trial_controls::Apply(bad,error));}
@@ -132,7 +138,8 @@ int main(){
         trial_controls::Remap(p);assert(!std::memcmp(&p,&before,sizeof(p)));
     }
     input::Pad p;p.connected=true;p.analog[3]=255;assert(trial_controls::ControllerSource(p)==4);
-    assert(trial_controls::Apply(changed,error));trial_controls::Remap(p);
+    auto response_profile=changed;response_profile.mixed_input=0;
+    assert(trial_controls::Apply(response_profile,error));trial_controls::Remap(p);
     assert(p.connected&&p.analog[0]==255&&p.analog[3]==0);
     p={};p.connected=true;p.lx=2000;trial_controls::BeginControllerSample(0);trial_controls::Remap(p);assert(p.lx==2000);
     trial_controls::AllowControllerDeadzone(0,15);trial_controls::RegisterControllerAxes(0x10000);
@@ -149,6 +156,13 @@ int main(){
     controller_config.stick_deadzone[0]=saved_deadzone;
     InterlockedExchange(&keyboard_mode,0);
     assert(trial_controls::NativeControllerResponse(0x10000,.4f,1.f/.45f,response)&&response==0);
+    assert(trial_controls::Apply(changed,error));xbox_KeyboardNoteInput();
+    assert(trial_controls::NativeControllerResponse(0x10000,.4f,1.f/.45f,response)&&response==0);
+    trial_coop::SetActive(true);response=123.f;
+    assert(!trial_controls::NativeControllerResponse(0x10000,.4f,1.f/.45f,response)&&response==123.f);
+    trial_coop::SetActive(false);trial_controls::AllowControllerDeadzone(0,0);
+    assert(!trial_controls::NativeControllerResponse(0x10000,.4f,1.f/.45f,response)&&response==123.f);
+    trial_controls::AllowControllerDeadzone(0,15);InterlockedExchange(&keyboard_mode,0);
     p={};p.connected=true;p.lx=32767;trial_controls::Remap(p);assert(p.lx>=32766);
     p={};p.connected=true;p.ly=-20000;assert(trial_controls::ControllerSource(p)==20);
     p.connected=false;assert(trial_controls::ControllerSource(p)==0);
@@ -176,6 +190,10 @@ int main(){
     submitted.heal_partner[0]=VK_ESCAPE;
     assert(trial_controls::Apply(submitted,error,1));
     assert(Same(second,trial_controls::Snapshot(1))&&Same(first,trial_controls::Snapshot()));
+    submitted.mixed_input=1;assert(!trial_controls::Apply(submitted,error,1));
+    assert(Same(second,trial_controls::Snapshot(1))&&Same(first,trial_controls::Snapshot()));
+    assert(trial_controls::MixedInput()==first.mixed_input);
+    assert(GetPrivateProfileIntW(L"PlayerActions2",L"MixedInput",99,profile)==99);
     assert(GetPrivateProfileIntW(L"ControllerPlayer2",L"Binding0_0",0,profile)==2);
     assert(GetPrivateProfileIntW(L"PistolSpinPlayer2",L"Binding1_0",0,profile)==9);
     for(unsigned i=0;i<7;++i){
@@ -279,6 +297,9 @@ int main(){
         trial_controls::aim_loaded[1]=false;assert(trial_controls::Snapshot(1).zoom_sensitivity==100);
     }
     for(const wchar_t* malformed:{L"2",L"1junk",L"-1",L"999999999999999999999999999999999999"}){
+        assert(WritePrivateProfileStringW(L"PlayerActions",L"MixedInput",malformed,profile));
+        trial_controls::actions_loaded[0]=false;
+        assert(!trial_controls::MixedInput()&&!trial_controls::Snapshot().mixed_input);
         assert(WritePrivateProfileStringW(L"Graphics",L"InvertMouseLook",malformed,profile));
         assert(!trial_input_profile::Read(profile,L"Graphics",L"InvertMouseLook",0,1));
         assert(WritePrivateProfileStringW(L"AimPlayer2",L"Mode",malformed,profile));
@@ -295,6 +316,9 @@ int main(){
         assert(WritePrivateProfileStringW(player?L"PlayerActions2":L"PlayerActions",L"MovementInertia",nullptr,profile));
         trial_controls::actions_loaded[player]=false;assert(trial_controls::MovementInertia(player)==1);
     }
+    assert(WritePrivateProfileStringW(L"PlayerActions",L"MixedInput",nullptr,profile));
+    trial_controls::actions_loaded[0]=false;
+    assert(!trial_controls::MixedInput()&&!trial_controls::Snapshot().mixed_input);
     assert(trial_controls::Apply(defaults,error,1));
     assert(WritePrivateProfileStringW(L"HealthPacks",nullptr,nullptr,profile));
     keyboard_config.binding[4][0]='H';trial_controls::health_loaded[0]=false;
