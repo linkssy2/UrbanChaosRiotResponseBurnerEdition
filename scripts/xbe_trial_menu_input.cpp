@@ -1,6 +1,7 @@
 #define NOMINMAX
 #include <windows.h>
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -29,7 +30,8 @@
 namespace {
 std::recursive_mutex input_lock;
 HWND game_window;
-bool menu_mode=true, gameplay=false, captured=false, click_pending=false;
+std::atomic<bool> menu_mode{true};
+bool gameplay=false, captured=false, click_pending=false;
 int input_pause_owner=-1;
 float click_x,click_y;
 long dx=0,dy=0,order_x=0,order_y=0;
@@ -68,9 +70,9 @@ int xbox_KeyboardMode(){const int owner=trial_coop::PauseOwner();return owner<0?
 
 namespace {
 trial_controls::CaptureGate controls_capture[2];
-unsigned RawKeyboardSource(){
+unsigned RawKeyboardSource(unsigned released=0){
     for(unsigned key=1;key<256;++key){
-        if(key==VK_SHIFT||key==VK_CONTROL||key==VK_MENU)continue;
+        if(key==released||key==VK_SHIFT||key==VK_CONTROL||key==VK_MENU)continue;
         if(GetAsyncKeyState(key)&0x8000)return key;
     }
     return 0;
@@ -83,11 +85,40 @@ bool ActionSourceDown(unsigned slot,bool gated=false){
     }
     return source&&source<256&&(gated?keyboard_key_down(source):(GetAsyncKeyState(source)&0x8000)!=0);
 }
-void ControlsCaptureMessage(UINT msg,WPARAM wp){
-    const int wheel=GET_WHEEL_DELTA_WPARAM(wp);
-    if(msg==WM_MOUSEWHEEL&&focused()&&wheel)controls_capture[0].Wheel(wheel>0?256:257);
-    if(msg==WM_KILLFOCUS||(msg==WM_ACTIVATEAPP&&!wp))
+void ControlsCaptureMessage(UINT msg,WPARAM wp,LPARAM lp=0){
+    if((msg==WM_ACTIVATEAPP&&!wp)||msg==WM_KILLFOCUS){
         for(auto& capture:controls_capture)capture.Cancel();
+        return;
+    }
+    auto& capture=controls_capture[0];
+    if(!capture.active||capture.device||!focused())return;
+    unsigned source=0;bool down=false;
+    switch(msg){
+    case WM_KEYDOWN:case WM_SYSKEYDOWN:case WM_KEYUP:case WM_SYSKEYUP:
+        down=msg==WM_KEYDOWN||msg==WM_SYSKEYDOWN;
+        if(down&&(uint64_t(lp)&(1ull<<30)))return;
+        source=unsigned(wp);
+        if(source==VK_CONTROL)source=(lp&(1LL<<24))?VK_RCONTROL:VK_LCONTROL;
+        if(source==VK_MENU)source=(lp&(1LL<<24))?VK_RMENU:VK_LMENU;
+        if(source==VK_SHIFT)source=MapVirtualKey(unsigned(lp>>16)&255,MAPVK_VSC_TO_VK_EX);
+        if(source==VK_ESCAPE&&down){capture.Cancel();return;}
+        if(!source||source>=256)return;
+        break;
+    case WM_LBUTTONDOWN:case WM_LBUTTONUP:source=VK_LBUTTON;down=msg==WM_LBUTTONDOWN;break;
+    case WM_RBUTTONDOWN:case WM_RBUTTONUP:source=VK_RBUTTON;down=msg==WM_RBUTTONDOWN;break;
+    case WM_MBUTTONDOWN:case WM_MBUTTONUP:source=VK_MBUTTON;down=msg==WM_MBUTTONDOWN;break;
+    case WM_XBUTTONDOWN:case WM_XBUTTONUP:
+        source=GET_XBUTTON_WPARAM(wp)==XBUTTON1?VK_XBUTTON1:VK_XBUTTON2;down=msg==WM_XBUTTONDOWN;break;
+    case WM_MOUSEWHEEL:{
+        const int wheel=GET_WHEEL_DELTA_WPARAM(wp);
+        if(wheel)capture.Wheel(wheel>0?256:257);
+        return;
+    }
+    default:return;
+    }
+    // A complete tap may occur between guest pad polls; retain its press edge.
+    if(down)capture.Press(source);
+    else if(!capture.armed)capture.Sample(RawKeyboardSource(source),trial_controls::ControllerSource(last_pad[0]),true);
 }
 }
 namespace trial_controls {
@@ -97,10 +128,18 @@ void BeginCapture(unsigned device,unsigned player){
     controls_capture[player].Cancel();
     if(device<=1&&(!player||device==1)){
         controls_capture[player].Begin(device);AllowControllerDeadzone(player,0);TrialRagdollDragInput(player,false);
+        if(!device)controls_capture[player].Sample(RawKeyboardSource(),ControllerSource(last_pad[0]),focused());
     }
 }
 void CancelCapture(unsigned player){std::lock_guard guard(input_lock);if(player<2)controls_capture[player].Cancel();}
-unsigned TakeCapture(unsigned player){std::lock_guard guard(input_lock);return player<2?controls_capture[player].Take():0;}
+unsigned TakeCapture(unsigned player){
+    std::lock_guard guard(input_lock);
+    if(player>=2)return 0;
+    auto& capture=controls_capture[player];
+    if(capture.active&&!capture.armed&&!capture.device)
+        capture.Sample(RawKeyboardSource(),ControllerSource(last_pad[0]),focused());
+    return capture.Take();
+}
 bool CaptureWaiting(unsigned player){std::lock_guard guard(input_lock);return player<2&&controls_capture[player].active;}
 }
 
@@ -186,17 +225,26 @@ void TrialCoopPauseImGuiInput(){
     // input. UiLock also protects the owner snapshot shared by those threads.
     std::lock_guard guard(app::UiLock());
     static int previous=-1;
-    static bool mouse_was_disabled=false;
+    static bool mouse_was_disabled=false,mouse_blocked=false;
     const int owner=trial_coop::PauseOwner();
+    const bool block_mouse=owner==1||(owner<0&&(menu_mode||TrialGraphicsOpen())&&!TrialCoopMenuOpen()&&!xbox_KeyboardMode());
     if(ImGui::GetCurrentContext()){
         auto& io=ImGui::GetIO();
         // Our explicit pad navigation owns X; ImGui's hold-X window switcher does not.
         io.ConfigFlags&=~ImGuiConfigFlags_NavEnableGamepad;
-        if(owner==1){
-            if(previous!=1)mouse_was_disabled=(io.ConfigFlags&ImGuiConfigFlags_NoMouse)!=0;
+        if(block_mouse){
+            if(!mouse_blocked)mouse_was_disabled=(io.ConfigFlags&ImGuiConfigFlags_NoMouse)!=0;
             io.ConfigFlags|=ImGuiConfigFlags_NoMouse;
-        }else if(previous==1&&!mouse_was_disabled)io.ConfigFlags&=~ImGuiConfigFlags_NoMouse;
+            // Repeats and Win32's polled cursor are not fresh device activity.
+            if(owner<0){
+                const auto position=io.MousePos;
+                io.ClearEventsQueue();io.ClearInputKeys();io.ClearInputMouse();
+                // NoMouse hides hover; retain the position for the first stationary click back.
+                io.MousePos=position;
+            }
+        }else if(mouse_blocked&&!mouse_was_disabled)io.ConfigFlags&=~ImGuiConfigFlags_NoMouse;
     }
+    mouse_blocked=block_mouse;
     if(owner==previous)return;
     previous=owner;
     if(ImGui::GetCurrentContext()){
@@ -269,7 +317,7 @@ void TrialMenuKeysEnd(){
 uint64_t ucrr_host_menu_milliseconds(){return GetTickCount64();}
 int ucrr_host_menu_pointer(float* x,float* y,int* click){
     std::lock_guard guard(input_lock);*click=0;
-    if(trial_coop::PauseBlocksKeyboard()||!menu_mode||!focused()||TrialGraphicsOpen()){click_pending=false;return 0;}
+    if(trial_coop::PauseBlocksKeyboard()||!xbox_KeyboardMode()||!menu_mode||!focused()||TrialGraphicsOpen()){click_pending=false;return 0;}
     if(!(GetAsyncKeyState(VK_LBUTTON)&0x8000))release_keys[VK_LBUTTON]=false;
     if(release_keys[VK_LBUTTON])click_pending=false;
     RECT r;POINT p;
@@ -304,7 +352,7 @@ void TrialInputPublish(){
 bool TrialInputMessage(void*,uint32_t msg,uintptr_t wp,intptr_t lp,intptr_t* result){
     std::lock_guard guard(input_lock);
     if(trial_coop::PauseBlocksMessage(msg)){click_pending=false;dx=dy=0;*result=0;return true;}
-    ControlsCaptureMessage(msg,wp);
+    ControlsCaptureMessage(msg,wp,lp);
     if(TrialAudioTraceHotkey(msg,uint32_t(wp),uint64_t(lp),focused(),gameplay&&!menu_mode&&!TrialGraphicsOpen())){
         auto path=(app::ExeDir()/("audio-trace-"+std::to_string(GetTickCount64())+".csv")).string();
         TrialAudioTraceStart(path.c_str());*result=0;return true;
@@ -343,7 +391,7 @@ bool TrialInputMessage(void*,uint32_t msg,uintptr_t wp,intptr_t lp,intptr_t* res
         if(key==VK_CONTROL)key=(lp&(1LL<<24))?VK_RCONTROL:VK_LCONTROL;
         if(key==VK_SHIFT)key=MapVirtualKey(unsigned(lp>>16)&255,MAPVK_VSC_TO_VK_EX);
         if(key<256&&msg==WM_KEYUP)release_keys[key]=false;
-        xbox_KeyboardSourceEvent(key,msg==WM_KEYDOWN);
+        if(msg==WM_KEYUP||!(uint64_t(lp)&(1ull<<30)))xbox_KeyboardSourceEvent(key,msg==WM_KEYDOWN);
         menu_key_taps.Event(key,msg==WM_KEYDOWN,(uint64_t(lp)&(1ull<<30))!=0,
             focused()&&!intro_gate.owner&&!TrialGraphicsOpen()&&key<256&&!release_keys[key]);
     }
@@ -485,7 +533,11 @@ void TrialInputPad(int port,input::Pad& pad){
     if(port!=0||!focused())return;
     if(pad.buttons||std::abs(int(pad.rx))>8689||std::abs(int(pad.ry))>8689)InterlockedExchange(&keyboard_mode,0);
     if(menu_key_update)menu_key_taps.GuestPortPolled(port);
-    XBOX_GAMEPAD keys;keyboard_apply_bindings(&keys,captured);keys.wButtons|=order_buttons;
+    XBOX_GAMEPAD keys;
+    const bool menu_keyboard=!menu_mode||xbox_KeyboardMode();
+    if(menu_keyboard)keyboard_apply_bindings(&keys,captured);
+    if(menu_mode&&menu_keyboard){const bool connected=pad.connected;pad={};pad.connected=connected;}
+    keys.wButtons|=order_buttons;
     // Gameplay A is interaction; the qualified manual-reload query reads its own edge.
     if(gameplay&&!menu_mode)keys.bAnalogButtons[0]=ActionSourceDown(1,true)?255:0;
     if(gameplay&&!menu_mode){
@@ -502,7 +554,7 @@ void TrialInputPad(int port,input::Pad& pad){
         keys.sThumbLX=SHORT(keys.sThumbLX*0.7071067811865475f);
         keys.sThumbLY=SHORT(keys.sThumbLY*0.7071067811865475f);
     }
-    const bool escape=keyboard_key_down(VK_ESCAPE);
+    const bool escape=menu_keyboard&&keyboard_key_down(VK_ESCAPE);
     if(!escape)escape_pause_held=false;
     if(gameplay&&!menu_mode){
         // Enter stays menu-only; a rebound Start key may pause as well as the
@@ -516,8 +568,8 @@ void TrialInputPad(int port,input::Pad& pad){
         if(escape){keys.wButtons|=16;escape_pause_held=true;}
     }else if(escape&&!escape_pause_held)keys.bAnalogButtons[1]=255;
     // Original modal screens consume A, not Start. Keep Enter as menu confirm.
-    if(menu_mode&&keyboard_key_down(VK_RETURN))keys.bAnalogButtons[0]=255;
-    if(menu_right_back)keys.bAnalogButtons[1]=255;
+    if(menu_mode&&menu_keyboard&&keyboard_key_down(VK_RETURN))keys.bAnalogButtons[0]=255;
+    if(menu_keyboard&&menu_right_back)keys.bAnalogButtons[1]=255;
     pad.buttons|=keys.wButtons;
     for(unsigned i=0;i<8;i++)pad.analog[i]=std::max(pad.analog[i],keys.bAnalogButtons[i]);
     if(keys.sThumbLX)pad.lx=keys.sThumbLX;if(keys.sThumbLY)pad.ly=keys.sThumbLY;

@@ -5,8 +5,9 @@ import struct
 from prepare_xbe_perf import once
 METHODS=r'''
 void D3D12Backend::MatchWorld(Tex& tx,const TextureDesc& d,const FormatInfo& fi,const uint8_t* p,uint32_t bytes) {
-    const auto* entry= !ext_&&!tx.signs&&!d.cube&&d.depth==1&&!d.linear&&!fi.depth
-        ? uc_world_textures::Match(d.width,d.height,d.format,p,bytes):nullptr;
+    const bool colour=!ext_&&!tx.signs&&!d.cube&&d.depth==1&&!d.linear&&!fi.depth;
+    tx.graffiti=colour&&uc_graffiti_alpha::Match(d.width,d.height,d.format,p,bytes);
+    const auto* entry=colour?uc_world_textures::Match(d.width,d.height,d.format,p,bytes):nullptr;
     if(entry!=tx.world_entry){if(tx.world_res)CurrentFrame().garbage.push_back(tx.world_res);tx.world_res.Reset();tx.world_attempted=false;tx.world_levels=0;}
     tx.world_entry=entry;
 }
@@ -29,7 +30,18 @@ ID3D12Resource* D3D12Backend::BindWorld(Tex& tx,DrawTextures& stages,int stage) 
     return tx.world_res.Get();
 }
 '''
-def prepare(area):
+def prepare_shader_header(source):
+    flags='    uint8_t flags = 0;   // kTexWide; bits 0 and 1 are a backend extension\'s'
+    patched_flags=flags.replace('kTexWide;', 'kTexWide/kTexGraffiti;')
+    wide='    kTexWide = 4,  // an upscaled target shrunk by the pass: each tap averaged over console texels'
+    graffiti='\n    kTexGraffiti = 8, // exact graffiti color pass: reduce opacity after the original alpha test'
+    # Unlike shaders.cpp, this private header survives incremental preparation.
+    if patched_flags in source:source=once(source,patched_flags,flags)
+    if graffiti in source:source=once(source,graffiti,'')
+    assert 'kTexGraffiti' not in source, 'unexpected graffiti shader flag declaration'
+    return once(once(source,flags,patched_flags),wide,wide+graffiti)
+
+def prepare(area,sdk):
     area=Path(area)
     # A6220 reads position/UV arrays before unlocking the vertex buffer at A63CC.
     xbe=(area/'assets/Default.xbe').read_bytes()
@@ -44,25 +56,39 @@ def prepare(area):
     section=next(s for s in sections if s[1]<=0x11030<s[1]+s[4])
     assert xbe[section[3]+0x11030-section[1]]==0xc3
     out=Path(area)/'src/compat';p=out/'d3d12.cpp';s=p.read_text()
-    s=once(s,'#include "xbe_hd_ui.h" // UC_HD_UI_TEXTURES','#include "xbe_hd_ui.h" // UC_HD_UI_TEXTURES\n#include "xbe_world_textures.h"')
+    s=once(s,'#include "xbe_hd_ui.h" // UC_HD_UI_TEXTURES','#include "xbe_hd_ui.h" // UC_HD_UI_TEXTURES\n#include "xbe_world_textures.h"\n#include "xbe_graffiti_alpha.h"')
     s=once(s,'    bool hd_ui_attempted = false;','''    bool hd_ui_attempted = false;
     const uc_world_textures::Entry* world_entry=nullptr;
     ComPtr<ID3D12Resource> world_res;
     uint32_t world_levels=0;
-    bool world_attempted=false;''')
+    bool world_attempted=false;
+    bool graffiti=false;''')
     s=once(s,'    void RetireHdUi(Tex&);','''    void RetireHdUi(Tex&);
     void MatchWorld(Tex&,const TextureDesc&,const FormatInfo&,const uint8_t*,uint32_t);
     ID3D12Resource* BindWorld(Tex&,DrawTextures&,int);''')
     s=once(s,'void D3D12Backend::RetireHdUi(Tex& tx) {','''void D3D12Backend::RetireHdUi(Tex& tx) {
     if(tx.world_res)CurrentFrame().garbage.push_back(tx.world_res);
-    tx.world_res.Reset();tx.world_entry=nullptr;tx.world_attempted=false;tx.world_levels=0;''')
+    tx.world_res.Reset();tx.world_entry=nullptr;tx.world_attempted=false;tx.world_levels=0;
+    tx.graffiti=false;''')
     s=once(s,'            MatchHdUi(tx, d, fi, p, total);','''            MatchHdUi(tx, d, fi, p, total);
             MatchWorld(tx, d, fi, p, total);''')
-    s=once(s,'    if (auto* replacement = BindHdUi(tx, stages, stage)) return replacement;','''    if (auto* replacement = BindWorld(tx, stages, stage)) return replacement;
+    s=once(s,'    if (auto* replacement = BindHdUi(tx, stages, stage)) return replacement;','''    if (tx.graffiti && stage==0 && uc_graffiti_alpha::Eligible(true,stage,s.simple[kMBlendEnable>>2],
+            s.simple[kMSrcBlend>>2],s.simple[kMDestBlend>>2],s.simple[kMBlendOp>>2],
+            s.simple[kMColorWriteEnable>>2])) info.flags|=kTexGraffiti;
+    if (auto* replacement = BindWorld(tx, stages, stage)) return replacement;
     if (auto* replacement = BindHdUi(tx, stages, stage)) return replacement;''')
     s=once(s,'void D3D12Backend::MatchHdUi(',METHODS+'\nvoid D3D12Backend::MatchHdUi(')
     p.write_text(s)
-    for name in ['xbe_world_textures.h','xbe_ledge_uv.h','xbe_ledge_uv_data.h','xbe_arm_mesh.h','xbe_arm_mesh_data.h','test_xbe_world_textures.cpp']:(out/name).write_text(Path(__file__).with_name(name).read_text())
+    p=area/'src/gpu/shaders.h'
+    s=(p if p.exists() else Path(sdk)/'runtime/gpu/shaders.h').read_text()
+    p.write_text(prepare_shader_header(s))
+    p=out/'shaders.cpp';s=p.read_text()
+    s=once(s,'    body += "alphatest(outc.a);\\n" + Hooks().Output() + "return outc;\\n}\\n";',
+        '    body += "alphatest(outc.a);\\n";\n'
+        '    if (k.tex[0].flags & kTexGraffiti) body += "outc.a = saturate(outc.a) * 0.5;\\n";\n'
+        '    body += Hooks().Output() + "return outc;\\n}\\n";')
+    p.write_text(s)
+    for name in ['xbe_world_textures.h','xbe_graffiti_alpha.h','xbe_ledge_uv.h','xbe_ledge_uv_data.h','xbe_arm_mesh.h','xbe_arm_mesh_data.h','test_xbe_world_textures.cpp']:(out/name).write_text(Path(__file__).with_name(name).read_text())
     p=area/'generated/game/x86_recomp.17.cpp';s=p.read_text()
     include='#include "kernel/memory.h"\n#include "xbe_input_memory.h"\n#include "xbe_ledge_uv.h"\n'
     arm_include='#include "xbe_arm_mesh.h"\n'

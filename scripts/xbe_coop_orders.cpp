@@ -69,10 +69,14 @@ uint32_t AimedMedic(const uint8_t* b,uint32_t manager,uint32_t owner,bool offer=
 bool Stack(const X86Context& c){return c.esp>=0x11000&&TrialGuestReadable(c.esp-4096,4096)&&TrialGuestReadable(c.esp,0x38);}
 struct CopyCall {
     X86Context c;uint8_t* b;uint32_t low,sp;std::array<uint8_t,4096> saved;
-    unsigned csr=_mm_getcsr();bool previous=copying;
-    CopyCall(const X86Context& context,uint8_t* base):c(context),b(base),low(c.esp-4096),sp(c.esp-512){std::memcpy(saved.data(),b+low,saved.size());copying=true;}
-    ~CopyCall(){copying=previous;std::memcpy(b+low,saved.data(),saved.size());_mm_setcsr(csr);}
-    void Run(uint32_t fn,uint32_t self,std::initializer_list<uint32_t> args){c.ecx=self;c.esp=sp;kernel::CallGuest(c,fn,args);}
+    unsigned csr=_mm_getcsr();bool previous=copying,active=false;
+    CopyCall(const X86Context& context,uint8_t* base):c(context),b(base),low(c.esp-4096),sp(c.esp-512){}
+    ~CopyCall(){if(active){copying=previous;std::memcpy(b+low,saved.data(),saved.size());_mm_setcsr(csr);}}
+    void Run(uint32_t fn,uint32_t self,std::initializer_list<uint32_t> args){
+        // Matching orders lists make no guest calls and need no stack snapshot.
+        if(!active){std::memcpy(saved.data(),b+low,saved.size());copying=true;active=true;}
+        c.ecx=self;c.esp=sp;kernel::CallGuest(c,fn,args);
+    }
 };
 bool ClientIn(const uint8_t* b,uint32_t manager,uint32_t id){
     const uint32_t head=Word(b,manager+0xac);if(!TrialGuestReadable(head,8))return false;

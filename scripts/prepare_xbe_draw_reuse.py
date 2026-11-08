@@ -1,4 +1,4 @@
-"""Reuse exact descriptors and preserve shader hashes with cheaper four-byte tails."""
+"""Reuse exact descriptors and compiled shaders without changing draw identities."""
 from pathlib import Path
 from prepare_xbe_perf import once, function
 
@@ -181,6 +181,71 @@ def sampler_fixture(source, shaders):
     return fixture
 
 
+_SHADER_SOURCE_MEMBER = '    std::unordered_map<uint64_t, uint64_t> shader_src_;  // vertex and pixel program keys to source hash'
+_SHADER_SOURCE_ENTRY = '''    struct ShaderSource {
+        uint64_t hash;
+        ComPtr<ID3DBlob> code;
+    };
+    std::unordered_map<uint64_t, ShaderSource> shader_src_;  // exact program keys to compiled sources'''
+
+
+def _shader_source_changes():
+    return [
+        (_SHADER_SOURCE_MEMBER, _SHADER_SOURCE_ENTRY),
+        ('        sh.vs_code = blobs_[vit->second].Get();\n        sh.vh = vit->second;',
+         '        sh.vs_code = vit->second.code.Get();\n        sh.vh = vit->second.hash;'),
+        ('    shader_src_[sh.vkey] = sh.vh;', '    shader_src_[sh.vkey] = {sh.vh, sh.vs_code};'),
+        ('        sh.ps_code = blobs_[pit->second].Get();\n        sh.ph = pit->second;',
+         '        sh.ps_code = pit->second.code.Get();\n        sh.ph = pit->second.hash;'),
+        ('    shader_src_[sh.pkey ^ kPixelKeySalt] = sh.ph;',
+         '    shader_src_[sh.pkey ^ kPixelKeySalt] = {sh.ph, sh.ps_code};'),
+    ]
+
+
+def shader_source_transform(source):
+    # Keep an owning result in the existing lookup: no second blob-map search per draw.
+    assert source.count('shader_src_') == 7, 'review new shader-source consumers'
+    if _SHADER_SOURCE_ENTRY in source:
+        for _, replacement in _shader_source_changes():
+            assert source.count(replacement) == 1, 'partial shader-source preparation'
+        return source
+    compile_body = function(source, 'ID3DBlob* D3D12Backend::Compile(')
+    for original, replacement in _shader_source_changes():
+        source = once(source, original, replacement)
+    assert function(source, 'ID3DBlob* D3D12Backend::Compile(') == compile_body
+    return source
+
+
+def shader_source_undo(source):
+    for original, replacement in reversed(_shader_source_changes()):
+        source = once(source, replacement, original)
+    return source
+
+
+def shader_source_fixture(source):
+    # The co-op blur preparer extends this interface after draw reuse is applied.
+    assert function(source, 'void D3D12Backend::EnsurePixelShader(').startswith(
+        'void D3D12Backend::EnsurePixelShader(const PixelKey& pk, DrawShaders& sh, bool smooth_tone, bool analytic_fog, bool coop_aim_blur) {')
+    baseline = shader_source_undo(source)
+    fixture = Path(__file__).with_name('test_xbe_shader_lookup.cpp').read_text()
+    for label, version, member in (
+        ('BEFORE', baseline, _SHADER_SOURCE_MEMBER), ('AFTER', source, _SHADER_SOURCE_ENTRY)
+    ):
+        methods = '\n\n'.join(function(version, name) for name in (
+            'void D3D12Backend::EnsureVertexShader(', 'void D3D12Backend::EnsurePixelShader('))
+        fixture = once(fixture, '/* ' + label + '_MEMBERS */', member)
+        fixture = once(fixture, '/* ' + label + ' */', methods)
+    return fixture
+
+
+def finalize_shader_lookup(area):
+    """Export the actual final VS/PS lookup methods after downstream preparers."""
+    compat = Path(area) / 'src/compat'
+    source = (compat / 'd3d12.cpp').read_text()
+    assert shader_source_transform(source) == source
+    (compat / 'test_shader_lookup.cpp').write_text(shader_source_fixture(source))
+
+
 def prepare(area):
     area = Path(area)
     path = area / 'src/compat/d3d12.cpp'
@@ -226,6 +291,9 @@ uint32_t D3D12Backend::TextureViewSlots(const DrawTextures& stages) {
     source = sampler_transform(source)
     assert sampler_transform(source) == source and sampler_transform(sampler_undo(source)) == source
     assert cache_transform(source) == source  # The two independent transforms compose.
+    source = shader_source_transform(source)
+    assert shader_source_transform(source) == source
+    assert shader_source_transform(shader_source_undo(source)) == source
     path.write_text(source)
     scripts = Path(__file__).parent
     (area / 'src/compat/xbe_srv_cache.h').write_text((scripts / 'xbe_srv_cache.h').read_text())

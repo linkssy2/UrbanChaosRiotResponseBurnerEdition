@@ -51,6 +51,7 @@ def prepare(area):
     source=texture_target_eligibility(source);assert texture_target_eligibility(source)==source
     source=descriptor_lifetime(source);assert descriptor_lifetime(source)==source
     source=upload_spill(source);assert upload_spill(source)==source
+    source=sync_pixels(source);assert sync_pixels(source)==source
     path.write_text(source)
     local=Path(__file__).parent
     for name in ('xbe_frame_reuse.h','xbe_upload_spill.h','test_xbe_frame_reuse.cpp'):
@@ -58,6 +59,17 @@ def prepare(area):
     fixture=(local/'test_xbe_readback_reuse.cpp').read_text()
     fixture=once(fixture,'/* READBACK_IMPLEMENTATION */',function(source,'bool D3D12Backend::ReadBack('))
     (area/'src/compat/test_xbe_readback_reuse.cpp').write_text(fixture)
+    fixture=(local/'test_xbe_sync_pixels.inc').read_text()
+    original=undo_sync_pixels(source)
+    assert sync_pixels(original)==source
+    for label,value in [('BEFORE',original),('AFTER',source)]:
+        body=function(value,'void D3D12Backend::Sync(')
+        fixture=once(fixture,'/* SYNC_'+label+' */',body)
+    fixture=once(fixture,'/* SNAPSHOT_CONSUMERS */','\n\n'.join(function(source,name) for name in (
+        'uint64_t MemSig(', 'bool Changed(', 'std::vector<uint8_t> LatchCpuChanges(')))
+    shaders=(area/'src/compat/shaders.cpp').read_text()
+    fixture=once(fixture,'/* HASH_IMPLEMENTATION */',function(shaders,'uint64_t Hash('))
+    (area/'src/compat/test_xbe_sync_pixels.inc').write_text(fixture)
     fixture=(local/'test_xbe_descriptor_lifetime.cpp').read_text()
     fixture=once(fixture,'/* DESCRIPTOR_IMPLEMENTATION */','\n'.join(function(source,name) for name in (
         'void D3D12Backend::RenewDescriptorHeap(', 'uint32_t D3D12Backend::AllocSrvSlots(')))
@@ -66,6 +78,37 @@ def prepare(area):
     (area/'src/compat/test_xbe_texture_constants.cpp').write_text(texture_dimension_fixture(source))
     name='test_xbe_texture_constants_model.inc'
     (area/'src/compat'/name).write_text((local/name).read_text())
+
+SYNC_PIXELS_OLD='''    std::vector<uint8_t> px;
+    if (!ReadBack(src.res, t.gw, t.gh, px)) return;'''
+SYNC_PIXELS_NEW='''    // ReadBack leaves the previous snapshot intact on failure; reuse its allocation.
+    if (!ReadBack(src.res, t.gw, t.gh, t.read)) return;'''
+SYNC_PIXELS_ROW='&px[size_t(y) * t.gw * 4]'
+SYNC_PIXELS_REUSED_ROW='&t.read[size_t(y) * t.gw * 4]'
+SYNC_PIXELS_MOVE='    t.read = std::move(px);\n'
+
+def sync_pixels(source):
+    old=function(source,'void D3D12Backend::Sync(')
+    # Sync is serialized on the render worker. Its Flush only submits/waits and
+    # delivers query reports; no callbacks inspect this snapshot during ReadBack.
+    reader=function(source,'bool D3D12Backend::ReadBack(')
+    resize=reader.index('    out.resize(')
+    assert 'return false' not in reader[resize:]
+    assert 'out.' not in reader[:resize] and '&out[' not in reader[:resize]
+    if SYNC_PIXELS_NEW in old:
+        assert old.count(SYNC_PIXELS_NEW)==old.count(SYNC_PIXELS_REUSED_ROW)==1
+        assert SYNC_PIXELS_MOVE not in old and SYNC_PIXELS_OLD not in old
+        return source
+    new=once(old,SYNC_PIXELS_OLD,SYNC_PIXELS_NEW)
+    new=once(new,SYNC_PIXELS_ROW,SYNC_PIXELS_REUSED_ROW)
+    return once(source,old,once(new,SYNC_PIXELS_MOVE,''))
+
+def undo_sync_pixels(source):
+    old=function(source,'void D3D12Backend::Sync(')
+    new=once(old,SYNC_PIXELS_NEW,SYNC_PIXELS_OLD)
+    new=once(new,SYNC_PIXELS_REUSED_ROW,SYNC_PIXELS_ROW)
+    new=once(new,'    t.drawn = false;',SYNC_PIXELS_MOVE+'    t.drawn = false;')
+    return once(source,old,new)
 
 DIMENSION_FIELD='    // Authored dimensions remain valid even when host binding fails.\n    uint32_t width[4], height[4];'
 DIMENSION_DECL='    void FillTexelConstants(int i, const TextureDesc& d, const DrawTextures& stages, DrawConstants& c);'
@@ -272,3 +315,73 @@ def upload_spill(source):
     return {resource.Get(),range.offset,map+range.offset,resource->GetGPUVirtualAddress()+range.offset};
 }'''
     return once(source,old,new)
+
+
+TARGET_CURRENT_LOOKUP_OLD = '    Target* rt = FindTarget(s.rt, false);'
+TARGET_CURRENT_LOOKUP_NEW = '''    // The draw owns these target entries throughout texture binding. Keep the
+    // header size check: the existing producer ring does not prove immutable
+    // headers under an arbitrarily large frame. Extensions retain the old path.
+    Target* rt = nullptr;
+    if (ext_) rt = FindTarget(s.rt, false);
+    else if (s.rt.header && draw_rt_ &&
+             draw_rt_->data == mem::VirtualFromPhysical(s.rt.data)) {
+        uint32_t gw = 0, gh = 0;
+        SurfaceSize(s.rt, gw, gh);
+        if (draw_rt_->gw == gw && draw_rt_->gh == gh) rt = draw_rt_;
+    }'''
+
+
+def target_lookup(source):
+    body = function(source, 'ID3D12Resource* D3D12Backend::BindTargetTexture(')
+    if TARGET_CURRENT_LOOKUP_NEW in body:
+        assert body.count(TARGET_CURRENT_LOOKUP_NEW) == 1 and TARGET_CURRENT_LOOKUP_OLD not in body
+        return source
+    draw = function(source, 'void D3D12Backend::Draw(')
+    stage = function(source, 'bool D3D12Backend::BindStageTexturesAndTargets(')
+    assert draw.index('if (!BindTargets(s)) return;') < draw.index('BindStageTexturesAndTargets(s, stages)')
+    assert stage.index('draw_rt_ = bound_rt_;') < stage.index('BindTexture(s, i, stages)') < stage.index('return BindTargets(s);')
+    # Retain the original resource-state restore and the current-frame stamp.
+    assert source.count('frame_++;') == 1
+    assert 'frame_++;' in function(source, 'void D3D12Backend::Present(')
+    for name in ('void D3D12Backend::Submit(', 'void D3D12Backend::Flush('):
+        assert 'frame_' not in function(source, name)
+    assert 'target_used_[slot.data] = frame_;' in function(source, 'Target* D3D12Backend::FindTarget(')
+    assert 'target_used_[slot.data] = frame_;' in function(source, 'Target* D3D12Backend::EnsureTarget(')
+    return once(source, body, once(body, TARGET_CURRENT_LOOKUP_OLD, TARGET_CURRENT_LOOKUP_NEW))
+
+
+def target_lookup_fixture(source, texture, memory):
+    original = once(source, TARGET_CURRENT_LOOKUP_NEW, TARGET_CURRENT_LOOKUP_OLD)
+    assert target_lookup(original) == source
+    names = (
+        'uint64_t D3D12Backend::SizedTargetKey(',
+        'D3D12Backend::TargetSlot D3D12Backend::FindTargetSlot(',
+        'Target* D3D12Backend::FindTarget(', 'Target* D3D12Backend::EnsureTarget(',
+        'Target* D3D12Backend::EnsurePairedTarget(', 'bool D3D12Backend::BindTargets(',
+        'ID3D12Resource* D3D12Backend::BindTexture(',
+        'bool D3D12Backend::BindStageTexturesAndTargets(',
+    )
+    shared = 'namespace mem {\n' + function(memory, 'uint32_t VirtualFromPhysical(') + '\n}\n'
+    shared += function(texture, 'void SurfaceSize(') + '\n'
+    shared += function(source, 'uint64_t TargetMapKey(').splitlines()[0] + '\n'
+    shared += '\n\n'.join(function(source, name) for name in names)
+    text = Path(__file__).with_name('test_xbe_target_lookup.cpp').read_text()
+    unchecked = once(source, TARGET_CURRENT_LOOKUP_NEW, '    Target* rt = ext_ ? FindTarget(s.rt, false) : draw_rt_;')
+    for label, value in [('BEFORE', original), ('AFTER', source), ('UNCHECKED', unchecked)]:
+        body = function(value, 'ID3D12Resource* D3D12Backend::BindTargetTexture(')
+        text = once(text, '/* ' + label + ' */', shared + '\n' + body)
+    return text
+
+
+def finalize_target_lookup(sdk, area):
+    local = Path(__file__).parent
+    compat = Path(area)/'src/compat'
+    path = compat/'d3d12.cpp'
+    source = target_lookup(path.read_text())
+    assert target_lookup(source) == source
+    witness = target_lookup_fixture(source, (compat/'texture.cpp').read_text(),
+                      (Path(sdk)/'runtime/kernel/memory.cpp').read_text())
+    path.write_text(source)
+    (compat/'test_xbe_target_lookup.cpp').write_text(witness)
+    name = 'test_xbe_target_lookup_model.inc'
+    (compat/name).write_text((local/name).read_text())

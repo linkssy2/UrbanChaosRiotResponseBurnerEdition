@@ -59,7 +59,7 @@ TrialFrontendPresentation frontend_presentation;
 UcHybridFrontendAction frontend_action{};
 TrialFrontendNameActionData frontend_name_action{};
 std::atomic<bool> frontend_active=false;
-std::atomic<bool> frontend_audio=false;
+std::atomic<bool> frontend_directional=false;
 std::atomic<unsigned> frontend_events=0;
 std::atomic<uint64_t> navigation_generation=1;
 // ImGui may spread rapid taps over several frames. Confirm belongs to the
@@ -103,7 +103,7 @@ bool Dirty() {
     return a.width!=b.width||a.height!=b.height||a.display_mode!=b.display_mode||
         a.render_percent!=b.render_percent||a.vsync!=b.vsync||a.fps_cap!=b.fps_cap||a.aniso!=b.aniso||
         draft.fov!=live.fov||draft.weapon_fov!=live.weapon_fov||draft.fmv_scale!=live.fmv_scale||draft.aspect!=live.aspect||draft.msaa!=live.msaa||draft.scenery!=live.scenery||
-        draft.characters!=live.characters||draft.character_quality!=live.character_quality||draft.death_convulsions!=live.death_convulsions||
+        draft.characters!=live.characters||draft.character_quality!=live.character_quality||draft.death_convulsions!=live.death_convulsions||draft.gameplay_blur!=live.gameplay_blur||
         draft.world_textures!=live.world_textures||draft.ragdolls!=live.ragdolls||draft.hd_ui!=live.hd_ui||draft.reticle_scale!=live.reticle_scale||draft.reticle_colors!=live.reticle_colors||draft_fps!=TrialShowFps||draft_fog_mode!=FogMode();
 }
 void Close() {
@@ -219,8 +219,11 @@ void FooterPrompts(MenuCanvas& c,std::initializer_list<MenuHint> hints){
 void BeginMenu(const char* name,const ImGuiViewport* view,ImGuiWindowFlags extra=0){
     ImGui::SetNextWindowPos(view->Pos);ImGui::SetNextWindowSize(view->Size);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,ImVec2(0,0));
+    // Full-viewport artwork must not inherit the window border's inset clip.
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize,0.f);
     ImGui::Begin(name,nullptr,ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_NoMove|
         ImGuiWindowFlags_NoSavedSettings|ImGuiWindowFlags_NoBackground|ImGuiWindowFlags_NoNav|extra);
+    ImGui::PopStyleVar();
 }
 void EndMenu(){ImGui::End();ImGui::PopStyleVar();}
 float revive_slide[2]{};
@@ -314,7 +317,7 @@ void RowStrip(MenuCanvas& c,const char*const* labels,const bool* enabled,unsigne
         const float width=(c.Width(labels[i],16)+gap)*fit;
         ImGui::PushID(int(i));ImGui::BeginDisabled(enabled&&!enabled[i]);
         const bool clicked=c.Hit("row",x,top,width,27);
-        const bool hot=ImGui::IsItemHovered();
+        const bool hot=xbox_KeyboardMode()&&ImGui::IsItemHovered();
         if(hot&&PointerMoved())hover(i);
         if(clicked)activate(i);
         const bool chosen=selected==i||hot;
@@ -679,10 +682,10 @@ void FrontendUi(const TrialFrontendFrame& f,const ImGuiViewport* view,bool inter
                 const float y=103.f+step*i;
                 ImGui::PushID(int(i));ImGui::BeginDisabled(!enabled[i]);
                 if(canvas.Hit("row",48,y-2,384,step))activate(i);
-                const bool hot=ImGui::IsItemHovered();
+                const bool hot=xbox_KeyboardMode()&&ImGui::IsItemHovered();
                 if(hot&&PointerMoved())choose(i);
-                if(enabled[i]&&(focus==i||hot))canvas.Selection(48,y,384,11);
-                canvas.Text(labels[i],56,y+2,14,!enabled[i]?disabled:focus==i||hot?white:muted,360);
+                if(enabled[i]&&focus==i)canvas.Selection(48,y,384,11);
+                canvas.Text(labels[i],56,y+2,14,!enabled[i]?disabled:focus==i?white:muted,360);
                 ImGui::EndDisabled();ImGui::PopID();
             }
         }else RowStrip(canvas,labels,enabled,count,top+9,focus,choose,activate);
@@ -937,12 +940,12 @@ void SettingsUi(const ImGuiViewport* view,bool paused){
         }
         RowStrip(canvas,labels,nullptr,3,257,confirmation,[&](unsigned i){confirmation=i;},activate);
     }else{
-        constexpr unsigned rows=21,total=rows+3;
-        constexpr unsigned order[]={0,1,2,5,6,7,20,3,4,9,8,10,11,12,19,13,14,15,18,16,17};
+        constexpr unsigned rows=22,total=rows+3;
+        constexpr unsigned order[]={0,1,2,5,6,7,20,3,4,9,8,21,10,11,12,19,13,14,15,18,16,17};
         constexpr float top=78,bottom=358,step=18,heading=22;
         constexpr float extent=rows*step+3*heading,max_scroll=extent-(bottom-top);
         auto position=[&](unsigned row){return unsigned(std::find(std::begin(order),std::end(order),row)-std::begin(order));};
-        auto row_y=[&](unsigned row){const auto i=position(row);return top+heading+i*step+(i>=7?heading:0)+(i>=17?heading:0);};
+        auto row_y=[&](unsigned row){const auto i=position(row);return top+heading+i*step+(i>=7?heading:0)+(i>=18?heading:0);};
         focus=std::min(focus,total-1);
         int delta=0;
         if(ready){
@@ -972,7 +975,7 @@ void SettingsUi(const ImGuiViewport* view,bool paused){
             scroll=std::clamp(scroll,0.f,max_scroll);
         }
         const char* headings[]={"Display","Rendering quality","Camera and HUD"};
-        const unsigned starts[]={0,7,17};
+        const unsigned starts[]={0,7,18};
         for(unsigned group=0;group<3;++group){
             const float y=top+starts[group]*step+group*heading-scroll;
             if(y<top||y+heading>bottom)continue;
@@ -1017,6 +1020,7 @@ void SettingsUi(const ImGuiViewport* view,bool paused){
         choice("FPS counter",draft_fps,flags,flag_names,7);
         const uint32_t fog_modes[]={0,1,2,3};const char* fog_names[]={"Off","Original","Smooth original","Distant only"};
         choice("Fog",draft_fog_mode,fog_modes,fog_names,8);
+        choice("Gameplay blur",draft.gameplay_blur,flags,flag_names,21);
         const uint32_t samples[]={1,2,4};const char* sample_names[]={"Off","2x","4x"};
         unsigned sample_index=draft.msaa==4?2:draft.msaa==2?1:0;
         const int sample_delta=row("MSAA",sample_names[sample_index],9);
@@ -1066,7 +1070,8 @@ void SettingsUi(const ImGuiViewport* view,bool paused){
         const float track=bottom-top-48,thumb=track*(bottom-top)/extent;
         canvas.Rect(605,top+24+(track-thumb)*scroll/max_scroll,6,thumb,muted);
         canvas.Line(60,364,520,IM_COL32(118,126,121,100));
-        canvas.Text(focus==20?(draft.fmv_scale==2?"Fill stretch removes verified black borders and stretches the picture to the screen without cropping it.":draft.fmv_scale==0?"Fill removes verified black borders without stretching. Some bars may remain.":"Original aspect ratio preserves the complete movie frame, including built-in borders."):
+        canvas.Text(focus==21?"Blur when aiming, firing, taking hits or downed. Applies to both co-op views.":
+                    focus==20?(draft.fmv_scale==2?"Fill stretch removes verified black borders and stretches the picture to the screen without cropping it.":draft.fmv_scale==0?"Fill removes verified black borders without stretching. Some bars may remain.":"Original aspect ratio preserves the complete movie frame, including built-in borders."):
                     focus==19?(textures_available?"Optional HD game texture pack. Keeps HUD and menus unchanged; uses more video memory.":"Not installed. Use Install HD Texture Pack in the launcher, then restart the game."):
                     focus==18?"Weapon FOV: 100% is original. Changes the gun and hands; keeps the world view.":
                     focus==17?"Change reticle size and colors for normal aim, enemies, friends and pistol spin.":
@@ -1119,7 +1124,7 @@ void TrialFrontendPublish(const TrialFrontendFrame& frame){
         ((frame.source.source_kind&0x80000000u)||(frame.source.kind==UC_HF_LIST&&frame.list_kind==3));
     const bool audio=frame.source.kind==UC_HF_LIST&&frame.list_kind==4;
     const bool options=frame.source.kind==UC_HF_LIST&&frame.list_kind==3;
-    const bool native=xbox_KeyboardMode()||IsMainMenu(frame)||frame.delete_dialog||coop_open.load()||owned_pause||audio||options;
+    const bool native=xbox_KeyboardMode()||IsMainMenu(frame)||frame.delete_dialog||coop_open.load()||owned_pause||audio||options||frame.source.kind==TRIAL_HF_CONTROLLER;
     const bool active=TrialFrontendSupported(frame)&&native;bool changed;
     {std::lock_guard lock(context_lock);
         coop_menu.Observe(frame);
@@ -1130,7 +1135,7 @@ void TrialFrontendPublish(const TrialFrontendFrame& frame){
             frontend_action={};frontend_name_action={};frontend_events=0;++navigation_generation;
             native_confirm_generation=0;
         }
-        frontend=frame;frontend_active=active;frontend_audio=active&&audio;
+        frontend=frame;frontend_active=active;frontend_directional=active&&(audio||frame.source.kind==TRIAL_HF_CONTROLLER);
         frontend_text_entry=active&&frame.source.kind==TRIAL_HF_NAME;
         frontend_transition=native&&(frame.source.source_kind&UC_HF_TRANSITION);
         if(!native)frontend_presentation={};
@@ -1171,7 +1176,7 @@ static bool ControllerSupplement(){
         context.screen==frontend.source.screen&&(context.kind==2||context.kind==3);
 }
 void TrialFrontendPad(uint32_t buttons,uint8_t confirm,uint8_t back,int16_t x,int16_t y){
-    const bool controls=PanelOpen()||frontend_audio.load();
+    const bool controls=PanelOpen()||frontend_directional.load();
     const unsigned mask=(controls?((buttons&1)||y>16000?1:0)|((buttons&2)||y<-16000?2:0)|
         ((buttons&4)||x<-16000?16:0)|((buttons&8)||x>16000?32:0):
         ((buttons&5)||x<-16000||y>16000?1:0)|((buttons&10)||x>16000||y<-16000?2:0))|
@@ -1185,6 +1190,7 @@ void TrialFrontendPad(uint32_t buttons,uint8_t confirm,uint8_t back,int16_t x,in
         epoch=navigation_generation;panel_mode=panel;released=false;previous=mask;frontend_events=0;
     }
     if(!mask)released=true;
+    if(xbox_KeyboardMode()){previous=mask;frontend_events=0;return;}
     if(released)frontend_events.fetch_or((mask&~previous)&(panel?127u:255u));
     previous=mask;
 }
@@ -1243,6 +1249,8 @@ void TrialGraphicsFonts(const std::filesystem::path& game) {
     if(trial_coop::Available())trial_coop_preview::Finalize();
 }
 void TrialGraphicsUi() {
+    if(xbox_KeyboardMode()&&!coop_open)frontend_events=0;
+    if(!xbox_KeyboardMode())native_confirm_generation=0;
     Menu menu;TrialFrontendFrame frame;TrialFrontendPresentation presentation;bool active;
     {std::lock_guard lock(context_lock);menu=context;frame=frontend;presentation=frontend_presentation;active=frontend_active.load();}
     const bool eligible=TrialFrontendSupported(frame)&&(frame.source.kind!=UC_HF_LIST||
@@ -1358,7 +1366,8 @@ void TrialGraphicsUi() {
         if(settings_page==1)ControlsUi(view,paused);else if(settings_page==2)LanguageUi(view,paused);else if(settings_page==3)CheatsUi(view);else if(settings_page==4)GameplayUi(view,paused);else SettingsUi(view,paused);
     }
     else if(current){
-        if(frame.source.kind==UC_HF_OBJECTIVES)ObjectivesUi(frame,view);
+        if(frame.source.kind==TRIAL_HF_CONTROLLER)ViewControlsUi(frame,view);
+        else if(frame.source.kind==UC_HF_OBJECTIVES)ObjectivesUi(frame,view);
         else if(frame.delete_dialog||frame.pause_dialog)ConfirmationUi(frame,view);
         else if(frame.source.kind==UC_HF_LIST&&(frame.list_kind>=4&&frame.list_kind<=6))OriginalSettingsUi(frame,view);
         else if(frame.source.kind==TRIAL_HF_NAME)NameUi(frame,view);else FrontendUi(frame,view);
@@ -1372,7 +1381,8 @@ void TrialGraphicsUi() {
     else if(transition){
         // Keep only the last copied presentation while the original manager
         // fades its rows. Active identities/actions were already revoked.
-        if(presentation.frame.source.kind==UC_HF_OBJECTIVES)ObjectivesUi(presentation.frame,view,false);
+        if(presentation.frame.source.kind==TRIAL_HF_CONTROLLER)ViewControlsUi(presentation.frame,view,false);
+        else if(presentation.frame.source.kind==UC_HF_OBJECTIVES)ObjectivesUi(presentation.frame,view,false);
         else if(presentation.frame.delete_dialog||presentation.frame.pause_dialog)ConfirmationUi(presentation.frame,view,false);
         else if(presentation.frame.source.kind==UC_HF_LIST&&(presentation.frame.list_kind>=4&&presentation.frame.list_kind<=6))OriginalSettingsUi(presentation.frame,view,false);
         else if(presentation.frame.source.kind==TRIAL_HF_NAME)NameUi(presentation.frame,view,false);

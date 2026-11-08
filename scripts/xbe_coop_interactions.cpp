@@ -24,10 +24,12 @@ struct HostRestore {unsigned csr=_mm_getcsr();~HostRestore(){_mm_setcsr(csr);}};
 // Original range/property routines use less than 1 KiB; keep both their stack
 // and out-parameters off the live translated frame, and restore every byte.
 struct Call {
-    X86Context c;uint8_t* b;uint32_t low,sp;std::array<uint8_t,4096> saved;
-    Call(const X86Context& context,uint8_t* base):c(context),b(base),low(context.esp-4096),sp(context.esp-512){std::memcpy(saved.data(),b+low,saved.size());}
-    ~Call(){std::memcpy(b+low,saved.data(),saved.size());}
-    uint32_t Run(uint32_t fn,uint32_t self,std::initializer_list<uint32_t> args){c.ecx=self;c.esp=sp;return kernel::CallGuest(c,fn,args);}
+    X86Context c;uint8_t* b;uint32_t low,sp;std::array<uint8_t,4096> saved;bool captured=false;
+    Call(const X86Context& context,uint8_t* base):c(context),b(base),low(context.esp-4096),sp(context.esp-512){}
+    // Lock prepares arguments before dispatch; capture before any scratch write.
+    void SaveScratch(){if(!captured){std::memcpy(saved.data(),b+low,saved.size());captured=true;}}
+    ~Call(){if(captured)std::memcpy(b+low,saved.data(),saved.size());}
+    uint32_t Run(uint32_t fn,uint32_t self,std::initializer_list<uint32_t> args){SaveScratch();c.ecx=self;c.esp=sp;return kernel::CallGuest(c,fn,args);}
 };
 bool Stack(const X86Context& c){return c.esp>=0x11000&&TrialGuestReadable(c.esp-4096,4096);}
 bool Actor(const uint8_t* b,uint32_t p,unsigned slot){
@@ -105,6 +107,7 @@ void Lock(Call& call,Record& r,bool value){
     if(!Current(call.b,r)||!TrialGuestReadable(0x51c398,4)||!TrialGuestReadable(Word(call.b,0x51c398),12))return;
     const uint32_t events=Word(call.b,Word(call.b,0x51c398)+8);
     if(!TrialGuestReadable(events,4))return;
+    call.SaveScratch();
     call.b[call.sp+128]=value?1:0;std::memcpy(call.b+call.sp+132,&r.id,4);
     // Use the original event95 delivery and BD670 actor-local control byte.
     // No campaign-global input state or companion control state is changed.

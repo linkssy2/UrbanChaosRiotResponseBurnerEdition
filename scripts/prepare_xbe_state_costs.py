@@ -80,6 +80,9 @@ def replay(source):
         cur_->cmds.clear();cur_->bytes.clear();cur_->vs.clear();cur_->ps.clear();
     }
 ''')
+    if 'void SendVertexConstants(const State& s)' in transport:
+        transport = once(transport, '    State sent_{},state_{};\n',
+                         '    const State* vsc_source_ = nullptr;\n    State sent_{},state_{};\n')
     return transport
 
 

@@ -28,6 +28,7 @@ static bool FrontendGuestOwns(uint32_t,uint32_t);
 static TrialFrontendFrame published;
 static TrialFrontendPresentation presentation;
 static bool name_keyboard_mode=true;
+static bool controller_info_presentation=true;
 int xbox_KeyboardMode(){return name_keyboard_mode;}
 bool TrialFrontendPresents(uint32_t owner,uint32_t kind){return presentation.Presents(owner,kind);}
 static UcHybridFrontendAction queued;
@@ -41,10 +42,11 @@ uint64_t ucrr_host_menu_milliseconds(){return 1000;}
 void TrialFrontendPublish(const TrialFrontendFrame& f){
     published=f;
     presentation.Publish(f,TrialFrontendSupported(f)&&
-        (f.delete_dialog||name_keyboard_mode||(trial_coop::PauseOwner()>=0&&(f.source.source_kind&0x80000000u))));
+        (f.source.kind==TRIAL_HF_CONTROLLER?controller_info_presentation:
+         f.delete_dialog||name_keyboard_mode||(trial_coop::PauseOwner()>=0&&(f.source.source_kind&0x80000000u))));
 }
 bool TrialFrontendTakeAction(UcHybridFrontendAction& a){if(!queued.kind)return false;a=queued;queued={};return true;}
-bool TrialFrontendOwns(uint32_t p,uint32_t k){return (published.delete_dialog||name_keyboard_mode||(trial_coop::PauseOwner()>=0&&(published.source.source_kind&0x80000000u)))&&TrialFrontendSupported(published)&&published.source.owner==p&&published.source.kind==k;}
+bool TrialFrontendOwns(uint32_t p,uint32_t k){return (published.source.kind==TRIAL_HF_CONTROLLER?controller_info_presentation:published.delete_dialog||name_keyboard_mode||(trial_coop::PauseOwner()>=0&&(published.source.source_kind&0x80000000u)))&&TrialFrontendSupported(published)&&published.source.owner==p&&published.source.kind==k;}
 void TrialGraphicsMenuContext(uint32_t,uint32_t,uint32_t,uint32_t){}
 void TrialCheatsUpdate(X86Context&,uint8_t*,uint64_t){}
 void TrialCheatsInvalidate(){}
@@ -231,7 +233,7 @@ int TrialGuestHook(X86Context& ctx,uint8_t* base,unsigned op){
     case 21:return ucrr_menu_profile_hover();
     case 22:ucrr_menu_profile_bounds();return 0;
     case 23:ucrr_menu_profile_leave();return 0;
-    case 41:FrontendControllerInfoEnter();return 0;
+    case 41:return FrontendControllerInfoEnter();
     default:assert(false);return 0;
     }
 }
@@ -258,7 +260,7 @@ X86_FUNC(sub_00259690){__imp__sub_00259690(ctx,base);profile_post_fade=X86_MEMF3
 X86_FUNC(sub_00259790){ctx.esp+=4;}
 X86_FUNC(sub_00284330){__imp__sub_00284330(ctx,base);}
 X86_FUNC(sub_002745F0){
-    if(controller_info_fixture){assert(X86_MEM32(ctx.esp)==0x276723&&X86_MEM32(ctx.esp+4)==0x17);ctx.eax=controller_info_back;}
+    if(controller_info_fixture){assert(X86_MEM32(ctx.esp)==0x276723&&X86_MEM32(ctx.esp+4)==0x17);ctx.eax=FrontendControllerInfoQuery()||controller_info_back;}
     else ctx.eax=menu_special_query()?1:0;
     ctx.esp+=4;
 }
@@ -342,22 +344,51 @@ static void CheckControllerInfo(){
         assert(context.esp==0x700000&&context.ebx==ebx&&context.ebp==ebp&&context.esi==esi&&context.edi==edi);
         return context.eax;
     };
-    for(bool paused:{false,true}){
+    for(bool keyboard:{false,true})for(bool paused:{false,true}){
+        name_keyboard_mode=keyboard;
         MEM32(manager+8)=paused?0x12:0;hf_pause_manager=paused?manager:0;
+        MEM32(0x485A18)=0x17;
         menu_pointer_begin(manager);GraphicsMenuBegin();
         assert(!menu_seen);profile_quads.clear();controller_info_labels=0;
         assert(run(diagram,true)==0&&menu_seen);
         menu_pointer_end();GraphicsMenuEnd();
-        assert(host_menu_mode&&menu_render_count==0&&menu_target_count==0);
-        assert(published.source.screen==screen&&published.source.kind==0&&!TrialFrontendSupported(published));
+        assert(host_menu_mode&&menu_render_count==1&&menu_target_count==0);
+        assert(published.source.screen==screen&&published.source.kind==TRIAL_HF_CONTROLLER&&TrialFrontendSupported(published));
         assert(bool(published.source.source_kind&0x80000000u)==paused);
-        assert(profile_quads.size()==1&&profile_quads[0].texture==7&&controller_info_labels==18);
-        assert(profile_quads[0].x==40&&profile_quads[0].y==80&&profile_quads[0].right==600&&profile_quads[0].bottom==400);
+        assert(profile_quads.empty()&&!controller_info_labels);
+        // The accepted copied page still covers the diagram during the fade,
+        // without making that outgoing screen interactive again.
+        MEM8(manager+0x14)=1;menu_pointer_begin(manager);GraphicsMenuBegin();
+        assert(run(diagram,true)==0&&!menu_seen&&profile_quads.empty()&&!controller_info_labels);
+        menu_pointer_end();GraphicsMenuEnd();
+        assert(published.source.source_kind&UC_HF_TRANSITION);
+        MEM8(manager+0x14)=0;menu_pointer_begin(manager);GraphicsMenuBegin();
+        assert(run(diagram,true)==0&&menu_seen);menu_pointer_end();GraphicsMenuEnd();
         MEM32(back+8)=paused?0x2675C0:0x271F50;
         const auto sounds=profile_back_sounds;
         controller_info_back=false;assert(run(back,false)==0&&profile_back_sounds==sounds);
-        controller_info_back=true;assert(run(back,false)==MEM32(back+8)&&profile_back_sounds==sounds+1);
-        controller_info_back=false;assert(run(back,false)==0&&profile_back_sounds==sounds+1);
+        const auto valid=UcHybridFrontendAction{published.source.epoch,screen,diagram,diagram,0,UC_HF_BACK};
+        for(unsigned invalid=0;invalid<7;++invalid){
+            queued=valid;
+            if(invalid==0)++queued.epoch;
+            if(invalid==1)++queued.screen;
+            if(invalid==2)++queued.owner;
+            if(invalid==3)++queued.row;
+            if(invalid==4)++queued.index;
+            if(invalid==5)queued.kind=UC_HF_ACTIVATE;
+            if(invalid==6)MEM32(back+8)=0x271810;
+            assert(run(back,false)==0&&profile_back_sounds==sounds);
+            MEM32(back+8)=paused?0x2675C0:0x271F50;queued={};
+        }
+        queued=valid;assert(run(back,false)==MEM32(back+8)&&profile_back_sounds==sounds+1);
+        assert(run(back,false)==0&&profile_back_sounds==sounds+1);
+        // An unavailable native renderer must retain both original pixels and Back.
+        controller_info_presentation=false;
+        assert(run(diagram,true)==0);
+        assert(profile_quads.size()==1&&profile_quads[0].texture==7&&controller_info_labels==18);
+        assert(profile_quads[0].x==40&&profile_quads[0].y==80&&profile_quads[0].right==600&&profile_quads[0].bottom==400);
+        controller_info_back=true;assert(run(back,false)==MEM32(back+8)&&profile_back_sounds==sounds+2);
+        controller_info_back=false;controller_info_presentation=true;
         // The production manager destructor clears even an unsupported native
         // screen and its pause bit before gameplay HUD/input resume.
         g_ecx=manager;ucrr_menu_manager_destroy();
@@ -376,7 +407,7 @@ static void CheckControllerInfo(){
         TrialGuestHook(context,ram,41);assert(!menu_seen);
         menu_pointer_end();GraphicsMenuEnd();assert(!host_menu_mode);
     }
-    g_ecx=manager;ucrr_menu_manager_destroy();controller_info_fixture=false;
+    g_ecx=manager;ucrr_menu_manager_destroy();controller_info_fixture=false;name_keyboard_mode=true;
     profile_back_sounds=saved_back_sounds;context=saved;
 }
 
@@ -384,7 +415,7 @@ namespace controller_fixture {
 // The production pad function runs unchanged. Only its shared UI state and
 // the panel-state query are supplied by this fixture; no ImGui input is mocked.
 static std::mutex context_lock;
-static std::atomic<bool> frontend_active=false,frontend_audio=false;
+static std::atomic<bool> frontend_active=false,frontend_directional=false;
 static std::atomic<unsigned> frontend_events=0;
 static std::atomic<unsigned> settings_page=0;
 static std::atomic<uint64_t> navigation_generation=1;
@@ -398,6 +429,8 @@ static void Sample(unsigned expected,uint32_t buttons=0,uint8_t confirm=0,uint8_
     assert(frontend_events.exchange(0)==expected);
 }
 static void Check(){
+    const bool previous_keyboard_mode=name_keyboard_mode;
+    name_keyboard_mode=false; // The physical input adapter has handed this fixture's pad the menu.
     // Inactive menus discard queued and held input. Entry requires neutral.
     frontend_events=15;Sample(0,1,255,255);
     frontend_active=true;Sample(0,1,255,255);Sample(0,1,255,255);
@@ -446,6 +479,11 @@ static void Check(){
     ++navigation_generation;Sample(0,8);Sample(0,8);Sample(0);Sample(2,8);
     frontend_active=false;Sample(0,0,255);frontend_active=true;
     Sample(0,0,255);Sample(0);Sample(4,0,255);
+    // A desktop takeover revokes queued and held controller input immediately.
+    Sample(0);TrialFrontendPad(8,0,0,0,0);assert(frontend_events==2);
+    name_keyboard_mode=true;Sample(0,8);Sample(0,8);Sample(0);
+    name_keyboard_mode=false;Sample(2,8);Sample(0);
+    name_keyboard_mode=previous_keyboard_mode;
 }
 }
 

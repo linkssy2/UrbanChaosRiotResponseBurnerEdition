@@ -141,19 +141,32 @@ def prepare_input(input_source):
     input_source=once(input_source,old,'')
     input_source=once(input_source,'    if(port==0)pad.connected=true;',
         '''    if(port==0)pad.connected=true;
-    if(port==0&&controller_connected&&focused()&&!TrialCoopMenuOpen()&&uc_pc_prompts::ControllerActive(pad)&&InterlockedExchange(&keyboard_mode,0))PostMessage(game_window,kCapture,0,0);''')
-    input_source=once(input_source,'    if(TrialGraphicsMessage(msg,wp,lp)){', '''    static uc_pc_prompts::PointerActivity pointer_activity;
+    if(port==0){
+        static uc_pc_prompts::MenuControllerActivity menu_activity;
+        const bool used=menu_activity.Sample(controller_connected&&focused(),pad);
+        if(controller_connected&&focused()&&!TrialCoopMenuOpen()&&
+           ((menu_mode||TrialGraphicsOpen())?used:uc_pc_prompts::ControllerActive(pad))&&
+           InterlockedExchange(&keyboard_mode,0)){
+            click_pending=false;menu_right_pending=false;menu_key_taps.Clear();
+            PostMessage(game_window,kCapture,0,0);
+        }
+    }''')
+    input_source=once(input_source,'bool TrialInputMessage(', '''void TrialPointerMessage(uint32_t msg,uintptr_t wp,intptr_t lp){
+    std::lock_guard guard(input_lock);
+    static uc_pc_prompts::PointerActivity pointer_activity;
     auto note_pointer_input=[&]{
         const bool changed=!xbox_KeyboardMode();xbox_KeyboardNoteInput();
         if(changed)PostMessage(game_window,kCapture,0,0);
     };
-    if(focused()&&(msg==WM_KEYDOWN||msg==WM_SYSKEYDOWN))note_pointer_input();
+    if(focused()&&(msg==WM_KEYDOWN||msg==WM_SYSKEYDOWN)&&!(uint64_t(lp)&(1ull<<30)))note_pointer_input();
     if(!focused()||captured)pointer_activity.Reset();
     else if(msg==WM_MOUSEMOVE){
         if(pointer_activity.Move(short(LOWORD(lp)),short(HIWORD(lp))))note_pointer_input();
-    }else if(msg==WM_LBUTTONDOWN||msg==WM_RBUTTONDOWN||msg==WM_MBUTTONDOWN||
-             msg==WM_XBUTTONDOWN||msg==WM_MOUSEWHEEL||msg==WM_MOUSEHWHEEL)note_pointer_input();
-    if(TrialGraphicsMessage(msg,wp,lp)){''')
+    }else if(msg==WM_LBUTTONDOWN||msg==WM_RBUTTONDOWN||msg==WM_MBUTTONDOWN||msg==WM_XBUTTONDOWN||
+             msg==WM_LBUTTONDBLCLK||msg==WM_RBUTTONDBLCLK||msg==WM_MBUTTONDBLCLK||msg==WM_XBUTTONDBLCLK||
+             ((msg==WM_MOUSEWHEEL||msg==WM_MOUSEHWHEEL)&&short(HIWORD(wp))))note_pointer_input();
+}
+bool TrialInputMessage(''')
     return input_source
 
 def prepare(input_source,graphics_source,area):

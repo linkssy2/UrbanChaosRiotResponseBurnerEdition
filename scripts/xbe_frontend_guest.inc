@@ -62,10 +62,29 @@ extern "C" uint32_t TrialFrontendWarningText(uint8_t* base,uint32_t key,uint32_t
 }
 static uint32_t frontend_name_owner,frontend_name_cancel;
 static uint64_t frontend_name_cancel_epoch;
-static void FrontendControllerInfoEnter(){
-    // The original controller diagram has no list to enable native menu Back.
-    if(hf_settled()&&menu_pointer_readable(g_ecx,0x14)&&MEM32(g_ecx)==0x4896F4)
-        menu_seen=1;
+static bool FrontendControllerInfoValid(uint32_t owner){
+    return menu_pointer_readable(owner,0x14)&&MEM32(owner)==0x4896F4;
+}
+static bool FrontendControllerInfoEnter(){
+    if(!FrontendControllerInfoValid(g_ecx))return false;
+    if(!hf_settled())return TrialFrontendPresents(g_ecx,TRIAL_HF_CONTROLLER);
+    menu_seen=1;menu_render_count=1;
+    UcHybridFrontendSnapshot s{};s.kind=TRIAL_HF_CONTROLLER;s.owner=g_ecx;s.count=1;
+    s.back_action=MEM32(0x485A18);s.rows[0].row=g_ecx;s.rows[0].enabled=1;
+    std::strcpy(s.title,"VIEW CONTROLS");hf_pending=s;hf_publish();
+    // Only an accepted native page may replace the original diagram and tabs.
+    return TrialFrontendPresents(g_ecx,TRIAL_HF_CONTROLLER);
+}
+static bool FrontendControllerInfoQuery(){
+    const auto& s=hf_view;
+    if(s.kind!=TRIAL_HF_CONTROLLER||s.screen!=menu_screen||!hf_settled()||!FrontendControllerInfoValid(s.owner)||
+       !FrontendGuestOwns(s.owner,s.kind)||!menu_pointer_readable(g_esp,8)||
+       MEM32(g_esp)!=0x276723||MEM32(g_esp+4)!=s.back_action||
+       !menu_pointer_readable(g_edi,0x20)||MEM32(g_edi)!=0x489974||MEM32(g_edi+4)!=s.back_action||
+       MEM32(g_edi+8)!=((s.source_kind&0x80000000u)?0x2675C0u:0x271F50u))return false;
+    UcHybridFrontendAction a{};
+    return TrialFrontendTakeAction(a)&&a.kind==UC_HF_BACK&&a.epoch==s.epoch&&
+        a.screen==s.screen&&a.owner==s.owner&&a.row==s.owner&&!a.index;
 }
 // The title's delete callback uses the global selected slot. Retain the exact
 // slot record while its original confirmation child is active, so a stale
@@ -236,7 +255,7 @@ extern "C" void ucrr_native_frontend_publish(const UcHybridFrontendSnapshot* sou
     TrialFrontendPublish(frame);
 }
 static bool FrontendGuestOwns(uint32_t owner,uint32_t kind){
-    return (kind==UC_HF_LEVELS||kind==UC_HF_REWARD_BROWSER||kind==UC_HF_PROFILES||kind==TRIAL_HF_NAME||kind==UC_HF_OBJECTIVES||
+    return (kind==UC_HF_LEVELS||kind==UC_HF_REWARD_BROWSER||kind==UC_HF_PROFILES||kind==TRIAL_HF_NAME||kind==UC_HF_OBJECTIVES||kind==TRIAL_HF_CONTROLLER||
         (kind==UC_HF_DIALOG&&(FrontendDeleteDialog(owner)||FrontendPauseDialog(owner)||FrontendDifficultyDialog(owner)))||
         GraphicsMenuKind(owner))&&TrialFrontendOwns(owner,kind);
 }

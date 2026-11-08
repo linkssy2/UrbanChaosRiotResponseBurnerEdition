@@ -14,6 +14,12 @@ def prepare(area):
     assert ui.count(marker)==1
     # Observation only: the real production InvisibleButton still owns input.
     observed=ui.replace(marker,'RecordMenuHit(id,Point(x,y),{width*sx,height*sy});\n        '+marker,1)
+    marker='        if(translate)text=trial_language::Ui(text);'
+    assert observed.count(marker)==1
+    observed=observed.replace(marker,marker+'\n        RecordMenuText(text);',1)
+    marker='    void Selection(float x,float y,float width,float height){'
+    assert observed.count(marker)==1
+    observed=observed.replace(marker,marker+'\n        RecordMenuSelection(Point(x,y));',1)
     marker='    c.Text("Revive Partner",x+key_width+15,y+6,14,white,232-key_width,true);'
     assert observed.count(marker)==1
     observed=observed.replace(marker,'    RecordRevivePrompt(slot,source,binding,trial_language::Ui("Revive Partner"));\n'+marker,1)

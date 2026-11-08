@@ -12,9 +12,11 @@ SHARED_HOOKS=(
     '\tTrialHealthPackUpdate(ctx,base);\n',
     '\tTrialGuestHook(ctx, base, 26);\n',
     '\tTrialDeathSpasmStep(ctx,base);\n',
+    '\tTrialCoopKOCommitted(ctx,base);\n',
     '\tif(trial_ragdoll_force::Tail(base,ctx.ecx))goto loc_002A5E31;\n',
 )
 PINS=(
+ (22,0xdf380,254,'8ffd8a39fc7ab2dbad28b2890c8ffe75618291b6d875919905ce2c1fc6cd0036','7ba44f99705b2ed15328a25ef42863a4a81c3f6c415affcad514fecd1eeb8f9c'),
  (21,0xd2ab0,2794,'49c4b4c5fde2eb9549928b28a8fd292c09b21572fc510b2f07ac712bd408b712','141801e02625b764e87fed6ae9f21703e40a39c962e1efafa9cc3f6675fba652'),
  (71,0x2a5da0,231,'16aee95dbd1452a1ee4e3505e9357e4064e832050b5bd074142c4fa10e33892e','b5d4db7e4bf64cade8852e25f65e0d289e88a920029ae8edc0b8c10ed50e905a'),
  (82,0x2f4ff0,87,'ff86222783e610ad699f9afebe58617074437a68ce655f1ebb67d2b6a7947162','4c946fb2c96f9c9c49a38dd6dd63498b73cde45738618a848cb336473b56b326'),
@@ -96,7 +98,7 @@ def prepare(area):
     assert struct.unpack('<f',raw(0x44c178,4))[0]==100.
     assert struct.unpack('<I',raw(0x48de08,4))[0]==0x2a8d00
     assert struct.unpack('<I',raw(0x49a8b8+0x6c,4))[0]==0x2f4ff0
-    leaves=(0x55bf0,0x55cd0,0x567f0,0x2f4ff0,0x2ecaa0,0x2a2870)
+    leaves=(0x55bf0,0x55cd0,0x567f0,0x2f4ff0,0x2ecaa0,0x2a2870,0xdf380)
     parts=['X86_FUNC(sub_002F6CC0);']+[f'X86_FUNC(sub_{a:08X});'for a in leaves]
     parts.extend(originals[a].replace('__imp__sub_','sub_',1)for a in leaves)
     fixture=(local/'test_xbe_ragdoll_drag.cpp').read_text();marker='// NATIVE_DRAG_CONTRACTS'

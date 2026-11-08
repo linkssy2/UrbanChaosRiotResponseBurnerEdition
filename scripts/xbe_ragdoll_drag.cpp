@@ -64,16 +64,23 @@ bool Available(const uint8_t* b,const Player& p){
     return std::isfinite(health)&&health>0&&state!=3&&state!=7&&state!=11&&state!=12&&state!=13&&
         !b[p.owner+0x202]&&!(Word(b,p.world+0x10)&0x800);
 }
-bool Dead(const uint8_t* b,const Player& p,const Grab& g){
+bool Draggable(const uint8_t* b,const Player& p,const Grab& g){
     if(!TrialGuestReadable(g.actor,0x19c)||!Entity(b,p.level,g.actor,g.id))return false;
     const auto type=Word(b,g.actor);
     if(type==0x45d040)return TrialCoopKeepDownedBody(b,g.actor);
     const float health=Real(b,g.actor+0x9c);
-    return (type==0x45c770||type==0x47bf50)&&std::isfinite(health)&&health<=0;
+    if((type!=0x45c770&&type!=0x47bf50)||!std::isfinite(health))return false;
+    if(health<=0)return true;
+    // Retail DF380 marks knockouts with bit 4; only their currently owned ragdoll is movable.
+    if(!(Word(b,g.actor+0x198)&4))return false;
+    const auto owner=Word(b,g.actor+0x118);
+    if(!TrialGuestReadable(owner,16)||Word(b,owner)!=0x48e6e0)return false;
+    const auto data=Word(b,owner+12);
+    return TrialGuestReadable(data,0x54)&&Word(b,data+0x50)==g.handle;
 }
 bool Current(const uint8_t* b,const Player& p){
     const auto& g=p.grab;
-    return g.body&&Available(b,p)&&Dead(b,p,g)&&
+    return g.body&&Available(b,p)&&Draggable(b,p,g)&&
         TrialRagdollMatchesLimb(b,g.handle,g.ragdoll,g.limb,g.body)&&
         Word(b,g.ragdoll+0x1c)==g.model;
 }
@@ -156,7 +163,7 @@ bool Acquire(Calls& call,Player& p,const View& view){
     if(g.limb!=2&&g.limb!=3&&g.limb!=4&&g.limb!=5&&g.limb!=6&&g.limb!=7&&g.limb!=8&&g.limb!=9&&g.limb!=10&&g.limb!=11)return false;
     if(!TrialGuestReadable(g.actor,0x19c))return false;
     g.id=Word(call.b,g.actor+0x54);g.model=Word(call.b,g.ragdoll+0x1c);
-    if(!Dead(call.b,p,g)||!Available(call.b,p))return false;
+    if(!Draggable(call.b,p,g)||!Available(call.b,p))return false;
     for(auto& other:players)if(&other!=&p&&other.grab.ragdoll==g.ragdoll){
         if(Current(call.b,other))return false;
         Cancel(other);

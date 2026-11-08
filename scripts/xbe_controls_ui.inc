@@ -74,6 +74,10 @@ bool ControlsLookSlider(unsigned action){return ControlsMouseSensitivity(action)
 const char* ControlsName(unsigned action){if(ControlsDeadzone(action))return action==ControlsProfileStart()+7?"Left stick deadzone":"Right stick deadzone";if(ControlsMovementInertia(action))return "Movement inertia";if(ControlsWalk(action))return "Walk";if(ControlsWalkMode(action))return "Walking mode";if(ControlsHud(action))return "Toggle HUD";if(ControlsZoomSensitivity(action))return "Zoom sensitivity";if(ControlsHealPartner(action))return "Heal Partner";if(ControlsMouseInvert(action))return "Invert mouse look";if(ControlsAimMode(action))return "Aiming mode";if(ControlsScopeZoom(action))return "Cycle scope zoom";if(ControlsHealthPack(action))return "Use health pack";if(ControlsProfile(action))return profile_names[action-ControlsProfileStart()];if(ControlsInteract(action))return "Interact / dialogue skip";if(ControlsPreviousFirearm(action))return "Previous Firearm";if(!controls_device&&action==2)return "Next Firearm";if(!controls_device&&action==0)return "Reload";if(ControlsMouseSensitivity(action))return "Mouse sensitivity";return action<ControlsBase()?control_names[action]:action==ControlsBase()?"Pistol spin mode":"Pistol spin button";}
 const char* ControlsHelp(unsigned action){if(ControlsDeadzone(action))return "Ignore small stick movements. 0% responds immediately; Original keeps the original controller response. Applies to this player only.";if(ControlsMovementInertia(action))return "Keep the original movement build-up. Off makes movement input respond immediately.";if(ControlsWalk(action))return "Move slowly using this input. Walking mode chooses Hold or Toggle.";if(ControlsWalkMode(action))return "Hold Walk to move slowly, or press once to toggle walking. Opening a menu cancels walking.";if(ControlsHud(action))return "Show or hide gameplay HUD for this player. Menus remain visible.";if(ControlsZoomSensitivity(action))return "Look speed while zoomed, for this player only. 100% keeps the current speed; lower values aim more slowly.";if(ControlsHealPartner(action))return "Use your pack to heal or revive the nearby partner you are facing. Living partners have no healing prompt.";if(ControlsMouseInvert(action))return "Reverse vertical mouse aiming. Stick aiming and mouse orders are unchanged.";if(ControlsAimMode(action))return "Toggle preserves the original zoom cycle. Hold needs a held key or button. Use Cycle scope zoom to change rifle magnification.";if(ControlsScopeZoom(action))return "In Hold mode, change rifle magnification while aiming. Assign a separate input; does not zoom out.";if(ControlsHealthPack(action))return controls_device?"Controller: double-tap D-pad Down to heal yourself; hold Down while facing your partner to heal or revive them. Collect more packs from medics.":"Use a stored health pack, or revive a nearby downed partner. Collect more from a medic while supplies last.";if(ControlsProfile(action))return profile_help[action-ControlsProfileStart()];if(ControlsInteract(action))return "Use nearby objects and skip dialogue. This key is displayed in interaction prompts.";if(ControlsPreviousFirearm(action))return "Equip or select the previous available firearm.";if(!controls_device&&action==2)return "Equip or select the next available firearm.";if(!controls_device&&action==0)return "Reload your weapon without activating nearby objects.";if(ControlsMouseSensitivity(action))return "Mouse look speed: 100% is the default. Lower is slower; independent of Windows pointer speed and stick sensitivity.";return action<ControlsBase()?control_help[action]:action==ControlsBase()?"Original gesture: rotate the stick or move the mouse in two full circles. Button press: use your assigned input.":"Used in Button press mode. Runs the original pistol spin and next-kill slow-motion reward.";}
 bool ControlsMouseSensitivity(unsigned action){return !controls_device&&action==ControlsBase()+2;}
+bool ControlsBindingAction(unsigned action){
+    return action!=ControlsBase()&&!ControlsAimMode(action)&&!ControlsWalkMode(action)&&
+        !ControlsMovementInertia(action)&&!ControlsMouseInvert(action)&&!ControlsLookSlider(action)&&!ControlsProfile(action);
+}
 unsigned& ControlsBinding(unsigned action,unsigned slot){
     if(ControlsWalk(action))return controls_draft.walk_binding[controls_device][slot];
     if(ControlsHud(action))return controls_draft.hud_binding[controls_device][slot];
@@ -126,7 +130,7 @@ bool ControlsOverlap(unsigned a,unsigned b){
 void ControlsAssign(bool replace){
     const unsigned action=unsigned(controls_capture_action);
     if(replace)for(unsigned i=0;i<ControlsProfileStart();++i)for(unsigned slot=0;slot<ControlsSlots(i);++slot)
-        if(i!=ControlsBase()&&!ControlsAimMode(i)&&!ControlsWalkMode(i)&&!ControlsMovementInertia(i)&&!ControlsMouseInvert(i)&&!ControlsLookSlider(i)&&!ControlsProfile(i)&&(i!=action||slot!=controls_slot)&&ControlsOverlap(ControlsBinding(i,slot),controls_candidate))ControlsBinding(i,slot)=0;
+        if(ControlsBindingAction(i)&&(i!=action||slot!=controls_slot)&&ControlsOverlap(ControlsBinding(i,slot),controls_candidate))ControlsBinding(i,slot)=0;
     ControlsBinding(action,controls_slot)=controls_candidate;
     ControlsCancelCapture();message="Binding changed. Select Apply to save.";
     ++navigation_generation;frontend_events=0;
@@ -285,7 +289,7 @@ void ControlsUi(const ImGuiViewport* view,bool paused){
         canvas.Text(group,61,118,11,muted);canvas.Center("PRIMARY",337,118,115,11,muted);canvas.Center("SECONDARY",465,118,115,11,muted);
         if(ready&&(events&64)&&focus>=1&&focus<=count*2){
             const auto action=ControlsAction(start+(focus-1)/2);
-            if(action!=ControlsBase()&&!ControlsAimMode(action)&&!ControlsWalkMode(action)&&!ControlsMovementInertia(action)&&!ControlsMouseInvert(action)&&!ControlsLookSlider(action)&&!ControlsProfile(action)){
+            if(ControlsBindingAction(action)){
                 ControlsBinding(action,(focus-1)%2)=0;message="Binding cleared. Apply to save.";
             }
         }
@@ -402,5 +406,86 @@ void ControlsUi(const ImGuiViewport* view,bool paused){
     }
     else if(xbox_KeyboardMode())FooterPrompts(canvas,{{13,"Select"},{VK_RBUTTON,confirm_back?"Keep editing":"Back"}});
     else FooterPrompts(canvas,{{0x103,"Navigate"},{0x101,"Select"},{0x104,"Clear binding"},{0x102,"Back"}});
+    ImGui::EndDisabled();EndMenu();
+}
+
+void ViewControlsUi(const TrialFrontendFrame& f,const ImGuiViewport* view,bool interactive=true){
+    static TrialFrontendReleaseGate gate;
+    static uint64_t epoch=0;
+    static unsigned device=0,focus=0,scroll=0;
+    const int owner=trial_coop::PauseOwner();
+    if(epoch!=f.source.epoch){
+        epoch=f.source.epoch;device=owner>=0?(owner?2u:0u):xbox_KeyboardMode()?0u:1u;
+        focus=scroll=0;
+    }
+    const bool ready=interactive&&gate.Accept(navigation_generation.load(),UiHeld());
+    const unsigned events=interactive?frontend_events.exchange(0):0;
+    const bool accept=TakeNativeConfirm(ready)||(ready&&(events&4));
+    const bool back=ready&&((events&8)||ImGui::IsMouseClicked(1,false)||
+        ImGui::IsKeyPressed(ImGuiKey_Escape,false)||ImGui::IsKeyPressed(ImGuiKey_Q,false));
+    BeginMenu("View controls",view);MenuCanvas c(view);
+    c.SettingsFrame((f.source.source_kind&0x80000000u)!=0,"VIEW CONTROLS");
+    ImGui::BeginDisabled(!ready);
+    const unsigned devices[]={0,1,2};
+    const char* names[]={"Keyboard and mouse","Controller - Player 1","Controller - Player 2"};
+    const unsigned previous=device;
+    const bool left=ready&&((events&16)||ImGui::IsKeyPressed(ImGuiKey_LeftArrow));
+    const bool right=ready&&((events&32)||ImGui::IsKeyPressed(ImGuiKey_RightArrow));
+    ImGui::BeginDisabled(owner>=0);
+    SettingChoice(c,"Input device",device,devices,names,0,focus,
+        owner<0&&focus==0?(left?-1:right||accept?1:0):0);
+    ImGui::EndDisabled();
+    if(device!=previous){scroll=0;focus=0;}
+    // The reference page and editor share action IDs; only the editor saves drafts.
+    controls_player=device==2?1:0;controls_device=device?1:0;
+    controls_draft=trial_controls::Snapshot(controls_player);
+    unsigned rows[43]{},count=0;
+    for(unsigned row=0;row<ControlsCount();++row)
+        if(ControlsBindingAction(ControlsAction(row)))rows[count++]=row;
+    const unsigned visible=std::min(count,8u),maximum=count-visible;
+    scroll=std::min(scroll,maximum);focus=std::min(focus,count);
+    auto reveal=[&](){if(focus){scroll=std::min(scroll,focus-1);if(focus>scroll+visible)scroll=focus-visible;}};
+    if(ready){
+        if((events&1)||ImGui::IsKeyPressed(ImGuiKey_UpArrow)){if(focus)--focus;reveal();}
+        if((events&2)||ImGui::IsKeyPressed(ImGuiKey_DownArrow)||ImGui::IsKeyPressed(ImGuiKey_Tab)){focus=std::min(focus+1,count);reveal();}
+        const auto p=ImGui::GetIO().MousePos,a=c.Point(50,132),b=c.Point(615,318);
+        if(p.x>=a.x&&p.x<b.x&&p.y>=a.y&&p.y<b.y)
+            scroll=unsigned(std::clamp(int(scroll)-int(std::round(ImGui::GetIO().MouseWheel*3)),0,int(maximum)));
+        if(back||(accept&&focus))FrontendAction(f,UC_HF_BACK);
+    }
+    if(focus)focus=std::clamp(focus,scroll+1,scroll+visible);
+    c.Text(ControlsGroup(rows[focus?focus-1:scroll]),61,118,11,muted);
+    c.Center("PRIMARY",337,118,115,11,muted);c.Center("SECONDARY",465,118,115,11,muted);
+    for(unsigned i=0;i<visible;++i){
+        const unsigned index=scroll+i,action=ControlsAction(rows[index]);const float y=138+i*20.f;
+        ImGui::PushID(int(index));
+        if(c.Hit("view control",50,y,540,20)||(ImGui::IsItemHovered()&&PointerMoved()))focus=index+1;
+        if(focus==index+1)c.Selection(50,y,540,20);
+        c.Text(ControlsName(action),61,y+3,12,focus==index+1?white:muted,264);
+        for(unsigned slot=0;slot<ControlsSlots(action);++slot){
+            const unsigned source=ControlsBinding(action,slot);
+            const bool heal=controls_device&&ControlsHealthPack(action)&&!slot&&(source==14||(!source&&!ControlsBinding(action,1)));
+            const char* label=heal?"Down x2 / hold":controls_device?trial_controller::Label(source):xbox_KeyboardSourceName(source);
+            c.Center(label,slot?469:341,y+3,107,12,focus==index+1?white:muted);
+        }
+        ImGui::PopID();
+    }
+    const float top=138,height=160,thumb=height*visible/count;
+    c.Rect(600,top,5,height,IM_COL32(80,90,85,140));
+    c.Hit("view controls scrollbar",594,top,17,height);
+    if(ImGui::IsItemActive()&&ImGui::IsMouseDown(0)){
+        const float y=(ImGui::GetIO().MousePos.y-c.origin.y)/c.sy;
+        scroll=unsigned(std::clamp(int(std::round((y-top-thumb/2)*maximum/(height-thumb))),0,int(maximum)));
+    }
+    c.Rect(597,top+(height-thumb)*scroll/std::max(1u,maximum),11,thumb,IM_COL32(173,184,177,210));
+    ControlsDescription(c,focus?ControlsHelp(ControlsAction(rows[focus-1])):"Change bindings in Options > Controls.");
+    const char* labels[]={"Scroll up","Back","Scroll down"};
+    const bool enabled[]={scroll>0,true,scroll<maximum};
+    RowStrip(c,labels,enabled,3,398,3,[](unsigned){},[&](unsigned i){
+        if(i==1)FrontendAction(f,UC_HF_BACK);
+        else if(i==0&&scroll)--scroll;else if(i==2&&scroll<maximum)++scroll;
+    });
+    if(xbox_KeyboardMode())FooterPrompts(c,{{38,"Scroll up"},{40,"Scroll down"},{VK_RBUTTON,"Back"}});
+    else FooterPrompts(c,{{0x103,"Navigate"},{0x102,"Back"}});
     ImGui::EndDisabled();EndMenu();
 }

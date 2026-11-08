@@ -41,6 +41,22 @@ template<class Pad> bool ControllerActive(const Pad& pad) {
     for(auto value:pad.analog)if(value>30)return true;
     return false;
 }
+struct MenuControllerActivity {
+    uint32_t previous=0;
+    template<class Pad> bool Sample(bool connected,const Pad& pad){
+        if(!connected){previous=0;return false;}
+        uint32_t mask=pad.buttons;
+        for(unsigned i=0;i<8;++i)if(pad.analog[i]>30)mask|=1u<<(16+i);
+        const int axes[]={pad.lx,pad.ly,pad.rx,pad.ry};
+        for(unsigned i=0;i<4;++i){
+            const unsigned negative=1u<<(24+i*2),positive=negative<<1;
+            // Match menu navigation; hysteresis keeps small stick noise from reclaiming it.
+            if(axes[i]<-16000||((previous&negative)&&axes[i]<-12000))mask|=negative;
+            if(axes[i]>16000||((previous&positive)&&axes[i]>12000))mask|=positive;
+        }
+        const bool used=(mask&~previous)!=0;previous=mask;return used;
+    }
+};
 struct PointerActivity {
     bool valid=false;long x=0,y=0;
     bool Move(long next_x,long next_y){

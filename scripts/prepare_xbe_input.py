@@ -54,6 +54,8 @@ def prepare():
             if marker not in text:continue
             assert text.count(marker)==1,addr
             insertion=(f'if ({call(op)}) goto loc_{branch};' if branch else call(op)+';')
+            if addr=='00276010':
+                insertion=f'if ({call(op)}) {{ ctx.eax = 0; ctx.esp += 12; return; }}'
             if branch and ('loc_'+branch+':') not in text:
                 target='\t// '+branch+' '
                 assert text.count(target)==1,branch

@@ -4,6 +4,11 @@ import hashlib
 import struct
 
 PINS=(
+    (0x5aab0,6,"82a6f08404d9c41eb2d1437c1fe102f4c25209e68bea2833795ddaf6641ca0c7"),
+    (0x5b140,7,"2783f77e759c990df3d7ae85040ccc1b0885a0285cf1d92254fab5af72f754e8"),
+    (0x64400,697,"d860b3feedd2d3897305962f2b90cf65a22e021d03784c7a601f6834f90e0f33"),
+    (0xbdab0,77,"45ece1835ce41f21433c855890584d7a17ae0130c27d1238e41bd06ff0bfff78"),
+    (0x646bc,56,"00ef2b348fce0edbd6f22915c689753f03d4000f68c59513ef9d97ff32aba674"),
     (0x643e0,6,"2f50be2683201136880faa73c01094369ebb3428808d2188c528381e7a624d6a"),
     (0x167f3,8,"cf544b24ed2963a18e4c6355659272bff6c3e5e52fc53a702444a933313493ae"),
     (0x1688b0,0x84,"dc01f2253b9ee220865f62e4065b24edcef98ac5dd66857d9b8d73fe404df09b"),
@@ -32,6 +37,11 @@ PINS=(
     (0x168b80,0x13,"78bddcf72b4736b97c48e04ff4008de192815e09b3aced424a11fa93fc775823"),
     (0x182c20,0x13,"c8e20c52c494d3b1e07682353adfe001368cdec12d3ed63cd14292ce7d2b096f"),
     (0xd2ab0,0xf,"2c0a32f728d14663320296e782d1791e322bcbdd020db1223b276cf68f2e5c4d"),
+    (0xd2bb9,0x82,"4662e6c1fa57cab742aa31937080fae9768338164a603326398b1e61ad8809db"),
+    (0x2180a0,0x22,"424f6d55ac90e45c2d9491ae63804bd7142dea228a27fd7b86ca8ad55251ec6a"),
+    (0x218120,7,"c9af73197615758bcbfce6464123bda69bcd94dae6cc0bde4066de331201cee1"),
+    (0x44c6c4,4,"5d5d32c7cf8e2ca77d9af6bf35a0ba5cd09074ccb4f3871aba6f67420b324a57"),
+    (0x46fc4c,4,"259cb45bfb2f4ed5b1813eeec0c13cefe3d9530c448199c2c2dd14b6f5296d33"),
     (0x172f49,0x9,"6580b55f8fed49d2120c507152beb572e615f9c2e4e92615c806a09a8c18952d"),
     (0x172e80,0x13,"65156691a5a6ea0b16cc7e3912ae4983e23d28779210d20ed6b147b8943de27d"),
     (0x168a40,0x13,"0c06c9de8a82df5264c170136c6209faf8c972b4878d338409f7fd6ce6c17312"),
@@ -145,6 +155,9 @@ def prepare(area):
     s=originals[21];a=s.index('\t// 000D2F20 ');z=s.index('loc_000D2F4C:',a)
     assert hashlib.sha256(s[a:z].encode()).hexdigest()=='c1592cdb850eb963d9a4f2e695c21868e610e0fe159a7882f05da1d05f27880f'
     pieces.append('X86_FUNC(OriginalInjectionQueue) {\n\tX86_LOAD_FLAGS();\n\tuint32_t ca=0,cb=0;\n'+s[a:z]+'loc_000D2F4C:\n\treturn;\n}\n')
+    s=originals[21];a=s.index('\t// 000D2BB9 ');z=s.index('loc_000D2C3B:',a)
+    assert hashlib.sha256(s[a:z].encode()).hexdigest()=='fd70604730898b2d082faa7e678dcfb0f3912ef429b2223e508d8637fe65aeac'
+    pieces.append('X86_FUNC(OriginalRefillStep) {\n\tX86_LOAD_FLAGS();\n\tuint32_t ca=0,cb=0;\n'+s[a:z]+'loc_000D2C3B:\n\treturn;\n}\n')
     for unit,name,label in ((19,'000BD650','Receipt'),(36,'00169570','Stock'),(38,'00182B60','Delivery'),(6,'0004ACD0','PlayerId')):
         for variant,sources in (('Original',originals),('Stored',patched)):
             s=sources[unit];anchor=f'X86_FUNC(__imp__sub_{name}) {{'
@@ -165,6 +178,8 @@ def prepare(area):
     assert hashlib.sha256(s[a:z].encode()).hexdigest()=='6cc239fda29236f7e04372b36ffa90f845448c05160f43de0932ebe34697da97'
     pieces.append(s[a:z].replace('__imp__sub_0004AF40','OriginalHudAllowed',1))
     for unit,name,label,digest in (
+        (54,'002180A0','OriginalSetHealth','934c1d1bd89f0665eda05195aa1bf8499cb202e98ee7e71798924aca9d600037'),
+        (54,'00218120','sub_00218120','98986e1f27a70a0afca0b839da9e97e17a45ba34c7c6fbd96a7f1f6ddf5d64b0'),
         (10,'0006BAC0','sub_0006BAC0','e50c500a76dd1ddd951293be1172b4dd5f2689293406540dfcecf12613a06d5a'),
         (55,'00222400','sub_00222400','09c13a1e23d706cb811e6af7bbb18ca18f5fb01c54ae195a3002f493ac6f732e'),
         (55,'002223D0','OriginalFadeAlpha','a9a5ea237d54c9038ae50977cd597103ae28484a7f8e316db297c603938b795d')):
@@ -176,7 +191,47 @@ def prepare(area):
     a=s.index('\t// 00073E37 ');z=s.index('\t// 00073E5B ',a)
     assert hashlib.sha256(s[a:z].encode()).hexdigest()=='14e3d65d24ac77f7a2305ebc8f5482632af262e4b0474b63b0927372fbe222e7'
     pieces.append('X86_FUNC(OriginalHudFade) {\n'+s[a:z]+'}\n')
+    # Original maximum-health query includes its settings-table stack frame.
+    s=(area/'generated/game/x86_recomp.8.cpp').read_text()
+    a=s.index('X86_FUNC(__imp__sub_0005AAB0) {');z=s.index('\nX86_WEAK_FUNC',a)
+    assert hashlib.sha256(s[a:z].encode()).hexdigest()=='a2545e4f4dd2e46a08e6eaaa35cb92ab4e0a90a6796cbcc2c68833a59af6c04d'
+    pieces.append(s[a:z].replace('__imp__sub_0005AAB0','sub_0005AAB0',1))
+    s=(area/'generated/game/x86_recomp.8.cpp').read_text()
+    a=s.index('X86_FUNC(__imp__sub_0005B140) {');z=s.index('\nX86_WEAK_FUNC',a)
+    assert hashlib.sha256(s[a:z].encode()).hexdigest()=='fca5208e06a850825d64fd0296f8c8c3f6f38bd6f86c8fb81d58ada92016bd0a'
+    pieces.append(s[a:z].replace('__imp__sub_0005B140','sub_0005B140',1))
+    s=(area/'generated/game/x86_recomp.9.cpp').read_text()
+    a=s.index('X86_FUNC(__imp__sub_000643E0) {');z=s.index('\nX86_WEAK_FUNC',a)
+    assert hashlib.sha256(s[a:z].encode()).hexdigest()=='65b95e293f8c3716565c1374654c761393adda622e455e39302fc425780aa031'
+    pieces.append(s[a:z].replace('__imp__sub_000643E0','sub_000643E0',1))
+    s=(area/'generated/game/x86_recomp.9.cpp').read_text()
+    a=s.index('X86_FUNC(__imp__sub_00064400) {');z=s.index('\nX86_WEAK_FUNC',a)
+    assert hashlib.sha256(s[a:z].encode()).hexdigest()=='27a1fd87731e8f497b65731890008267ce6c3440f375a2b967fe020734fd10ff'
+    pieces.append(s[a:z].replace('__imp__sub_00064400','sub_00064400',1))
+    s=(area/'generated/game/x86_recomp.19.cpp').read_text()
+    a=s.index('X86_FUNC(__imp__sub_000BDAB0) {');z=s.index('\nX86_WEAK_FUNC',a)
+    assert hashlib.sha256(s[a:z].encode()).hexdigest()=='9c508f4d4592e6233f97c5051efa1298678d01fd0b9a51f6bba706501803fa7f'
+    pieces.append(s[a:z].replace('__imp__sub_000BDAB0','OriginalMaximum',1))
     test=(local/'test_xbe_health_packs.cpp').read_text();marker='// ORIGINAL_HEALTH_PACK_CONTRACTS'
     assert test.count(marker)==1
+    # A cancelled injection retries from native neutral state 8. BFE00 uses
+    # this table when leaving states 4..11, including that normal retry path.
+    state_table=[]
+    for va in range(0xbfeac,0xbfecc,4):
+        section=next(s for s in sections if s[1]<=va and va+4<=s[1]+s[4])
+        value=struct.unpack_from('<I',x,section[3]+va-section[1])[0]
+        state_table.append(value)
+    assert state_table==[0xbfe1d,0xbfe39,0xbfe55,0xbfe94,0xbfe94,0xbfe71,0xbfe94,0xbfe8d]
+    assert test.count('// ORIGINAL_INJECTION_STATE_TABLE')==1
+    test=test.replace('// ORIGINAL_INJECTION_STATE_TABLE','\n'.join(
+        f'Put(0x{0xbfeac+i*4:x},0x{value:x});' for i,value in enumerate(state_table)))
+    constants=(*range(0x646bc,0x646f4,4),0x46c150,0x450b94,0x457cec,0x452840,0x44c1e0,0x44c174,0x44c6c4,0x46fc4c)
+    values=[]
+    for va in constants:
+        section=next(s for s in sections if s[1]<=va and va+4<=s[1]+s[4])
+        value=struct.unpack_from('<I',x,section[3]+va-section[1])[0]
+        values.append(f'Put(0x{va:x},0x{value:x});')
+    assert test.count('// ORIGINAL_MAXIMUM_CONSTANTS')==2
+    test=test.replace('// ORIGINAL_MAXIMUM_CONSTANTS','\n'.join(values))
     bridge_marker='// ORIGINAL_CALL_GUEST_CONTRACT';assert test.count(bridge_marker)==1
     (area/'src/compat/test_health_packs.cpp').write_text(test.replace(marker,'\n'.join(pieces)).replace(bridge_marker,bridge))

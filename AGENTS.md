@@ -10,3 +10,7 @@
   Windows success alone does not establish Proton compatibility, or vice versa.
 - Follow the paired-release workflow in `docs/XBE-RUNTIME-MAINTENANCE.md`.
   Linux currently uses the Windows runtime through Proton; do not label it native.
+- Use Markdown (`.md`) for new README files and future release instructions,
+  as requested by the user. Preserve third-party documentation filenames and
+  published archives. When migrating packaged README filenames, verify updates
+  from the currently published launcher on both platforms before shipping.

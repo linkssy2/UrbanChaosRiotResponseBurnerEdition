@@ -53,6 +53,7 @@ static std::string Table() {
         "\nscenery_lighting="+std::to_string(TrialSceneryLighting)+"\ncharacter_lighting="+std::to_string(TrialCharacterLighting)+
         "\ncharacter_quality="+std::to_string(TrialCharacterQuality)+"\nragdoll_amount="+std::to_string(TrialRagdollMode)+
         "\ndeath_convulsions="+std::to_string(TrialDeathConvulsions)+
+        "\ngameplay_blur="+std::to_string(TrialGameplayBlur)+
         "\nhd_ui="+std::to_string(TrialHdUi)+"\nreticle_scale="+std::to_string(TrialReticleScale)+
         "\nweapon_fov_scale="+std::to_string(TrialWeaponFovScale)+"\nfmv_scale="+std::to_string(TrialFmvScale)+
         "\nplayer2_field_of_view="+std::to_string(TrialPlayer2FieldOfView)+
@@ -145,6 +146,8 @@ int main() {
     assert(trial_graphics::SceneryLighting()&&trial_graphics::CharacterLighting());
     assert(trial_graphics::CharacterQuality()==0&&trial_graphics::RagdollMode()==0);
     assert(TrialDeathConvulsions&&trial_graphics::DeathConvulsions()&&trial_graphics::Snapshot().death_convulsions);
+    assert(TrialGameplayBlur&&trial_graphics::GameplayBlur()&&trial_graphics::Snapshot().gameplay_blur);
+    assert(trial_graphics::Draft{}.gameplay_blur);
     trial_graphics::PublishMsaaSupport((1u<<2)|(1u<<4));
     auto draft=trial_graphics::Snapshot();std::string message;
     draft.settings.width=2560;draft.settings.height=1440;
@@ -157,6 +160,7 @@ int main() {
     assert(!TrialHdUi&&!trial_graphics::HdUi()); // Draft edits cannot change live rendering.
     draft.scenery=false;draft.characters=false;draft.character_quality=1;draft.ragdolls=2;
     draft.death_convulsions=false;assert(trial_graphics::DeathConvulsions());
+    draft.gameplay_blur=false;assert(trial_graphics::GameplayBlur());
     assert(trial_graphics::Apply(draft,message));
     assert(app::display_posts==1&&app::settings.render_percent==150&&app::settings.aniso==16);
     assert(app::settings.fps_cap==120&&!app::settings.vsync&&app::settings.join_ip=="retained");
@@ -172,7 +176,9 @@ int main() {
     assert(saved.find("weapon_fov_scale=125")!=std::string::npos);
     assert(saved.find("fmv_scale=1")!=std::string::npos);
     assert(saved.find("death_convulsions=0")!=std::string::npos&&!trial_graphics::DeathConvulsions());
+    assert(saved.find("gameplay_blur=0")!=std::string::npos&&!trial_graphics::GameplayBlur());
     trial_graphics::Initialize();assert(!trial_graphics::Snapshot().death_convulsions&&!trial_graphics::DeathConvulsions());
+    assert(!trial_graphics::Snapshot().gameplay_blur&&!trial_graphics::GameplayBlur());
     assert(saved.find("msaa_samples=4")!=std::string::npos&&trial_graphics::MsaaSamples()==4);
     assert(saved.find("ragdoll_amount=2")!=std::string::npos&&!trial_graphics::SceneryLighting()&&!trial_graphics::CharacterLighting());
     assert(trial_graphics::CharacterQuality()==1&&trial_graphics::RagdollMode()==2);
@@ -192,9 +198,11 @@ int main() {
     draft.scenery=true;draft.characters=true;draft.character_quality=0;draft.ragdolls=0;draft.hd_ui=false;draft.reticle_scale=50;draft.weapon_fov=50;
     draft.fmv_scale=0;
     draft.death_convulsions=true;
+    draft.gameplay_blur=true;
     assert(!trial_graphics::Apply(draft,message));app::fail_save=false;
     assert(Read()==saved&&app::settings.width==before.settings.width&&TrialAspectRatio==before.aspect);
     assert(!TrialDeathConvulsions&&!trial_graphics::DeathConvulsions()&&!trial_graphics::Snapshot().death_convulsions);
+    assert(!TrialGameplayBlur&&!trial_graphics::GameplayBlur()&&!trial_graphics::Snapshot().gameplay_blur);
     assert(TrialReticleScale==150&&trial_graphics::ReticleScale()==150);
     assert(TrialWeaponFovScale==125&&trial_graphics::WeaponFovScale()==125);
     assert(TrialFmvScale==1&&trial_graphics::FmvScale()==1&&trial_graphics::Snapshot().fmv_scale==1);
@@ -234,6 +242,14 @@ int main() {
         assert(trial_graphics::SceneryLighting()==enabled&&trial_graphics::CharacterLighting()==enabled);
         assert(trial_graphics::CharacterQuality()==draft.character_quality&&trial_graphics::RagdollMode()==draft.ragdolls);
         assert(TrialDeathConvulsions==enabled&&trial_graphics::DeathConvulsions()==enabled);
+    }
+    for(unsigned player:{0u,1u})for(bool enabled:{true,false,true}){
+        draft=trial_graphics::Snapshot(player);draft.gameplay_blur=enabled;
+        const unsigned posts=app::display_posts;
+        assert(trial_graphics::Apply(draft,message,player));
+        assert(TrialGameplayBlur==enabled&&trial_graphics::GameplayBlur()==enabled&&app::display_posts==posts);
+        assert(trial_graphics::Snapshot(1-player).gameplay_blur==enabled);
+        assert(Read().find(std::string("gameplay_blur=")+(enabled?"1":"0"))!=std::string::npos);
     }
     trial_graphics::SetScalePending(true);assert(trial_graphics::ScalePending());
     trial_graphics::SetScalePending(false);assert(!trial_graphics::ScalePending());

@@ -11,6 +11,11 @@
 namespace kernel {alignas(16) static std::array<uint8_t,0x800000> memory{};}
 namespace mem {bool IsCommitted(uint32_t page){return page<kernel::memory.size();}}
 #include "xbe_coop_aim_blur.cpp"
+#include "xbe_graphics_settings.h"
+namespace trial_graphics {
+static bool gameplay_blur=true;
+bool GameplayBlur(){return gameplay_blur;}
+}
 namespace aim_test {
 constexpr uint32_t world=0x620000,state=0x624000,layers=0x630000;
 constexpr uint32_t owner0=0x610000,owner1=0x612000,layer0=0x631000,layer1=0x632000;
@@ -21,8 +26,11 @@ constexpr uint32_t target_service=0x645000,target=0x646000,projection=0x647000,m
 constexpr uint32_t camera0=0x650000,camera1=0x651000,view0=0x652000,view1=0x653000;
 constexpr uint32_t queue0=0x654000,queue1=0x655000,params=0x656000;
 constexpr uint32_t arg=0x657000,arg1=0x658000,binding=0x659000,blur=0x65a000,stack=0x7f0000;
+constexpr uint32_t feedback=0x65b000,current_frame=0x65c000,previous_frame=0x65d000;
 unsigned presentation=1,next_node=0;
 bool throw_render=false;
+unsigned history_requests=0;
+std::array<float,4> feedback_constant{};
 std::vector<uint32_t> freed,recycled;
 struct Call {int slot;float start,end,amplitude;};
 std::vector<Call> calls;
@@ -43,6 +51,8 @@ void Setup(){
     trial_coop::Reset();auto c=Context();TrialCoopAimBlurBeginUpdate(c,Bytes());
     kernel::memory.fill(0);trial_coop::SetAvailable(true);assert(trial_coop::Request());trial_coop::SetActive(true);
     presentation=1;next_node=0;calls.clear();freed.clear();recycled.clear();throw_render=false;
+    trial_graphics::gameplay_blur=true;
+    history_requests=0;feedback_constant.fill(-1);
     Put(0x51c4dc,world);Put(world,0x450c48);Put(world+4,state);Put(world+0x10,0x80);Put(world+0x934,manager);
     Put(state+4,layers);Put(state+8,layers+8);
     for(unsigned i=0;i<2;++i){
@@ -55,6 +65,8 @@ void Setup(){
     Put(manager+12,list);Put(list+4,sentinel);Put(sentinel,sentinel);Put(sentinel+4,sentinel);
     Put(0x5150b0,graphics);Put(0x519f60,graphics);Put(graphics,table);
     Put(table+0x60,0xf1060);Put(table+0xa4,0xf10a4);Put(table+0xdc,0xf10dc);Put(table+0x50,0xf1050);
+    Put(table+0x38,0xf1038);Put(feedback,table+0x400);Put(table+0x410,0xf1410);
+    Float(0x44c174,0);Put(current_frame+4,0x10203040);Put(previous_frame+4,0x50607080);
     Put(service,table+0x100);Put(table+0x11c,0xf101c);Put(target_service+0x10,target);
     Put(descriptor,descriptor_table);
     for(const auto& p:std::array<std::array<uint32_t,2>,6>{{{0x48,0x94760},{0x4c,0x94770},{0x50,0x947c0},{0x54,0x94780},{0x58,0x947a0},{0x5c,0x947b0}}})Put(descriptor_table+p[0],p[1]);
@@ -84,6 +96,8 @@ void x86_icall(X86Context& c,uint8_t* b,uint32_t t){
     case 0xf10dc:assert(c.ecx==graphics&&Word(c.esp+4)==0);c.eax=payload;c.esp+=4;break;
     case 0xf1050:assert(c.ecx==graphics);c.eax=projection;break;
     case 0xf1010:assert(c.ecx==projection);c.eax=matrix;break;
+    case 0xf1038:assert(c.ecx==graphics);c.eax=feedback;break;
+    case 0xf1410:assert(c.ecx==feedback);x87_push(c,Real(feedback+0x10));break;
     default:std::printf("unexpected virtual %08x\n",t);std::abort();
     }
     c.esp+=4;
@@ -111,6 +125,15 @@ X86_FUNC(sub_000920B0){
     assert(!std::memcmp(Bytes()+Word(ctx.esp+16),Bytes()+matrix,64));
     calls.push_back({TrialCoopAimBlurActiveView(),Real(ctx.esp+8),Real(ctx.esp+12),Real(ctx.esp+20)});
     if(throw_render)throw 23;ctx.esp+=24;
+}
+X86_FUNC(sub_003E3250){
+    using namespace aim_test;assert(Word(ctx.esp+4)==0xffffffffu);
+    ++history_requests;ctx.eax=previous_frame;ctx.esp+=8;
+}
+X86_FUNC(sub_0009C830){
+    using namespace aim_test;assert(Word(ctx.esp+4)==2);
+    std::memcpy(feedback_constant.data(),Bytes()+Word(ctx.esp+8),sizeof feedback_constant);
+    ctx.esp+=4;
 }
 // PRODUCTION_AIM_BLUR_BODIES
 namespace aim_test {
@@ -165,6 +188,55 @@ void CheckTransitions(){
     assert(calls.size()==2&&calls[0].slot==-1&&calls[1].slot==-1);
     std::puts("aim blur: presentation changes between update and render preserve cinematic/SP aggregate and split ownership");
 }
+void CheckGameplayBlurSetting(){
+    for(unsigned mode=0;mode<3;++mode){
+        Setup();
+        if(mode==0)trial_coop::SetActive(false);
+        if(mode==2)presentation=2;
+        Pulse(0,.4f);Pulse(1,.8f);Direct();Update();
+        trial_graphics::gameplay_blur=false;
+        Render(0);Render(1);assert(calls.empty());
+        assert(Bytes()[descriptor+0x55]&&Real(descriptor+0x60)==.8f);
+        trial_graphics::gameplay_blur=true;
+        Render(0);Render(1);assert(calls.size()==2);
+        calls.clear();trial_graphics::gameplay_blur=false;Clear();
+        Pulse(1,.8f,.01f);
+        for(unsigned i=0;i<20;++i)Update();
+        assert(Word(list+8)==0);
+        trial_graphics::gameplay_blur=true;
+        Render(0);Render(1);assert(calls.empty());
+    }
+    std::puts("gameplay blur: Off suppresses scene output for SP, both co-op views and shared cameras; pulse expiry and immediate On recovery retained");
+}
+void CheckFeedbackBlurSetting(){
+    // Run the pinned native producer-to-composite instructions; no GPU or draw stub
+    // can invent whether the previous frame is admitted or its weight is nonzero.
+    for(float amount:{0.f,.2f,.8f})for(bool enabled:{false,true}){
+        Setup();Float(feedback+0x10,amount);trial_graphics::gameplay_blur=enabled;
+        auto c=Context();const auto top=c.top;PatchedFeedbackPublication(c,Bytes());
+        const float expected=enabled?amount:0.f;
+        assert(c.esp==stack&&c.top==top&&Real(stack+0x24)==expected);
+        assert(Real(feedback+0x10)==amount);
+        Put(stack+0x30,0);c.eax=current_frame;PatchedFeedbackHistory(c,Bytes());
+        assert(c.esp==stack&&c.top==top&&Word(stack+0x58)==Word(current_frame+4));
+        assert(history_requests==(expected>0?1u:0u));
+        assert(Word(stack+0x30)==(expected>0?previous_frame:0));
+        c.esp-=8;PatchedFeedbackConstant(c,Bytes());
+        assert(c.esp==stack);
+        for(float value:feedback_constant)assert(value==expected);
+        // Toggling back on reads the current descriptor, never a cached disabled value.
+        trial_graphics::gameplay_blur=true;c=Context();PatchedFeedbackPublication(c,Bytes());
+        assert(Real(stack+0x24)==amount);
+    }
+    for(float amount:{0.f,.2f,.8f}){
+        Setup();Float(feedback+0x10,amount);auto a=Context(),b=a;
+        OriginalFeedbackPublication(a,Bytes());
+        const std::vector<uint8_t> memory(kernel::memory.begin(),kernel::memory.end());
+        PatchedFeedbackPublication(b,Bytes());
+        assert(!std::memcmp(&a,&b,sizeof a)&&std::equal(memory.begin(),memory.end(),kernel::memory.begin()));
+    }
+    std::puts("gameplay blur: original feedback publication/previous-frame branch/shader weight use neutral zero only while Off; current scene and descriptor survive; On publication matches original");
+}
 void CheckLifecycle(){
     Setup();const auto node=Pulse(1);Update();Clear();assert(Word(list+8)==0&&freed.size()==1);
     assert(Pulse(0,.6f,1,0xcd9d1)==node);Update();Render(0);Render(1);assert(calls.size()==2);
@@ -202,4 +274,4 @@ void CheckIsolation(){
     std::puts("aim blur: descriptor and scope restore on normal/exception exit; observer CPU/MXCSR preserved (no GPU)");
 }
 }
-int main(){aim_test::CheckOwnership();aim_test::CheckTransitions();aim_test::CheckLifecycle();aim_test::CheckNativeParity();aim_test::CheckIsolation();}
+int main(){aim_test::CheckOwnership();aim_test::CheckTransitions();aim_test::CheckGameplayBlurSetting();aim_test::CheckFeedbackBlurSetting();aim_test::CheckLifecycle();aim_test::CheckNativeParity();aim_test::CheckIsolation();}

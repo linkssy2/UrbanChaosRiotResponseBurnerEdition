@@ -276,8 +276,8 @@ def prepare(area):
               '64d83be46aee5a8a6af349e264161854c27a3e0898614f7ac885c8fe3d278c2b']
     for (va,n),digest in zip(pins,expected):
         assert hashlib.sha256(read(va,n)).hexdigest()==digest,hex(va)
-    # Controller Info keeps its original diagram and Back listener. It has no
-    # command list in the normal single-scheme case, so qualify its own entry.
+    # Replace only the qualified diagram; retain the original Back listener,
+    # callbacks and fallback when native presentation is unavailable.
     assert read(0x4896F4,12)==struct.pack('<3I',0x275FA0,0x276010,0x2C2B60)
     for va,n,digest in [
         (0x276010,0x228,'e05a0cb5f5e304d27dfac3cff63390cdd72d8f1e8d2207038eeb4fbd74e73d55'),
@@ -290,7 +290,7 @@ def prepare(area):
     for address in ('00276240','00276010','00276690'):
         match=re.search(r'X86_FUNC\(__imp__sub_'+address+r'\) \{.*?^\}',diagram_source,re.S|re.M)
         assert match,address;diagram_functions.append(match[0])
-    assert diagram_functions[1].count('TrialGuestHook(ctx, base, 41);')==1
+    assert diagram_functions[1].count('if (TrialGuestHook(ctx, base, 41)) { ctx.eax = 0; ctx.esp += 12; return; }')==1
     assert test.count('// ORIGINAL_CONTROLLER_INFO_PATH')==1
     test=test.replace('// ORIGINAL_CONTROLLER_INFO_PATH','\n'.join(diagram_functions))
     functions=[]

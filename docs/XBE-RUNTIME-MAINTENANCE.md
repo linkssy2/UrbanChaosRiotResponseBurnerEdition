@@ -1,5 +1,244 @@
 # Burner Edition: current runtime
 
+## Private gameplay blur option (November 7)
+
+Graphics > Gameplay blur is a default-On, saved shared setting for single-player
+and both co-op views. Apply publishes it immediately without rebuilding display
+resources. Keep draft/Discard and failed-save rollback consistent with the other
+graphics settings, including English and Spanish menu text.
+
+The scene-depth blur consumer `00097B50` takes its original no-effect epilogue
+when Off. Pulse creation, aging, expiry and co-op descriptor restoration remain
+intact, so toggling On cannot revive an expired effect. The separate co-op downed
+scene blur observes the same setting; the red warning, timer and revive rules
+are unchanged. Do not suppress the generic Gaussian filter or authored blurred
+particles: glow and other rendering use those paths too.
+
+The separate MotionBlur manager publishes through `0005F890` to graphics `+28`
+(`000898C0`, descriptor `004561D4`, strength setter `0009D480`). Its consumer is
+`000A2C70`: override only the local strength after `000A30A9` with the original
+neutral zero when Off. Retain the current-scene composite and original effect
+lifecycle; skipping that entire function would remove more than motion blur.
+The original strength getter and x87 pop still run, while the zero local prevents
+previous-frame acquisition and supplies zero to the feedback shader constant.
+Swap continues rotating frame history while Off, so enabling again reads recent
+history rather than a frozen image. The fixture executes the pinned publication,
+history-admission and shader-weight instructions, and checks default-On parity.
+
+Source-backed scene-consumer, downed-state, settings persistence and menu fixtures
+cover the option. Paired private build receipts belong in
+`build/gameplay-blur-20261107`. The Windows tester confirmed that turning the
+option Off removes the blur. Separate downed/co-op scene coverage and Proton
+execution remain unverified by that feedback.
+
+## Private environmental audio and healing correction (November 7)
+
+The active xberecomp mixer previously acknowledged I3DL2 listener and effect-data
+requests without processing the title's environmental audio. The maintained
+adapter restores the game's bin-10 environmental send and bins 6-9 directional
+processing using the pinned xberecomp DSP processors. Apply authored channel
+headroom once, preserving separate voice headroom. Retail startup explicitly
+sets all 32 channel headrooms to zero; retain that call instead of assuming the
+SDK default of one. Keep deferred settings, effect
+state bounds, unaffected direct-speaker routing, MIXIN gain, voice cursors and
+stereo/surround output contracts under test. The game also submits per-voice
+low-pass packets through buffer SetFilter and the stream entry mislabeled
+SetEG; apply that filter once
+before the dry/wet routing split. The inspected filter owners are PCM/stream
+children, not the spatial MIXIN buses; do not invent shared-bus filters from
+the adjacent bus constructor alone.
+
+The original image includes Xbox Live communicator capture modules. These are
+not missing environmental effects and no microphone or network voice input is
+fabricated. Original executable/image identities, all-archive reverb census,
+processor classification and waveform limitations belong in
+`build/subway-reverb-20261107`. A compiled DSP adapter or offline impulse tail
+does not establish audible Xbox parity or live Proton acceptance. The original
+game requests FullHRTF; the existing PC spatial mixer remains an approximation,
+and the host 7.1 side pair is an extension of the original front/rear processing.
+Keep those limitations explicit rather than claiming complete DSP equivalence.
+
+Stored self-healing now reserves a pack while the original injection is queued
+or playing, then spends it at the original Heal animation event. An earlier
+cutscene cancellation retains the pack and blocks a stale event. Preserve the
+original self-animation, sound, pulse and gradual refill; partner healing and
+reviving retain their existing successful-contact debit. The original queue,
+state handler and post-contact refill are exercised in the health fixture,
+including both co-op owners. Evidence belongs in
+`build/health-cutscene-20261107`.
+
+The combined private Windows and Linux/Proton candidate and shared source/runtime
+receipts belong in `build/graffiti-audio-healing-20261107`. Keep live audio,
+cutscene interruption and Linux acceptance separate from automated checks.
+
+## Private View Controls replacement (November 7)
+
+Controller Info now presents the same framed, scrollable native menu as the
+other PC screens. It reads current action bindings for keyboard/mouse or either
+controller profile; a co-op pause locks the reference to the player who paused.
+Mouse wheel, draggable scrollbar, clickable rows and footer, right-click,
+Escape and controller Back are supported. Binding changes remain in Controls.
+
+The qualified original diagram snapshot owns presentation only after native
+acceptance; Back still returns through the original main/pause callback. Keep
+the original renderer fallback, held-input gate and transition revocation.
+The frontend and ImGui fixtures cover these contracts and current bindings;
+record live acceptance separately in `build/view-controls-20261107`.
+
+The live Windows check covered entry, current bindings, scrolling and right-click
+Back. Scroll selection now stays within visible rows, and the shared menu atlas
+includes Up/Down keycaps used by View Controls and Objectives. Keep physical
+controller/co-op pause acceptance and Proton testing separate from the fixtures.
+
+## Graffiti transparency investigation (November 7)
+
+The subsequent user request explicitly changes the authored appearance: retain
+the lettering and dark outline, but make both translucent like the raw HD source.
+The expanded census covers 25 distinct graffiti/tag identities and 89 material
+references. The runtime treatment halves final opacity after the
+original alpha test, preserving RGB, cutout coverage and authored over/additive/
+reverse-subtract blending. Exact source identity also covers existing HD
+replacements without modifying archives or requiring a new texture pack.
+Keep the census and candidate verification in `build/graffiti-alpha-20261107`;
+this is an appearance enhancement, not evidence of alpha stripping in the port.
+Record exact-identity and alpha-test verification separately from live appearance
+acceptance. Shader-header preparation accepts fresh and already-patched copies,
+preserves the co-op blur constants, and rejects unexpected flag declarations.
+
+The reported pink graffiti matches original `map_02_graff03.tga` (64x64 BC3).
+Its dark edging is authored in both the Xbox and matching original PS2 image;
+the published HD pack already maps it. Thirty-two offscreen tests using the
+production-generated compact material shader preserve original texture alpha
+and blend transparent/fractional pixels correctly. No texture or renderer patch
+was justified. Exact reporter level, HD settings and live draw state remain
+unknown; retain evidence in `build/decal-texture-20261107`, not release assets.
+
+## Private menu edge correction (November 7)
+
+The full-viewport menu window now disables ImGui's window border while beginning
+the window. Its default one-pixel border inset the content clip on all four
+edges, exposing the moving original menu behind otherwise full-size artwork.
+The override is restored immediately; nested content clips, original controller
+screens and the authored animated background retain their existing behavior.
+
+The production-derived menu fixture checks clipped opaque coverage at all four
+corners across menu transitions, screen sizes and aspect ratios. Keep the old
+inset-clip negative witness and private evidence in `build/menu-edge-20261107`.
+Record live Windows menu inspection separately from untested Proton behavior;
+this rendering correction is not an additional FPS claim.
+
+## Private rebinding correction (November 7, issue 26)
+
+Keyboard/mouse binding capture now retains fresh window-message presses, including
+short taps completed between guest pad polls. The prior polling-only path could
+miss those taps while ordinary menu toggles still worked. Capture starts armed
+only when existing inputs are released; release events and the capture UI service
+neutral arming without waiting for another guest input poll. Repeats, focus loss,
+Escape cancellation, modifier sides, mouse buttons and co-op player ownership keep
+their existing rules. Controller capture retains its physical polling path.
+
+The production-derived input fixture includes a negative witness for the old
+capture and covers complete press/release pairs between polls. Private evidence
+and paired packages belong in `build/rebind-input-20261107`. The normal build also
+retains the preceding CPU/rendering improvements; this input correction is not
+claimed as an FPS gain. Record Windows menu acceptance separately from untested
+Proton input and do not infer the reporter's exact hardware cause from one test.
+
+## Private helper provenance follow-up (November 7)
+
+The executable input graph and recorded compiler dependencies were audited under
+`build/helper-provenance-20261107`. The game links the pinned XboxXBERecomp runtime
+with current title adapters, not the retired SpoonZ renderer. Offline migration
+fixtures remain reference evidence; deleting unlinked tests cannot improve FPS.
+Older asset readers, the cursor and input adapters still support current features.
+
+The default-off typed pixel-lighting adapter is no longer injected into the
+production renderer. Default HLSL/DXBC, shader keys and cache behavior remain
+identical. Keep the preparer's SUM operand and infinity corrections and independent
+offline reference fixtures. This retirement is cleanup, not a measured FPS gain.
+
+Co-op interaction calls now capture their temporary stack only when dispatching
+guest code or writing event arguments. Lock captures before its pre-call payload;
+repeated calls retain the first snapshot and exception unwinding restores it.
+The differential fixture includes nested calls and nonzero argument sentinels.
+Runtime guest-memory, resource-lifetime and synchronization checks remain active.
+Correctness proofs run in separate tests, not in the gameplay frame loop.
+
+Sampled render targets reuse the current draw's target node without repeating
+the target-map lookup or same-frame freshness write. Current header dimensions
+and translated data identity are still checked. Extension callbacks retain the
+original path; texture binding cannot retire the cached node in the ordinary
+path. Preserve the final target rebind, which restores attachment states after
+copies and resolves. The production-derived fixture compares resource-operation
+order and includes a failing unchecked-pointer witness for mutable headers.
+
+The original maximum-health query writes 332 bytes below the live caller's stack
+pointer, exceeding its former 256-byte snapshot. A query-local 512-byte guard and
+snapshot now cover that footprint; self-healing uses the same protected query.
+The original five-function chain, upgrade/profile cases and outer sentinels are
+executed in the health fixture. Other scratch users are unchanged and are not
+claimed transitively depth-proven. This correction is not an FPS optimization.
+
+The preceding candidate's matched Windows Canals A/B/B/A runs measured 67.86 to
+72.46 FPS (6.78%) at unchanged visual settings. That gain belongs to the earlier
+state/bounds/readback changes in `build/performance-deep-20261107`, not this
+follow-up. New helper timings do not establish another gameplay FPS gain.
+Maintain one resulting runtime and asset manifest for Windows and Linux/Proton;
+separate live acceptance is required, especially for Steam Deck.
+
+## Private CPU/GPU helper review (November 7)
+
+The shared Windows/Proton runtime now prepares three qualified candidates:
+audited simple-state dirty blocks, the current-ABI lighting bounds leaf, and one
+reusable synchronous downsample surface. Render-state replay still owns an
+immutable queued copy; guest resource headers remain checked on every draw.
+Untracked state and unsupported bounds inputs keep the existing path. The
+downsample change preserves filtering, alpha, barriers and blocking readback
+waits; asynchronous readbacks retain their independent storage.
+
+Production-derived replay, generated-code equivalence and hardware/WARP pixel
+checks run through `scripts/build_xbe_game_trial.py`. Evidence and the frozen
+private source manifest belong in `build/performance-deep-20261107`. Helper
+microbenchmarks do not establish a gameplay FPS gain. Final Canals comparisons
+must use matched settings, uncapped rendering, timed restart phases and both
+co-op views; Windows results do not establish Proton or Steam Deck performance.
+No effects, geometry, resolution, lighting or texture quality is reduced.
+
+## Private menu input handoff and Steam Deck review (November 6)
+
+The Steam Deck v0.14 support log shows a 1920 x 1080 window on the built-in
+screen, with sparse gameplay samples of 33.4-58 FPS. It does not identify CPU/GPU
+costs. See `docs/STEAM-DECK-INPUT-2026-11-06.md` for the resolution comparison and
+limits. Do not claim that the menu fix improves Steam Deck frame rates.
+
+Ordinary menus now follow fresh device activity: unchanged held controller
+inputs and stick noise do not reclaim ownership from the mouse/keyboard.
+Controller ownership suppresses stale pointer hover, queued mouse/key events and
+native pointer actions; mouse/keyboard ownership suppresses queued controller
+navigation. The co-op character selector retains simultaneous independent input,
+and co-op pause ownership remains unchanged. The main menu highlights only its
+focused row.
+
+Private source backups, automated-check and paired-package receipts belong in
+`build/deck-input-20261106`. The existing private knockout-drag change is retained.
+No game or published release is replaced without the corresponding staging step;
+Windows and Proton live device switching and Steam Deck performance require
+separate confirmation. Normal logging remains opt-in.
+
+## Private knockout dragging follow-up (November 6)
+
+Extend the shared drag eligibility to knocked-out NPCs with positive health,
+using the original DF380 restraint flag and the exact currently owned physics
+wrapper/data/pool handle. Dead NPCs and downed co-op partners retain their
+existing rules. No input, health, AI, arrest, recovery, force or retention policy
+changes are needed. Original player input and arrest behaviors were traced;
+there is no evidence for delaying or consuming ordinary Interact presses.
+The original knockout event is pinned and executed in the drag fixture, with
+actor-state preservation and invalidation checks. See `docs/RAGDOLL-DRAG.md`.
+Private Windows/Proton candidate evidence belongs in
+`build/knockout-drag-20261106`; published 0.14 remains unchanged. Native physics
+feel and live arrest/recovery need a gameplay pass; Proton remains untested.
+
 ## Release 0.14 preparation (November 6)
 
 The post-0.13 changes are prepared together as 0.14: 16:10 display support,
@@ -2275,6 +2514,16 @@ character/action coverage; Proton live acceptance remains pending.
 
 ### Paired Windows and Linux releases
 
+Use Markdown (`.md`) for new README files and future release instructions.
+The published 0.14 updater accepts `README.txt` and `assets/README.txt`, and its
+Linux archive validator requires `README-linux.txt`. Renaming those package
+entries without a compatible transition would break installed-launcher updates
+before the new updater can run. Release 0.15 places the Markdown instructions
+under the already-managed `tools/` directory and retains those legacy TXT paths
+as compatibility pointers. Verify the transition using the actual published
+updater on both platforms. Keep published archives and third-party documentation
+unchanged.
+
 The user requires Windows and Linux/Proton builds to stay current together.
 Unless a request explicitly targets one platform, prepare both packages from
 the same source revision, release version, verified runtime and shared manifests.
@@ -2555,3 +2804,75 @@ validated clone at the original ray predicate's accept path. Keep limb collision
 IDs, world contacts and all original damage/push logic. See
 `docs/CORPSE-SHIELD.md`; the asset recipe stays unchanged. Native filter and
 ownership checks do not establish live bash acceptance or Proton compatibility.
+
+## November 6 performance follow-up
+
+The private performance candidate keeps visual settings and rendering operations
+unchanged. `prepare_xbe_frame_costs.py` reuses each target's existing CPU pixel
+snapshot in synchronous readback. Preserve the readback failure guarantee: the
+output is not modified before resource creation and mapping succeed. Sync runs
+on the render worker; its submission/wait path must not inspect that snapshot
+reentrantly. `Changed`, CPU-overlay extraction, late-readback clearing, guest row
+padding, copy ordering and source lifetime remain unchanged. The existing
+readback target now also compares extracted old/new Sync bodies and consumers;
+real GPU readback checks remain separate from CPU-only allocation benchmarks.
+
+`prepare_xbe_draw_reuse.py` stores an owning compiled blob alongside the source
+hash in the existing shader-source cache. Warm VS/PS hits avoid two extra blob-map
+lookups per draw. Compile, shader keys, generated HLSL, pipeline identity and
+portable shader-cache files are unchanged. The extracted shader-lookup fixture
+covers success, cached failure, variants, shared blobs and map rehashing. One
+extra reference is acquired only when a new source entry is stored.
+
+The co-op orders `CopyCall` saves/restores its 4 KiB guest-stack region only if it
+actually invokes guest code. Keep one snapshot for all calls in that scope,
+exception-safe restoration, the recursion guard and original floating-point
+state. Matching client lists need no snapshot. Other registration/event callers
+invoke Run immediately and retain their existing behavior. The larger-list
+regression from a proposed optional-wrapper version was rejected; the final
+version keeps the original synchronization loop.
+
+Focused measurements and exact input identities are in
+`build/performance-20261106`. These CPU-path benchmarks are not gameplay FPS or
+Steam Deck/Proton measurements. Use identical settings, warmed shaders, the same
+scene and uncapped paired runs for gameplay comparisons. The active renderer
+does not reuse geometry uploads: an earlier geometry cache was removed after
+showing no useful reuse. Preserve immutable queued geometry snapshots.
+
+## November 7: paired triangle-strip expansion
+
+`prepare_xbe_vertex_costs.py` expands two adjacent converted strip triangles
+together, reusing their shared edge. The complete index sequence, alternating
+winding, degenerate triangles, base-vertex subtraction and incomplete-tail
+handling remain byte-identical. The queued source stays immutable, and uploads,
+shaders, lighting, effects, resolution and synchronization are unchanged.
+
+The existing vertex fixture compares the extracted pre-change assembler with
+the candidate, including short/odd/even strips, repeated indices, nonzero output
+prefixes and 65,536-index input. `test_vertex_costs strip-pairs` is a synthetic
+CPU benchmark only. Private implementation evidence lives in
+`build/performance-20261107-geometry`; matched co-op Canals explosion evidence
+belongs in `build/performance-20261107-coop`. Range/group render-state scans and
+adjacent pixel-key caching were investigated but rejected after regressions;
+they are not included in the runtime. Windows and Proton candidates must use
+one runtime and source manifest; Windows results do not verify Proton hardware.
+
+## November 7: vertex-constant submission candidate
+
+`prepare_xbe_vertex_constant_costs.py` tracks the 48 existing 64-byte vertex
+constant blocks in the audited producer state. Constant setters and viewport
+updates mark their written blocks; shader-declaration loads mark the full range
+once. Sending still compares and queues the original bytes, in the original
+order. Untracked states, changed producer identity and reset state use the full
+scan. Dirty metadata is not serialized and never substitutes for immutable
+queued data or render-worker constant revisions.
+
+Keep the writer-set assertions and extracted queue/replay fixture when changing
+the D3D setters. A new writer must mark its range or disable tracking. The fixture
+covers bitwise constants, clipped setters, shader declarations, resets, source
+changes and delayed consumption; isolated cost tests include the setters. These
+tests do not establish gameplay speed or visual acceptance. The current-runtime
+comparison and rejected experiments are recorded in
+`build/performance-next-20261107`, separately from the earlier release comparison.
+Pair Windows and Proton packages from the same checked runtime; Proton remains
+unverified until tested on Linux.

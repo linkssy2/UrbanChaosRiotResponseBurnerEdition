@@ -22,8 +22,8 @@ extern "C" {
 int native_hud_keycap(uint32_t*,unsigned,const char*,const char*);
 
 namespace {
-constexpr unsigned icon_codes[]={13,'Q','D','R',37,39,1,27,2,0x101,0x102,0x103,0x104,0x105,0x201,0x202,0x203,0x204,0x205,0x301,0x302,0x303,0x304,0x305,0x401,0x402,0x403,0x404,0x405};
-std::array<std::array<float,4>,29> icon_uv{};
+constexpr unsigned icon_codes[]={13,'Q','D','R',37,39,1,27,2,0x101,0x102,0x103,0x104,0x105,0x201,0x202,0x203,0x204,0x205,0x301,0x302,0x303,0x304,0x305,0x401,0x402,0x403,0x404,0x405,38,40};
+std::array<std::array<float,4>,std::size(icon_codes)> icon_uv{};
 std::array<std::array<float,4>,5> hd_icon_uv{};
 ImFont* original_fonts[2]{},*hd_fonts[2]{};
 bool icons_ready=false,hd_icons_ready=false;
@@ -114,18 +114,23 @@ bool TrialLoadFrontendFonts(ImFontAtlas* atlas,const std::filesystem::path& game
                        ValidHd(hd_data[1],data[1].width,data[1].height);
     const auto* hd_buttons=uc_hd_ui::Buttons();
     const bool have_hd_buttons=ValidHd(hd_buttons,32,1024);
-    std::array<std::vector<uint32_t>,34> icons;
+    std::array<std::vector<uint32_t>,std::size(icon_codes)+5> icons;
     const char* labels[]={"ENTER","Q","D","R","<",">","","ESC",""};
     for(unsigned i=0;i<9;++i){
         icons[i].resize(128*128);
         if(!native_hud_keycap(icons[i].data(),icon_codes[i],labels[i],nullptr))return false;
+    }
+    const char* vertical_labels[]={"UP","DOWN"};
+    for(unsigned i=0;i<2;++i){
+        icons[29+i].resize(128*128);
+        if(!native_hud_keycap(icons[29+i].data(),icon_codes[29+i],vertical_labels[i],nullptr))return false;
     }
     // Original button strip: A, B, direction pad, X, Y.
     const unsigned rows[]={1,4,5,3,2};
     for(unsigned i=9;i<14;++i)
         icons[i].assign(button_pixels.begin()+rows[i-9]*1024,button_pixels.begin()+(rows[i-9]+1)*1024);
     if(have_hd_buttons)for(unsigned i=0;i<5;++i){
-        auto& pixels=icons[29+i];pixels.resize(128*128);
+        auto& pixels=icons[std::size(icon_codes)+i];pixels.resize(128*128);
         for(unsigned p=0;p<pixels.size();++p)pixels[p]=HdPixel(*hd_buttons,size_t(rows[i])*128*128+p);
     }
     for(unsigned family=1;family<=3;++family)for(unsigned i=0;i<5;++i){
@@ -135,8 +140,8 @@ bool TrialLoadFrontendFonts(ImFontAtlas* atlas,const std::filesystem::path& game
             pixels[y*128+x]=button_pixels[(5*32+y/4)*32+x/4];}
         else TrialControllerGlyph(pixels.data(),sources[i],family);
     }
-    ImFont* fonts[4]{};int rectangles[4]{},icon_rectangles[34]{};
-    const unsigned font_count=have_hd?4:2,icon_count=have_hd_buttons?34:29;
+    ImFont* fonts[4]{};int rectangles[4]{},icon_rectangles[std::size(icon_codes)+5]{};
+    const unsigned font_count=have_hd?4:2,icon_count=std::size(icon_codes)+(have_hd_buttons?5:0);
     static const ImWchar seed_range[]={'?','?',0};
     for(unsigned i=0;i<font_count;++i){
         const auto& d=data[i%2];
@@ -184,7 +189,7 @@ bool TrialLoadFrontendFonts(ImFontAtlas* atlas,const std::filesystem::path& game
             const uint32_t c=icons[i][size_t(y)*r->Width+x];
             reinterpret_cast<ImU32*>(pixels)[size_t(r->Y+y)*width+r->X+x]=IM_COL32((c>>16)&255,(c>>8)&255,c&255,c>>24);
         }
-        auto& uv=i<29?icon_uv[i]:hd_icon_uv[i-29];
+        auto& uv=i<std::size(icon_codes)?icon_uv[i]:hd_icon_uv[i-std::size(icon_codes)];
         uv={float(r->X)/width,float(r->Y)/height,float(r->X+r->Width)/width,float(r->Y+r->Height)/height};
     }
     for(unsigned i=0;i<2;++i){original_fonts[i]=fonts[i];hd_fonts[i]=fonts[i+2];}
@@ -200,9 +205,9 @@ ImFont* TrialFrontendFontForUi(ImFont* original){
 
 bool TrialMenuIconUV(unsigned code,float (&uv)[4]){
     if(code>=0x101&&code<=0x105)code+=trial_controller::family.load()*0x100;
-    if(icons_ready)for(unsigned i=0;i<29;++i)if(icon_codes[i]==code){
+    if(icons_ready)for(unsigned i=0;i<std::size(icon_codes);++i)if(icon_codes[i]==code){
         const bool original_button=i>=9&&i<14;
-        const bool family_dpad=i>=14&&(i-14)%5==2;
+        const bool family_dpad=i>=14&&i<29&&(i-14)%5==2;
         const auto& selected=trial_graphics::HdUi()&&hd_icons_ready&&(original_button||family_dpad)?
             hd_icon_uv[family_dpad?2:i-9]:icon_uv[i];
         std::copy(selected.begin(),selected.end(),uv);return true;

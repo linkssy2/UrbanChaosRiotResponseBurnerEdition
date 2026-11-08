@@ -74,6 +74,14 @@ void x86_icall(X86Context& c,uint8_t* b,uint32_t target){
 }
 [[noreturn]]void x86_trap(X86Context&,uint32_t,const char*){std::abort();}
 void x86_resume(X86Context&,uint8_t*,const X86Resume&){std::abort();}
+// Behavior allocation and event storage are boundaries; retail DF380 sets the knockout state.
+X86_FUNC(sub_000159C0){ctx.esp+=12;}
+X86_FUNC(sub_001F8EA0){ctx.esp+=8;}
+X86_FUNC(sub_001F8DE0){ctx.esp+=16;}
+X86_FUNC(sub_001F8BA0){ctx.esp+=4;}
+X86_FUNC(sub_001F92B0){ctx.eax=0;ctx.esp+=4;}
+X86_FUNC(sub_0020A260){ctx.eax=0;ctx.esp+=16;}
+X86_FUNC(sub_00032CB0){ctx.esp+=8;}
 // NATIVE_DRAG_CONTRACTS
 
 namespace drag_test {
@@ -163,6 +171,43 @@ void GrabTargets(){
         Update(slot,false);Hold(slot);assert(!Held(slot));
         F(Actor(slot)+0x9c,100);Update(slot,false);Hold(slot);assert(!Held(slot));
     }
+}
+void KnockOut(unsigned slot){
+    const auto actor=Actor(slot),owner=0x6e0000+slot*0x100,data=0x6f0000+slot*0x100;
+    F(actor+0x9c,75);
+    auto c=Context(slot);c.ecx=actor;c.fs_base=0x700000;
+    U(SP+4,RESULT+0x100);U(SP+8,0);B()[RESULT+0x105]=1;
+    sub_000DF380(c,B());assert(c.esp==SP+12&&(U(actor+0x198)&4)&&F(actor+0x9c)==75);
+    // The native behavior supplies this owned pool handle after its fall animation.
+    U(actor+0x118,owner);U(owner,0x48e6e0);U(owner+12,data);U(data+0x50,handles[slot]);
+}
+void KnockoutTargets(){
+    for(bool coop:{false,true})for(unsigned slot=0;slot<(coop?2u:1u);++slot)
+    for(uint32_t type:{0x45c770u,0x47bf50u})for(unsigned part:{2u,4u,8u,10u}){
+        Seed(coop);U(Actor(slot),type);KnockOut(slot);hit_limb=part;
+        std::array<uint8_t,0x200> actor;std::memcpy(actor.data(),B()+Actor(slot),actor.size());
+        Acquire(slot);Step(slot);assert(Held(slot)&&forces==1);
+        Update(slot,false);Hold(slot);assert(!Held(slot));
+        assert(!std::memcmp(actor.data(),B()+Actor(slot),actor.size())); // Dragging cannot alter health, KO/reward state or AI.
+    }
+    for(unsigned reason=0;reason<8;++reason){
+        Seed();KnockOut(0);Acquire();Update(0,false);
+        switch(reason){
+        case 0:U(A+0x198,0);break; // Native recovery/reset.
+        case 1:U(0x6f0050,UINT32_MAX);break; // The behavior released its ragdoll.
+        case 2:U(0x6f0050,handles[1]);break; // Stale/another actor's handle.
+        case 3:U(A+0x5c,1);break; // Entity removal.
+        case 4:U(A,0x45d040);break; // Healthy co-op player is never a knockout target.
+        case 5:F(A+0x9c,std::numeric_limits<float>::quiet_NaN());break;
+        case 6:U(0x6e000c,0xfffffff0);break;
+        case 7:U(0x6e0000,0);break;
+        }
+        const auto count=forces;Step();assert(!Held()&&forces==count);
+        Update(0,false);Hold(0);assert(!Held());
+    }
+    Seed();KnockOut(0);KnockOut(1);Acquire();Acquire(1);Update(0,false);Step();Step(1);assert(Held()&&Held(1)&&forces==2);
+    Seed();KnockOut(0);selected[1]=0;Acquire();Update(1,false);Hold(1);assert(Held()&&!Held(1));
+    Seed();KnockOut(0);U(0x6f0050,UINT32_MAX);Update(0,false);Hold(0);assert(!Held()); // Knockout flag before ragdoll creation.
 }
 void Retry(){
     for(float fps:{30.f,60.f,120.f,240.f,360.f})for(unsigned rejection=0;rejection<3;++rejection){
@@ -329,5 +374,5 @@ void MovingTarget(){
     }
 }
 }
-int main(){drag_test::InteractMapping();drag_test::Latch();drag_test::GrabTargets();drag_test::Retry();drag_test::Invalidations();drag_test::Lift();drag_test::Force();drag_test::MovingTarget();
+int main(){drag_test::InteractMapping();drag_test::Latch();drag_test::GrabTargets();drag_test::KnockoutTargets();drag_test::Retry();drag_test::Invalidations();drag_test::Lift();drag_test::Force();drag_test::MovingTarget();
     std::puts("ragdoll drag: native Interact held query/X exclusion, hold/latch/retry/release, co-op exclusivity, identity cancellation, fixed world-up lift, bounded pull response at 30/60/120/240/360 FPS with free/loaded limbs, native force and context/stack guards passed; native joint/contact feel requires live testing.");}

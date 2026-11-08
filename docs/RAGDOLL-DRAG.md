@@ -1,7 +1,7 @@
 # Ragdoll limb dragging
 
 Hold the assigned Interact button (F by default) for 0.45 seconds while aiming
-at a nearby dead body's arm, leg, head or chest. The grab stays latched after releasing the
+at a nearby dead or knocked-out enemy's arm, leg, head or chest. The grab stays latched after releasing the
 button. Move or turn to drag the body; hold Interact again to let go. Ordinary
 quick Interact presses retain their original behavior. Each co-op player owns
 their own grab, and a body can be grabbed by only one player at a time.
@@ -11,12 +11,29 @@ The held limb is pulled toward a point 18 cm above its acquired view-relative
 offset. This lift is world-up, does not accumulate, and does not teleport the
 limb or suspend the rest of the body through the floor.
 
-The feature supports dead NPCs and downed co-op partners. Living NPCs and the
+The feature supports dead NPCs, knocked-out enemies and downed co-op partners. Active NPCs and the
 pelvis/lower spine are not grab targets. Acquisition is limited to the nearest native
 ray hit within two metres. Walls block acquisition and obstructed grabs release.
 Pause, menus, focus loss, death, scripted control locks, revival, body removal,
 and excessive separation release the grab. A fresh button release is required
 before another grab after cancellation.
+
+Knocked-out enemies retain their health and native behavior. Retail `DF380`
+sets the knockout/restraint flag (`actor+0x198`, bit `4`). Positive-health
+targets additionally need their own current physics wrapper (`actor+0x118`,
+type `48E6E0`), data (`wrapper+0x0c`) and ragdoll handle (`data+0x50`) to match
+the grabbed pool entry. Recovery/reset, wrapper disposal or handle replacement
+release the grab before another force is applied. The original interaction,
+arrest, recovery and corpse-retention paths are not rewritten.
+
+The November 6 knockout follow-up is private, with receipts under
+`build/knockout-drag-20261106`. Its fixture executes the hash-pinned original
+knockout event, then the production drag logic for both NPC types, both co-op
+owners, single-player, limb/head/chest targets, exclusive ownership and stale
+body rejection. It verifies that dragging changes neither actor health nor
+knockout/AI state. Behavior allocation, ray geometry and native joint/contact
+solving remain fixture boundaries. Live knockout dragging, arrest/recovery and
+Proton gameplay need separate confirmation.
 
 ## Maintained integration
 

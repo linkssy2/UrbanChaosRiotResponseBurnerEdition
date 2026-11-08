@@ -5,6 +5,7 @@
 #define NOMINMAX
 #include <windows.h>
 #include <algorithm>
+#include <atomic>
 #include <cassert>
 #include <cmath>
 #include <cstdint>
@@ -88,6 +89,10 @@ static UINT TestRawInput(HRAWINPUT handle,UINT command,void* data,UINT* size,UIN
     std::memcpy(data,handle,sizeof(RAWINPUT));return sizeof(RAWINPUT);
 }
 #define GetRawInputData TestRawInput
+namespace trial_graphics {
+struct ViewRect{float x,y,width,height;};
+static ViewRect ViewBounds(float width,float height,bool){return {0,0,width,height};}
+}
 // GENERATED_MOUSE_HOST
 #undef GetRawInputData
 static uint8_t mouse_guest[0x12000]{};
@@ -112,7 +117,20 @@ static bool Neutral(const input::Pad& p){
     for(auto value:p.analog)if(value)return false;
     return true;
 }
-static input::Pad Poll(int port,input::Pad p={}){TrialInputPad(port,p);return p;}
+static input::Pad Poll(int port,input::Pad p={}){
+    // Physical keyboard state changes in this fixture stand in for Win32 messages.
+    static bool observed_keys[256]{};
+    for(unsigned key=1;key<256;++key)if(observed_keys[key]!=physical_keys[key]){
+        observed_keys[key]=physical_keys[key];
+        if(!trial_coop::PauseBlocksKeyboard())TrialPointerMessage(physical_keys[key]?WM_KEYDOWN:WM_KEYUP,key,0);
+    }
+    TrialInputPad(port,p);return p;
+}
+static void TestMenuRightButton(bool down){
+    static bool previous=false;
+    if(down&&!previous&&!trial_coop::PauseBlocksKeyboard())TrialPointerMessage(WM_RBUTTONDOWN,0,0);
+    previous=down;TrialMenuRightButton(down);
+}
 static void ReleaseAll(){
     std::memset(physical_keys,0,sizeof(physical_keys));test_open=false;test_focused=true;
     for(int port=0;port<4;++port)Poll(port);
@@ -143,6 +161,103 @@ static input::Pad Controller(unsigned control){
         case 11:p.ry=-30000;break;
     }
     return p;
+}
+static void CheckCaptureMessages(){
+    const auto reset=[](){
+        trial_controls::CancelCapture(0);trial_controls::CancelCapture(1);
+        trial_coop::Reset();ReleaseAll();test_open=true;
+    };
+    const auto arm=[](){trial_controls::BeginCapture(0);Poll(0);};
+    const auto key=[](unsigned source,LPARAM bits=0,UINT down=WM_KEYDOWN,UINT up=WM_KEYUP){
+        ControlsCaptureMessage(down,source,bits);
+        ControlsCaptureMessage(up,source,bits);
+    };
+    // Issue 26: both events arrive between guest polls. GetAsyncKeyState sees
+    // no held J at either poll; the window-delivered press must survive.
+    reset();arm();key('J');assert(Neutral(Poll(0)));
+    assert(trial_controls::TakeCapture()=='J'&&!trial_controls::CaptureWaiting());
+    assert(!trial_controls::TakeCapture());
+    // A row activated on click-release begins with neutral physical input.
+    // A fresh key need not wait for a guest poll or a UI TakeCapture call.
+    reset();trial_controls::BeginCapture(0);key('J');
+    assert(trial_controls::TakeCapture()=='J'&&!trial_controls::CaptureWaiting());
+
+    // Releasing the opening mouse/keyboard press can arm the next press even
+    // when the guest has not polled again. The opener itself is never bound.
+    for(unsigned opener:{unsigned(VK_LBUTTON),unsigned(VK_RETURN)}){
+        reset();physical_keys[opener]=true;trial_controls::BeginCapture(0);Poll(0);
+        const UINT down=opener==VK_LBUTTON?WM_LBUTTONDOWN:WM_KEYDOWN;
+        const UINT up=opener==VK_LBUTTON?WM_LBUTTONUP:WM_KEYUP;
+        ControlsCaptureMessage(down,opener==VK_LBUTTON?0:opener);
+        assert(!trial_controls::TakeCapture()&&trial_controls::CaptureWaiting());
+        physical_keys[opener]=false;ControlsCaptureMessage(up,opener==VK_LBUTTON?0:opener);
+        key('J');assert(trial_controls::TakeCapture()=='J');
+    }
+    // Releasing one opening input does not ignore another held key or pad.
+    reset();physical_keys[VK_LBUTTON]=physical_keys['K']=true;
+    trial_controls::BeginCapture(0);Poll(0);
+    physical_keys[VK_LBUTTON]=false;ControlsCaptureMessage(WM_LBUTTONUP,0);
+    key('J');assert(!trial_controls::TakeCapture()&&trial_controls::CaptureWaiting());
+    physical_keys['K']=false;ControlsCaptureMessage(WM_KEYUP,'K');
+    key('I');assert(trial_controls::TakeCapture()=='I');
+    reset();Poll(0,Controller(2));trial_controls::BeginCapture(0);
+    key('J');assert(!trial_controls::TakeCapture());
+    input::Pad idle;idle.connected=true;Poll(0,idle);key('I');
+    assert(trial_controls::TakeCapture()=='I');
+
+    struct MousePress{UINT down,up;WPARAM parameter;unsigned source;};
+    const MousePress mouse[]={
+        {WM_LBUTTONDOWN,WM_LBUTTONUP,0,VK_LBUTTON},
+        {WM_RBUTTONDOWN,WM_RBUTTONUP,0,VK_RBUTTON},
+        {WM_MBUTTONDOWN,WM_MBUTTONUP,0,VK_MBUTTON},
+        {WM_XBUTTONDOWN,WM_XBUTTONUP,MAKEWPARAM(0,XBUTTON1),VK_XBUTTON1},
+        {WM_XBUTTONDOWN,WM_XBUTTONUP,MAKEWPARAM(0,XBUTTON2),VK_XBUTTON2}};
+    for(const auto& press:mouse){
+        reset();arm();ControlsCaptureMessage(press.down,press.parameter);
+        ControlsCaptureMessage(press.up,press.parameter);Poll(0);
+        assert(trial_controls::TakeCapture()==press.source&&!trial_controls::TakeCapture());
+    }
+    reset();arm();key('J',LPARAM(1ull<<30));
+    assert(!trial_controls::TakeCapture()&&trial_controls::CaptureWaiting());
+    key('J');assert(trial_controls::TakeCapture()=='J');
+    key('J',LPARAM(1ull<<30));assert(!trial_controls::TakeCapture());
+
+    struct Modifier{unsigned key,scan,extended,source;bool system;};
+    const Modifier modifiers[]={
+        {VK_SHIFT,0x2A,0,VK_LSHIFT,false},{VK_SHIFT,0x36,0,VK_RSHIFT,false},
+        {VK_CONTROL,0x1D,0,VK_LCONTROL,false},{VK_CONTROL,0x1D,1,VK_RCONTROL,false},
+        {VK_MENU,0x38,0,VK_LMENU,true},{VK_MENU,0x38,1,VK_RMENU,true}};
+    for(const auto& modifier:modifiers){
+        reset();arm();const LPARAM bits=LPARAM(modifier.scan<<16)|(LPARAM(modifier.extended)<<24);
+        key(modifier.key,bits,modifier.system?WM_SYSKEYDOWN:WM_KEYDOWN,modifier.system?WM_SYSKEYUP:WM_KEYUP);
+        Poll(0);assert(trial_controls::TakeCapture()==modifier.source);
+    }
+
+    for(UINT loss:{UINT(WM_KILLFOCUS),UINT(WM_ACTIVATEAPP)}){
+        reset();arm();key('J');test_focused=false;ControlsCaptureMessage(loss,0);
+        assert(!trial_controls::TakeCapture()&&!trial_controls::CaptureWaiting());
+        ControlsCaptureMessage(WM_KEYUP,'J');test_focused=true;arm();
+        assert(!trial_controls::TakeCapture());key('K');assert(trial_controls::TakeCapture()=='K');
+        reset();arm();test_focused=false;key('J');
+        assert(!trial_controls::TakeCapture());test_focused=true;
+    }
+    reset();arm();ControlsCaptureMessage(WM_KEYDOWN,VK_ESCAPE);
+    ControlsCaptureMessage(WM_KEYUP,VK_ESCAPE);
+    assert(!trial_controls::CaptureWaiting()&&!trial_controls::TakeCapture());
+
+    // Physical keyboard messages belong only to P1. P2 still captures the
+    // controller on its own logical port, or port zero before co-op starts.
+    for(bool coop:{false,true}){
+        reset();trial_coop::SetActive(coop);
+        trial_controls::BeginCapture(0,0);trial_controls::BeginCapture(1,1);
+        Poll(0,idle);if(coop)Poll(1,idle);
+        key('J');ControlsCaptureMessage(WM_MOUSEWHEEL,MAKEWPARAM(0,WHEEL_DELTA));
+        assert(trial_controls::TakeCapture(0)=='J');
+        assert(!trial_controls::TakeCapture(1)&&trial_controls::CaptureWaiting(1));
+        Poll(coop?1:0,Controller(3));assert(trial_controls::TakeCapture(1)==8);
+    }
+    reset();trial_controls::CancelCapture(0);trial_controls::CancelCapture(1);ReleaseAll();
+    std::puts("controls capture: between-poll key/mouse events, opener release, repeats, modifiers, focus and P2 isolation passed");
 }
 static void CheckRagdollDragInput(){
     trial_coop::SetActive(true);trial_coop::ResetPauseOwner();
@@ -435,6 +550,41 @@ static void CheckControllerKeyboardIsolation(){
     keyboard_defaults(&keyboard_config);trial_coop::Reset();ReleaseAll();
     puts("Controller deadzones: mouse/keyboard ownership, raw rotation, opposed keys and P2 isolation passed");
 }
+static void CheckMenuDeviceHandoff(){
+    trial_coop::Reset();ReleaseAll();menu_mode=true;gameplay=false;captured=false;intro_gate={};
+    TrialGraphicsInputChanged();
+    for(bool host:{false,true}){
+        test_open=host;Poll(0);xbox_KeyboardNoteInput();
+        auto held=Controller(0);
+        Poll(0,held);assert(!xbox_KeyboardMode());
+        float x=0,y=0;int click=1;click_pending=true;
+        assert(!ucrr_host_menu_pointer(&x,&y,&click)&&!click&&!click_pending);
+        test_focused=false;TrialPointerMessage(WM_KILLFOCUS,0,0);test_focused=true;
+        TrialPointerMessage(WM_MOUSEMOVE,0,MAKELPARAM(50,50));assert(!xbox_KeyboardMode());
+        TrialPointerMessage(WM_MOUSEMOVE,0,MAKELPARAM(51,50));assert(xbox_KeyboardMode());
+        assert(Neutral(Poll(0,held))&&xbox_KeyboardMode());
+        held.buttons|=2;Poll(0,held);assert(!xbox_KeyboardMode());
+        TrialPointerMessage(WM_MOUSEMOVE,0,MAKELPARAM(51,50));assert(!xbox_KeyboardMode());
+        TrialPointerMessage(WM_LBUTTONDOWN,0,0);assert(xbox_KeyboardMode());
+        assert(Neutral(Poll(0,held))&&xbox_KeyboardMode());
+        Poll(0);Poll(0,held);assert(!xbox_KeyboardMode());
+        TrialPointerMessage(WM_MOUSEWHEEL,0,0);assert(!xbox_KeyboardMode());
+        TrialPointerMessage(WM_MOUSEWHEEL,MAKEWPARAM(0,WHEEL_DELTA),0);assert(xbox_KeyboardMode());
+        auto drift=Controller(4);drift.lx=15000;assert(Neutral(Poll(0,drift))&&xbox_KeyboardMode());
+        drift.lx=17000;Poll(0,drift);assert(!xbox_KeyboardMode());
+        TrialPointerMessage(WM_RBUTTONDOWN,0,0);assert(xbox_KeyboardMode());
+        for(int value:{16001,15000,17000}){drift.lx=value;assert(Neutral(Poll(0,drift))&&xbox_KeyboardMode());}
+        drift.lx=-17000;Poll(0,drift);assert(!xbox_KeyboardMode());
+        test_open=false;ReleaseAll();test_open=host;
+    }
+    test_open=false;physical_keys['W']=true;assert(Poll(0).ly>0&&xbox_KeyboardMode());
+    auto pad=Controller(0);auto delivered=Poll(0,pad);assert(!xbox_KeyboardMode()&&!delivered.ly);
+    TrialPointerMessage(WM_KEYDOWN,'W',intptr_t(1ull<<30));
+    delivered=Poll(0,pad);assert(!xbox_KeyboardMode()&&!delivered.ly);
+    TrialPointerMessage(WM_KEYDOWN,'Z',0);assert(xbox_KeyboardMode());
+    delivered=Poll(0,pad);assert(!delivered.buttons&&delivered.ly>0);
+    ReleaseAll();menu_mode=false;gameplay=true;
+}
 int main(){
     keyboard_init();keyboard_defaults(&keyboard_config);
     controller_init();controller_defaults(&controller_config);controller_publish();
@@ -517,7 +667,7 @@ int main(){
     // Capture sees raw input before the menu neutralizes/remaps it. It will
     // not bind the opening click or a held controller confirm, and wheel and
     // focus events use the real production message helper.
-    test_open=true;trial_controls::BeginCapture(0);physical_keys[VK_LBUTTON]=true;
+    test_open=true;physical_keys[VK_LBUTTON]=true;trial_controls::BeginCapture(0);
     Poll(0);assert(!trial_controls::TakeCapture()&&trial_controls::CaptureWaiting());
     physical_keys[VK_LBUTTON]=false;Poll(0);physical_keys[VK_MBUTTON]=true;Poll(0);
     assert(trial_controls::TakeCapture()==VK_MBUTTON&&!trial_controls::CaptureWaiting());
@@ -533,8 +683,8 @@ int main(){
     // Each capture listens only to its player's physical sources. One player
     // can bind a key while the other binds a controller without sharing events.
     ReleaseAll();test_open=true;trial_coop::SetActive(true);
-    trial_controls::BeginCapture(0,0);trial_controls::BeginCapture(1,1);
-    physical_keys['W']=true;Poll(1,idle);
+    physical_keys['W']=true;trial_controls::BeginCapture(0,0);trial_controls::BeginCapture(1,1);
+    Poll(1,idle);
     Poll(0,Controller(3));assert(!trial_controls::TakeCapture(1));
     Poll(1,Controller(2));assert(trial_controls::TakeCapture(1)==1);
     assert(trial_controls::CaptureWaiting(0));
@@ -662,31 +812,31 @@ int main(){
     // Right-click Back is event-backed: a complete tap between title polls
     // still supplies exactly one B press, and no gameplay action is remapped.
     ReleaseAll();intro_gate={};menu_mode=true;captured=false;
-    TrialMenuRightButton(true);TrialMenuRightButton(false);
+    TestMenuRightButton(true);TestMenuRightButton(false);
     assert(Poll(0).analog[1]==255);assert(Neutral(Poll(0)));
-    physical_keys[VK_RBUTTON]=true;TrialMenuRightButton(true);
+    physical_keys[VK_RBUTTON]=true;TestMenuRightButton(true);
     assert(Poll(0).analog[1]==255);assert(Neutral(Poll(0)));
-    TrialMenuRightButton(true);assert(Neutral(Poll(0))); // repeated down is not a new click
+    TestMenuRightButton(true);assert(Neutral(Poll(0))); // repeated down is not a new click
     menu_mode=false;captured=true;
     assert(Neutral(Poll(0))&&menu_right_consumed); // closing hold cannot fire secondary
-    physical_keys[VK_RBUTTON]=false;TrialMenuRightButton(false);assert(Neutral(Poll(0)));
-    physical_keys[VK_RBUTTON]=true;TrialMenuRightButton(true);
+    physical_keys[VK_RBUTTON]=false;TestMenuRightButton(false);assert(Neutral(Poll(0)));
+    physical_keys[VK_RBUTTON]=true;TestMenuRightButton(true);
     const auto gameplay_right=Poll(0);assert(!Neutral(gameplay_right)&&!gameplay_right.analog[1]);
     XBOX_GAMEPAD expected_right;keyboard_apply_bindings(&expected_right,captured);
     assert(gameplay_right.buttons==expected_right.wButtons);
     for(unsigned i=0;i<8;++i)assert(gameplay_right.analog[i]==expected_right.bAnalogButtons[i]);
-    physical_keys[VK_RBUTTON]=false;TrialMenuRightButton(false);Poll(0);
+    physical_keys[VK_RBUTTON]=false;TestMenuRightButton(false);Poll(0);
     // Host-owned menus consume their own ImGui click; never queue a second
     // legacy Back, including a click held while native ownership disappears.
-    menu_mode=true;test_open=true;physical_keys[VK_RBUTTON]=true;TrialMenuRightButton(true);
+    menu_mode=true;test_open=true;physical_keys[VK_RBUTTON]=true;TestMenuRightButton(true);
     assert(!menu_right_pending&&menu_right_consumed&&Neutral(Poll(0)));
     test_open=false;assert(Neutral(Poll(0)));
     menu_mode=false;assert(Neutral(Poll(0)));
-    physical_keys[VK_RBUTTON]=false;TrialMenuRightButton(false);Poll(0);
+    physical_keys[VK_RBUTTON]=false;TestMenuRightButton(false);Poll(0);
     // Original intro playback and focus loss do not acquire menu Back.
     menu_mode=true;intro_gate.Context(0x600000,1,true,true);
-    TrialMenuRightButton(true);TrialMenuRightButton(false);assert(!menu_right_pending);
-    intro_gate={};test_focused=false;TrialMenuRightButton(true);TrialMenuRightButton(false);
+    TestMenuRightButton(true);TestMenuRightButton(false);assert(!menu_right_pending);
+    intro_gate={};test_focused=false;TestMenuRightButton(true);TestMenuRightButton(false);
     assert(!menu_right_pending);test_focused=true;assert(Neutral(Poll(0)));
     ReleaseAll();
     ReleaseAll();menu_mode=true;physical_keys[VK_RETURN]=true;
@@ -888,4 +1038,6 @@ int main(){
     HealthGestures();
     CheckPlayerActions();
     CheckRagdollDragInput();
+    CheckMenuDeviceHandoff();
+    CheckCaptureMessages();
 }

@@ -11,7 +11,7 @@ import sys
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
-VERSION = '0.14'
+VERSION = '0.15'
 SDK = REPO / 'build/upstream-review-xboxxbe-20261014'
 RUNTIME_NAME = 'UrbanChaosXbeTrial.exe'
 RUNTIME_FILES = (RUNTIME_NAME, 'zlib1.dll', 'libusb-1.0.dll', 'msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll')
@@ -220,6 +220,9 @@ def sources(runtime):
         'cover.png': HERE.parent / 'burner/cover.png',
         'README.txt': HERE / 'README-release.txt',
         'assets/README.txt': HERE / 'README-assets.txt',
+        'tools/README.md': HERE / 'README-release.md',
+        'tools/README-assets.md': HERE / 'README-assets.md',
+        'tools/README-linux.md': HERE.parent / 'burner-linux/README-linux.md',
         'licenses/XboxXBERecomp.txt': SDK / 'LICENSE',
         'licenses/XboxXBERecomp-third-party.txt': SDK / 'THIRD_PARTY.txt',
         'licenses/zlib.txt': HERE / 'zlib-license.txt',
@@ -389,6 +392,7 @@ def assemble(runtime, expected_sha256, output, shader_seed=None):
     (output / 'tools/runtime-manifest.json').write_text(json.dumps(info, indent=2) + '\n')
     (output / 'licenses/DEPENDENCIES.txt').write_text(
         'XboxXBERecomp by TGP482: https://github.com/TGP482/XboxXBERecomp (MIT).\n'
+        'Audio DSP processors: XboxXBERecomp revision e0de3e44d10443c1c9aad512f36baf133cdd4a60, with maintained Urban Chaos routing and validation; covered by XboxXBERecomp.txt.\n'
         'Urban Chaos input profiles, UI and disc-import adapters are maintained with this port.\n'
         'SDL3, Dear ImGui and toml++ notices: XboxXBERecomp-third-party.txt.\n'
         'libusb 1.0.29 (LGPL-2.1-or-later): unmodified upstream Windows DLL; license and corresponding source archive included. https://github.com/libusb/libusb/releases/tag/v1.0.29\n'

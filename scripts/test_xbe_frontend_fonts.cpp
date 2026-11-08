@@ -12,6 +12,7 @@
 #include <vector>
 #include <utility>
 #include <windows.h>
+int native_hud_keycap(uint32_t*,unsigned,const char*,const char*);
 #define CHECK(x) do{if(!(x)){std::fprintf(stderr,"FAIL %d: %s\n",__LINE__,#x);std::exit(1);}}while(0)
 static bool hd_selected=false;
 namespace trial_graphics {bool HdUi(){return hd_selected;}}
@@ -138,7 +139,7 @@ int main(int argc,char** argv){
     CheckFont(atlas,hd_body,hd_medium);CheckFont(atlas,hd_title,hd_large);
     hd_selected=false;
     CHECK(TrialFrontendFontForUi(body)==body&&TrialFrontendFontForUi(title)==title);
-    for(unsigned code:{13u,unsigned('Q'),unsigned('D'),unsigned('R'),37u,39u,1u,27u,2u,0x101u,0x102u,0x103u,0x104u,0x105u}){
+    for(unsigned code:{13u,unsigned('Q'),unsigned('D'),unsigned('R'),37u,38u,39u,40u,1u,27u,2u,0x101u,0x102u,0x103u,0x104u,0x105u}){
         float uv[4]{};CHECK(TrialMenuIconUV(code,uv));
         CHECK(uv[0]>=0&&uv[1]>=0&&uv[2]<=1&&uv[3]<=1&&uv[2]>uv[0]&&uv[3]>uv[1]);
         unsigned visible=0;
@@ -159,13 +160,31 @@ int main(int argc,char** argv){
     trial_controller::family=0;
     const auto* atlas_pixels=atlas->TexPixelsRGBA32;
     const int atlas_width=atlas->TexWidth,atlas_height=atlas->TexHeight,atlas_rects=atlas->CustomRects.Size;
-    for(unsigned code:{13u,1u,0x101u,0x102u,0x103u,0x104u,0x105u,0x201u,0x301u,0x401u}){
+    for(unsigned code:{13u,38u,40u,1u,0x101u,0x102u,0x103u,0x104u,0x105u,0x201u,0x301u,0x401u}){
         float original[4],hd[4];hd_selected=false;CHECK(TrialMenuIconUV(code,original));
         hd_selected=true;CHECK(TrialMenuIconUV(code,hd));
         if(code>=0x101&&code<=0x105){
             CHECK(Near((hd[2]-hd[0])*atlas_width,128)&&Near((hd[3]-hd[1])*atlas_height,128));
             CHECK(Near((original[2]-original[0])*atlas_width,32)&&Near((original[3]-original[1])*atlas_height,32));
         }else CHECK(!std::memcmp(original,hd,sizeof(hd))); // Native PC/PS/Nintendo artwork stays 128px.
+    }
+    // Up/Down footer hints must contain their key labels, not empty frames or controller art.
+    for(unsigned code:{38u,40u}){
+        std::vector<uint32_t> expected(128*128);
+        CHECK(native_hud_keycap(expected.data(),code,code==38?"UP":"DOWN",nullptr));
+        float original[4]{};hd_selected=false;CHECK(TrialMenuIconUV(code,original));
+        CHECK(Near((original[2]-original[0])*atlas_width,128)&&Near((original[3]-original[1])*atlas_height,128));
+        const unsigned left=unsigned(std::lround(original[0]*atlas_width)),top=unsigned(std::lround(original[1]*atlas_height));
+        for(unsigned y=0;y<128;++y)for(unsigned x=0;x<128;++x){
+            const auto c=expected[y*128+x];
+            CHECK(atlas_pixels[size_t(top+y)*atlas_width+left+x]==IM_COL32((c>>16)&255,(c>>8)&255,c&255,c>>24));
+        }
+        for(unsigned family=0;family<=3;++family)for(bool enabled:{false,true}){
+            trial_controller::family=family;hd_selected=enabled;
+            float uv[4]{};CHECK(TrialMenuIconUV(code,uv));
+            CHECK(!std::memcmp(original,uv,sizeof(uv)));
+        }
+        trial_controller::family=0;
     }
     // Navigation uses the same authored D-pad for every controller family.
     float hd_dpad[4]{};hd_selected=true;CHECK(TrialMenuIconUV(0x103,hd_dpad));
@@ -203,11 +222,13 @@ int main(int argc,char** argv){
     CHECK(!TrialLoadFrontendFonts(&missing_atlas,std::filesystem::path(/* GAME_PATH */)/"missing-font-test",missing_body,missing_title));
     CHECK(!missing_body&&!missing_title&&missing_atlas.Fonts.empty()&&missing_atlas.CustomRects.empty());
     float new_icon[4]{};CHECK(!TrialMenuIconUV(13,new_icon));
+    CHECK(!TrialMenuIconUV(38,new_icon)&&!TrialMenuIconUV(40,new_icon));
     // A later successful startup publishes the newly packed coordinates;
     // failed startup cannot leave a previous GPU atlas's coordinates active.
     ImFontAtlas rebuilt;rebuilt.TexDesiredWidth=8192;
     CHECK(TrialLoadFrontendFonts(&rebuilt,/* GAME_PATH */,missing_body,missing_title));
     CHECK(TrialMenuIconUV(13,new_icon)&&std::memcmp(old_icon,new_icon,sizeof(old_icon)));
+    CHECK(TrialMenuIconUV(38,new_icon)&&TrialMenuIconUV(40,new_icon));
     CHECK(!TrialLoadFrontendFonts(nullptr,/* GAME_PATH */,missing_body,missing_title));
     CHECK(!TrialMenuIconUV(13,new_icon));
     ImGui::DestroyContext();

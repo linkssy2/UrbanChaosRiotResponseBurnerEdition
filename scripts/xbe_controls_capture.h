@@ -16,9 +16,10 @@ struct CaptureGate {
         const unsigned source=device?controller:keyboard;
         if(source){pending=source;active=false;}
     }
-    void Wheel(unsigned source){
-        if(active&&armed&&!device&&(source==256||source==257)){pending=source;active=false;}
+    void Press(unsigned source){
+        if(active&&armed&&!device&&source&&source<=257){pending=source;active=false;}
     }
+    void Wheel(unsigned source){if(source==256||source==257)Press(source);}
     unsigned Take(){const auto value=pending;pending=0;return value;}
 };
 void BeginCapture(unsigned device,unsigned player=0);

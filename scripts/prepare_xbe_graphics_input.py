@@ -48,6 +48,8 @@ def prepare(source, area):
         ('// GENERATED_PAD', function(source, 'TrialInputPad') + '\n' + function(source, 'TrialFirearmDirection', 'int ')),
         ('// GENERATED_CONTROL_STICK', control_stick),
         ('// GENERATED_MOUSE_HOST', '\n'.join((
+            function(source, 'TrialPointerMessage'),
+            function(source, 'ucrr_host_menu_pointer', 'int '),
             re.search(r'int TrialMouseActive\(\)[^\n]+', source)[0],
             function(source, 'TrialMouseTake'),
             re.search(r'static unsigned OrderDirection\(\)[^\n]+', source)[0],

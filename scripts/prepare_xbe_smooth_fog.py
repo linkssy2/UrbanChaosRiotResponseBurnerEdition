@@ -468,13 +468,16 @@ def patch(source):
     EnsurePixelShader(pk, sh, smooth_tone, analytic_fog);''')
     source = source.replace('EnsurePixelShader(const PixelKey& pk, DrawShaders& sh)',
                             'EnsurePixelShader(const PixelKey& pk, DrawShaders& sh, bool smooth_tone, bool analytic_fog)')
-    anchor = '    auto source = uc_xbe_lighting::Pixel(pk, PixelHlsl(pk), uc_xbe_lighting::Enabled());'
-    source = once(source, anchor, anchor + '\n    if (smooth_tone) SmoothToneShader(source);\n    if (analytic_fog) AnalyticFogShader(source);')
+    anchor = '    sh.ps_code = Compile(PixelHlsl(pk), "main", "ps_5_0", sh.ph);'
+    source = once(source, anchor, '''    auto source = PixelHlsl(pk);
+    if (smooth_tone) SmoothToneShader(source);
+    if (analytic_fog) AnalyticFogShader(source);
+    sh.ps_code = Compile(source, "main", "ps_5_0", sh.ph);''')
     source = source.replace('CaptureShaders(const State& s, const Assembled& a, const DrawShaders& sh, const PixelKey& pk)',
                             'CaptureShaders(const State& s, const Assembled& a, const DrawShaders& sh, const PixelKey& pk, bool smooth_tone, bool analytic_fog)')
     source = once(source, '        CaptureShaders(s, a, sh, pk);',
                   '        CaptureShaders(s, a, sh, pk, smooth_tone, analytic_fog);')
-    source = once(source, '    CaptureShader("ps", sh.pkey, PixelHlsl(pk));', '''    auto pixel=uc_xbe_lighting::Pixel(pk,PixelHlsl(pk),uc_xbe_lighting::Enabled());
+    source = once(source, '    CaptureShader("ps", sh.pkey, PixelHlsl(pk));', '''    auto pixel=PixelHlsl(pk);
     if(smooth_tone)SmoothToneShader(pixel);
     if(analytic_fog)AnalyticFogShader(pixel);
     CaptureShader("ps",sh.pkey,pixel);''')

@@ -42,7 +42,16 @@ extern "C" void CoopSkip(X86Context&,uint8_t*);
 extern "C" void OriginalTurn(X86Context&,uint8_t*);
 extern "C" void CoopTurn(X86Context&,uint8_t*);
 [[noreturn]] void x86_trap(X86Context&,uint32_t,const char*){std::abort();}
+static bool scratch_throw=false,scratch_nested=false;
+static unsigned scratch_calls=0;
 void x86_icall(X86Context& c,uint8_t* b,uint32_t target){
+    if(target==0xff001){
+        ++scratch_calls;const auto output=R32(c.esp+4);assert(output<kernel::memory.size()-64);
+        std::memset(b+c.esp-128,0x5a,96);std::memset(b+output,0x6b,64);
+        if(scratch_nested){scratch_nested=false;interactions::Call inner(c,b);inner.Run(0xff001,c.ecx,{inner.sp+128});}
+        if(scratch_throw)throw std::runtime_error("written scratch boundary");
+        c.eax=0xaabbccdd;c.esp+=8;return;
+    }
     if(target==0x33b60){sub_00033B60(c,b);return;}
     if(target==0x1f90a0){sub_001F90A0(c,b);return;}
     if(target==0xf0001){
@@ -307,6 +316,40 @@ static void WaitingRecords(){
     assert(_mm_getcsr()==csr&&!std::memcmp(saved.data(),g_base+stack-4096,saved.size()));
     interactions::lookup_owner=0;fail_lock=false;Tick(other_behavior);assert(!g_base[p1+0x202]);
 }
+static void ScratchContracts(){
+    // No guest call leaves capture inactive. Repeated/nested calls and a throw
+    // after callback writes must still restore the first original stack image.
+    for(unsigned mode=0;mode<5;++mode){
+        Seed();for(uint32_t i=0;i<8192;++i)g_base[stack-8192+i]=uint8_t(i*73+19);
+        auto c=Context();const auto before=c;const auto csr=_mm_getcsr();
+        std::array<uint8_t,8192> saved;std::memcpy(saved.data(),g_base+stack-8192,saved.size());
+        scratch_throw=mode==3;scratch_nested=mode==4;scratch_calls=0;
+        try{
+            interactions::HostRestore host;interactions::Call call(c,g_base);assert(!call.captured);
+            if(mode)assert(call.Run(0xff001,proxy,{call.sp+128})==0xaabbccddu);
+            if(mode==2)assert(call.Run(0xff001,proxy,{call.sp+128})==0xaabbccddu);
+            assert(call.captured==(mode!=0)&&mode!=3);
+        }catch(const std::runtime_error&){assert(mode==3);}
+        assert(!std::memcmp(saved.data(),g_base+stack-8192,saved.size()));
+        assert(!std::memcmp(&c,&before,sizeof c)&&_mm_getcsr()==csr);
+        assert(scratch_calls==(mode==0?0u:mode==2||mode==4?2u:1u));
+    }
+    scratch_throw=scratch_nested=false;
+    // Lock writes its arguments before Run. A Run-only capture loses these
+    // original bytes; nonzero sentinels reject that tempting incomplete change.
+    for(bool throwing:{false,true})for(bool value:{false,true}){
+        Seed();for(uint32_t i=0;i<8192;++i)g_base[stack-8192+i]=uint8_t(i*73+19);
+        auto c=Context();const auto before=c;const auto csr=_mm_getcsr();assert(interactions::Pair(g_base));
+        auto* r=interactions::Find(g_base,behavior,true);assert(r);r->slot=0;
+        std::array<uint8_t,8192> saved;std::memcpy(saved.data(),g_base+stack-8192,saved.size());
+        fail_lock=throwing;
+        try{interactions::HostRestore host;interactions::Call call(c,g_base);interactions::Lock(call,*r,value);assert(call.captured&&!throwing);}
+        catch(const std::runtime_error&){assert(throwing);}
+        assert(!std::memcmp(saved.data(),g_base+stack-8192,saved.size()));
+        assert(!std::memcmp(&c,&before,sizeof c)&&_mm_getcsr()==csr);
+        assert(bool(g_base[p1+0x202])==(!throwing&&value));
+    }
+}
 int main(int argc,char** argv){
     if(argc==2){
         if(!std::strcmp(argv[1],"--waiting-admission"))WaitingAdmission();
@@ -317,5 +360,6 @@ int main(int argc,char** argv){
     }
     assert(argc==1);CallBoundary();Ownership();RendezvousRecovery();Admission();SkipAndTurn();LifecycleAndSafety();
     WaitingAdmission();WaitingRevival();WaitingRecords();
-    std::puts("PASS production CallGuest return/restore ABI and stale EAX isolation, original NPC range/facing and conversation lifecycle, either actor initiation, original per-actor lock/unlock, independent input/skip/turn target, partner-free movement with deferred script commitment, owner released to revive/retrieve a missing partner without repeated speech, current-update waiting after busy/condition/revival branches, stale record retirement and owned-lock/replacement guards, native single-player fallback, abort/down/revive/reset, context/stack/MXCSR guards; live dialogue visuals pending");
+    ScratchContracts();
+    std::puts("PASS production CallGuest return/restore ABI and stale EAX isolation, original NPC range/facing and conversation lifecycle, either actor initiation, original per-actor lock/unlock, independent input/skip/turn target, partner-free movement with deferred script commitment, owner released to revive/retrieve a missing partner without repeated speech, current-update waiting after busy/condition/revival branches, stale record retirement and owned-lock/replacement guards, native single-player fallback, abort/down/revive/reset, context/stack/MXCSR guards, lazy scratch capture with pre-call arguments and nested/throwing callbacks; live dialogue visuals pending");
 }

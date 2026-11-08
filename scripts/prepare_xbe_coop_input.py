@@ -30,6 +30,8 @@ CURSOR_HOOK='\tif (TrialGuestHook(ctx, base, 9)) { ctx.eax = (ctx.eax & ~255u) |
 APP_INCLUDE='#include "xbe_coop_pause.h"\n'
 HOST_DECL='extern void TrialCoopPauseImGuiInput();\n'
 HOST_CALL='    TrialCoopPauseImGuiInput();\n'
+ACTIVITY_DECL='extern void TrialPointerMessage(uint32_t,uintptr_t,intptr_t);\n'
+ACTIVITY_CALL='    TrialPointerMessage(msg,wp,lp);\n'
 APP_GATE='    if (trial_coop::PauseBlocksMessage(msg)) return msg == WM_INPUT ? DefWindowProc(hwnd, msg, wp, lp) : 0;\n'
 
 def clean(source):
@@ -61,7 +63,7 @@ def unprepare(area):
             if text!=original:path.write_text(original)
     main=area/'src/compat/main.cpp'
     if main.exists():
-        text=main.read_text();original=text.replace(APP_INCLUDE,'').replace(APP_GATE,'').replace(HOST_DECL,'').replace(HOST_CALL,'')
+        text=main.read_text();original=text.replace(APP_INCLUDE,'').replace(APP_GATE,'').replace(HOST_DECL,'').replace(HOST_CALL,'').replace(ACTIVITY_DECL,'').replace(ACTIVITY_CALL,'')
         if text!=original:main.write_text(original)
     renderer=area/'src/compat/d3d12.cpp'
     if renderer.exists():
@@ -71,11 +73,12 @@ def unprepare(area):
 def prepare_host(area):
     area=Path(area)
     main=area/'src/compat/main.cpp'
-    text=main.read_text().replace(APP_INCLUDE,'').replace(APP_GATE,'').replace(HOST_DECL,'').replace(HOST_CALL,'')
+    text=main.read_text().replace(APP_INCLUDE,'').replace(APP_GATE,'').replace(HOST_DECL,'').replace(HOST_CALL,'').replace(ACTIVITY_DECL,'').replace(ACTIVITY_CALL,'')
     entry='LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {\n'
     assert text.count(entry)==1
-    text=APP_INCLUDE+HOST_DECL+text.replace(entry,entry+HOST_CALL+APP_GATE,1)
+    text=APP_INCLUDE+HOST_DECL+ACTIVITY_DECL+text.replace(entry,entry+HOST_CALL+APP_GATE+ACTIVITY_CALL,1)
     assert text.index(HOST_CALL)<text.index(APP_GATE)<text.index('ImGui_ImplWin32_WndProcHandler(hwnd, msg, wp, lp)')
+    assert text.index(APP_GATE)<text.index(ACTIVITY_CALL)<text.index('ImGui_ImplWin32_WndProcHandler(hwnd, msg, wp, lp)')
     main.write_text(text)
     renderer=area/'src/compat/d3d12.cpp'
     text=renderer.read_text().replace(HOST_DECL,'').replace(HOST_CALL,'')

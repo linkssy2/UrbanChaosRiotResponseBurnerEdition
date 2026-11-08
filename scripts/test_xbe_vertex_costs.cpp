@@ -27,6 +27,7 @@ namespace logx { void Write(Level,const char*,...){} }
 /* ORIGINAL_VERTEX */
 /* PRODUCTION_VERTEX */
 /* PREVIOUS_INDEX_DISPATCH */
+/* PREVIOUS_STRIP_PAIRS */
 
 namespace {
 constexpr unsigned kHeader=0x100,kData=0x1000,kStride=64,kVertices=65536+32;
@@ -256,6 +257,39 @@ void BenchIndexDispatch() {
             packed?"packed":"converted",vertices,indices.size(),before[3],after[3],100*(before[3]-after[3])/before[3]);
     }
 }
+
+void CheckStripPairs() {
+    std::vector<uint16_t> indices(65536);
+    for(unsigned i=0;i<indices.size();++i)indices[i]=uint16_t(i/2*31);
+    for(unsigned count:{0u,1u,2u,3u,4u,5u,6u,7u,34u,329u,1000u,65535u,65536u}) {
+        std::vector<uint32_t> before{91,82,73},after=before;
+        gpu::Topology a{},b{};
+        unsigned reads=0;
+        const auto local=[&](uint32_t i){assert(i<count);return uint32_t(indices[i])-37u;};
+        previous_strip_pairs::PreviousListIndices(6,count,local,before,a);
+        gpu::ListIndices(6,count,[&](uint32_t i){++reads;return local(i);},after,b);
+        assert(before==after&&a==b);
+        assert(reads==(count>=3?count:0));
+        ++checks;
+    }
+}
+
+void BenchStripPairs() {
+    // Same full production assembler before and after only the strip loop change.
+    for(unsigned layout=0;layout<3;++layout)for(unsigned vertices:{34u,329u,1000u}) {
+        auto s=layout==0?PackedState(2):layout==1?State():ParticleState();
+        std::vector<uint16_t> indices(vertices*2-2);
+        for(unsigned i=0;i<indices.size();++i)indices[i]=uint16_t(i%vertices);
+        std::array<double,7> before{},after{};
+        for(unsigned pass=0;pass<7;++pass){
+            if(pass%2){after[pass]=Bench(gpu::Assemble,s,6,indices,10000,false);before[pass]=Bench(previous_strip_pairs::Assemble,s,6,indices,10000,false);}
+            else{before[pass]=Bench(previous_strip_pairs::Assemble,s,6,indices,10000,false);after[pass]=Bench(gpu::Assemble,s,6,indices,10000,false);}
+        }
+        std::sort(before.begin(),before.end());std::sort(after.begin(),after.end());
+        std::printf("BENCH paired strips %s: %u vertices, %zu indices | median before %.3f us after %.3f us (%.1f%%); synthetic CPU assembly, not FPS\n",
+            layout==0?"packed":layout==1?"converted":"raw control",vertices,indices.size(),before[3],after[3],100*(before[3]-after[3])/before[3]);
+    }
+}
 }
 
 int main(int argc,char** argv) {
@@ -411,7 +445,9 @@ int main(int argc,char** argv) {
 #endif
     CheckParticleQuads();
     CheckIndexDispatch();
+    CheckStripPairs();
     std::printf("PASS vertex assembly: %u previous/new cases, exact authored values and primitive order; packed padding, fallback, mutation, particle quads and independent storage preserved (GPU decode tested separately)\n",checks);
+    if(argc>1&&!std::strcmp(argv[1],"strip-pairs")){BenchStripPairs();return 0;}
     if(argc>1&&!std::strcmp(argv[1],"dispatch")){BenchIndexDispatch();return 0;}
     if(argc>1){
         s=State();

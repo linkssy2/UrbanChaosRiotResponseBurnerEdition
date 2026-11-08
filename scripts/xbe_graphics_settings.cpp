@@ -18,6 +18,7 @@ bool TrialSceneryLighting = true, TrialCharacterLighting = true;
 bool TrialHdUi = false;
 bool TrialWorldTextures = false;
 bool TrialDeathConvulsions = true;
+bool TrialGameplayBlur = true;
 uint32_t TrialReticleScale = 100;
 std::array<uint32_t,4> TrialReticleColors[2]{};
 uint32_t TrialWeaponFovScale = 100;
@@ -30,6 +31,7 @@ static std::atomic<uint32_t> field_of_view{53};
 static std::atomic<bool> hd_ui{false};
 static std::atomic<bool> world_textures{false};
 static std::atomic<bool> death_convulsions{true};
+static std::atomic<bool> gameplay_blur{true};
 static std::atomic<uint32_t> reticle_scale{100};
 static std::atomic<uint32_t> reticle_colors[2][4]{};
 uint32_t ReticleColor(unsigned player,unsigned state){
@@ -43,6 +45,7 @@ uint32_t FieldOfView(unsigned player){return player==1?player2_field_of_view.loa
 bool WorldTexturesAvailable(){return uc_world_textures::Available();}
 bool WorldTextures(){return world_textures.load();}
 bool DeathConvulsions(){return death_convulsions.load();}
+bool GameplayBlur(){return gameplay_blur.load();}
 bool HdUi(){return hd_ui.load();}
 uint32_t ReticleScale(){return reticle_scale.load();}
 uint32_t WeaponFovScale(){return weapon_fov_scale.load();}
@@ -60,6 +63,7 @@ static void PublishEffects(const Draft& d){
     hd_ui=d.hd_ui;
     world_textures=d.world_textures;
     death_convulsions=d.death_convulsions;
+    gameplay_blur=d.gameplay_blur;
     reticle_scale=d.reticle_scale;
     for(unsigned p=0;p<2;++p)for(unsigned s=0;s<4;++s)reticle_colors[p][s]=TrialReticleColors[p][s];
     weapon_fov_scale=d.weapon_fov;
@@ -69,7 +73,7 @@ static void PublishEffects(const Draft& d){
     effects=uint32_t(d.scenery)|(uint32_t(d.characters)<<1)|(d.character_quality<<2)|(d.ragdolls<<3);
 }
 static Draft Current(){return {app::Get(),TrialAspectRatio,TrialMsaaSamples,
-    TrialSceneryLighting,TrialCharacterLighting,TrialCharacterQuality,TrialRagdollMode,TrialFieldOfView,TrialHdUi,TrialReticleScale,TrialWorldTextures,TrialWeaponFovScale,TrialFmvScale,TrialReticleColors[0],TrialDeathConvulsions};}
+    TrialSceneryLighting,TrialCharacterLighting,TrialCharacterQuality,TrialRagdollMode,TrialFieldOfView,TrialHdUi,TrialReticleScale,TrialWorldTextures,TrialWeaponFovScale,TrialFmvScale,TrialReticleColors[0],TrialDeathConvulsions,TrialGameplayBlur};}
 static Draft Current(unsigned player){
     Draft d=Current();
     if(player<2)d.reticle_colors=TrialReticleColors[player];
@@ -84,6 +88,7 @@ static void Store(const Draft& d){
     TrialHdUi=d.hd_ui;
     TrialWorldTextures=d.world_textures;
     TrialDeathConvulsions=d.death_convulsions;
+    TrialGameplayBlur=d.gameplay_blur;
     TrialReticleScale=d.reticle_scale;
     TrialReticleColors[0]=d.reticle_colors;
     TrialWeaponFovScale=d.weapon_fov;

@@ -1,4 +1,4 @@
-"""Keep converted draw storage and choose conversion formats outside hot loops."""
+"""Preserve exact vertex data while reducing conversion and index-expansion work."""
 from pathlib import Path
 from prepare_xbe_perf import once, function
 
@@ -102,7 +102,28 @@ def packed_vertices(source):
 
 
 def transform(source):
-    return index_dispatch(quad_index_fill(strip_index_fill(ranged_sequence(packed_vertices(converted_storage(format_dispatch(source)))))))
+    return strip_pairs(index_dispatch(quad_index_fill(strip_index_fill(ranged_sequence(packed_vertices(converted_storage(format_dispatch(source))))))))
+
+
+def strip_pairs(source):
+    if '// UC_STRIP_PAIRS' in source:return source
+    before='''            for (uint32_t i = 0; i + 2 < count; i++) {
+                output[size_t(i) * 3] = local(i + (i & 1));
+                output[size_t(i) * 3 + 1] = local(i + !(i & 1));
+                output[size_t(i) * 3 + 2] = local(i + 2);
+            }'''
+    after='''            // UC_STRIP_PAIRS: reuse the shared edge, preserving winding and degenerates.
+            uint32_t a = local(0), b = local(1), i = 2;
+            for (; i < count - 1; i += 2, output += 6) {
+                const uint32_t c = local(i), d = local(i + 1);
+                output[0] = a; output[1] = b; output[2] = c;
+                output[3] = c; output[4] = b; output[5] = d;
+                a = c; b = d;
+            }
+            if (i < count) {
+                output[0] = a; output[1] = b; output[2] = local(i);
+            }'''
+    return once(source,before,after)
 
 
 def index_dispatch(source):
@@ -185,7 +206,8 @@ def quad_index_fill(source):
 def prepare(source, area, header):
     baseline = converted_storage(format_dispatch(source))
     before_dispatch = quad_index_fill(strip_index_fill(ranged_sequence(packed_vertices(baseline))))
-    result = index_dispatch(before_dispatch)
+    before_pairs = index_dispatch(before_dispatch)
+    result = strip_pairs(before_pairs)
     assert transform(result) == result
     target = Path(area) / 'src/gpu/vertex.h'
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -198,6 +220,12 @@ void OriginalFvfInputs(uint32_t, VertexShader&);''')
     fixture = Path(__file__).with_name('test_xbe_vertex_costs.cpp').read_text()
     fixture = once(fixture, '/* ORIGINAL_VERTEX */', original)
     fixture = once(fixture, '/* PRODUCTION_VERTEX */', result)
+    previous_pairs = before_pairs.replace('FvfInputs(', 'PreviousFvfInputs(').replace('Convert(', 'PreviousConvert(')
+    previous_pairs = previous_pairs.replace('ListIndices(', 'PreviousListIndices(')
+    previous_pairs = once(previous_pairs, 'namespace gpu {', '''namespace previous_strip_pairs {
+using namespace gpu;
+void PreviousFvfInputs(uint32_t, VertexShader&);''')
+    fixture = once(fixture, '/* PREVIOUS_STRIP_PAIRS */', previous_pairs)
     previous = function(before_dispatch, 'bool AssembleConverted(')
     previous += '\n' + once(function(before_dispatch, 'bool Assemble('),
         'return AssembleConverted(s, inputs, d, out);',

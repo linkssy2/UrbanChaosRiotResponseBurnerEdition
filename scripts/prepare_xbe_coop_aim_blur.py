@@ -18,6 +18,7 @@ PINS=(
     (0x947c0,25,'a930f57678205517705f8fc669417e53e370c136f247ff75dd836d2ec517aa22'),
     (0x97050,177,'14b65325b2c468365ec5094ebc9fc1e1104fab422e539a40b6e8a88109f1e3f0'),
     (0x97b50,201,'6613d6e5c50fe57a891dc86e54403f6f5bc58468e31ca6f46085025453126d6a'),
+    (0xa2c70,1621,'23eabaa095630da460bf9b11deae18b974b13cb8f5450b5527159cd1016c20ad'),
     (0xbee50,291,'849366b75b9097a70968abe48c201db58b865896c977535d7e5e9902fd223e18'),
     (0x9e985,120,'c8bf0091d2fb11729529f9ab01c3193a4c3a257f0f6a7c78b701c45f899f9a5f'),
 )
@@ -36,8 +37,10 @@ BODIES={
         0x947c0:'9c6358b40ed42858f2a63f903ca708103be0e6ccb065cbc94e1c2f35dfeb1288',
         0x97050:'c807831b97bf7ebb01b52c0e7197e4021415cf9bca270ab7997a6075ed9842d2',
         0x97b50:'65db934ea7fddf4ee7a610e245d6cd0da74988bc1f7c61997ab6dc4bd84b41e8'},
+    16:{0xa2c70:'b327d489d0600b50ba69c3cd11dffef1d6c67fd2a218cbbd35d589a5e6f68c1e'},
 }
 INCLUDE='#include "xbe_coop_aim_blur.h"\n'
+SETTINGS_INCLUDE='#include "xbe_graphics_settings.h"\n'
 HOOKS={6:(
     ('X86_FUNC(__imp__sub_000490D0) {\n','\tTrialCoopAimBlurRequestScope trial_aim_blur_request(ctx,base);\n'),
     ('X86_FUNC(__imp__sub_00048E80) {\n','\tTrialCoopAimBlurBeginUpdate(ctx,base);\n'),
@@ -49,10 +52,14 @@ HOOKS={6:(
 ),15:(
     ('X86_FUNC(__imp__sub_00097B50) {\n','\tTrialCoopAimBlurViewScope trial_aim_blur_view(ctx,base);\n'),
     ('\t// 00097B8B mov edx, [eax+0x08]\n','\ttrial_aim_blur_view.Apply(ctx);\n'),
+    ('\t// 00097B9A mov eax, [esi]\n','\tif (!trial_graphics::GameplayBlur()) goto loc_00097C0B;\n'),
+),16:(
+    # Neutral history weight keeps the current-scene composite and presentation alive.
+    ('\t// 000A30AD mov ecx, [esp+0x2C]\n','\tif (!trial_graphics::GameplayBlur()) X86_MEMF32(ctx.esp + 0x24u) = 0.0f;\n'),
 )}
 
 def clean(source,unit):
-    source=source.replace(INCLUDE,'')
+    source=source.replace(INCLUDE,'').replace(SETTINGS_INCLUDE,'')
     for _,hook in HOOKS.get(unit,()):source=source.replace(hook,'')
     return source
 
@@ -90,18 +97,33 @@ def patched(source,unit):
         # Entry scopes follow the opening brace; instruction hooks precede the instruction.
         source=source.replace(anchor,anchor+hook if anchor.startswith('X86_FUNC') else hook+anchor,1)
     assert source.count('#include "x86_recomp_shared.h"\n')==1
-    return source.replace('#include "x86_recomp_shared.h"\n','#include "x86_recomp_shared.h"\n'+INCLUDE,1)
+    return source.replace('#include "x86_recomp_shared.h"\n','#include "x86_recomp_shared.h"\n'+INCLUDE+(SETTINGS_INCLUDE if unit in (15,16) else ''),1)
 
 def fixture(sources):
     parts=[]
     for unit,bodies in BODIES.items():
         for address in bodies:
-            if address==0x490a0:continue
+            if address in (0x490a0,0xa2c70):continue
             body=function(patched(sources[unit],unit),address)
             parts.append(body.replace(f'__imp__sub_{address:08X}',f'sub_{address:08X}',1))
     # Original complete pulse/update bodies serve as independent native parity oracles.
     for address,name in ((0x490d0,'OriginalPulse'),(0x48e80,'OriginalUpdate')):
         parts.append(function(sources[6],address).replace(f'__imp__sub_{address:08X}',name,1))
+    # Execute the actual publication, history admission and shader-weight instructions.
+    # The surrounding current-scene draw remains byte-for-byte original, not bypassed.
+    for source,prefix in ((sources[16],'Original'),(patched(sources[16],16),'Patched')):
+        body=function(source,0xa2c70)
+        for name,first,last in (('FeedbackPublication','000A308D','000A30AD'),
+                                ('FeedbackHistory','000A30F3','000A3125'),
+                                ('FeedbackConstant','000A3160','000A318D')):
+            first=body.index('\t// '+first);last=body.index('\t// '+last,first)
+            fragment=body[first:last]
+            parts.append(f'X86_FUNC({prefix}{name}) {{\n\tX86_LOAD_FLAGS();\n'
+                         '\tuint32_t ca=0,cb=0; (void)ca; (void)cb;\n'+fragment+'\t;\n}\n')
+    original=function(sources[16],0xa2c70)
+    fixed=function(patched(sources[16],16),0xa2c70)
+    assert fixed.replace(HOOKS[16][0][1],'')==original
+    assert '\tX86_PUSH32(0xA3232u); sub_003EF1F0(ctx, base);' in fixed
     text=(Path(__file__).parent/'test_xbe_coop_aim_blur.cpp').read_text()
     assert text.count('// PRODUCTION_AIM_BLUR_BODIES')==1
     return text.replace('// PRODUCTION_AIM_BLUR_BODIES','\n'.join(parts))

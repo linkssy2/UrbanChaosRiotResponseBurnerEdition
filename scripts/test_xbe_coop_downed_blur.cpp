@@ -11,6 +11,10 @@
 #include "kernel/kernel.h"
 namespace kernel {static std::array<uint8_t,0x800000> memory{};}
 namespace mem {bool IsCommitted(uint32_t p){return p<kernel::memory.size();}}
+namespace trial_graphics {
+static bool gameplay_blur=true;
+bool GameplayBlur(){return gameplay_blur;}
+}
 #include "../common/xbe_coop_downed_blur.cpp"
 
 constexpr uint32_t kWorld=0x600000,kState=0x601000,kVector=0x602000;
@@ -49,6 +53,7 @@ X86_FUNC(sub_00215380){
 X86Context Setup(){
     kernel::memory.fill(0);trial_coop::requested=true;trial_coop::active=true;
     presentation=1;menu=intro=revoke=false;seconds[0]=seconds[1]=0;down[0]=down[1]=false;
+    trial_graphics::gameplay_blur=true;
     calls=mask=owner_queries=0;order.clear();
     Put(0x51c4dc,kWorld);Put(kWorld,0x450c48);Put(kWorld+4,kState);Put(kWorld+0x10,0x80);
     Put(kState+4,kVector);Put(kState+8,kVector+8);
@@ -75,6 +80,10 @@ int main(){
     }
     c=Setup();seconds[0]=seconds[1]=5;down[0]=down[1]=true;
     TrialCoopDownedSceneBlur(c,B());assert(calls==1&&mask==3);
+    trial_graphics::gameplay_blur=false;CheckBlocked(c);
+    assert(seconds[0]==5&&seconds[1]==5&&down[0]&&down[1]);
+    trial_graphics::gameplay_blur=true;
+    TrialCoopDownedSceneBlur(c,B());assert(calls==2&&mask==3);
     c=Setup();seconds[0]=11;down[0]=true;CheckBlocked(c);assert(!owner_queries);
     c=Setup();seconds[0]=5;CheckBlocked(c);assert(owner_queries==1); // expired body rejected
     c=Setup();seconds[0]=5;down[0]=revoke=true;CheckBlocked(c); // world/actor reuse revoked snapshot

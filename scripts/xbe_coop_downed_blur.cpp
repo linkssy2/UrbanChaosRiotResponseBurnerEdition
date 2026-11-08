@@ -4,6 +4,7 @@
 #include "xbe_coop_cinematics.h"
 #include "xbe_coop_death.h"
 #include "xbe_trial_graphics_ui.h"
+#include "xbe_graphics_settings.h"
 #include "xbe_intro_skip.h"
 #include "kernel/memory.h"
 #include "xbe_input_memory.h"
@@ -22,7 +23,7 @@ bool Counting(unsigned slot){
 }
 
 void TrialCoopDownedSceneBlur(const X86Context& c,const uint8_t* b){
-    if(!trial_coop::Active()||!trial_coop::Requested()||
+    if(!trial_graphics::GameplayBlur()||!trial_coop::Active()||!trial_coop::Requested()||
        (!Counting(0)&&!Counting(1))||TrialCoopPresentation()!=1||
        TrialGraphicsOpen()||TrialIntroPlaying()||!b||
        !TrialGuestReadable(c.esp,4)||ReadBlur(b,c.esp)!=0x557e8u||

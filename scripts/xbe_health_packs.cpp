@@ -117,6 +117,7 @@ bool PartnerInFront(const uint8_t* b,uint32_t owner,uint32_t partner,bool prompt
 }
 bool InjectionTarget(const uint8_t* b,unsigned slot){
     const auto& a=injections[slot];
+    if(a.target==players[slot].actor)return Read(b,a.target+0x54)==a.target_id;
     return Slot(b,a.target)==int(1-slot)&&Read(b,a.target+0x54)==a.target_id&&
         (a.reviving?TrialCoopNearbyDownedPlayer(b,players[slot].actor):NearbyInjuredPartner(b,players[slot].actor))==a.target&&
         PartnerInFront(b,players[slot].actor,a.target,false,!a.reviving);
@@ -131,9 +132,16 @@ struct Scratch {
     ~Scratch(){std::memcpy(b+address,saved.data(),256);}
 };
 bool Stack(const X86Context& c){return c.esp>=0x10100&&TrialGuestReadable(c.esp-256,256);}
+// BDAB0 -> 64400 reaches 332 bytes below the caller after temp.esp -= 64.
+// Keep this larger bound local to that query; other scratch users are unchanged.
+struct MaximumScratch {
+    uint8_t* b;uint32_t address;std::array<uint8_t,512> saved;
+    MaximumScratch(uint8_t* base,uint32_t sp):b(base),address(sp-512){std::memcpy(saved.data(),b+address,saved.size());}
+    ~MaximumScratch(){std::memcpy(b+address,saved.data(),saved.size());}
+};
 float Maximum(const X86Context& c,uint8_t* b,uint32_t owner){
-    if(!Stack(c))return 0;
-    Scratch scratch(b,c.esp);X86Context temp=c;temp.ecx=owner;temp.esp=c.esp-64;
+    if(c.esp<0x10200||!TrialGuestReadable(c.esp-512,512))return 0;
+    MaximumScratch scratch(b,c.esp);X86Context temp=c;temp.ecx=owner;temp.esp=c.esp-64;
     kernel::CallGuest(temp,0xbdab0,{});const float value=float(temp.st[temp.top&7]);
     return std::isfinite(value)&&value>0?value:0;
 }
@@ -490,17 +498,18 @@ void TrialHealthPackUpdate(X86Context& c,uint8_t* b){
             }
         }
         else if(use!=TrialHealthPackUse::Partner){
-            Scratch scratch(b,c.esp);X86Context temp=c;temp.esp=c.esp-64;
-            kernel::CallGuest(temp,0xbdab0,{});
-            const float maximum=float(temp.st[temp.top&7]);
+            const float maximum=Maximum(c,b,owner);
             const float health=Real(b,owner+0x9c),remaining=Real(b,owner+0x46c);
             const uint32_t state=Read(b,owner+0x170);
             if(std::isfinite(maximum)&&health<maximum&&remaining==0&&!b[owner+0x470]&&state!=3&&state!=11&&state!=13){
-                temp=c;temp.esp=c.esp-64;
-                // Original Heal receipt queues the first-person hypospray injection;
-                // CD980 supplies BDAB0() health and D2AB0 applies its refill.
-                kernel::CallGuest(temp,0xbd650,{0,0});
-                if(b[owner+0x470])--p.count;
+                Scratch scratch(b,c.esp);X86Context temp=c;temp.esp=c.esp-64;
+                // Reserve this owner's pack until the original Heal contact;
+                // a cutscene can replace the queued/playing injection first.
+                injection={p.id,owner,p.id,0,generation.load()};
+                injection.reviving=false;
+                try{kernel::CallGuest(temp,0xbd650,{0,0});}
+                catch(...){injection={};throw;}
+                if(!b[owner+0x470])injection={};
             }
         }
     }
@@ -508,19 +517,21 @@ void TrialHealthPackUpdate(X86Context& c,uint8_t* b){
 }
 bool TrialHealthPackPartnerAnimation(const uint8_t* b,uint32_t owner){
     using namespace health_packs;const int slot=Slot(b,owner);
-    return slot>=0&&InjectionOwner(b,unsigned(slot))&&Read(b,owner+0x170)==3;
+    return slot>=0&&InjectionOwner(b,unsigned(slot))&&injections[slot].target!=owner&&Read(b,owner+0x170)==3;
 }
 void TrialHealthPackInjectionClip(X86Context& c,const uint8_t* b){
     using namespace health_packs;const int slot=Slot(b,c.esi);
     // CDA75 supplies the original owner-list animation start, after lookup
     // and before pushing its result. Only replace this owner's action clip.
-    if(slot>=0&&TrialHealthPackPartnerAnimation(b,c.esi)&&Read(b,c.esi+0x174)==1){
-        c.eax=injections[slot].clip;injections[slot].selected=true;
+    if(slot>=0&&InjectionOwner(b,unsigned(slot))&&Read(b,c.esi+0x170)==3&&Read(b,c.esi+0x174)==1){
+        auto& a=injections[slot];
+        if(a.target!=c.esi)c.eax=a.clip;
+        a.selected=TrialGuestReadable(c.eax,16);
     }
 }
 bool TrialHealthPackInjectionContact(X86Context& c,uint8_t* b){
     using namespace health_packs;const uint32_t owner=c.esi;const int slot=Slot(b,owner);
-    if(slot<0||!TrialHealthPackPartnerAnimation(b,owner))return false;
+    if(slot<0||!InjectionOwner(b,unsigned(slot))||Read(b,owner+0x170)!=3)return false;
     auto& a=injections[slot];
     // CD98E is reached only for the original named Heal event. A stale event
     // while lowering the weapon must neither finish this new action nor heal self.
@@ -529,6 +540,11 @@ bool TrialHealthPackInjectionContact(X86Context& c,uint8_t* b){
     if(!trial_health::enabled||a.cancelled||!Alive(b,owner)||!players[slot].count||!InjectionTarget(b,unsigned(slot))||
        !HudAllowed(c,b,owner))return true;
     HostRestore host;
+    if(a.target==owner){
+        if(Real(b,owner+0x46c)!=0||Maximum(c,b,owner)<=Real(b,owner+0x9c))return true;
+        --players[slot].count;Publish(b,unsigned(slot));
+        return false; // Original contact supplies the self-heal, sound and pulse.
+    }
     bool healed=false;
     if(a.reviving)healed=TrialCoopRevivePlayer(c,b,a.target);
     else{

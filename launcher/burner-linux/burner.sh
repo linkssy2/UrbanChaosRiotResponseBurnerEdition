@@ -8,7 +8,7 @@ usage() {
 Urban Chaos: Riot Response - experimental Linux / Proton package
 
 Advanced direct-Proton wrapper. Recommended setup: use Steam as described in
-README-linux.txt. This wrapper does not set up the Steam Linux Runtime container.
+tools/README-linux.md. This wrapper does not set up the Steam Linux Runtime container.
 
   ./burner.sh use-iso "/path/to/your Xbox game.iso"
   ./burner.sh import "/path/to/your Xbox game.iso"
@@ -194,7 +194,7 @@ if run_logged; then
 else
     result=$?
     if [[ $action != status || $result != 2 ]]; then
-        printf 'Burner Edition: %s failed (exit %s). Read the error above and README-linux.txt. If Proton cannot start directly, use the recommended Steam shortcut so Steam supplies its Linux Runtime.\n' "$action" "$result" >&2
+        printf 'Burner Edition: %s failed (exit %s). Read the error above and tools/README-linux.md. If Proton cannot start directly, use the recommended Steam shortcut so Steam supplies its Linux Runtime.\n' "$action" "$result" >&2
     fi
     exit "$result"
 fi

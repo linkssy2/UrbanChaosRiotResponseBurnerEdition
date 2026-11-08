@@ -9,7 +9,7 @@
 #include <stdexcept>
 #include "kernel/kernel.h"
 namespace kernel {static std::array<uint8_t,0x800000> memory{};uint8_t* g_base=memory.data();}
-namespace mem {bool IsCommitted(uint32_t page){return page<kernel::memory.size();}}
+namespace mem {static uint32_t denied=0xffffffffu;bool IsCommitted(uint32_t page){return page<kernel::memory.size()&&page!=denied;}}
 #include "../common/xbe_health_packs.cpp"
 namespace hp_test {
 constexpr uint32_t p0=0x610000,p1=0x612000,world=0x620000,medic=0x630000;
@@ -46,6 +46,7 @@ X86Context Context(uint32_t owner){X86Context c{};c.esp=stack;c.ecx=owner;c.eax=
 void Setup(bool coop=true){
     trial_health::enabled=true;
     kernel::memory.fill(0);health_packs::world=0;health_packs::medics.clear();health_packs::delivery=nullptr;health_packs::medic_owner=0;
+    // ORIGINAL_INJECTION_STATE_TABLE
     for(unsigned i=0;i<2;++i){health_packs::players[i]={};health_packs::published[i]=0;health_packs::pending[i]=0;health_packs::held[i]=false;health_packs::injections[i]={};hypospray[i]=false;}
     for(auto& r:health_packs::restored)r={};
     nearby=0;presentation=0;mode_hud_mask=1;revive_success=false;throw_call=false;stored=false;duplicate=false;stock_calls=receipts=revives=0;
@@ -88,6 +89,7 @@ bool TrialCoopRevivePlayer(X86Context&,uint8_t*,uint32_t owner){assert(owner==hp
 [[noreturn]] void x86_trap(X86Context&,uint32_t,const char*){std::abort();}
 X86_FUNC(OriginalReceipt);X86_FUNC(StoredReceipt);X86_FUNC(OriginalStock);X86_FUNC(StoredStock);X86_FUNC(OriginalPlayerId);X86_FUNC(StoredPlayerId);
 X86_FUNC(OriginalInjectionState);
+X86_FUNC(sub_00218120);
 X86_FUNC(sub_0006BAC0);X86_FUNC(sub_00222400);
 X86_FUNC(sub_000C1A10){ctx.eax=0;ctx.esp+=4;}
 X86_FUNC(sub_000BC6A0){assert(false);}X86_FUNC(sub_000BECB0){assert(false);}
@@ -114,7 +116,9 @@ X86_FUNC(sub_001FB180){
 X86_FUNC(sub_00216BD0){assert(hp_test::Word(ctx.esp+8)==0x458a98);++hp_test::injection_sounds;ctx.esp+=16;}
 X86_FUNC(sub_00055EC0){++hp_test::self_pulses;ctx.eax=0x730100;ctx.esp+=28;}
 X86_FUNC(sub_000490D0){ctx.esp+=4;}
-X86_FUNC(sub_000BDAB0){x87_push(ctx,1200);ctx.esp+=4;}
+static bool real_maximum=false;static unsigned maximum_calls=0;
+X86_FUNC(OriginalMaximum);
+X86_FUNC(sub_000BDAB0){if(real_maximum){++maximum_calls;OriginalMaximum(ctx,base);}else{x87_push(ctx,1200);ctx.esp+=4;}}
 X86_FUNC(sub_0004A840){ctx.eax=hp_test::manager;ctx.esp+=4;}
 X86_FUNC(sub_0004ACD0){if(hp_test::stored)StoredPlayerId(ctx,base);else OriginalPlayerId(ctx,base);}
 X86_FUNC(sub_00056260){++hp_test::stock_calls;hp_test::Put(ctx.ecx+0xf74,hp_test::Word(ctx.esp+4));ctx.esp+=8;}
@@ -134,6 +138,7 @@ void x86_icall(X86Context& c,uint8_t* base,uint32_t target){
     if(target==0x2223d0){assert(c.ecx==fades&&Word(c.esp+8)==0);OriginalFadeAlpha(c,base);return;}
     if(target==0x207d70){assert(Word(c.esp+4)==401);c.eax=medic_root_available?root:0;c.esp+=8;return;}
     if(target==0xbdab0){sub_000BDAB0(c,base);return;}
+    if(target==0x2180a0){OriginalSetHealth(c,base);return;}
     if(target==0x22b930){
         assert(!std::strcmp(reinterpret_cast<const char*>(Bytes()+Word(Word(c.esp+4))),"assets_coop\\medical\\eqp_hypospray_anim_heal_partner.kfa"));
         c.eax=partner_clip_available?0x730300:0;c.ecx=0x22b930;c.edx=0x22b8d0;c.ebx=0x1122;c.esi=0x3344;c.edi=0x5566;c.ebp=0x7788;c.esp+=4;return;
@@ -312,7 +317,7 @@ void Use(){
     Setup();Press(0);Update(0);assert(TrialHealthPackSnapshot(0).count==1&&!Bytes()[p0+0x470]);
     Float(p0+0x9c,600);Press(0);auto c=Context(p0);const auto before=c;std::array<uint8_t,256> scratch{};std::memcpy(scratch.data(),Bytes()+stack-256,256);
     const unsigned oldcsr=_mm_getcsr();_mm_setcsr(0x5f80);TrialHealthPackUpdate(c,Bytes());assert(_mm_getcsr()==0x5f80);_mm_setcsr(oldcsr);
-    assert(!std::memcmp(&c,&before,sizeof c)&&!std::memcmp(scratch.data(),Bytes()+stack-256,256));assert(TrialHealthPackSnapshot(0).count==0&&TrialHealthPackSnapshot(1).count==1&&Bytes()[p0+0x470]);
+    assert(!std::memcmp(&c,&before,sizeof c)&&!std::memcmp(scratch.data(),Bytes()+stack-256,256));assert(TrialHealthPackSnapshot(0).count==1&&TrialHealthPackSnapshot(1).count==1&&Bytes()[p0+0x470]);
     // Holding, disallowed input, full health, dead state, existing healing and
     // old requests crossing actor creation cannot spend another player's pack.
     Setup();Float(p0+0x9c,100);TrialHealthPackInput(0,true,false);TrialHealthPackInput(0,true,true);Update(0);assert(TrialHealthPackSnapshot(0).count==1);
@@ -324,13 +329,84 @@ void Use(){
     Setup();Float(p0+0x9c,100);Put(p0+0x54,999);Press(0);Update(0);assert(!Bytes()[p0+0x470]);
     Setup();Float(p0+0x9c,100);throw_call=true;Press(0);c=Context(p0);const auto saved=c;try{TrialHealthPackUpdate(c,Bytes());assert(false);}catch(int){}assert(!std::memcmp(&c,&saved,sizeof c)&&TrialHealthPackSnapshot(0).count==1);
 }
+void SelfInjectionTransactions(){
+    for(bool coop:{false,true})for(unsigned slot=0;slot<(coop?2u:1u);++slot){
+        const uint32_t owner=slot?p1:p0;
+        // Interrupt before native admission, while lowering, or while injecting.
+        for(unsigned phase=0;phase<3;++phase)for(unsigned interruption=0;interruption<3;++interruption){
+            Setup(coop);Float(owner+0x9c,600);Press(slot);Update(slot);
+            assert(health_packs::players[slot].count==1&&health_packs::injections[slot].target==owner);
+            if(phase==1){InjectionQueue(slot);Update(slot);InjectionTick(slot);}
+            if(phase==2)StartInjection(slot);
+            if(interruption==0)Put(world+0x10,0x800);
+            if(interruption==1)Put(manager+0x14,0);
+            if(interruption==2)presentation=2;
+            Update(slot);
+            assert(health_packs::players[slot].count==1&&!Word(owner+0x46c));
+            if(!phase){
+                assert(!Bytes()[owner+0x470]&&!health_packs::injections[slot].target);
+            }else{
+                assert(health_packs::injections[slot].cancelled);
+                // A cinematic can hide then restore the HUD before a stale
+                // animation event arrives. Cancellation must stay latched.
+                Put(world+0x10,0);Put(manager+0x14,0xffffffffu);presentation=0;
+                if(phase==1){animation_complete=true;InjectionTick(slot);}
+                Bytes()[owner+0x1a2]=1;InjectionTick(slot);InjectionTick(slot);
+                assert(health_packs::players[slot].count==1&&!Word(owner+0x46c)&&!self_pulses&&!injection_sounds);
+            }
+            // A fresh button edge after the interrupted action can heal once.
+            Put(world+0x10,0);Put(manager+0x14,0xffffffffu);presentation=0;
+            Put(owner+0x170,8);Bytes()[owner+0x1a2]=0;Update(slot);Press(slot);Update(slot);StartInjection(slot);
+            assert(animation_path==0x458a48&&!TrialHealthPackPartnerAnimation(Bytes(),owner));
+            assert(health_packs::players[slot].count==1);
+            Bytes()[owner+0x1a2]=1;InjectionTick(slot);InjectionTick(slot);
+            assert(health_packs::players[slot].count==0&&health_packs::Real(Bytes(),owner+0x46c)==1200);
+            assert(self_pulses==1&&injection_sounds==1&&!revives);
+            if(coop)assert(health_packs::players[1-slot].count==1&&!Word((slot?p0:p1)+0x46c));
+        }
+        // Revalidate contact even when a cutscene starts between Update and
+        // the animation callback; full health and pending refills also reject.
+        for(unsigned fault=0;fault<5;++fault){
+            Setup(coop);Float(owner+0x9c,600);Press(slot);Update(slot);StartInjection(slot);
+            if(fault==0)presentation=2;
+            if(fault==1)trial_health::enabled=false;
+            if(fault==2)Float(owner+0x9c,1200);
+            if(fault==3)Float(owner+0x46c,100);
+            if(fault==4)health_packs::injections[slot].cancelled=true;
+            Bytes()[owner+0x1a2]=1;InjectionTick(slot);
+            presentation=0;trial_health::enabled=true;Float(owner+0x9c,600);Float(owner+0x46c,0);
+            InjectionTick(slot);
+            assert(health_packs::players[slot].count==1&&!Word(owner+0x46c)&&!self_pulses&&!injection_sounds);
+        }
+        Setup(coop);Float(owner+0x9c,600);Press(slot);Update(slot);InjectionQueue(slot);Update(slot);
+        Bytes()[owner+0x1a2]=1;InjectionTick(slot);
+        assert(!health_packs::injections[slot].contact&&health_packs::players[slot].count==1&&!Word(owner+0x46c));
+        Setup(coop);Float(owner+0x9c,600);Press(slot);Update(slot);Bytes()[owner+0x470]=0;Update(slot);
+        assert(!health_packs::injections[slot].target&&health_packs::players[slot].count==1);
+        // After contact, changing the native action state retains the original
+        // refill; the cutscene HUD gate must neither cancel it nor refund stock.
+        Setup(coop);Float(owner+0x9c,600);Press(slot);Update(slot);StartInjection(slot);
+        Bytes()[owner+0x1a2]=1;InjectionTick(slot);
+        auto state=Context(owner);Put(state.esp+4,11);Put(state.esp+8,0);OriginalInjectionState(state,Bytes());
+        Put(world+0x10,0x800);Update(slot);
+        assert(Word(owner+0x170)==11&&health_packs::players[slot].count==0&&health_packs::Real(Bytes(),owner+0x46c)==1200);
+        Float(0x44c174,0);Float(0x44c6c4,40);Put(0x46fc4c,0x2180a0);
+        for(unsigned step=1;step<=30;++step){
+            auto refill=Context(owner);refill.ebx=owner;OriginalRefillStep(refill,Bytes());
+            assert(health_packs::Real(Bytes(),owner+0x9c)==std::min(600.f+40.f*step,1200.f));
+            assert(health_packs::Real(Bytes(),owner+0x46c)==1200.f-40.f*step);
+        }
+        assert(health_packs::players[slot].count==0&&self_pulses==1&&injection_sounds==1);
+    }
+    puts("self injection: SP/P1/P2 queue/lower/inject interruption, retained cancellation, native contact once, retry, stale event and partner isolation passed");
+}
 void PartnerInjection(){
     for(unsigned slot=0;slot<2;++slot){
         const uint32_t healer=slot?p1:p0;
         Setup();nearby=slot?p0:p1;Float(healer+0x9c,600);
         TrialHealthPackRequest(slot,TrialHealthPackUse::Self);Update(slot);
-        assert(Bytes()[healer+0x470]&&!health_packs::injections[slot].target);
-        assert(TrialHealthPackSnapshot(slot).count==0&&TrialHealthPackSnapshot(1-slot).count==1);
+        assert(Bytes()[healer+0x470]&&health_packs::injections[slot].target==healer);
+        assert(TrialHealthPackSnapshot(slot).count==1&&TrialHealthPackSnapshot(1-slot).count==1);
         Setup();Float(healer+0x9c,600);nearby=0;
         TrialHealthPackRequest(slot,TrialHealthPackUse::Partner);Update(slot);
         assert(!Bytes()[healer+0x470]&&TrialHealthPackSnapshot(slot).count==1);
@@ -507,7 +583,7 @@ void HudVisibility(){
         assert(!TrialHealthPackSnapshot(0).visible&&TrialHealthPackSnapshot(0).count==1&&!Bytes()[p0+0x470]);
         Put(world+0x10,0);Bytes()[0x4e71a8]=1;Put(manager+0x14,0xffffffff);mode_hud_mask=1;Float(hud+0x14,1);Put(hud+4,p0);Put(0x44bf54,0x4af40);presentation=0;
         Update(0);assert(TrialHealthPackSnapshot(0).visible&&TrialHealthPackSnapshot(0).count==1&&!Bytes()[p0+0x470]);
-        Press(0);Update(0);assert(TrialHealthPackSnapshot(0).count==0&&Bytes()[p0+0x470]);
+        Press(0);Update(0);assert(TrialHealthPackSnapshot(0).count==1&&Bytes()[p0+0x470]);
     }
 }
 void HudLetterbox(){
@@ -561,7 +637,7 @@ void HudLetterbox(){
     // Visual-only fades must not change previously accepted use/animation
     // admission, spend twice, or cancel an injection already in progress.
     Setup(false);Float(p0+0x9c,600);Fades({{101,0,1}});Press(0);Update(0);
-    assert(!TrialHealthPackSnapshot(0).visible&&TrialHealthPackSnapshot(0).count==0&&Bytes()[p0+0x470]);
+    assert(!TrialHealthPackSnapshot(0).visible&&TrialHealthPackSnapshot(0).count==1&&Bytes()[p0+0x470]);
     Setup();nearby=p1;revive_success=true;Press(0);Update(0);StartInjection(0);Fades({{101,0,1}});Update(0);
     assert(!TrialHealthPackSnapshot(0).visible&&!health_packs::injections[0].cancelled);
     Bytes()[p0+0x1a2]=1;InjectionTick(0);InjectionTick(0);assert(revives==1&&TrialHealthPackSnapshot(0).count==0);
@@ -701,4 +777,62 @@ void Checkpoints(){
     std::filesystem::remove(directory);
 }
 }
-int main(){hp_test::GuestReturnContract();hp_test::Pickup();hp_test::Eligibility();hp_test::MedicOrders();hp_test::Use();hp_test::PartnerInjection();hp_test::LivingPartner();hp_test::RevivePrompt();hp_test::HealthBarExtent();hp_test::HudVisibility();hp_test::HudLetterbox();hp_test::DifficultyAndToggle();hp_test::Checkpoints();std::puts("health packs: retail delivery/stock/eligibility/HUD admission, isolated input, healing, revive and checkpoint contracts passed");}
+namespace hp_test {
+void MaximumStackContracts(){
+    constexpr uint32_t profile=0x680000;
+    unsigned maximum_depth=0;
+    for(unsigned owner_slot=0;owner_slot<2;++owner_slot)for(unsigned override=0;override<2;++override)for(unsigned bits=0;bits<8;++bits){
+        Setup();real_maximum=true;
+        // ORIGINAL_MAXIMUM_CONSTANTS
+        Put(0x5150b4,profile);Put(profile+0x13c,override);
+        for(unsigned i=0;i<3;++i)Bytes()[0x51530c+i]=(bits&(1u<<i))?uint8_t(i+1):0;
+        const uint32_t actor=owner_slot?p1:p0;
+        auto c=Context(actor);const auto before=c;
+        for(uint32_t i=0;i<1056;++i)Bytes()[c.esp-1024+i]=uint8_t(i*73+19);
+        std::array<uint8_t,1056> snapshot;std::memcpy(snapshot.data(),Bytes()+c.esp-1024,snapshot.size());
+        unsigned upgrades=0;for(unsigned i=0;i<3;++i)upgrades+=(bits>>i)&1;
+        const uint32_t constants[]={0x46c150,0x450b94,0x457cec,0x452840};
+        float expected;std::memcpy(&expected,Bytes()+(override?0x44c1e0:constants[upgrades]),4);
+        // Execute the unmodified emitted chain and real CallGuest bridge first.
+        // Its deepest stack write is independently measured against sentinels.
+        X86Context temp=c;temp.esp=c.esp-64;
+        kernel::CallGuest(temp,0xbdab0,{});
+        assert(float(temp.st[temp.top&7])==expected&&temp.esp==c.esp-64);
+        unsigned depth=0;
+        for(unsigned i=0;i<snapshot.size();++i)if(snapshot[i]!=Bytes()[c.esp-1024+i]){assert(i<1024);depth=std::max(depth,1024-i);}
+        assert(depth==(override?72u:332u));maximum_depth=std::max(maximum_depth,depth);
+        std::memcpy(Bytes()+c.esp-1024,snapshot.data(),snapshot.size());
+        const auto csr=_mm_getcsr();
+        assert(health_packs::Maximum(c,Bytes(),actor)==expected);
+        assert(!std::memcmp(snapshot.data(),Bytes()+c.esp-1024,snapshot.size()));
+        assert(!std::memcmp(&c,&before,sizeof c)&&_mm_getcsr()==csr);
+    }
+    // A page can be outside the old 256-byte guard but inside the real call
+    // footprint. Reject before dispatch and leave every sentinel unchanged.
+    Setup();real_maximum=true;auto c=Context(p0);c.esp=stack+0x130;
+    mem::denied=(c.esp-512)&~0xfffu;const auto calls=maximum_calls;
+    assert(health_packs::Maximum(c,Bytes(),p0)==0&&maximum_calls==calls);
+    mem::denied=0xffffffffu;
+    c.esp=0x101ff;assert(health_packs::Maximum(c,Bytes(),p0)==0&&maximum_calls==calls);
+    // Self-use must use the same protected query, even when single-player pack
+    // mode does not ask Maximum during the regular per-frame published update.
+    for(bool coop:{false,true})for(unsigned slot=0;slot<(coop?2u:1u);++slot){
+        Setup(coop);real_maximum=true;
+        // ORIGINAL_MAXIMUM_CONSTANTS
+        Put(0x5150b4,profile);Put(profile+0x13c,0);
+        for(unsigned i=0;i<3;++i)Bytes()[0x51530c+i]=0;
+        const auto actor=slot?p1:p0;Float(actor+0x9c,600);Press(slot);
+        auto use=Context(actor);const auto before=use;
+        for(uint32_t i=0;i<1056;++i)Bytes()[use.esp-1024+i]=uint8_t(i*73+19);
+        std::array<uint8_t,1056> snapshot;std::memcpy(snapshot.data(),Bytes()+use.esp-1024,snapshot.size());
+        const auto csr=_mm_getcsr();TrialHealthPackUpdate(use,Bytes());
+        assert(!std::memcmp(snapshot.data(),Bytes()+use.esp-1024,snapshot.size()));
+        assert(!std::memcmp(&use,&before,sizeof use)&&_mm_getcsr()==csr);
+        assert(Bytes()[actor+0x470]&&TrialHealthPackSnapshot(slot).count==1);
+    }
+    real_maximum=false;
+    std::printf("PASS original maximum-health chain: 32 profile/upgrade/player cases, deepest write %u bytes, exact 1056-byte outer sentinels, page/lower-bound rejection, self-use in single-player and co-op\n",maximum_depth);
+}
+}
+
+int main(){hp_test::GuestReturnContract();hp_test::Pickup();hp_test::Eligibility();hp_test::MedicOrders();hp_test::Use();hp_test::SelfInjectionTransactions();hp_test::PartnerInjection();hp_test::LivingPartner();hp_test::RevivePrompt();hp_test::HealthBarExtent();hp_test::HudVisibility();hp_test::HudLetterbox();hp_test::DifficultyAndToggle();hp_test::Checkpoints();hp_test::MaximumStackContracts();std::puts("health packs: retail delivery/stock/eligibility/HUD admission, isolated input, healing, revive and checkpoint contracts passed");}

@@ -142,6 +142,18 @@ static void SnapshotChecks(){
     CHECK(!pointer.Move(123,456)&&!pointer.Move(123,456));
     CHECK(pointer.Move(124,456)&&!pointer.Move(124,456));
     pointer.Reset();CHECK(!pointer.Move(200,200)&&pointer.Move(200,201));
+    uc_pc_prompts::MenuControllerActivity activity;
+    pad={};CHECK(!activity.Sample(true,pad));
+    pad.buttons=1;CHECK(activity.Sample(true,pad)&&!activity.Sample(true,pad));
+    pad.buttons|=2;CHECK(activity.Sample(true,pad)&&!activity.Sample(true,pad));
+    pad.lx=15000;CHECK(!activity.Sample(true,pad));
+    pad.lx=16001;CHECK(activity.Sample(true,pad));
+    for(int value:{19000,15000,16001,12001,17000}){pad.lx=value;CHECK(!activity.Sample(true,pad));}
+    pad.lx=-17000;CHECK(activity.Sample(true,pad));
+    pad.lx=-12000;CHECK(!activity.Sample(true,pad));
+    pad.lx=-17000;CHECK(activity.Sample(true,pad));
+    CHECK(!activity.Sample(false,pad));pad={};CHECK(!activity.Sample(true,pad));
+    for(unsigned i=0;i<8;++i){pad.analog[i]=255;CHECK(activity.Sample(true,pad)&&!activity.Sample(true,pad));}
 }
 static void ControllerSnapshotChecks(){
     keyboard_mode=false;gameplay=true;menu_mode=false;

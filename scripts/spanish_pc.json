@@ -8,6 +8,8 @@
   "FOV applies to Player 2. Other graphics settings are shared.": "El campo de visión se aplica al jugador 2. Los demás ajustes gráficos son compartidos.",
   "Graphics": "Gráficos",
   "Death convulsions": "Convulsiones al morir",
+  "Gameplay blur": "Desenfoque en el juego",
+  "Blur when aiming, firing, taking hits or downed. Applies to both co-op views.": "Desenfoque al apuntar, disparar, recibir impactos o quedar abatido. Se aplica a ambas vistas cooperativas.",
   "Brief convulsions on killed enemies and downed co-op partners.": "Convulsiones breves en enemigos muertos y compañeros abatidos en cooperativo.",
   "Controls": "Controles",
   "CONTROLS": "CONTROLES",
@@ -439,5 +441,8 @@
   "Ignore small stick movements. 0% responds immediately; Original keeps the original controller response. Applies to this player only.": "Ignora pequeños movimientos del stick. 0% responde al instante; Original conserva la respuesta original del mando. Solo afecta a este jugador.",
   "Display": "Pantalla",
   "Rendering quality": "Calidad gráfica",
-  "Camera and HUD": "Cámara e interfaz"
+  "Camera and HUD": "Cámara e interfaz",
+  "VIEW CONTROLS": "VER CONTROLES",
+  "Down x2 / hold": "Abajo x2 / mantener",
+  "Change bindings in Options > Controls.": "Cambia las asignaciones en Opciones > Controles."
 }

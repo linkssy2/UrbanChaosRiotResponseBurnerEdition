@@ -4,7 +4,7 @@
 #include <cstring>
 #include "hybrid_frontend_guest.h"
 
-enum { TRIAL_HF_NAME=6, TRIAL_HF_DELETE=8 };
+enum { TRIAL_HF_NAME=6, TRIAL_HF_DELETE=8, TRIAL_HF_CONTROLLER=9 };
 struct TrialLevelRect { float x=0,y=0,w=0,h=0; };
 struct TrialFrontendFrame {
     UcHybridFrontendSnapshot source{};
@@ -74,7 +74,8 @@ inline bool TrialFrontendSupported(const TrialFrontendFrame& f) {
         return true;
     }
     if(TrialFrontendDifficulty(s))return true;
-    if(s.kind==UC_HF_OBJECTIVES)return s.count==1&&s.back_action&&s.rows[0].row==s.owner;
+    if(s.kind==UC_HF_OBJECTIVES||s.kind==TRIAL_HF_CONTROLLER)
+        return s.count==1&&s.back_action&&s.rows[0].row==s.owner;
     if(s.kind==UC_HF_DIALOG)return s.count==2&&s.rows[1].callback==0x284310&&
         ((f.delete_dialog&&f.delete_name[0]&&s.rows[0].callback==0x284580)||
          (f.pause_dialog&&f.dialog_message[0]&&(s.source_kind&0x80000000u)&&

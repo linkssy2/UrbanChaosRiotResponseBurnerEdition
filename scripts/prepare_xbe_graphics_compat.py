@@ -142,15 +142,12 @@ int main() {
  start=d.index('void D3D12Backend::BlitFrame(')
  end=d.index('void D3D12Backend::RenderUi()',start)
  d=d[:start]+once(d[start:end],'float uv[4] = {0, 0, 1, 1};','float uv[4] = {0, 0, front.present_x, front.present_y};')+d[end:]
- from prepare_xbe_native_lighting import patch_source, prepare_shaders
- d=patch_source(d)
- d=once(d,'#include "xbe_native_lighting.h"','#include "xbe_native_lighting.h"\n#include "xbe_wall_depth.h"')
+ from prepare_xbe_native_lighting import prepare_shaders
+ d=once(d,'#include "gpu/shaders.h"','#include "gpu/shaders.h"\n#include "xbe_wall_depth.h"')
  bias_seam='        k.zslope = Bits(SimpleState(s, kMSlopeScale)) * (bound_ds_ ? float(bound_ds_->w) / bound_ds_->gw : 1.0f);'
  d=once(d,bias_seam,bias_seam+'\n        k.zbias = uc_wall_depth::ReceiverBias(s.vs_handle, s.ps ? s.ps->handle : 0, k);')
  for name in ('xbe_wall_depth.h','test_xbe_wall_depth.cpp'):
   (AREA/'src/compat'/name).write_text((ROOT/'scripts'/name).read_text())
  prepare_shaders(SDK/'runtime/gpu/shaders.cpp', AREA/'src/compat/shaders.cpp')
- (AREA/'src/compat/xbe_native_lighting.h').write_text((ROOT/'scripts/xbe_native_lighting.h').read_text())
- (AREA/'src/compat/native_lighting_pixel_source.h').write_text((ROOT/'src/native_lighting_pixel_source.h').read_text())
  (AREA/'src/compat/d3d12.cpp').write_text(packed_renderer(d))
 if __name__=='__main__':prepare()

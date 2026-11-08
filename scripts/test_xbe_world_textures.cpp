@@ -2,10 +2,33 @@
 #include "xbe_world_textures.h"
 #include "xbe_ledge_uv.h"
 #include "xbe_arm_mesh.h"
+#include "xbe_graffiti_alpha.h"
 #include <cassert>
 #include <cstdio>
 int main(int argc,char** argv){
  using namespace uc_world_textures;
+ // Translucency belongs only to the exact graffiti's colour-blended first stage.
+ using uc_graffiti_alpha::Eligible;
+ for(auto destination:{0x303u,1u})for(auto operation:{0x8006u,0x800bu}){
+  const bool accepted=operation==0x8006u||destination==1;
+  assert(Eligible(true,0,1,0x302,destination,operation,0xffffffff)==accepted);
+  assert(!Eligible(false,0,1,0x302,destination,operation,0xffffffff));
+  assert(!Eligible(true,1,1,0x302,destination,operation,0xffffffff));
+  assert(!Eligible(true,0,0,0x302,destination,operation,0xffffffff));
+  assert(!Eligible(true,0,1,1,destination,operation,0xffffffff));
+  assert(!Eligible(true,0,1,0x302,destination,operation,0));
+  assert(!Eligible(true,0,1,0x302,destination,operation,0x01000000));
+  for(auto channel:{0x00010000u,0x00000100u,1u})
+   assert(Eligible(true,0,1,0x302,destination,operation,channel)==accepted);
+ }
+ assert(!Eligible(true,0,1,0x302,0,0x8006,0xffffffff));
+ assert(!Eligible(true,0,1,0x302,0x303,0x800a,0xffffffff));
+ for(const auto& identity:uc_graffiti_alpha::kEntries){
+  assert(identity.width&&identity.height&&(identity.format==12||identity.format==15));
+  assert(Hex(identity.sha256));
+  std::vector<uint8_t> foreign(identity.bytes,0);
+  assert(!uc_graffiti_alpha::Match(identity.width,identity.height,identity.format,foreign.data(),identity.bytes));
+ }
  Entry e{};std::string hash(64,'a');
  assert(Parse("64 32 12 1024 "+hash+" "+hash,e));
  for(auto line:{std::string("64 32 12 1024 ../../x x"),"0 32 12 1024 "+hash+" "+hash,"64 32 11 1024 "+hash+" "+hash,"64 32 12 1024 "+hash+" "+hash+" extra"})assert(!Parse(line,e));
@@ -34,6 +57,21 @@ int main(int argc,char** argv){
  std::vector<uint8_t> unknown(32);assert(!uc_ledge_uv::Apply(unknown,unknown));
  for(int arg=1;arg<argc;++arg){
   std::ifstream f(argv[arg],std::ios::binary);assert(f);
+  if(std::filesystem::path(argv[arg]).extension()==".graffiti"){
+   uint32_t count=0;f.read(reinterpret_cast<char*>(&count),4);assert(count==std::size(uc_graffiti_alpha::kEntries));
+   for(uint32_t n=0;n<count;++n){
+    uint32_t descriptor[4];f.read(reinterpret_cast<char*>(descriptor),sizeof descriptor);assert(f&&descriptor[3]&&descriptor[3]<1024*1024);
+    std::vector<uint8_t> data(descriptor[3]);f.read(reinterpret_cast<char*>(data.data()),data.size());assert(f);const auto original=data;
+    assert(uc_graffiti_alpha::Match(descriptor[0],descriptor[1],descriptor[2],data.data(),descriptor[3]));
+    assert(data==original);
+    assert(!uc_graffiti_alpha::Match(descriptor[0]+1,descriptor[1],descriptor[2],data.data(),descriptor[3]));
+    assert(!uc_graffiti_alpha::Match(descriptor[0],descriptor[1],14,data.data(),descriptor[3]));
+    assert(!uc_graffiti_alpha::Match(descriptor[0],descriptor[1],descriptor[2],data.data(),descriptor[3]-1));
+    data[data.size()/2]^=1;
+    assert(!uc_graffiti_alpha::Match(descriptor[0],descriptor[1],descriptor[2],data.data(),descriptor[3]));
+   }
+   assert(f.peek()==EOF);std::printf("graffiti: %u exact original identities, RGB payload preservation and mutated/foreign rejection checked\n",count);continue;
+  }
   if(std::filesystem::path(argv[arg]).extension()==".positions") {
    std::vector<uint8_t> original((std::istreambuf_iterator<char>(f)),{}),positions=original;
    const auto count=positions.size()/10;

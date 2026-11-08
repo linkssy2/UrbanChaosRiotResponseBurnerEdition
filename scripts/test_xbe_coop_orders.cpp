@@ -16,6 +16,7 @@
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
+#include <vector>
 #include "kernel/kernel.h"
 namespace kernel {static std::array<uint8_t,0x800000> memory{};uint8_t* g_base=memory.data();}
 namespace mem {bool IsCommitted(uint32_t page){return page<kernel::memory.size();}}
@@ -24,7 +25,7 @@ constexpr uint32_t W=0x608000,STATE=0x609000,C=0x60c000,VT=0x60d000,DATA=0x60e00
 constexpr uint32_t NPC[]={C,0x60f000},HELP[]={0x610000,0x611000};
 static uint32_t queues[2];static float health[2];static bool medic_present,orders_available[2],throw_text;
 static unsigned clears[2];
-static uint32_t admitted[2]={P[0],P[1]},heap;static bool candidate,fail_copy;
+static uint32_t admitted[2]={P[0],P[1]},heap;static bool candidate,fail_copy,fail_action;
 static unsigned attached,chosen,complete[2],drawn[2],updated[2],made_sprites[2];
 static uint32_t control_owner;
 static std::array<std::array<float,16>,2> look_matrices;
@@ -203,7 +204,9 @@ void x86_icall(X86Context& c,uint8_t* b,uint32_t fn){
     case 0x1407f0:sub_001407F0(c,b);return;
     case 0x77500:Coop_00077500(c,b);return;
     case 0x159150:if(fail_copy)throw std::runtime_error("allocation boundary");sub_00159150(c,b);return;
-    case 0x158f30:if(candidate)Coop_00158F30(c,b);else Original_00158F30(c,b);return;
+    case 0x158f30:
+        if(fail_action){Put(c.esp-64,0xbad);_mm_setcsr(_mm_getcsr()^0x6000);throw std::runtime_error("action boundary");}
+        if(candidate)Coop_00158F30(c,b);else Original_00158F30(c,b);return;
     case 0x1583e0:if(candidate)Coop_001583E0(c,b);else Original_001583E0(c,b);return;
     case 0x159120:if(candidate)Coop_00159120(c,b);else Original_00159120(c,b);return;
     case 0x157640:Coop_00157640(c,b);return;
@@ -237,7 +240,7 @@ static void Seed(){
     health_packs::world=0;health_packs::medics.clear();health_packs::medic_owner=0;health_packs::delivery=nullptr;text_values.clear();
     for(auto& p:health_packs::players)p={};
     for(auto& r:health_packs::restored)r={};
-    candidate=true;fail_copy=false;throw_text=medic_present=false;attached=chosen=0;heap=0x620000;
+    candidate=true;fail_copy=fail_action=false;throw_text=medic_present=false;attached=chosen=0;heap=0x620000;
     selectable_available=true;target_positions={{{0,0,100},{1000,0,-100}}};
     for(unsigned i=0;i<2;++i){look_queries[i]=filter_queries[i]=ray_queries[i]=marks[i]=0;target_types[i]=3;
         look_available[i]=target_available[i]=true;blocked[i]=false;look_matrices[i]={};
@@ -527,7 +530,60 @@ static void HelpRouting(){
     Seed();trial_coop::SetActive(false);Invoke(0x1407f0,HELP[0],{0x46b660,0});assert(!HelpCount(0)&&HelpCount(1)==1);
     std::puts("help prompts: native singleton regression, own publication/event/clear, native look-away/medic eligibility, stale ownership, nested unwind and SP fallback passed (text resources are boundary stubs)");
 }
+static void SynchronizationNoWork(){
+    for(unsigned clients:{0u,1u,8u,32u}){
+        Seed();
+        for(unsigned i=0;i<clients;++i){
+            const auto id=650+i,client=0x650000+i*0x100;Identity(client,id);
+            for(unsigned slot=0;slot<2;++slot){
+                const auto head=Read(M[slot]+0xac),node=Allocate(0x20);
+                Put(node,Read(head));Put(node+4,head);Put(Read(head)+4,node);Put(head,node);Put(node+8,id);
+            }
+        }
+        for(unsigned slot=0;slot<2;++slot){
+            auto c=Context(M[slot]);const auto keep=c;const unsigned csr=_mm_getcsr();
+            const std::vector<uint8_t> memory(B(),B()+kernel::memory.size());
+            {TrialCoopOrdersScope scope(c,B());assert(selecting==M[slot]&&!copying);}
+            assert(!selecting&&!copying&&_mm_getcsr()==csr&&!std::memcmp(&c,&keep,sizeof(c)));
+            assert(!std::memcmp(B(),memory.data(),memory.size()));
+        }
+    }
+    // No guest call is needed for invalid/stale clients or malformed action ranges.
+    for(unsigned invalid=0;invalid<5;++invalid){
+        Seed();const auto head=Read(M[0]+0xac),node=Allocate(0x20);
+        Put(head,node);Put(node,head);Put(node+8,300);Put(node+0x10,DATA);Put(node+0x14,DATA+0x1c);
+        if(invalid==0)Put(node+0x14,DATA-1);
+        if(invalid==1)Put(node+0x14,DATA+1);
+        if(invalid==2)Put(node+0x14,DATA+8193*0x1c);
+        if(invalid==3){Put(node+0x10,0x800000);Put(node+0x14,0x80001c);}
+        if(invalid==4)Put(C+0x5c,1);
+        auto c=Context(M[1]);const auto keep=c;const unsigned csr=_mm_getcsr();
+        const std::vector<uint8_t> memory(B(),B()+kernel::memory.size());
+        {TrialCoopOrdersScope scope(c,B());}
+        assert(!copying&&!selecting&&_mm_getcsr()==csr&&!std::memcmp(&c,&keep,sizeof(c)));
+        assert(!std::memcmp(B(),memory.data(),memory.size()));
+    }
+    // A copied registration can succeed before an action throws. The single
+    // snapshot must still unwind the whole guest stack and floating-point state.
+    Seed();candidate=false;Register(0);candidate=true;fail_action=true;
+    auto c=Context(M[1]);const auto keep=c;const unsigned csr=_mm_getcsr();
+    std::array<uint8_t,4096> stack;std::memcpy(stack.data(),B()+SP-4096,stack.size());
+    bool caught=false;try{TrialCoopOrdersScope scope(c,B());}catch(const std::runtime_error&){caught=true;}
+    assert(caught&&Find(M[1],300)&&!copying&&!selecting&&_mm_getcsr()==csr);
+    assert(!std::memcmp(&c,&keep,sizeof(c))&&!std::memcmp(stack.data(),B()+SP-4096,stack.size()));
+    fail_action=false;
+    Seed();candidate=false;Register(0);candidate=true;
+    const auto head=Read(M[0]+0xac),node=Allocate(0x20);
+    Put(node,Read(head));Put(node+4,head);Put(Read(head)+4,node);Put(head,node);Put(node+8,301);
+    c=Context(M[1]);std::memcpy(stack.data(),B()+SP-4096,stack.size());
+    {TrialCoopOrdersScope scope(c,B());}
+    assert(Find(M[1],300)&&Find(M[1],301)&&made_sprites[1]==1&&attached==1);
+    assert(Read(C+0x98)==200&&Read(NPC[1]+0x98)==0&&!copying&&!selecting);
+    assert(!std::memcmp(stack.data(),B()+SP-4096,stack.size())&&_mm_getcsr()==csr);
+    std::puts("orders synchronization: empty/matching lists, invalid clients/action spans preserve all memory/context; partial-copy exceptions restore guest stack/MXCSR/scope");
+}
 int main(){
+    SynchronizationNoWork();
     NativeLookSelection();HelpRouting();MedicCollection();MedicRepeatHint();PreTeamMedicOffer();HudVisibility();
     // Negative witness: P1 registers commands, but both HUDs dispatch P2's
     // last-constructed empty list. Merely replacing key glyphs cannot fix it.

@@ -394,6 +394,10 @@ HLE_STDCALL(UrbanChaos_StreamPitch, 2) { return VoicePitch(a); }
  ds=prepare_audio_decode_cache(ds,AREA)
  from prepare_xbe_audio_surround import prepare as prepare_audio_surround
  ds,audio_output=prepare_audio_surround(ds,audio_output,AREA)
+ from prepare_xbe_audio_filter import prepare as prepare_audio_filter
+ ds=prepare_audio_filter(ds,AREA)
+ from prepare_xbe_audio_dsp import prepare as prepare_audio_dsp
+ ds=prepare_audio_dsp(ds,AREA)
  (AREA/'src/compat/xaudio2.cpp').write_text(audio_output)
  (AREA/'src/compat/dsound.cpp').write_text(ds)
  (AREA/'src/compat/test_device_refs.cpp').write_text('''#include "device_refs.h"
@@ -438,7 +442,7 @@ int main(){uint32_t r=0;if(uc_ds_ref(r,false)!=0||uc_ds_ref(r,true)!=1||uc_ds_re
  assert info.count('.init = nullptr,')==1
  info=info.replace('.init = nullptr,','.init = trial_graphics::Initialize,')
  info=info.replace('#include "xbe_graphics_settings.h"','#include "xbe_graphics_settings.h"\n#include "xbe_language.h"')
- info=info.replace('{"ragdoll_amount", nullptr, &TrialRagdollMode}', '{"death_convulsions", &TrialDeathConvulsions, nullptr}, {"ragdoll_amount", nullptr, &TrialRagdollMode}')
+ info=info.replace('{"ragdoll_amount", nullptr, &TrialRagdollMode}', '{"death_convulsions", &TrialDeathConvulsions, nullptr}, {"gameplay_blur", &TrialGameplayBlur, nullptr}, {"ragdoll_amount", nullptr, &TrialRagdollMode}')
  info=info.replace('{"ragdoll_amount", nullptr, &TrialRagdollMode}',
                    '{"ragdoll_amount", nullptr, &TrialRagdollMode}, {"language", nullptr, &TrialLanguage}, {"world_textures", &TrialWorldTextures, nullptr}, {"hd_ui", &TrialHdUi, nullptr}, {"reticle_scale", nullptr, &TrialReticleScale}, {"reticle_normal_color", nullptr, &TrialReticleColors[0][0]}, {"reticle_enemy_color", nullptr, &TrialReticleColors[0][1]}, {"reticle_friendly_color", nullptr, &TrialReticleColors[0][2]}, {"reticle_spin_color", nullptr, &TrialReticleColors[0][3]}, {"player2_reticle_normal_color", nullptr, &TrialReticleColors[1][0]}, {"player2_reticle_enemy_color", nullptr, &TrialReticleColors[1][1]}, {"player2_reticle_friendly_color", nullptr, &TrialReticleColors[1][2]}, {"player2_reticle_spin_color", nullptr, &TrialReticleColors[1][3]}, {"weapon_fov_scale", nullptr, &TrialWeaponFovScale}, {"player2_field_of_view", nullptr, &TrialPlayer2FieldOfView}, {"player2_weapon_fov_scale", nullptr, &TrialPlayer2WeaponFovScale}, {"fmv_scale", nullptr, &TrialFmvScale}')
  info=info.replace('#include "xbe_graphics_settings.h"','#include "xbe_graphics_settings.h"\n#include "xbe_audio_output.h"\n#include "xbe_health_settings.h"\n#include "xbe_cheats.h"')
@@ -471,7 +475,7 @@ int main(){uint32_t r=0;if(uc_ds_ref(r,false)!=0||uc_ds_ref(r,true)!=1||uc_ds_re
  from prepare_xbe_hd_ui import prepare as prepare_hd_ui
  prepare_hd_ui(AREA)
  from prepare_xbe_world_textures import prepare as prepare_world_textures
- prepare_world_textures(AREA)
+ prepare_world_textures(AREA,SDK)
  from prepare_xbe_coop_blur import prepare as prepare_coop_blur
  prepare_coop_blur(AREA)
  # The brightness experiment added a second readback in live Canals captures.
@@ -508,8 +512,20 @@ int main(){uint32_t r=0;if(uc_ds_ref(r,false)!=0||uc_ds_ref(r,true)!=1||uc_ds_re
   prepare_shadow_diagnostic(AREA)
  from prepare_xbe_coop_input import prepare_host as prepare_coop_pause_host
  prepare_coop_pause_host(AREA)
+ from prepare_xbe_simple_state_costs import prepare as prepare_simple_state_costs
+ prepare_simple_state_costs(AREA)
+ from prepare_xbe_vertex_constant_costs import prepare as prepare_vertex_constant_costs
+ prepare_vertex_constant_costs(AREA)
+ from prepare_xbe_lighting_bounds import integrate as prepare_lighting_bounds
+ prepare_lighting_bounds(AREA)
+ from prepare_xbe_sync_downsample_costs import prepare as prepare_sync_downsample_costs
+ prepare_sync_downsample_costs(AREA)
+ from prepare_xbe_frame_costs import finalize_target_lookup
+ finalize_target_lookup(SDK,AREA)
  from prepare_xbe_draw_bindings import finalize as finalize_draw_bindings
  finalize_draw_bindings(AREA)
+ from prepare_xbe_draw_reuse import finalize_shader_lookup
+ finalize_shader_lookup(AREA)
  zlib_dll=Path(os.environ.get('UCRR_ZLIB_DLL','C:/Users/Administrator/.cache/codex-runtimes/codex-primary-runtime/dependencies/native/git/mingw64/bin/zlib1.dll'))
  assert zlib_dll.is_file(),f'Missing zlib dependency: {zlib_dll}'
  (AREA/'CMakeLists.txt').write_text('''cmake_minimum_required(VERSION 3.25)
@@ -574,6 +590,7 @@ list(APPEND XBE_HOST_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/compat/vertex.cpp"
 list(APPEND XBE_HOST_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/compat/texture.cpp")
 list(APPEND XBE_HOST_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/compat/shaders.cpp")
 list(APPEND XBE_HOST_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/compat/dsound.cpp")
+list(APPEND XBE_HOST_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/compat/xbe_dsp_image.cpp")
 list(APPEND XBE_HOST_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/compat/xaudio2.cpp" "${CMAKE_CURRENT_SOURCE_DIR}/src/compat/xbe_audio_loop.cpp")
 list(APPEND XBE_HOST_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/compat/xbe_audio_settings.cpp")
 list(APPEND XBE_HOST_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/compat/xbe_health_settings.cpp")
@@ -623,8 +640,18 @@ add_executable(test_frame_reuse src/compat/test_xbe_frame_reuse.cpp)
 add_executable(test_wall_depth src/compat/test_xbe_wall_depth.cpp)
 add_executable(test_descriptor_lifetime src/compat/test_xbe_descriptor_lifetime.cpp)
 add_executable(test_draw_reuse src/compat/test_draw_reuse.cpp)
+add_executable(test_shader_lookup src/compat/test_shader_lookup.cpp)
+target_link_libraries(test_shader_lookup PRIVATE d3dcompiler)
 add_executable(test_draw_bindings src/compat/test_draw_bindings.cpp)
 target_include_directories(test_draw_bindings PRIVATE src "'''+(SDK/'runtime').as_posix()+'''")
+add_executable(test_simple_state_costs src/compat/test_simple_state_costs.cpp)
+target_include_directories(test_simple_state_costs PRIVATE src "'''+(SDK/'runtime').as_posix()+'''")
+add_executable(test_vertex_constant_costs src/compat/test_vertex_constant_costs.cpp)
+target_include_directories(test_vertex_constant_costs PRIVATE src "'''+(SDK/'runtime').as_posix()+'''")
+add_executable(test_lighting_bounds src/common/test_lighting_bounds.cpp)
+target_include_directories(test_lighting_bounds PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
+add_executable(test_sync_downsample src/compat/test_xbe_sync_downsample.cpp)
+target_link_libraries(test_sync_downsample PRIVATE d3d12 dxgi d3dcompiler)
 add_executable(test_screen_sampling src/compat/test_xbe_screen_sampling.cpp src/compat/shaders.cpp)
 target_include_directories(test_screen_sampling PRIVATE src src/compat "'''+(SDK/'runtime').as_posix()+'''")
 target_link_libraries(test_screen_sampling PRIVATE d3d11 d3dcompiler)
@@ -635,6 +662,7 @@ target_include_directories(test_vertex_costs PRIVATE src "'''+(SDK/'runtime').as
 add_executable(test_palette_init src/compat/test_xbe_palette_init.cpp)
 target_include_directories(test_palette_init PRIVATE src)
 add_executable(test_texture_constants src/compat/test_xbe_texture_constants.cpp)
+add_executable(test_target_lookup src/compat/test_xbe_target_lookup.cpp)
 add_executable(test_texture_formats src/compat/test_xbe_texture_formats.cpp)
 target_include_directories(test_texture_formats PRIVATE src "'''+(SDK/'runtime').as_posix()+'''")
 add_executable(test_draw_batches src/compat/test_draw_batches.cpp)
@@ -686,6 +714,10 @@ add_executable(test_audio_routing src/compat/test_audio_routing.cpp)
 add_executable(test_audio_decode_cache src/compat/test_audio_decode_cache.cpp)
 add_executable(test_audio_surround src/compat/test_audio_surround.cpp src/compat/xbe_audio_settings.cpp)
 target_include_directories(test_audio_surround PRIVATE "'''+(SDK/'runtime').as_posix()+'''" generated/game)
+add_executable(test_audio_dsp src/compat/test_audio_dsp.cpp src/compat/xbe_dsp_image.cpp)
+target_include_directories(test_audio_dsp PRIVATE "'''+ROOT.as_posix()+'''" "'''+(SDK/'runtime').as_posix()+'''" generated/game)
+add_executable(test_audio_filter src/compat/test_audio_filter.cpp)
+target_include_directories(test_audio_filter PRIVATE "'''+ROOT.as_posix()+'''" "'''+(SDK/'runtime').as_posix()+'''" generated/game)
 add_executable(test_audio_output src/compat/test_audio_output.cpp)
 target_include_directories(test_audio_routing PRIVATE "'''+ROOT.as_posix()+'''" "'''+(SDK/'runtime').as_posix()+'''" generated/game)
 target_compile_definitions(test_audio_loop PRIVATE XBE_AUDIO_TRACE_TEST=1)
@@ -760,7 +792,7 @@ target_include_directories(test_coop_death PRIVATE src/common "'''+(SDK/'runtime
 add_executable(test_coop_downed_camera src/compat/test_coop_downed_camera.cpp)
 target_include_directories(test_coop_downed_camera PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
 add_executable(test_coop_downed_blur src/compat/test_coop_downed_blur.cpp)
-target_include_directories(test_coop_downed_blur PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
+target_include_directories(test_coop_downed_blur PRIVATE src/common src/compat "'''+(SDK/'runtime').as_posix()+'''")
 add_executable(test_coop_shields src/compat/test_coop_shields.cpp)
 target_include_directories(test_coop_shields PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
 add_executable(test_coop_progression src/compat/test_coop_progression.cpp)
@@ -923,14 +955,22 @@ target_include_directories(UrbanChaosXbeTrial PRIVATE "'''+ROOT.as_posix()+'''" 
  run('test-release-assets',[AREA/'out-msvc/test_release_assets.exe',AREA/'assets/Default.xbe',ROOT/'game_files/Default.xbe'])
  run('test-disc-files',[AREA/'out-msvc/test_disc_files.exe'])
  run('test-event-callback',[AREA/'out-msvc/test_event_callback.exe'])
- run('build-frame-reuse',['cmake','--build',AREA/'out-msvc','--target','test_frame_reuse','test_descriptor_lifetime','test_readback_reuse','test_draw_reuse','test_sampler_inputs','test_vertex_costs','test_palette_init','test_texture_constants','test_texture_formats','test_draw_batches','test_vblank_wait','-j','4'])
+ run('build-frame-reuse',['cmake','--build',AREA/'out-msvc','--target','test_frame_reuse','test_descriptor_lifetime','test_readback_reuse','test_draw_reuse','test_shader_lookup','test_sampler_inputs','test_vertex_costs','test_palette_init','test_texture_constants','test_texture_formats','test_draw_batches','test_vblank_wait','-j','4'])
  run('test-frame-reuse',[AREA/'out-msvc/test_frame_reuse.exe'])
  run('build-wall-depth',['cmake','--build',AREA/'out-msvc','--target','test_wall_depth'])
  run('test-wall-depth',[AREA/'out-msvc/test_wall_depth.exe'])
  run('test-descriptor-lifetime',[AREA/'out-msvc/test_descriptor_lifetime.exe'])
  run('test-draw-reuse',[AREA/'out-msvc/test_draw_reuse.exe'])
+ run('test-shader-lookup',[AREA/'out-msvc/test_shader_lookup.exe'])
  run('build-draw-bindings',['cmake','--build',AREA/'out-msvc','--target','test_draw_bindings','-j','4'])
  run('test-draw-bindings',[AREA/'out-msvc/test_draw_bindings.exe'])
+ run('build-helper-costs',['cmake','--build',AREA/'out-msvc','--target','test_simple_state_costs','test_vertex_constant_costs','test_lighting_bounds','test_sync_downsample','test_target_lookup','-j','4'])
+ run('test-simple-state-costs',[AREA/'out-msvc/test_simple_state_costs.exe'])
+ run('test-vertex-constant-costs',[AREA/'out-msvc/test_vertex_constant_costs.exe'])
+ run('test-lighting-bounds',[AREA/'out-msvc/test_lighting_bounds.exe'])
+ run('test-sync-downsample-warp',[AREA/'out-msvc/test_sync_downsample.exe'])
+ run('test-sync-downsample-hardware',[AREA/'out-msvc/test_sync_downsample.exe','hardware'])
+ run('test-target-lookup',[AREA/'out-msvc/test_target_lookup.exe'])
  run('build-screen-sampling',['cmake','--build',AREA/'out-msvc','--target','test_screen_sampling','-j','4'])
  run('test-screen-sampling',[AREA/'out-msvc/test_screen_sampling.exe'])
  run('test-file-query-efficiency',[sys.executable,ROOT/'scripts/xbe_file_query_efficiency_checks.py','--run','--area',AREA,'--sdk',SDK])
@@ -1089,6 +1129,9 @@ target_include_directories(UrbanChaosXbeTrial PRIVATE "'''+ROOT.as_posix()+'''" 
  run('build-audio-surround',['cmake','--build',AREA/'out-msvc','--target','test_audio_surround','test_audio_output','-j','4'])
  run('test-audio-surround',[AREA/'out-msvc/test_audio_surround.exe'])
  run('test-audio-output',[AREA/'out-msvc/test_audio_output.exe'])
+ run('build-audio-dsp',['cmake','--build',AREA/'out-msvc','--target','test_audio_dsp','test_audio_filter','-j','4'])
+ run('test-audio-dsp',[AREA/'out-msvc/test_audio_dsp.exe',AREA/'assets/audiodata.bin'])
+ run('test-audio-filter',[AREA/'out-msvc/test_audio_filter.exe'])
  run('test-audio-cone',[AREA/'out-msvc/test_audio_cone.exe'])
  run('test-audio-factors',[AREA/'out-msvc/test_audio_factors.exe'])
  run('test-resource-refs',[AREA/'out-msvc/test_resource_refs.exe'])

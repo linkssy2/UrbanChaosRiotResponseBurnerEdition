@@ -9,6 +9,7 @@
 #include <d3d12.h>
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <cassert>
 #include <cstdint>
 #include <cstdio>
@@ -292,6 +293,8 @@ private:
     }
     Sink* inner_=&sink;
     std::vector<Range> ranges_=StateRanges();
+    const State* simple_source_=nullptr;
+    const State* vsc_source_=nullptr;
     State sent_{},state_{};
     Batch batch_{};
     Batch* cur_=&batch_;

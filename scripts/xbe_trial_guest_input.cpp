@@ -47,7 +47,7 @@ int TrialGuestHook(X86Context& ctx,uint8_t* base,unsigned op){
     case 38:FrontendObjectivesEnter();break;
     case 39:FrontendObjectivesLeave();break;
     case 40:FrontendObjectivesInput();break;
-    case 41:FrontendControllerInfoEnter();break;
+    case 41:result=FrontendControllerInfoEnter();break;
     case 36:{
         spin_button=false;
         if(menu_pointer_readable(g_esi,0x80c)&&menu_pointer_readable(g_esp+8,8)&&
@@ -66,7 +66,7 @@ int TrialGuestHook(X86Context& ctx,uint8_t* base,unsigned op){
     case 2:ucrr_menu_list_enter();FrontendListEnter();break;case 3:GraphicsMenuCapture();ucrr_menu_list_leave();break;
     case 4:ucrr_menu_adjust_enter();break;case 5:ucrr_menu_adjust_leave();break;
     case 6:ucrr_menu_arrow_bounds();break;case 7:ucrr_menu_list_hover();break;
-    case 8:ucrr_menu_row_bounds();break;case 9:result=FrontendObjectivesQuery()||FrontendNameQuery()||ucrr_menu_click_query();break;
+    case 8:ucrr_menu_row_bounds();break;case 9:result=FrontendControllerInfoQuery()||FrontendObjectivesQuery()||FrontendNameQuery()||ucrr_menu_click_query();break;
     case 10:ucrr_level_enter();break;case 11:ucrr_level_leave();break;
     case 12:result=ucrr_level_hover();break;case 13:ucrr_level_thumb_begin();break;
     case 14:ucrr_level_thumb_bounds();break;

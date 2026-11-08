@@ -16,12 +16,12 @@ def prepare(area):
     s=replace(s,'        LOGE("input: SDL failed', '        input_diagnostic::Log("SDL initialization failed");\n        LOGE("input: SDL failed')
     p.write_text(s)
     p=area/'src/common/xbe_trial_menu_input.cpp';s=p.read_text();s='#include "xbe_input_diagnostic.h"\n'+s
-    s=replace(s,'    ControlsCaptureMessage(msg,wp);','''    if(input_diagnostic::Enabled()){
+    s=replace(s,'    ControlsCaptureMessage(msg,wp,lp);','''    if(input_diagnostic::Enabled()){
         static unsigned keys=0,clicks=0,moves=0;static input_diagnostic::Rate rate;
         keys+=msg==WM_KEYDOWN;clicks+=msg==WM_LBUTTONDOWN||msg==WM_RBUTTONDOWN;moves+=msg==WM_MOUSEMOVE;
         if(rate.Due()){input_diagnostic::Log("host keys=%u clicks=%u moves=%u focus=%d",keys,clicks,moves,focused());keys=clicks=moves=0;}
     }
-    ControlsCaptureMessage(msg,wp);''')
+    ControlsCaptureMessage(msg,wp,lp);''')
     s=replace(s,'    if(port<0||port>=4)return;','''    if(port<0||port>=4)return;
     if(input_diagnostic::Enabled()){
         static input_diagnostic::Rate rate[4];
