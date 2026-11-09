@@ -171,8 +171,21 @@ def prepare(sdk,area):
     if gpu_fixture.exists():
         textures=source[source.index('struct DrawTextures {'):source.index('\n};',source.index('struct DrawTextures {'))+3]
         fill=function(source,'void D3D12Backend::FillTexelConstants(').replace('D3D12Backend::','')
+        # Use the final maintained constant mapper, including the later dirty-state patch.
+        from prepare_xbe_simple_state_costs import rewrite_writes, TEXTURE_WRITES
+        texture=rewrite_writes((compat/'texture.cpp').read_text(),TEXTURE_WRITES,(1,1,1,1))
+        feedback='\n'.join(function(text,signature) for text,signature in (
+            (texture,'uint32_t PackColor('),(texture,'void ApplyPixelConstants('),
+            (source,'void Color('),(source,'uint32_t SimpleState('),(source,'void FillCombinerConstants(')))
+        for address,size,digest in ((0x4f8550,16,'92f8e4ae71e30802d288bb46ee3369521f1a5ac5fd75816e40a31f22f56971ee'),
+                                    (0x4f6cc0,240,'506eacb1ebc775bd5b21d147195daba354abaadbc033688c2efa8a5adc0f55d7')):
+            section=next(s for s in sections if s[1]<=address and address+size<=s[1]+s[4])
+            offset=section[3]+address-section[1];data=xbe[offset:offset+size]
+            assert hashlib.sha256(data).hexdigest()==digest,hex(address)
+            if address==0x4f8550:assert struct.unpack('<4I',data)==(0x4f6cc0,1,0x51a238,0)
+            else:feedback+='\nconstexpr uint32_t kFeedbackShader[]={'+','.join(f'0x{v:x}u' for v in struct.unpack('<60I',data))+'};\n'
         fixture=gpu_fixture.read_text()
-        fixture=once(fixture,'// PRODUCTION_COOP_AIM_BLUR_RENDER_GPU',textures+'\nconstexpr float kGlowBoxTexels=3.0f;\n'+fill)
+        fixture=once(fixture,'// PRODUCTION_COOP_AIM_BLUR_RENDER_GPU',textures+'\nconstexpr float kGlowBoxTexels=3.0f;\n'+fill+'\n'+feedback)
         (compat/'test_coop_aim_blur_render_gpu.cpp').write_text(fixture)
     # Run the original emitted quad builders in the contract fixture, not a
     # second implementation of their topology, UV packing or stack offsets.

@@ -1,5 +1,62 @@
 # Burner Edition: current runtime
 
+## Weapon selector acceptance and 0.17 preparation (November 8)
+
+The user confirmed forward/reverse selector visuals on the normal candidate
+`e70d7ea19d89a4e9ce1a6ff4826d47fe554f6190eca57bf546bfb097db98e321`, then accepted
+cycling with ten firearm variants in private all-weapons runtime
+`224fc9fd12433c55b83b216558001f9fb69fa92a723a1ce76da3cd2227c67311`.
+The latter only adds a session-only menu toggle, native resource preloads and
+native inventory grants; the maintained selector code is identical. This is
+user visual acceptance of that longer inventory, not a full campaign or Proton
+verification. The temporary cheat and copied test saves must not ship. Normal
+Mk. progression is unchanged. Preserve private recipes/evidence under
+`build/all-weapons-test-20261108`; release preparation lives in `build/release-0.17`.
+
+## Separate frame ghosting control (November 8)
+
+Graphics now separates Gameplay blur (scene-depth and co-op downed softening)
+from Frame ghosting (previous-frame feedback). Both are saved shared settings
+for single-player and both co-op views, including shared cutscene cameras. Apply
+publishes immediately; neither option rebuilds display resources. Turn both Off
+to suppress both screen effects. Keep glow, authored particle streaks, heat haze,
+camera motion and prerendered movies separate from these controls.
+
+New installs retain the original default-On behavior. When loading an older
+settings file without `frame_ghosting`, inherit its `gameplay_blur` value once;
+an explicit new ghosting value wins. This preserves the previous all-Off choice.
+The final composite `000A2C70` uses FrameGhosting for its neutral local history
+weight; `00097B50` and the co-op downed pass continue using GameplayBlur. Keep
+effect aging and history rotation running while either presentation is disabled.
+
+The report in `build/blur-report-20261108` confirms original MotionBlur events in
+the matching train-crash animation. The user subsequently confirmed the reporter
+had Gameplay blur Off; treat that as a reported failure, not proof the separate
+toggle fixes the recorded effect. Exact running version and live reproduction
+still require confirmation.
+Implementation, paired candidate receipts and verification limits belong in
+`build/frame-ghosting-20261108`. Source-backed fixtures and GPU sampling checks
+remain distinct from live acceptance in those exact scenes and on Proton.
+
+## Weapon selector direction (November 8)
+
+The user's three-firearm recording confirms a separate presentation defect:
+shotgun-to-pistol changes the ammunition display correctly, but the carousel
+passes through Assault Rifle Mk.3. The original HUD updater `00077230` only
+advances its fractional selection index forward. Reversing inventory selection
+alone does not reverse that animation.
+
+Keep the correction in `prepare_xbe_firearm_cycle.py` and
+`xbe_firearm_cycle.h`. Remember the accepted Previous Firearm selection at
+`00042230`, scoped to its inventory owner and target; use it only for that
+owner's firearm carousel. Preserve the original animation speed, fade, renderer,
+controller forward cycle, other categories and inventory eligibility. Direction
+must survive key release and be replaced by subsequent forward/direct selection.
+The retail-function fixture covers wraparound, rapid changes and co-op ownership.
+Private evidence and paired candidate verification belong in
+`build/weapon-selector-direction-20261108`; do not equate fixtures with live
+visual acceptance or Proton verification.
+
 ## Private firearm cycling and optional mixed input (November 7)
 
 Issue #27 reproduced offline with the production host input adapter and original
@@ -42,7 +99,8 @@ scene blur observes the same setting; the red warning, timer and revive rules
 are unchanged. Do not suppress the generic Gaussian filter or authored blurred
 particles: glow and other rendering use those paths too.
 
-The separate MotionBlur manager publishes through `0005F890` to graphics `+28`
+Before the separate Frame ghosting control above, the MotionBlur manager also
+followed Gameplay blur. It publishes through `0005F890` to graphics `+28`
 (`000898C0`, descriptor `004561D4`, strength setter `0009D480`). Its consumer is
 `000A2C70`: override only the local strength after `000A30A9` with the original
 neutral zero when Off. Retain the current-scene composite and original effect

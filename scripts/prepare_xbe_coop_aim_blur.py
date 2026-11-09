@@ -4,6 +4,13 @@ import hashlib
 import struct
 
 PINS=(
+    (0x445e0,24,'f773a24cff17f32dc8da445541b2db6ca11bb082750db10f3f3eea6974a8849f'),
+    (0x44600,35,'01b57a9dc8bd2773a898cf8b0589954cc92dcc867cbf6367683de648256f3b3d'),
+    (0x5f890,448,'7505f740214023adb56d6986f469e0434dc5484b36955e70f4b26284874e20c5'),
+    (0x691b0,118,'cdee02cf6dccfc1e7cb55411f600a8224ff0b347db72670317e7a64970664d47'),
+    (0x9d480,38,'40a3e1d137e1273b7d1f7f0961e0242a13723b7d25ae433005b08cb3ad94c710'),
+    (0x44bf94,4,'e00e5eb9444182f352323374ef4e08ebcb784725fdd4fd612d7730540b3e0c8c'),
+    (0x44e594,4,'030a1a64b337c633d995221728d15e8b0d086cc0dcf4557205111b089b04464d'),
     (0x48e10,69,'2c0fd8c942f231829f22bc45235da5d42459d396a6b32fc94e72b3e5ebbd1c98'),
     (0x48e60,20,'f2b03d11da47ff2a82b5aaa52c27bf495418cd455750fa6b54a59823881af3cb'),
     (0x48e80,387,'eec9ba37667d61378e03b0e9c234f06da3195c04d9f3800191e57f962e2f89f0'),
@@ -37,7 +44,12 @@ BODIES={
         0x947c0:'9c6358b40ed42858f2a63f903ca708103be0e6ccb065cbc94e1c2f35dfeb1288',
         0x97050:'c807831b97bf7ebb01b52c0e7197e4021415cf9bca270ab7997a6075ed9842d2',
         0x97b50:'65db934ea7fddf4ee7a610e245d6cd0da74988bc1f7c61997ab6dc4bd84b41e8'},
-    16:{0xa2c70:'b327d489d0600b50ba69c3cd11dffef1d6c67fd2a218cbbd35d589a5e6f68c1e'},
+    16:{0xa2c70:'b327d489d0600b50ba69c3cd11dffef1d6c67fd2a218cbbd35d589a5e6f68c1e',
+        0x9d480:'46ee63d22fa165a2ea549d888a9a0e659d4a5f42f57adf15c3cb527b944c5b76'},
+    5:{0x445e0:'ebc530c70abc1bb14b2dc4d8d0db96395f0d2a1cfbfef706fb129610d26c8158',
+       0x44600:'e42da55f7d6e6a920d98ca520b9ded3b7a142be212fd34d6d874217cd7e6b286'},
+    10:{0x691b0:'87d6cca131b21281743d78af490db97405f519110a9c9e834f5fe85ae20569e2'},
+    8:{0x5f890:'a1d9bb31e37a5e2ce2de453e74f5802ede4a6fe80898cd2214e54eed72967df6'},
 }
 INCLUDE='#include "xbe_coop_aim_blur.h"\n'
 SETTINGS_INCLUDE='#include "xbe_graphics_settings.h"\n'
@@ -55,11 +67,15 @@ HOOKS={6:(
     ('\t// 00097B9A mov eax, [esi]\n','\tif (!trial_graphics::GameplayBlur()) goto loc_00097C0B;\n'),
 ),16:(
     # Neutral history weight keeps the current-scene composite and presentation alive.
-    ('\t// 000A30AD mov ecx, [esp+0x2C]\n','\tif (!trial_graphics::GameplayBlur()) X86_MEMF32(ctx.esp + 0x24u) = 0.0f;\n'),
+    ('\t// 000A30AD mov ecx, [esp+0x2C]\n','\tif (!trial_graphics::FrameGhosting()) X86_MEMF32(ctx.esp + 0x24u) = 0.0f;\n'),
 )}
+LEGACY_FEEDBACK_HOOK='\tif (!trial_graphics::GameplayBlur()) X86_MEMF32(ctx.esp + 0x24u) = 0.0f;\n'
 
 def clean(source,unit):
     source=source.replace(INCLUDE,'').replace(SETTINGS_INCLUDE,'')
+    if unit==16:
+        anchor=HOOKS[16][0][0]
+        source=source.replace(LEGACY_FEEDBACK_HOOK+anchor,anchor)
     for _,hook in HOOKS.get(unit,()):source=source.replace(hook,'')
     return source
 
@@ -101,17 +117,22 @@ def patched(source,unit):
 
 def fixture(sources):
     parts=[]
+    for unit in HOOKS:
+        assert clean(patched(sources[unit],unit),unit)==sources[unit]
+        assert patched(clean(patched(sources[unit],unit),unit),unit)==patched(sources[unit],unit)
+    legacy=patched(sources[16],16).replace(HOOKS[16][0][1],LEGACY_FEEDBACK_HOOK)
+    assert clean(legacy,16)==sources[16]
     for unit,bodies in BODIES.items():
         for address in bodies:
             if address in (0x490a0,0xa2c70):continue
-            body=function(patched(sources[unit],unit),address)
+            body=function(patched(sources[unit],unit) if unit in HOOKS else sources[unit],address)
             parts.append(body.replace(f'__imp__sub_{address:08X}',f'sub_{address:08X}',1))
     # Original complete pulse/update bodies serve as independent native parity oracles.
     for address,name in ((0x490d0,'OriginalPulse'),(0x48e80,'OriginalUpdate')):
         parts.append(function(sources[6],address).replace(f'__imp__sub_{address:08X}',name,1))
     # Execute the actual publication, history admission and shader-weight instructions.
     # The surrounding current-scene draw remains byte-for-byte original, not bypassed.
-    for source,prefix in ((sources[16],'Original'),(patched(sources[16],16),'Patched')):
+    for source,prefix in ((sources[16],'Original'),(patched(sources[16],16),'Patched'),(legacy,'Legacy')):
         body=function(source,0xa2c70)
         for name,first,last in (('FeedbackPublication','000A308D','000A30AD'),
                                 ('FeedbackHistory','000A30F3','000A3125'),
@@ -130,7 +151,7 @@ def fixture(sources):
 
 def prepare(area):
     area=Path(area);local=Path(__file__).parent;sources=verified_sources(area)
-    for unit,source in sources.items():(area/f'generated/game/x86_recomp.{unit}.cpp').write_text(patched(source,unit))
+    for unit in HOOKS:(area/f'generated/game/x86_recomp.{unit}.cpp').write_text(patched(sources[unit],unit))
     for name in ('xbe_coop_aim_blur.h','xbe_coop_aim_blur.cpp'):
         (area/'src/common'/name).write_text((local/name).read_text())
     (area/'src/compat/test_coop_aim_blur.cpp').write_text(fixture(sources))

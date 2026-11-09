@@ -76,7 +76,8 @@ struct Gpu {
         ComPtr<ID3D11RasterizerState> rs;Check(device->CreateRasterizerState(&raster,&rs));context->RSSetState(rs.Get());
         D3D11_SAMPLER_DESC sampler{};sampler.Filter=D3D11_FILTER_MIN_MAG_LINEAR_MIP_POINT;
         sampler.AddressU=sampler.AddressV=sampler.AddressW=D3D11_TEXTURE_ADDRESS_CLAMP;sampler.MaxLOD=D3D11_FLOAT32_MAX;
-        ComPtr<ID3D11SamplerState> ss;Check(device->CreateSamplerState(&sampler,&ss));auto sr=ss.Get();context->PSSetSamplers(0,1,&sr);
+        ComPtr<ID3D11SamplerState> ss;Check(device->CreateSamplerState(&sampler,&ss));
+        ID3D11SamplerState* samplers[]{ss.Get(),ss.Get()};context->PSSetSamplers(0,2,samplers);
         const uint32_t indices[]={0,1,2,0,2,3};auto ib=Buffer(indices,sizeof(indices),D3D11_BIND_INDEX_BUFFER);
         context->IASetIndexBuffer(ib.Get(),DXGI_FORMAT_R32_UINT,0);
     }
@@ -86,17 +87,77 @@ struct Gpu {
         Check(device->CreateBuffer(&description,&initial,&buffer));return buffer;
     }
     void Draw(ID3D11RenderTargetView* target,ID3D11ShaderResourceView* source,ID3D11PixelShader* shader,
-              const float* vertices,const DrawConstants& constants){
+              const float* vertices,const DrawConstants& constants,ID3D11ShaderResourceView* history=nullptr){
         auto vb=Buffer(vertices,20*sizeof(float),D3D11_BIND_VERTEX_BUFFER);auto vr=vb.Get();UINT stride=20,offset=0;
         context->IASetVertexBuffers(0,1,&vr,&stride,&offset);
         auto cb=Buffer(&constants,sizeof(constants),D3D11_BIND_CONSTANT_BUFFER);auto cr=cb.Get();
         context->VSSetConstantBuffers(1,1,&cr);context->PSSetConstantBuffers(1,1,&cr);
-        context->OMSetRenderTargets(1,&target,nullptr);context->PSSetShaderResources(0,1,&source);
+        ID3D11ShaderResourceView* sources[]{source,history};
+        context->OMSetRenderTargets(1,&target,nullptr);context->PSSetShaderResources(0,2,sources);
         context->PSSetShader(shader,nullptr,0);context->DrawIndexed(6,0,0);
-        ID3D11ShaderResourceView* none=nullptr;context->PSSetShaderResources(0,1,&none);
+        ID3D11ShaderResourceView* none[2]{};context->PSSetShaderResources(0,2,none);
         context->OMSetRenderTargets(0,nullptr,nullptr);
     }
 };
+
+static void CheckFeedbackPixels(Gpu& gpu){
+    State state;state.ps=std::make_shared<PixelShader>();
+    static_assert(sizeof(kFeedbackShader)==sizeof(state.ps->def));
+    std::memcpy(state.ps->def,kFeedbackShader,sizeof(kFeedbackShader));
+    state.rs[kRsPsTextureModes]=state.ps->def[54];state.TrackSimple();
+    assert(state.ps->def[59]==0x1f2); // The retail final combiner reads D3D constant 2.
+    ComPtr<ID3D11PixelShader> shaders[2];
+    for(unsigned history=0;history<2;++history){
+        TexInfo textures[4]{};textures[0]={kTex2D,1};if(history)textures[1]={kTex2D,1};
+        auto key=MakePixelKey(state,textures);key.quad=1;
+        assert(key.tex_modes==(history?0x21u:1u));
+        const auto code=Compile(PixelHlsl(key),"ps_5_0");
+        Check(gpu.device->CreatePixelShader(code->GetBufferPointer(),code->GetBufferSize(),nullptr,&shaders[history]));
+    }
+    constexpr unsigned size=8;
+    D3D11_TEXTURE2D_DESC description{};description.Width=description.Height=size;
+    description.MipLevels=description.ArraySize=1;description.Format=DXGI_FORMAT_R32G32B32A32_FLOAT;
+    description.SampleDesc.Count=1;description.BindFlags=D3D11_BIND_RENDER_TARGET|D3D11_BIND_SHADER_RESOURCE;
+    ComPtr<ID3D11Texture2D> images[3],readback;ComPtr<ID3D11ShaderResourceView> sources[2];
+    for(auto& image:images)Check(gpu.device->CreateTexture2D(&description,nullptr,&image));
+    for(unsigned i=0;i<2;++i)Check(gpu.device->CreateShaderResourceView(images[i].Get(),nullptr,&sources[i]));
+    ComPtr<ID3D11RenderTargetView> target;Check(gpu.device->CreateRenderTargetView(images[2].Get(),nullptr,&target));
+    description.BindFlags=0;description.Usage=D3D11_USAGE_STAGING;description.CPUAccessFlags=D3D11_CPU_ACCESS_READ;
+    Check(gpu.device->CreateTexture2D(&description,nullptr,&readback));
+    D3D11_VIEWPORT viewport{0,0,float(size),float(size),0,1};gpu.context->RSSetViewports(1,&viewport);
+    const float quad[]={0,0,1,0,0,size,0,1,size,0,size,size,1,size,size,0,size,1,0,size};
+    DrawConstants constants{};constants.surf[0]=constants.surf[1]=size;constants.surf[2]=1;constants.misc[1]=7;
+    DrawTextures textures{};textures.rt[0]=textures.rt[1]=true;
+    FillTexelConstants(0,size,size,textures,constants);FillTexelConstants(1,size,size,textures,constants);
+    unsigned frame=0;
+    for(bool keep_history:{false,true})for(float weight:{.8f,0.f,.2f,0.f,.8f,0.f,0.f}){
+        const bool history=keep_history||weight>0;
+        const std::array<float,4> current{.125f+float(frame%4)*.125f,.25f,.75f,1};
+        const std::array<float,4> previous{.875f,.75f,.125f+float(frame%3)*.125f,1};++frame;
+        for(unsigned i=0;i<2;++i){
+            std::array<std::array<float,4>,size*size> pixels;pixels.fill(i?previous:current);
+            gpu.context->UpdateSubresource(images[i].Get(),0,nullptr,pixels.data(),size*16,0);
+        }
+        state.psc[2].fill(weight);state.simple_dirty.fill(0);ApplyPixelConstants(state,2,1);
+        assert(state.simple_dirty[1]&(uint64_t(1)<<56));
+        FillCombinerConstants(state,constants);for(float value:constants.pc[16])assert(value==weight);
+        const float clear[]{.99f,.01f,.99f,.5f};gpu.context->ClearRenderTargetView(target.Get(),clear);
+        gpu.Draw(target.Get(),sources[0].Get(),shaders[history].Get(),quad,constants,history?sources[1].Get():nullptr);
+        gpu.context->CopyResource(readback.Get(),images[2].Get());D3D11_MAPPED_SUBRESOURCE mapped{};
+        Check(gpu.context->Map(readback.Get(),0,D3D11_MAP_READ,0,&mapped));
+        for(unsigned y=0;y<size;++y)for(unsigned x=0;x<size;++x){
+            const auto actual=reinterpret_cast<const float*>(static_cast<const uint8_t*>(mapped.pData)+y*mapped.RowPitch)+4*x;
+            for(unsigned channel=0;channel<4;++channel){
+                const float expected=channel==3?0.f:current[channel]*(1-weight)+previous[channel]*weight;
+                if(std::abs(actual[channel]-expected)>.00001f){
+                    std::fprintf(stderr,"feedback frame%u history%u weight%.2f pixel%u,%u channel%u actual%.6f expected%.6f\n",
+                        frame,unsigned(history),weight,x,y,channel,actual[channel],expected);assert(false);}
+            }
+        }
+        gpu.context->Unmap(readback.Get(),0);
+    }
+    std::puts("PASS 14 retail feedback GPU frames: pinned shader, production constant mapping/key/HLSL/fill, nonzero-to-zero weights, changing current/history, zero with history bound or absent");
+}
 
 static std::array<float,4> Pixel(unsigned x,unsigned y,unsigned height){
     return {float((x*13+y*7)%23)/24.f,y<height/2?.875f:0.f,y<height/2?0.f:.875f,
@@ -194,7 +255,7 @@ int main(int argc,char** argv){
     float bounds[4]{};
     assert(!CoopAimBlurBounds(2,64,48,bounds));assert(!CoopAimBlurBounds(0,0,48,bounds));
     assert(!CoopAimBlurBounds(0,64,0,bounds));assert(!CoopAimBlurBounds(1,64,1,bounds));
-    Gpu gpu(argc==2);unsigned cases=0,negative=0,wide_cases=0,wide_negative=0;
+    Gpu gpu(argc==2);CheckFeedbackPixels(gpu);unsigned cases=0,negative=0,wide_cases=0,wide_negative=0;
     for(auto size:{std::array<unsigned,2>{64,48},std::array<unsigned,2>{96,54},std::array<unsigned,2>{128,48}})
         for(float scale:{.5f,.75f,1.f,1.25f,2.f})for(unsigned slot:{0u,1u}){
             RunCase(gpu,size[0],size[1],scale,slot,0,negative);++cases;

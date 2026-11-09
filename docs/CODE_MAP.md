@@ -1,4 +1,4 @@
-# Burner Edition 0.16 source map
+# Burner Edition 0.17 source map
 
 - `scripts/build_xbe_game_trial.py`: maintained build, preparation order and tests.
 - `scripts/prepare_xbe_*.py`: pinned transformations of the XboxXBERecomp runtime
@@ -9,6 +9,9 @@
 - `scripts/xbe_trial_menu_input.cpp`, `xbe_controls*` and
   `xbe_keyboard_bindings.inc`: published firearm direction, optional mixed
   controller/mouse gameplay and separate co-op ownership.
+- `scripts/xbe_firearm_cycle.h` and `prepare_xbe_firearm_cycle.py`: original
+  inventory cycling and the matching reverse HUD carousel, scoped to the
+  selecting player and target. The pickup fixture shares the selection hook.
 - `scripts/xbe_ragdoll_drag.*`: per-player held-Interact body dragging through
   the original input, collision query and physics-force paths.
 - `scripts/xbe_corpse_shield*` and `scripts/corpse_shield_assets.py`: the optional
@@ -22,7 +25,8 @@
   per-voice filtering connected to the pinned runtime's audio processors.
 - `scripts/xbe_graffiti_alpha.h`: exact-identity graffiti opacity enhancement.
 - `scripts/xbe_graphics_settings.*`, `prepare_xbe_coop_aim_blur.py` and
-  `xbe_coop_downed_blur.cpp`: the shared Gameplay blur option and its consumers.
+  `xbe_coop_downed_blur.cpp`: separate shared Gameplay blur and Frame ghosting
+  options, saved-setting migration and their final presentation consumers.
 - `native/`: only model, animation, texture and archive helpers reached by the
   current build/setup closure; unrelated historical reconstruction is excluded.
 - `launcher/burner-xbe`: Windows launchers and common verified setup worker.

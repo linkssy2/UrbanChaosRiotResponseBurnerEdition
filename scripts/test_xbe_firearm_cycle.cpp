@@ -11,7 +11,7 @@ namespace mem {bool IsCommitted(uint32_t a){return a>=0x10000&&a<kernel::memory.
 #include "xbe_firearm_cycle.h"
 using namespace kernel;
 static constexpr uint32_t player=0x600000,inventory=player+0x498,items=0x610000,
-    descriptors=0x620000,order=0x630000,reserves=0x640000,stack=0x700000;
+    descriptors=0x620000,order=0x630000,reserves=0x640000,hud=0x650200,stack=0x700000;
 static constexpr uint32_t ids[]={17,2,5,8}; // Checkpoint order is not item-ID order.
 static int direction=0;
 static unsigned pressed_category=0,publications=0,transitions=0;
@@ -39,6 +39,7 @@ X86_FUNC(sub_000BC560){assert(ctx.ecx==player);ctx.esp+=4;}
 static uint32_t item(unsigned id){return items+id*0x5c;}
 static void reset(unsigned current=0,unsigned count=4,unsigned category=0){
     memory.fill(0);direction=0;pressed_category=category;press=true;fail_publish=false;
+    trial_firearm_cycle::hud_cycle={};
     publications=transitions=0;assert(!trial_firearm_cycle::inventory);
     W32(inventory,items);W32(inventory+0x64,ids[current]);W32(inventory+0x68,ids[current]);W32(inventory+0x6c,ids[current]);
     for(unsigned c=0;c<3;++c)W32(inventory+0x70+c*4,0xffffffff);
@@ -65,6 +66,20 @@ static unsigned cycle(int dir,bool consumer=true,uint32_t caller=0xC4E03,unsigne
     if(consumer)sub_000C4CB0(ctx,g_base);else sub_00042840(ctx,g_base);
     preserved(ctx,stack+(consumer?4:8));return R32(inventory+0x68);
 }
+static uint32_t hud_category(unsigned category=0){return hud+0x16c+category*0xe8;}
+static void setup_hud(unsigned count=3,unsigned category=0){
+    W32(hud+8,player);W32(hud_category(category)+0xe4,count);
+    for(unsigned i=0;i<count;++i)W32(hud_category(category)+0xc+i*8,ids[i]);
+    W32(0x453568,0x40e49249);G<float>(0x44bf94)=1.f;
+}
+static float hud_step(unsigned target,float delta=.035f,unsigned category=0,bool active=true,bool original=false){
+    auto ctx=context(hud,0x7721e,category);
+    W32(stack+8,target);W32(stack+12,active);G<float>(stack+16)=delta;
+    if(original)original_hud_step(ctx,g_base);else sub_00077230(ctx,g_base);
+    preserved(ctx,stack+20);
+    return G<float>(hud_category(category));
+}
+static void near(float actual,float expected){assert(std::fabs(actual-expected)<.00001f);}
 int main(){
     unsigned cases=0;
     for(int dir:{-1,1})for(unsigned current=0;current<4;++current){
@@ -112,8 +127,50 @@ int main(){
     // A guest exception cannot leave the reverse scope active for later automatic selection.
     reset();direction=-1;fail_publish=true;auto ctx=context(inventory);
     try{sub_00042840(ctx,g_base);assert(false);}catch(const std::runtime_error&){}
-    assert(!trial_firearm_cycle::inventory);++cases;
+    assert(!trial_firearm_cycle::inventory);
+    assert(trial_firearm_cycle::hud_cycle.inventory==inventory&&trial_firearm_cycle::hud_cycle.target==R32(inventory+0x68));
+    fail_publish=false;auto recover=context(inventory);W32(stack+4,ids[1]);sub_00042230(recover,g_base);
+    assert(!trial_firearm_cycle::hud_cycle.inventory);++cases;
     // Pending selection after a checkpoint keeps its authored non-numeric ordering.
     reset(3);assert(cycle(-1)==ids[2]);W32(inventory+0x64,ids[2]);assert(cycle(-1)==ids[1]);++cases;
-    std::printf("firearm cycle: %u retail input/scan cases; reverse/wrap/checkpoint order, ownership/ammo, zero/one, recursion, controller/category/automatic parity and unwind passed\n",cases);
+    // The original HUD must take the backward adjacent edge, not animate through the other gun.
+    reset(0,3);setup_hud();assert(cycle(-1)==ids[2]);direction=0;
+    static auto hud_saved=memory,hud_result=memory;hud_saved=memory;
+    near(hud_step(ids[2],.035f,0,true,true),.25f);
+    near(hud_step(ids[2],.105f,0,true,true),1.f); // Original traverses the unrelated middle gun.
+    memory=hud_saved;
+    G<float>(hud_category()+8)=.2f;
+    near(hud_step(ids[2]),2.75f);near(G<float>(hud_category()+8),.45f);
+    near(hud_step(ids[2]),2.5f);near(hud_step(ids[2]),2.25f);near(hud_step(ids[2]),2.f);
+    near(hud_step(ids[2]),2.f);assert(!trial_firearm_cycle::hud_cycle.inventory);++cases;
+    // Another backward press while in flight retains direction, including after release.
+    reset(0,3);setup_hud();assert(cycle(-1)==ids[2]);near(hud_step(ids[2]),2.75f);
+    W32(inventory+0x64,ids[2]);assert(cycle(-1)==ids[1]);direction=0;
+    near(hud_step(ids[1]),2.5f);near(hud_step(ids[1],1.f),1.f);++cases;
+    // Forward input replaces the old direction; automatic/direct selection clears it too.
+    reset(0,3);setup_hud();assert(cycle(-1)==ids[2]);near(hud_step(ids[2]),2.75f);
+    W32(inventory+0x64,ids[2]);assert(cycle(1)==ids[0]);assert(!trial_firearm_cycle::hud_cycle.inventory);
+    near(hud_step(ids[0],.021f),2.9f);near(hud_step(ids[0],.021f),0.f);++cases;
+    reset(0,3);setup_hud();assert(cycle(-1)==ids[2]);
+    auto direct=context(inventory);W32(stack+4,ids[1]);sub_00042230(direct,g_base);
+    assert(!trial_firearm_cycle::hud_cycle.inventory);near(hud_step(ids[1]),.25f);++cases;
+    // Other owners and categories use the original forward animation and original fades.
+    reset(0,3);setup_hud();setup_hud(3,1);assert(cycle(-1)==ids[2]);
+    W32(hud+8,player+0x1000);hud_saved=memory;
+    near(hud_step(ids[2]),.25f);hud_result=memory;
+    memory=hud_saved;hud_step(ids[2],.035f,0,true,true);assert(memory==hud_result);
+    W32(hud+8,player);near(hud_step(ids[2],.035f,1),.25f);++cases;
+    reset(0,3);setup_hud();assert(cycle(-1)==ids[2]);G<float>(hud_category()+8)=.5f;
+    near(hud_step(ids[2],.035f,0,false),2.75f);near(G<float>(hud_category()+8),.25f);++cases;
+    // Eligibility rebuilds may change count/order while a selection is animating.
+    reset(0,3);setup_hud();assert(cycle(-1)==ids[2]);near(hud_step(ids[2]),2.75f);
+    W32(hud_category()+0xe4,2);W32(hud_category()+0xc,ids[2]);W32(hud_category()+0x14,ids[0]);
+    near(hud_step(ids[2]),.5f);near(hud_step(ids[2],1.f),0.f);++cases;
+    reset(0,3);setup_hud();assert(cycle(-1)==ids[2]);W32(hud_category()+0xe4,1);W32(hud_category()+0xc,ids[2]);
+    near(hud_step(ids[2]),0.f);W32(hud_category()+0xe4,0);near(hud_step(ids[2]),0.f);++cases;
+    reset(0,3);setup_hud();assert(cycle(-1)==ids[2]);W32(hud_category()+0xe4,2);
+    G<float>(hud_category())=.5f;hud_saved=memory;
+    hud_step(ids[2]);hud_result=memory;
+    memory=hud_saved;hud_step(ids[2],.035f,0,true,true);assert(memory==hud_result);++cases;
+    std::printf("firearm cycle: %u retail input/scan/HUD cases; reverse/wrap/checkpoint order, ammo eligibility, key-release/rapid input, owner/category/fade isolation and unwind passed\n",cases);
 }

@@ -1,4 +1,4 @@
-# Urban Chaos: Riot Response - Burner Edition 0.16
+# Urban Chaos: Riot Response - Burner Edition 0.17
 
 HD HUD is still a work in progress and has known prompt/display issues.
 Turn HD UI Off to use the original HUD, which works normally.
@@ -9,9 +9,10 @@ PC controls and menus. Original gameplay is statically recompiled from Xbox code
 XboxXBERecomp: https://github.com/TGP482/XboxXBERecomp
 
 ## This Update
-Fixes Previous Firearm sometimes cycling in the wrong direction, adds an optional
-Controller + mouse mode for single-player (Off by default), and keeps Graphics
-and Audio setting descriptions clear of the bottom frame.
+Corrects the weapon selector animation when cycling backward and adds a separate
+Frame ghosting graphics option. Turn Gameplay blur and Frame ghosting Off to
+disable both screen effects. These saved settings carry across mission loads
+and restarts. The temporary all-weapons testing cheat is not included.
 See the release page for the complete change list:
 https://github.com/linkssy2/UrbanChaosRiotResponseBurnerEdition/releases
 

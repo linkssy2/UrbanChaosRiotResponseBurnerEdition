@@ -20,6 +20,7 @@ extern bool TrialHdUi;
 extern bool TrialWorldTextures;
 extern bool TrialDeathConvulsions;
 extern bool TrialGameplayBlur;
+extern bool TrialFrameGhosting;
 extern uint32_t TrialCharacterQuality, TrialRagdollMode;
 namespace trial_graphics {
 // Zero retains the authored state color. Values are stable settings-file IDs.
@@ -40,6 +41,7 @@ struct Draft {
     std::array<uint32_t,4> reticle_colors{}; // normal, enemy, friendly, spin
     bool death_convulsions = true;
     bool gameplay_blur = true;
+    bool frame_ghosting = true;
 };
 Draft Snapshot();
 Draft Snapshot(unsigned player);
@@ -77,6 +79,7 @@ uint32_t CharacterQuality(); // 0 full, 1 simple; player lighting stays intact
 uint32_t RagdollMode(); // 0 original, 1 more, 2 retain until mission teardown
 bool DeathConvulsions();
 bool GameplayBlur();
+bool FrameGhosting();
 bool Apply(const Draft& draft, std::string& message);
 bool Apply(const Draft& draft, std::string& message, unsigned player);
 // Validation is separate from the platform's fullscreen-mode availability test.

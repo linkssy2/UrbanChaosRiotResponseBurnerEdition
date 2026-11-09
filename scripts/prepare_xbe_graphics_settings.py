@@ -26,6 +26,10 @@ SAVE = r'''void Save() {
     }
 }'''
 
+FRAME_GHOSTING_MIGRATION = '''    // Preserve the old combined blur preference until the separate key is saved.
+    if (!t.contains("frame_ghosting")) TrialFrameGhosting = TrialGameplayBlur;
+'''
+
 
 PAIRED = r'''
 // A newly encountered attachment must match a retained companion. Otherwise a
@@ -116,6 +120,8 @@ def prepare(settings, main, graphics, area):
         (area/'src/compat'/name).write_text((local/name).read_text())
     settings=once(settings,'#include "app/app.h"',
                   '#include "app/app.h"\n#include "xbe_graphics_settings.h"\n#include <system_error>')
+    settings=once(settings,'    if (kGame.load) kGame.load(&t);',
+                  FRAME_GHOSTING_MIGRATION+'    if (kGame.load) kGame.load(&t);')
     save=between(settings,'void Save() {','\nvoid LogSettings()')
     settings=settings.replace(save,SAVE+'\n',1)
     wide=between(settings,'bool Widescreen() {','\nfloat RenderScale(')
@@ -190,6 +196,7 @@ def prepare(settings, main, graphics, area):
                       '    if(platform_supported)return true;message="unsupported display";return false;\n}\n',1)
     fixture=once(fixture,'// GENERATED_SETTINGS',host)
     fixture=once(fixture,'// GENERATED_SAVE',SAVE)
+    fixture=once(fixture,'// GENERATED_FRAME_GHOSTING_MIGRATION',FRAME_GHOSTING_MIGRATION)
     (area/'src/compat/test_graphics_settings.cpp').write_text(fixture)
     fixture=(local/'test_xbe_target_resize.cpp').read_text()
     fixture=once(fixture,'// GENERATED_RESIZE',PAIRED+resize)

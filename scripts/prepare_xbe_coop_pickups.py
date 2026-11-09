@@ -3,6 +3,7 @@ from pathlib import Path
 import hashlib
 import re
 import struct
+from prepare_xbe_firearm_cycle import SELECT as FIREARM_SELECT
 
 INCLUDE = '#include "xbe_coop_pickups.h"\n'
 ENTRY = '\tif(!TrialCoopPickupAllowed(ctx,base)){ctx.esp+=8;return;}\n'
@@ -76,7 +77,7 @@ def prepare(area):
     bodies={}
     for unit,va,size,raw_hash,lifted_hash in BODIES:
         assert hashlib.sha256(raw(va,size)).hexdigest()==raw_hash,hex(va)
-        text=body(sources[unit],va)
+        text=body(sources[unit],va).replace(FIREARM_SELECT,'')
         assert hashlib.sha256(text.encode()).hexdigest()==lifted_hash,hex(va)
         bodies[va]=text
     fixed={}

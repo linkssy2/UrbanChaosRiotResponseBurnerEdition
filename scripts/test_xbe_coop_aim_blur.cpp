@@ -15,6 +15,8 @@ namespace mem {bool IsCommitted(uint32_t page){return page<kernel::memory.size()
 namespace trial_graphics {
 static bool gameplay_blur=true;
 bool GameplayBlur(){return gameplay_blur;}
+static bool frame_ghosting=true;
+bool FrameGhosting(){return frame_ghosting;}
 }
 namespace aim_test {
 constexpr uint32_t world=0x620000,state=0x624000,layers=0x630000;
@@ -27,6 +29,8 @@ constexpr uint32_t camera0=0x650000,camera1=0x651000,view0=0x652000,view1=0x6530
 constexpr uint32_t queue0=0x654000,queue1=0x655000,params=0x656000;
 constexpr uint32_t arg=0x657000,arg1=0x658000,binding=0x659000,blur=0x65a000,stack=0x7f0000;
 constexpr uint32_t feedback=0x65b000,current_frame=0x65c000,previous_frame=0x65d000;
+constexpr uint32_t motion=0x65e000,motion_manager=0x65e100,motion_head=0x65e200,motion_node=0x65e300,pain=0x65f000;
+float frame_step=.1f;
 unsigned presentation=1,next_node=0;
 bool throw_render=false;
 unsigned history_requests=0;
@@ -47,11 +51,11 @@ X86Context Context(){
     for(unsigned i=0;i<8;++i){c.st[i]=double(i)+.125;c.mm[i]=0x1234567800000000ull+i;c.xmm[i].q[0]=i+1;c.xmm[i].q[1]=i+9;}
     return c;
 }
-void Setup(){
+void ResetWorld(){
     trial_coop::Reset();auto c=Context();TrialCoopAimBlurBeginUpdate(c,Bytes());
     kernel::memory.fill(0);trial_coop::SetAvailable(true);assert(trial_coop::Request());trial_coop::SetActive(true);
     presentation=1;next_node=0;calls.clear();freed.clear();recycled.clear();throw_render=false;
-    trial_graphics::gameplay_blur=true;
+    frame_step=.1f;
     history_requests=0;feedback_constant.fill(-1);
     Put(0x51c4dc,world);Put(world,0x450c48);Put(world+4,state);Put(world+0x10,0x80);Put(world+0x934,manager);
     Put(state+4,layers);Put(state+8,layers+8);
@@ -66,6 +70,10 @@ void Setup(){
     Put(0x5150b0,graphics);Put(0x519f60,graphics);Put(graphics,table);
     Put(table+0x60,0xf1060);Put(table+0xa4,0xf10a4);Put(table+0xdc,0xf10dc);Put(table+0x50,0xf1050);
     Put(table+0x38,0xf1038);Put(feedback,table+0x400);Put(table+0x410,0xf1410);
+    Put(table+0x40c,0x9d480);Float(0x44bf94,1);Float(0x44e594,.8f);
+    Put(motion_manager+8,motion_head);Put(motion_manager+0x14,motion_head+0x40);Put(motion_head+0x40,motion_head+0x40);
+    Put(motion_head,motion_node);Bytes()[motion_head+0x11]=1;
+    Put(motion_node+4,motion_head);Put(motion_node+8,motion_head);Put(motion_node+12,motion);
     Float(0x44c174,0);Put(current_frame+4,0x10203040);Put(previous_frame+4,0x50607080);
     Put(service,table+0x100);Put(table+0x11c,0xf101c);Put(target_service+0x10,target);
     Put(descriptor,descriptor_table);
@@ -75,6 +83,9 @@ void Setup(){
     Put(arg+4,arg1);Put(arg1+12,binding);Put(binding,table+0x300);Put(table+0x320,0xf1020);
     Put(0x519f18,blur);
 }
+void Setup(){
+    ResetWorld();trial_graphics::gameplay_blur=true;trial_graphics::frame_ghosting=true;
+}
 }
 uint32_t TrialCoopPlayer(unsigned slot){return slot==0?aim_test::owner0:slot==1?aim_test::owner1:0;}
 unsigned TrialCoopPresentation(){return aim_test::presentation;}
@@ -82,12 +93,14 @@ unsigned TrialCoopPresentation(){return aim_test::presentation;}
 void x86_resume(X86Context&,uint8_t*,const X86Resume&){std::abort();}
 X86_FUNC(sub_00049180);X86_FUNC(sub_00094760);X86_FUNC(sub_00094770);
 X86_FUNC(sub_00094780);X86_FUNC(sub_000947A0);X86_FUNC(sub_000947B0);X86_FUNC(sub_000947C0);
+X86_FUNC(sub_0009D480);
 void x86_icall(X86Context& c,uint8_t* b,uint32_t t){
     using namespace aim_test;
     switch(t){
     case 0x94760:sub_00094760(c,b);return;case 0x94770:sub_00094770(c,b);return;
     case 0x94780:sub_00094780(c,b);return;case 0x947a0:sub_000947A0(c,b);return;
     case 0x947b0:sub_000947B0(c,b);return;case 0x947c0:sub_000947C0(c,b);return;
+    case 0x9d480:sub_0009D480(c,b);return;
     case 0xf1060:assert(c.ecx==graphics);c.eax=descriptor;break;
     case 0xf10a4:assert(c.ecx==graphics);c.eax=service;break;
     case 0xf101c:assert(c.ecx==service);c.eax=target_service;break;
@@ -120,6 +133,9 @@ X86_FUNC(sub_002012C0){
     Put(sentinel,sentinel);Put(sentinel+4,sentinel);Put(list+8,0);ctx.esp+=4;
 }
 X86_FUNC(sub_00095070){assert(ctx.ecx==aim_test::payload);ctx.eax=aim_test::payload;ctx.esp+=4;}
+X86_FUNC(sub_00055EC0){assert(ctx.ecx==aim_test::world);ctx.eax=aim_test::manager;ctx.esp+=4;}
+X86_FUNC(sub_001F9010){x87_push(ctx,aim_test::frame_step);ctx.esp+=4;}
+X86_FUNC(sub_0004FFE0){std::abort();} // The fixture has no disabled-effect registry entries.
 X86_FUNC(sub_000920B0){
     using namespace aim_test;assert(ctx.ecx==blur&&Word(ctx.esp+4)==target);
     assert(!std::memcmp(Bytes()+Word(ctx.esp+16),Bytes()+matrix,64));
@@ -189,16 +205,17 @@ void CheckTransitions(){
     std::puts("aim blur: presentation changes between update and render preserve cinematic/SP aggregate and split ownership");
 }
 void CheckGameplayBlurSetting(){
-    for(unsigned mode=0;mode<3;++mode){
+    for(unsigned mode=0;mode<3;++mode)for(bool ghosting:{false,true})for(bool enabled:{false,true}){
         Setup();
         if(mode==0)trial_coop::SetActive(false);
         if(mode==2)presentation=2;
+        trial_graphics::frame_ghosting=ghosting;
         Pulse(0,.4f);Pulse(1,.8f);Direct();Update();
-        trial_graphics::gameplay_blur=false;
-        Render(0);Render(1);assert(calls.empty());
+        trial_graphics::gameplay_blur=enabled;
+        Render(0);Render(1);assert(calls.size()==(enabled?2u:0u));calls.clear();
         assert(Bytes()[descriptor+0x55]&&Real(descriptor+0x60)==.8f);
-        trial_graphics::gameplay_blur=true;
-        Render(0);Render(1);assert(calls.size()==2);
+        trial_graphics::gameplay_blur=!enabled;
+        Render(0);Render(1);assert(calls.size()==(enabled?0u:2u));
         calls.clear();trial_graphics::gameplay_blur=false;Clear();
         Pulse(1,.8f,.01f);
         for(unsigned i=0;i<20;++i)Update();
@@ -206,13 +223,14 @@ void CheckGameplayBlurSetting(){
         trial_graphics::gameplay_blur=true;
         Render(0);Render(1);assert(calls.empty());
     }
-    std::puts("gameplay blur: Off suppresses scene output for SP, both co-op views and shared cameras; pulse expiry and immediate On recovery retained");
+    std::puts("gameplay blur: all four settings combinations isolate depth rendering in SP, split and shared cameras; disabled expiry and immediate toggle recovery retained");
 }
 void CheckFeedbackBlurSetting(){
     // Run the pinned native producer-to-composite instructions; no GPU or draw stub
     // can invent whether the previous frame is admitted or its weight is nonzero.
-    for(float amount:{0.f,.2f,.8f})for(bool enabled:{false,true}){
-        Setup();Float(feedback+0x10,amount);trial_graphics::gameplay_blur=enabled;
+    unsigned legacy_failures=0;
+    for(float amount:{0.f,.2f,.8f})for(bool gameplay:{false,true})for(bool enabled:{false,true}){
+        Setup();Float(feedback+0x10,amount);trial_graphics::gameplay_blur=gameplay;trial_graphics::frame_ghosting=enabled;
         auto c=Context();const auto top=c.top;PatchedFeedbackPublication(c,Bytes());
         const float expected=enabled?amount:0.f;
         assert(c.esp==stack&&c.top==top&&Real(stack+0x24)==expected);
@@ -225,17 +243,56 @@ void CheckFeedbackBlurSetting(){
         assert(c.esp==stack);
         for(float value:feedback_constant)assert(value==expected);
         // Toggling back on reads the current descriptor, never a cached disabled value.
-        trial_graphics::gameplay_blur=true;c=Context();PatchedFeedbackPublication(c,Bytes());
+        // The previous coupled hook must fail both independent toggle combinations.
+        c=Context();LegacyFeedbackPublication(c,Bytes());
+        if(amount>0&&gameplay!=enabled){assert(Real(stack+0x24)!=expected);++legacy_failures;}
+        trial_graphics::frame_ghosting=true;c=Context();PatchedFeedbackPublication(c,Bytes());
         assert(Real(stack+0x24)==amount);
     }
-    for(float amount:{0.f,.2f,.8f}){
-        Setup();Float(feedback+0x10,amount);auto a=Context(),b=a;
-        OriginalFeedbackPublication(a,Bytes());
-        const std::vector<uint8_t> memory(kernel::memory.begin(),kernel::memory.end());
-        PatchedFeedbackPublication(b,Bytes());
-        assert(!std::memcmp(&a,&b,sizeof a)&&std::equal(memory.begin(),memory.end(),kernel::memory.begin()));
+    assert(legacy_failures==4);
+    for(float amount:{0.f,.2f,.8f})for(bool gameplay:{false,true}){
+        std::vector<uint8_t> memory;X86Context original{};unsigned requests=0;std::array<float,4> constant{};
+        for(bool patched:{false,true}){
+            Setup();Float(feedback+0x10,amount);trial_graphics::gameplay_blur=gameplay;auto c=Context();
+            (patched?PatchedFeedbackPublication:OriginalFeedbackPublication)(c,Bytes());
+            Put(stack+0x30,0);c.eax=current_frame;(patched?PatchedFeedbackHistory:OriginalFeedbackHistory)(c,Bytes());
+            c.esp-=8;(patched?PatchedFeedbackConstant:OriginalFeedbackConstant)(c,Bytes());
+            if(!patched){original=c;memory.assign(kernel::memory.begin(),kernel::memory.end());requests=history_requests;constant=feedback_constant;}
+            else assert(!std::memcmp(&original,&c,sizeof c)&&std::equal(memory.begin(),memory.end(),kernel::memory.begin())&&
+                        history_requests==requests&&feedback_constant==constant);
+        }
     }
-    std::puts("gameplay blur: original feedback publication/previous-frame branch/shader weight use neutral zero only while Off; current scene and descriptor survive; On publication matches original");
+    std::puts("frame ghosting: four settings combinations gate history/weight independently; legacy hook fails four negative controls; enabled publication/history/constant CPU and memory match original");
+}
+void CheckOriginalProducers(){
+    for(unsigned mode=0;mode<3;++mode)for(bool gameplay:{false,true})for(bool ghosting:{false,true}){
+        Setup();if(mode==0)trial_coop::SetActive(false);if(mode==2)presentation=2;
+        trial_graphics::gameplay_blur=gameplay;trial_graphics::frame_ghosting=ghosting;
+        // Both original pain channels feed the same depth consumer (damage/shield).
+        Float(pain+4,.6f);Float(pain+8,1);Float(pain+12,.2f);
+        Float(pain+16,.3f);Float(pain+20,1);Float(pain+24,.2f);
+        auto c=Context();c.ecx=pain;sub_000691B0(c,Bytes());assert(c.esp==stack+4);
+        Update();Render(0);Render(1);assert(calls.size()==(gameplay?2u:0u));
+        if(gameplay)for(const auto& call:calls)assert(call.amplitude==.6f);
+        calls.clear();trial_graphics::gameplay_blur=false;
+        for(unsigned i=0;i<20;++i){c=Context();c.ecx=pain;sub_000691B0(c,Bytes());Update();}
+        assert(Real(pain+4)==0&&Real(pain+16)==0);
+        trial_graphics::gameplay_blur=true;Render(0);Render(1);assert(calls.empty());
+
+        // Original crash event: amount 2 for 17.5 seconds; native manager clamps to .8.
+        c=Context();c.ecx=motion;Float(stack+4,2);Float(stack+8,17.5f);sub_000445E0(c,Bytes());
+        assert(c.esp==stack+12&&Real(motion)==2&&Real(motion+4)==17.5f);
+        trial_graphics::gameplay_blur=gameplay;
+        for(unsigned frame=0;frame<37;++frame){
+            c=Context();c.ecx=motion;Float(stack+4,.5f);sub_00044600(c,Bytes());assert(c.esp==stack+8);
+            c=Context();c.ecx=motion_manager;sub_0005F890(c,Bytes());assert(c.esp==stack+4);
+            const float published=frame<35?.8f:0.f;assert(Real(feedback+0x10)==published);
+            c=Context();PatchedFeedbackPublication(c,Bytes());assert(Real(stack+0x24)==(ghosting?published:0.f));
+        }
+        assert(Real(motion)==0);trial_graphics::frame_ghosting=true;
+        c=Context();PatchedFeedbackPublication(c,Bytes());assert(Real(stack+0x24)==0);
+    }
+    std::puts("blur producers: native damage/shield depth channels and authored crash MotionBlur request/aging/manager/clamp survive toggles and expire in SP, co-op and shared cameras");
 }
 void CheckLifecycle(){
     Setup();const auto node=Pulse(1);Update();Clear();assert(Word(list+8)==0&&freed.size()==1);
@@ -248,6 +305,34 @@ void CheckLifecycle(){
     assert(calls.size()==2&&calls[0].amplitude==.8f&&calls[1].amplitude==.8f);
     Setup();Pulse(1);Update();Put(world+0x934,manager+0x80);Render(0);Render(1);assert(calls.size()==2);
     std::puts("aim blur: expiry, clear, node reuse, owner-id reuse and world-manager replacement do not retain stale ownership");
+}
+void CheckDisabledAcrossWorldReset(){
+    Setup();trial_graphics::gameplay_blur=false;trial_graphics::frame_ghosting=false;
+    // Recreate guest scene state without reapplying host preferences.
+    for(unsigned generation=0;generation<3;++generation){
+        ResetWorld();
+        for(unsigned mode=0;mode<4;++mode){
+            trial_coop::SetActive(mode!=0);presentation=mode==2?2:1;
+            Put(world+0x10,mode==3?0x880:0x80);
+            Put(owner1+0x54,350+generation);
+            Put(layer1+0x20,view1+generation*0x100);Put(camera1+4,view1+generation*0x100);
+            Clear();assert(Word(list+8)==0);
+            Pulse(0,.4f,17.5f);Pulse(1,.8f,17.5f);Direct(.6f);Update();
+            assert(Bytes()[descriptor+0x55]&&Real(descriptor+0x60)==.8f);
+            Render(0);Render(1);assert(calls.empty());
+            auto c=Context();c.ecx=motion;Float(stack+4,2);Float(stack+8,17.5f);sub_000445E0(c,Bytes());
+            c=Context();c.ecx=motion_manager;sub_0005F890(c,Bytes());
+            assert(Real(feedback+0x10)==.8f);
+            c=Context();PatchedFeedbackPublication(c,Bytes());
+            assert(Real(stack+0x24)==0);
+            Put(stack+0x30,0);c.eax=current_frame;PatchedFeedbackHistory(c,Bytes());
+            assert(history_requests==0&&Word(stack+0x30)==0&&Word(stack+0x58)==Word(current_frame+4));
+            c.esp-=8;PatchedFeedbackConstant(c,Bytes());
+            for(float value:feedback_constant)assert(value==0);
+            assert(!trial_graphics::GameplayBlur()&&!trial_graphics::FrameGhosting());
+        }
+    }
+    std::puts("blur disabled: recreated guest worlds, co-op resets, replacement camera/owner state and fresh script requests stay neutral across SP/split/shared cameras without reapplying preferences");
 }
 void CheckNativeParity(){
     // Observers must not change native storage, pulse timing, publication, flags
@@ -274,4 +359,4 @@ void CheckIsolation(){
     std::puts("aim blur: descriptor and scope restore on normal/exception exit; observer CPU/MXCSR preserved (no GPU)");
 }
 }
-int main(){aim_test::CheckOwnership();aim_test::CheckTransitions();aim_test::CheckGameplayBlurSetting();aim_test::CheckFeedbackBlurSetting();aim_test::CheckLifecycle();aim_test::CheckNativeParity();aim_test::CheckIsolation();}
+int main(){aim_test::CheckOwnership();aim_test::CheckTransitions();aim_test::CheckGameplayBlurSetting();aim_test::CheckFeedbackBlurSetting();aim_test::CheckOriginalProducers();aim_test::CheckLifecycle();aim_test::CheckDisabledAcrossWorldReset();aim_test::CheckNativeParity();aim_test::CheckIsolation();}

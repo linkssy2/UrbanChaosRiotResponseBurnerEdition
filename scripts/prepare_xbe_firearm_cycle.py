@@ -1,4 +1,4 @@
-"""Reverse only the retail firearm scan reached by a PC Previous Firearm press."""
+"""Reverse the retail firearm scan and its HUD animation for PC Previous Firearm."""
 from pathlib import Path
 import hashlib
 import re
@@ -17,15 +17,18 @@ PINS={
 0x42DA0:(5,42,'3d5c6b114e83c4958db8fc03742d986fe9b13ad734e38ccc06aeeb1c6a882553','b66dd0eda7342696c23646a5ba7c3d797406048b574e501f87ebd158880bf8c8'),
 0x43C00:(5,116,'c30943a51c6d43b4aeeafdc571f6c51b38118e157b47c4e051453810c55b6f72','4a9fbca06aa4621a31f73d77961e485958500120ff20f169390f9ed4e533ad25'),
 0xC4CB0:(20,567,'ad402843a2b8205b631e285b3f49f162a1acc49867c030925049535690df6e7f','4ee498a998074badc1e39a0b96fc59463bc511946ee97a4f731467e4fbb21b6c'),
+0x77230:(11,266,'ccfaf28b39c3362a0137c7528a9cf24cd5517b4ac2746ba162f2a1e2fa63a022','b05db7ee2540b56df6932eacbdfe2872e8928974fcee7e36354782f7b94e9cd3'),
 }
 INCLUDE='#include "xbe_firearm_cycle.h"\n'
 SCOPE='\ttrial_firearm_cycle::Scope firearm_scope(ctx,base);\n'
 STEP='\ttrial_firearm_cycle::BeforeIncrement(ctx,base);\n'
+SELECT='\ttrial_firearm_cycle::Selection(ctx,base);\n'
+HUD='\tif(trial_firearm_cycle::StepHud(ctx,base))goto loc_000772ED;\n'
 
 def prepare(area):
     area=Path(area)
     paths={unit:area/f'generated/game/x86_recomp.{unit}.cpp' for unit,_,_,_ in PINS.values()}
-    original={unit:path.read_text().replace(INCLUDE,'').replace(SCOPE,'').replace(STEP,'') for unit,path in paths.items()}
+    original={unit:path.read_text().replace(INCLUDE,'').replace(SCOPE,'').replace(STEP,'').replace(SELECT,'').replace(HUD,'') for unit,path in paths.items()}
     bodies={}
     image=(area/'assets/Default.xbe').read_bytes()
     base=struct.unpack_from('<I',image,0x104)[0]
@@ -38,15 +41,22 @@ def prepare(area):
         body=re.search(rf'X86_FUNC\(__imp__sub_{address:08X}\) \{{.*?^\}}',original[unit],re.S|re.M)[0]
         assert hashlib.sha256(body.encode()).hexdigest()==body_hash,hex(address)
         bodies[address]=body
+    original_hud=bodies[0x77230].replace('X86_FUNC(__imp__sub_00077230)','X86_FUNC(original_hud_step)',1)
     bodies[0x42840]=bodies[0x42840].replace('{\n','{\n'+SCOPE,1)
     marker='\t// 00042787 inc ebp\n'
     assert bodies[0x426F0].count(marker)==1
     bodies[0x426F0]=bodies[0x426F0].replace(marker,STEP+marker)
-    staged=original[5]
-    for address in (0x42840,0x426F0):
-        old=re.search(rf'X86_FUNC\(__imp__sub_{address:08X}\) \{{.*?^\}}',staged,re.S|re.M)[0]
-        staged=staged.replace(old,bodies[address],1)
-    staged=staged.replace('#include "x86_recomp_shared.h"\n','#include "x86_recomp_shared.h"\n'+INCLUDE,1)
+    bodies[0x42230]=bodies[0x42230].replace('{\n','{\n'+SELECT,1)
+    marker='\t// 00077281 ucomiss xmm4, [ecx]\n'
+    assert bodies[0x77230].count(marker)==1
+    bodies[0x77230]=bodies[0x77230].replace(marker,HUD+marker)
+    staged={unit:original[unit] for unit in (5,11)}
+    for address in (0x42840,0x426F0,0x42230,0x77230):
+        unit=PINS[address][0]
+        old=re.search(rf'X86_FUNC\(__imp__sub_{address:08X}\) \{{.*?^\}}',staged[unit],re.S|re.M)[0]
+        staged[unit]=staged[unit].replace(old,bodies[address],1)
+    for unit in staged:
+        staged[unit]=staged[unit].replace('#include "x86_recomp_shared.h"\n','#include "x86_recomp_shared.h"\n'+INCLUDE,1)
     common=area/'src/common';compat=area/'src/compat'
     common.mkdir(parents=True,exist_ok=True);compat.mkdir(parents=True,exist_ok=True)
     for name in ('xbe_firearm_cycle.h','xbe_input_memory.h'):
@@ -55,7 +65,8 @@ def prepare(area):
     extracted='\n\n'.join(body.replace('X86_FUNC(__imp__sub_','X86_FUNC(sub_',1) for body in bodies.values())
     test=(ROOT/'scripts/test_xbe_firearm_cycle.cpp').read_text()
     assert test.count('// RETAIL_FUNCTIONS')==1
-    (compat/'test_firearm_cycle.cpp').write_text(test.replace('// RETAIL_FUNCTIONS',declarations+'\n'+extracted))
-    if paths[5].read_text()!=staged:paths[5].write_text(staged)
+    (compat/'test_firearm_cycle.cpp').write_text(test.replace('// RETAIL_FUNCTIONS',declarations+'\n'+extracted+'\n'+original_hud))
+    for unit,source in staged.items():
+        if paths[unit].read_text()!=source:paths[unit].write_text(source)
 
 if __name__=='__main__':prepare(ROOT/'build/xbe-full-integration-20261014')

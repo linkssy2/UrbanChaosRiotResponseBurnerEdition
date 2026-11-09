@@ -103,7 +103,7 @@ bool Dirty() {
     return a.width!=b.width||a.height!=b.height||a.display_mode!=b.display_mode||
         a.render_percent!=b.render_percent||a.vsync!=b.vsync||a.fps_cap!=b.fps_cap||a.aniso!=b.aniso||
         draft.fov!=live.fov||draft.weapon_fov!=live.weapon_fov||draft.fmv_scale!=live.fmv_scale||draft.aspect!=live.aspect||draft.msaa!=live.msaa||draft.scenery!=live.scenery||
-        draft.characters!=live.characters||draft.character_quality!=live.character_quality||draft.death_convulsions!=live.death_convulsions||draft.gameplay_blur!=live.gameplay_blur||
+        draft.characters!=live.characters||draft.character_quality!=live.character_quality||draft.death_convulsions!=live.death_convulsions||draft.gameplay_blur!=live.gameplay_blur||draft.frame_ghosting!=live.frame_ghosting||
         draft.world_textures!=live.world_textures||draft.ragdolls!=live.ragdolls||draft.hd_ui!=live.hd_ui||draft.reticle_scale!=live.reticle_scale||draft.reticle_colors!=live.reticle_colors||draft_fps!=TrialShowFps||draft_fog_mode!=FogMode();
 }
 void Close() {
@@ -940,13 +940,13 @@ void SettingsUi(const ImGuiViewport* view,bool paused){
         }
         RowStrip(canvas,labels,nullptr,3,257,confirmation,[&](unsigned i){confirmation=i;},activate);
     }else{
-        constexpr unsigned rows=22,total=rows+3;
-        constexpr unsigned order[]={0,1,2,5,6,7,20,3,4,9,8,21,10,11,12,19,13,14,15,18,16,17};
+        constexpr unsigned rows=23,total=rows+3;
+        constexpr unsigned order[]={0,1,2,5,6,7,20,3,4,9,8,21,22,10,11,12,19,13,14,15,18,16,17};
         // Reserve a help band inside the frame, including glyphs and shadows.
         constexpr float top=78,bottom=344,step=18,heading=22;
         constexpr float extent=rows*step+3*heading,max_scroll=extent-(bottom-top);
         auto position=[&](unsigned row){return unsigned(std::find(std::begin(order),std::end(order),row)-std::begin(order));};
-        auto row_y=[&](unsigned row){const auto i=position(row);return top+heading+i*step+(i>=7?heading:0)+(i>=18?heading:0);};
+        auto row_y=[&](unsigned row){const auto i=position(row);return top+heading+i*step+(i>=7?heading:0)+(i>=19?heading:0);};
         focus=std::min(focus,total-1);
         int delta=0;
         if(ready){
@@ -976,7 +976,7 @@ void SettingsUi(const ImGuiViewport* view,bool paused){
             scroll=std::clamp(scroll,0.f,max_scroll);
         }
         const char* headings[]={"Display","Rendering quality","Camera and HUD"};
-        const unsigned starts[]={0,7,18};
+        const unsigned starts[]={0,7,19};
         for(unsigned group=0;group<3;++group){
             const float y=top+starts[group]*step+group*heading-scroll;
             if(y<top||y+heading>bottom)continue;
@@ -1022,6 +1022,7 @@ void SettingsUi(const ImGuiViewport* view,bool paused){
         const uint32_t fog_modes[]={0,1,2,3};const char* fog_names[]={"Off","Original","Smooth original","Distant only"};
         choice("Fog",draft_fog_mode,fog_modes,fog_names,8);
         choice("Gameplay blur",draft.gameplay_blur,flags,flag_names,21);
+        choice("Frame ghosting",draft.frame_ghosting,flags,flag_names,22);
         const uint32_t samples[]={1,2,4};const char* sample_names[]={"Off","2x","4x"};
         unsigned sample_index=draft.msaa==4?2:draft.msaa==2?1:0;
         const int sample_delta=row("MSAA",sample_names[sample_index],9);
@@ -1071,7 +1072,8 @@ void SettingsUi(const ImGuiViewport* view,bool paused){
         const float track=bottom-top-48,thumb=track*(bottom-top)/extent;
         canvas.Rect(605,top+24+(track-thumb)*scroll/max_scroll,6,thumb,muted);
         canvas.Line(60,350,520,IM_COL32(118,126,121,100));
-        canvas.Text(focus==21?"Blur when aiming, firing, taking hits or downed. Applies to both co-op views.":
+        canvas.Text(focus==22?"Previous-frame trails in gameplay and cutscenes. Shared by both co-op views.":
+                    focus==21?"Scene softening when aiming or downed. Shared by both co-op views.":
                     focus==20?(draft.fmv_scale==2?"Fill stretch removes verified black borders and stretches the picture to the screen without cropping it.":draft.fmv_scale==0?"Fill removes verified black borders without stretching. Some bars may remain.":"Original aspect ratio preserves the complete movie frame, including built-in borders."):
                     focus==19?(textures_available?"Optional HD game texture pack. Keeps HUD and menus unchanged; uses more video memory.":"Not installed. Use Install HD Texture Pack in the launcher, then restart the game."):
                     focus==18?"Weapon FOV: 100% is original. Changes the gun and hands; keeps the world view.":
