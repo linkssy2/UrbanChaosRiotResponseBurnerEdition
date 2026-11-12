@@ -59,9 +59,9 @@ class LauncherChecks {
                 Check(homePlay.Height==homeManage.Height&&Math.Abs(homePlay.Width-homeManage.Width)<=1,"Home actions differ in size: PLAY="+homePlay.Size+" MANAGE="+homeManage.Size+" form="+form.Size+" scale="+scale);
                 homeManage.PerformClick();
                 var manage=(Control)Field(form,"manage");Check(manage.Visible,"Manage navigation did not open");
-                string[] names={"Settings","Game files","Add-ons","Updates","Support"};
+                string[] names={"Settings","Game files","Add-ons","DLC / Prototypes","Updates","Support"};
                 var sections=(TableLayoutPanel[])Field(form,"manageSections");Check(sections.Length==names.Length,"Manage navigation lost a section");
-                string[][] grouped={new[]{"language","skipStartup"},new[]{"verify","folder","saves"},new[]{"textures","voices"},new[]{"updates"},new[]{"diagnostics"}};
+                string[][] grouped={new[]{"language","skipStartup"},new[]{"verify","folder","saves"},new[]{"textures","voices"},new string[0],new[]{"updates"},new[]{"diagnostics"}};
                 for(int i=0;i<names.Length;i++){
                     ButtonNamed(manage,names[i]).PerformClick();
                     for(int j=0;j<sections.Length;j++)Check(sections[j].Visible==(i==j),"Manage section selection is inconsistent: "+names[i]);
@@ -70,7 +70,13 @@ class LauncherChecks {
                     var expectedNavigationSize=ButtonNamed(manage,names[0]).Size;
                     foreach(string name in names){var navigationButton=ButtonNamed(manage,name);Check(navigationButton.Size==expectedNavigationSize,"Navigation button stretched: "+name+" size="+navigationButton.Size+" expected="+expectedNavigationSize+" form="+form.Size+" scale="+scale);}
                 }
-                Check(ButtonNamed(sections[4],"OPEN LOGS").Enabled,"Support lost the logs action");
+                int unavailable=0;
+                foreach(Control control in Descendants(sections[3])){
+                    Check(control is Label,"Prototype preview must not expose an import or play action");
+                    if(control.Text=="Not yet playable in Burner Edition.")unavailable++;
+                }
+                Check(unavailable==2,"Prototype preview lost its unavailable status");
+                Check(ButtonNamed(sections[5],"OPEN LOGS").Enabled,"Support lost the logs action");
                 ButtonNamed(manage,"BACK").PerformClick();Check(((Control)Field(form,"home")).Visible,"Manage Back did not return Home");
                 Status(form,false,AppDomain.CurrentDomain.BaseDirectory);((Button)Field(form,"select")).PerformClick();
                 var source=(Control)Field(form,"source");Check(source.Visible,"Select Game did not open source choices");

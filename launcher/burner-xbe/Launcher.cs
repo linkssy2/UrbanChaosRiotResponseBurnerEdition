@@ -27,7 +27,7 @@ class BurnerLauncher : Form {
     readonly ProgressBar progress=new ProgressBar();
     readonly Panel pages=new Panel();
     readonly TableLayoutPanel home=Page(), source=Page(), manage=Page();
-    readonly TableLayoutPanel manageSettings=Page(), manageFiles=Page(), manageAddons=Page(), manageUpdates=Page(), manageSupport=Page();
+    readonly TableLayoutPanel manageSettings=Page(), manageFiles=Page(), manageAddons=Page(), managePrototypes=Page(), manageUpdates=Page(), manageSupport=Page();
     readonly TableLayoutPanel[] manageSections;
     readonly Button[] manageNavigation;
     readonly ComboBox language=new ComboBox();
@@ -121,10 +121,9 @@ class BurnerLauncher : Form {
         var manager=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=1,Margin=Padding.Empty};manager.RowStyles.Add(new RowStyle(SizeType.Percent,100));manager.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,138));manager.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
         var navigation=Page();navigation.Padding=new Padding(0,6,12,0);manager.Controls.Add(navigation,0,0);
         var sections=new Panel{Dock=DockStyle.Fill,Margin=Padding.Empty,Padding=new Padding(10,0,0,0)};manager.Controls.Add(sections,1,0);
-        manageSections=new[]{manageSettings,manageFiles,manageAddons,manageUpdates,manageSupport};manageNavigation=new Button[manageSections.Length];
-        string[] sectionNames={"SETTINGS","GAME FILES","ADD-ONS","UPDATES","SUPPORT"};
-        for(int i=0;i<manageSections.Length;i++){var section=manageSections[i];section.AccessibleName=sectionNames[i];sections.Controls.Add(section);manageNavigation[i]=MakeButton(sectionNames[i],(s,e)=>ShowManageSection(section));manageNavigation[i].Font=new Font("Segoe UI",9,FontStyle.Bold);Add(navigation,manageNavigation[i],48);}
-        navigation.RowCount++;navigation.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+        manageSections=new[]{manageSettings,manageFiles,manageAddons,managePrototypes,manageUpdates,manageSupport};manageNavigation=new Button[manageSections.Length];
+        string[] sectionNames={"SETTINGS","GAME FILES","ADD-ONS","DLC / PROTOTYPES","UPDATES","SUPPORT"};
+        for(int i=0;i<manageSections.Length;i++){var section=manageSections[i];section.AccessibleName=sectionNames[i];sections.Controls.Add(section);manageNavigation[i]=MakeButton(sectionNames[i],(s,e)=>ShowManageSection(section));manageNavigation[i].Font=new Font("Segoe UI",9,FontStyle.Bold);Add(navigation,manageNavigation[i],44);}
         manage.RowCount++;manage.RowStyles.Add(new RowStyle(SizeType.Percent,100));manage.Controls.Add(manager,0,manage.RowCount-1);
         Add(manageSettings,TextLabel("LANGUAGE",10),26);
         language.DropDownStyle=ComboBoxStyle.DropDownList;language.Dock=DockStyle.Fill;language.AccessibleName="Game language";language.Font=new Font("Segoe UI",11);language.BackColor=Color.FromArgb(24,42,43);language.ForeColor=ForeColor;language.FlatStyle=FlatStyle.Flat;
@@ -143,6 +142,13 @@ class BurnerLauncher : Form {
         Add(manageAddons,TextLabel("Select your downloaded HD texture ZIP.",9),38);
         voices=MakeButton("IMPORT SPANISH VOICES",async(s,e)=>await SelectAddon(true));Add(manageAddons,voices,48);
         Add(manageAddons,TextLabel("Requires your European PS2 ISO (SLES-53991). Spanish text is already included.",9),62);
+        Add(managePrototypes,TextLabel("ROLL CALL PROTOTYPES",12),34);
+        Add(managePrototypes,TextLabel("Explore early versions of Urban Chaos. Prototype game files are not included.",10),60);
+        Add(managePrototypes,TextLabel("MAY 19, 2004  /  PLAYSTATION 2",10),34);
+        Add(managePrototypes,TextLabel("Not yet playable in Burner Edition.",9),36);
+        Add(managePrototypes,TextLabel("OCTOBER 14, 2004  /  PLAYSTATION 2",10),34);
+        Add(managePrototypes,TextLabel("Not yet playable in Burner Edition.",9),36);
+        Add(managePrototypes,TextLabel("Import will become available when prototype support is ready. You will need your own matching prototype ISO. The main game and its saves will stay separate.",9),98);
         Add(manageUpdates,TextLabel("LAUNCHER UPDATES",12),34);
         Add(manageUpdates,TextLabel("Check for a newer Burner Edition release. Saves, settings and installed add-ons are preserved.",9),68);
         updates=MakeButton("CHECK FOR UPDATES",async(s,e)=>await UpdateRelease());Add(manageUpdates,updates,48);
@@ -151,12 +157,12 @@ class BurnerLauncher : Form {
         diagnostics=MakeButton("DIAGNOSTIC LOGGING: OFF",async(s,e)=>await Operation("diagnostics"," --logging "+(diagnosticLogging?"off":"on")));Add(manageSupport,diagnostics,48);
         Add(manageSupport,MakeButton("OPEN LOGS",(s,e)=>OpenFolder(Path.Combine(Root,"GameData","logs"))),48);
         Add(manageSupport,TextLabel("Off by default. Applies next game session. Logs stay on this computer.",9),58);
-        foreach(var page in new[]{home,source,manageSettings,manageFiles,manageAddons,manageUpdates,manageSupport}){int height=page.Padding.Vertical;foreach(RowStyle row in page.RowStyles)height+=(int)row.Height;page.AutoScrollMinSize=new Size(0,height);page.RowCount++;page.RowStyles.Add(new RowStyle(SizeType.Percent,100));}
+        foreach(var page in new[]{home,source,navigation,manageSettings,manageFiles,manageAddons,managePrototypes,manageUpdates,manageSupport}){int height=page.Padding.Vertical;foreach(RowStyle row in page.RowStyles)height+=(int)row.Height;page.AutoScrollMinSize=new Size(0,height);page.RowCount++;page.RowStyles.Add(new RowStyle(SizeType.Percent,100));}
         ShowManageSection(manageSettings);
         var feedback=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=1,RowCount=3,Margin=new Padding(0,10,0,4)};feedback.RowStyles.Add(new RowStyle(SizeType.Absolute,20));feedback.RowStyles.Add(new RowStyle(SizeType.Percent,100));feedback.RowStyles.Add(new RowStyle(SizeType.Absolute,8));
         feedback.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
         var statusTitle=TextLabel("STATUS",8);statusTitle.ForeColor=Color.FromArgb(172,183,144);feedback.Controls.Add(statusTitle,0,0);status.Text="Checking game data...";status.Dock=DockStyle.Fill;status.Font=new Font("Segoe UI",9);status.Margin=Padding.Empty;feedback.Controls.Add(status,0,1);progress.Dock=DockStyle.Fill;progress.Visible=false;progress.Margin=Padding.Empty;feedback.Controls.Add(progress,0,2);layout.Controls.Add(feedback,0,2);
-        var footer=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=1,Margin=Padding.Empty};footer.RowStyles.Add(new RowStyle(SizeType.Percent,100));footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));footer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,122));footer.Controls.Add(TextLabel("v0.17  /  WINDOWS + PROTON\nOriginal disc files are not included.",9),0,0);
+        var footer=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=1,Margin=Padding.Empty};footer.RowStyles.Add(new RowStyle(SizeType.Percent,100));footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));footer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,122));footer.Controls.Add(TextLabel("v0.18  /  WINDOWS + PROTON\nOriginal disc files are not included.",9),0,0);
         cancel=MakeButton("QUIT",(s,e)=>{if(busy&&!running&&cancelPath!=null){File.WriteAllText(cancelPath,"");status.Text="Cancelling safely...";cancel.Enabled=false;}else if(!busy)Close();});footer.Controls.Add(cancel,1,0);layout.Controls.Add(footer,0,3);
         ApplyStatus(new Dictionary<string,object>{{"ready",false}});ShowPage(home);
 #if !LAUNCHER_PREVIEW

@@ -1,4 +1,4 @@
-# Urban Chaos: Riot Response - Burner Edition 0.17
+# Urban Chaos: Riot Response - Burner Edition 0.18
 
 HD HUD is still a work in progress and has known prompt/display issues.
 Turn HD UI Off to use the original HUD, which works normally.
@@ -9,10 +9,12 @@ PC controls and menus. Original gameplay is statically recompiled from Xbox code
 XboxXBERecomp: https://github.com/TGP482/XboxXBERecomp
 
 ## This Update
-Corrects the weapon selector animation when cycling backward and adds a separate
-Frame ghosting graphics option. Turn Gameplay blur and Frame ghosting Off to
-disable both screen effects. These saved settings carry across mission loads
-and restarts. The temporary all-weapons testing cheat is not included.
+Keeps scope artwork visible with No HUD, restores dead-enemy blood pools with
+ledge clipping, and corrects the TV electrocution sound timing. Knocked-out
+enemies do not receive blood pools. Includes the updated launcher cover.
+Missions use their normal starting points; the hotel test spawn is excluded.
+Manage > DLC / Prototypes remains visible, but import and play are not available.
+Prototype integration is paused. No original or prototype game files are included.
 See the release page for the complete change list:
 https://github.com/linkssy2/UrbanChaosRiotResponseBurnerEdition/releases
 

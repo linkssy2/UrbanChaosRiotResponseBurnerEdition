@@ -1,5 +1,28 @@
 # Burner Edition: current runtime
 
+## November 12: scope, blood pools, hotel audio and launcher cover
+
+The user accepted scope artwork remaining visible with No HUD, restored blood
+pools with ledge clipping, and a 300 ms advance of the TV electrocution sound in
+Frank's Auto Parts. They also verified that knocked-out enemies do not create
+blood pools. These are Windows user checks; Proton gameplay remains unverified.
+
+`prepare_xbe_tv_audio.py` applies the accepted bank timestamp change after the
+original AMPC parser returns at 00250451. The parser's GUID callback 0024AD10
+writes the bank GUID at owner+34; track and reference chunks are at owner+98
+and owner+90. The hook checks mapped extents, bank GUID, chunk headers, the TV
+sample GUID and original command before changing 3662 to 3362 ms. Other banks,
+dialogue and already-adjusted data are unchanged. The compiled fixture uses
+the original bank and checks the exact changed bytes and rejected inputs.
+This is a scene-specific correction, not a global audio latency adjustment.
+
+Do not ship the private hotel restart archive or test saves. Main packages use
+the original disc manifest and apply audio timing only in memory. Original
+restart IDs remain RestartPoint_0=0 and RestartPoint_4=3. The user's approved
+cover is `launcher/burner/cover.png`, with the gold/red Burner Edition lettering
+over an orange brushstroke. Paired build/package evidence belongs in
+`build/main-fixes-20261112`; previously published archives remain unchanged.
+
 ## Weapon selector acceptance and 0.17 preparation (November 8)
 
 The user confirmed forward/reverse selector visuals on the normal candidate
@@ -2962,3 +2985,11 @@ comparison and rejected experiments are recorded in
 `build/performance-next-20261107`, separately from the earlier release comparison.
 Pair Windows and Proton packages from the same checked runtime; Proton remains
 unverified until tested on Linux.
+
+## Private blood-pool ledge candidate (November 12)
+
+User accepted the No HUD scope fix. Blood-pool flag4 bypasses surface-intersection checks, not camera visibility; the earlier camera explanation was incorrect. The private ledge candidate caches supporting-ground polygons at creation through the original 214230 query and clips the growing pool with interpolated texture coordinates. Flat supported pools retain the original vertex path. Both 9BF50 and 9C018 entries are covered with byte pins and reversible preparation. Sampling is approximate; subcell holes require collision-triangle clipping.
+
+Paired unpublished Windows/Proton v0.17 candidates, source snapshots, launch dependency validation and offline test evidence: build/reported-issues-20261112/ledge-candidates. Private runnable stage: ledge-live. Live ledge pixels, performance and Proton execution remain unverified. Audio unchanged and deferred.
+
+The first ledge candidate regressed pool visibility: its half-unit support ray did not reach the floor beneath the original one-unit raised quad. The corrected private ledge-height candidate restores the original two-unit ray reach. A raised-quad/segment-floor regression fails before and passes after; Windows intro launch observed, but corrected pool pixels and Proton execution still require acceptance.

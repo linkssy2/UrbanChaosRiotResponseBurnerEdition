@@ -1,4 +1,4 @@
-# Burner Edition 0.17 source map
+# Burner Edition 0.18 source map
 
 - `scripts/build_xbe_game_trial.py`: maintained build, preparation order and tests.
 - `scripts/prepare_xbe_*.py`: pinned transformations of the XboxXBERecomp runtime
@@ -42,3 +42,6 @@ source are deliberately absent from this snapshot.
 See `docs/RAGDOLL-DRAG.md`, `docs/CORPSE-SHIELD.md` and
 `docs/DISPLAY-AND-CONTROLLER-SETTINGS.md` for the new source paths, ownership
 contracts and verification limits.
+
+- `scripts/xbe_blood_clip.h` and `xbe_blood_pools.cpp`: creation-time support sampling and reusable per-draw clipping scratch. Flat supported pools retain the original draw path.
+- `scripts/xbe_tv_audio.h`: exact bank/sample/command matching applies the accepted scene correction once during loading.

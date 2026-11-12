@@ -221,3 +221,23 @@ bool TrialPlayerHudVisible(const X86Context& c,const uint8_t* b){
     return !TrialGuestReadable(actor,0x36c)||Word(b,actor)!=0x46fbe8||
         trial_player_actions::HudVisible(Word(b,actor+0x368));
 }
+
+TrialHiddenHudScope::TrialHiddenHudScope(const X86Context& c,uint8_t* b):base(b){
+    if(TrialPlayerHudVisible(c,b))return;
+    draw=false;
+    if(!TrialGuestReadable(c.ecx,0x18))return;
+    uint32_t node=Word(b,c.ecx+8);
+    if(!TrialGuestReadable(node,12)||Word(b,node)!=0x453bd0)return;
+    node=Word(b,node+8);
+    if(!TrialGuestReadable(node,0x1c)||Word(b,node)!=0x453c20)return;
+    const uint32_t scope=Word(b,node+0x10);
+    if(!TrialGuestReadable(scope,12)||Word(b,scope)!=0x4530bc||
+       Word(b,scope+4)!=Word(b,c.ecx+4))return;
+    // Keep the native scope draw and restore the full tree before updates resume.
+    root=c.ecx;draw=true;
+    for(unsigned i=0;i<3;++i)saved[i]=Word(b,root+8+4*i);
+    Put(b,root+8,scope);Put(b,root+12,0);Put(b,root+16,0);
+}
+TrialHiddenHudScope::~TrialHiddenHudScope(){
+    if(root)for(unsigned i=0;i<3;++i)Put(base,root+8+4*i,saved[i]);
+}

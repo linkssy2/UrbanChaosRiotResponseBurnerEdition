@@ -5,9 +5,10 @@ import re
 import struct
 
 INCLUDE='#include "xbe_coop_orders.h"\n'
+SCOPE_ONLY='\tif(hidden_hud.root)goto loc_00073EF7;\n'
 ENTRIES={
  0x40d60:'\tif(!TrialCoopOrdersChoose(ctx,base)){ctx.esp+=12;return;}\n',
- 0x73d80:'\tif(!TrialPlayerHudVisible(ctx,base)){ctx.esp+=8;return;}\n\tTrialCoopOrdersHudScope coop_orders_hud(ctx,base);\n',
+ 0x73d80:'\tTrialHiddenHudScope hidden_hud(ctx,base);\n\tif(!hidden_hud.draw){ctx.esp+=8;return;}\n\tTrialCoopOrdersHudScope coop_orders_hud(ctx,base);\n',
  0x73fa0:'\tTrialCoopOrdersHudScope coop_orders_hud(ctx,base);\n',
  0x140e10:'\tTrialCoopHelpScope coop_help(ctx,base);\n',
  0x1407f0:'\tTrialCoopHelpScope coop_help(ctx,base);\n',
@@ -74,6 +75,8 @@ def body(source,address):
     return re.search(rf'X86_FUNC\(__imp__sub_{address:08X}\) \{{.*?^\}}',source,re.M|re.S).group()
 
 def clean(source):
+    source=source.replace(SCOPE_ONLY,'')
+    source=source.replace('\tTrialHiddenHudScope hidden_hud(ctx,base);\n','').replace('\tif(!hidden_hud.draw){ctx.esp+=8;return;}\n','')
     source=source.replace(INCLUDE,'').replace(MEDIC_HINT_NEW,MEDIC_HINT_OLD)
     source=source.replace('\tTrialCoopOrdersChoose(ctx,base);\n','')
     for original,fixed in MEDIC_REPLACEMENTS.items():source=source.replace(fixed,original)
@@ -138,6 +141,9 @@ def prepare(area):
                 assert source.count(marker)==1
                 source=source.replace(marker,marker+hook,1)
         if unit==11:
+            marker='\t// 00073E6F mov eax, [0x0051CEBC]\n'
+            assert source.count(marker)==1
+            source=source.replace(marker,SCOPE_ONLY+marker,1)
             for va in (0x71900,0x71920):
                 original=body(source,va)
                 fixed=original.replace('ctx.ecx = (uint32_t)(X86_MEM32(ea))','ctx.ecx = (uint32_t)(TrialCoopOrdersHud(base,X86_MEM32(ea)))')
@@ -158,6 +164,12 @@ def prepare(area):
         sources[unit]=source
         (area/f'generated/game/x86_recomp.{unit}.cpp').write_text(source.replace('#include "x86_recomp_shared.h"\n','#include "x86_recomp_shared.h"\n'+INCLUDE,1))
     fixtures=[]
+    root_draw=originals[0x73d80]
+    branch=root_draw[root_draw.index('\t// 00073E62 '):root_draw.index('\t// 00073E6F ')]
+    fixtures.append('X86_FUNC(Coop_HudScopeBranch) {\n'
+        '\tTrialHiddenHudScope hidden_hud(ctx,base);if(!hidden_hud.draw)return;\n'
+        '\tctx.esi=ctx.ecx;\n'+branch+SCOPE_ONLY+
+        '\t++ordinary_hud_tail;\nloc_00073EF7:;\n}\n')
     for unit,va,*_ in PINS:
         if va in (0x73d80,0x73fa0,0x158510,0x70d90,0x79f50,0x140680):continue
         original=originals[va];fixed=body(sources[unit],va)

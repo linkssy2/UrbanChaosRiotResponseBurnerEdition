@@ -105,7 +105,7 @@ class Ps2Disc:
             raise ValueError('Truncated PS2 source file.')
         return data
 
-    def _iso_files(self, handle):
+    def _iso_files(self, handle, *, root_files=False):
         def read(offset, size):
             if offset < 0 or offset + size > self._iso_size:
                 raise ValueError('PS2 ISO extent is outside the image.')
@@ -163,7 +163,7 @@ class Ps2Disc:
         if both(primary, 80, 4) * 2048 > self._iso_size:
             raise ValueError('Truncated PS2 ISO volume.')
         root = directory(primary[156:156 + primary[156]])
-        urban = directory(root['urban'])
+        urban = root if root_files else directory(root['urban'])
         boot_offset, boot_size = extent(root['system.cnf'])
         if boot_size > 4096 or root['system.cnf'][25] & 2:
             raise ValueError('Invalid PS2 boot configuration.')

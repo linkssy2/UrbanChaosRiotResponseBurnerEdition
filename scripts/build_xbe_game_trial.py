@@ -30,6 +30,10 @@ try:
  report['deferred_tests']=[]
  report['live_status']='New executable pending checks and live verification'
  save()
+ from prepare_xbe_tv_audio import unprepare as unprepare_tv_audio
+ unprepare_tv_audio(AREA)
+ from prepare_xbe_blood_pools import unprepare as unprepare_blood_pools
+ unprepare_blood_pools(AREA)
  from prepare_xbe_cheats import unprepare as unprepare_cheats
  unprepare_cheats(AREA)
  from prepare_xbe_ragdoll_drag import unprepare as unprepare_ragdoll_drag
@@ -269,6 +273,10 @@ try:
  prepare_coop_pickups(AREA)
  from prepare_xbe_coop_orders import prepare as prepare_coop_orders
  prepare_coop_orders(AREA)
+ from prepare_xbe_blood_pools import prepare as prepare_blood_pools
+ prepare_blood_pools(AREA)
+ from prepare_xbe_tv_audio import prepare as prepare_tv_audio
+ prepare_tv_audio(AREA)
  xbe=(AREA/'assets/Default.xbe').read_bytes()
  u=lambda o:struct.unpack_from('<I',xbe,o)[0]
  base=u(0x104); table=u(0x120)-base
@@ -784,6 +792,11 @@ target_include_directories(test_coop_spin PRIVATE src/common "'''+(SDK/'runtime'
 add_executable(test_coop_pickups src/compat/test_coop_pickups.cpp)
 target_include_directories(test_coop_pickups PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
 add_executable(test_coop_orders src/compat/test_coop_orders.cpp)
+add_executable(test_blood_pools src/compat/test_blood_pools.cpp)
+add_executable(test_tv_audio src/common/test_xbe_tv_audio.cpp)
+add_executable(test_blood_creation src/compat/test_blood_creation.cpp)
+target_include_directories(test_blood_creation PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
+target_include_directories(test_blood_pools PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
 target_include_directories(test_coop_orders PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
 add_executable(test_aim_diagnostic src/compat/test_aim_diagnostic.cpp)
 target_include_directories(test_aim_diagnostic PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
@@ -1056,6 +1069,16 @@ target_include_directories(UrbanChaosXbeTrial PRIVATE "'''+ROOT.as_posix()+'''" 
  run('test-coop-pickups',[AREA/'out-msvc/test_coop_pickups.exe'])
  run('build-coop-orders',['cmake','--build',AREA/'out-msvc','--target','test_coop_orders','-j','4'])
  run('test-coop-orders',[AREA/'out-msvc/test_coop_orders.exe'])
+ run('build-blood-pools',['cmake','--build',AREA/'out-msvc','--target','test_blood_pools','test_blood_creation','-j','4'])
+ run('test-blood-pools',[AREA/'out-msvc/test_blood_pools.exe'])
+ run('test-blood-creation',[AREA/'out-msvc/test_blood_creation.exe'])
+ from analyze_frontend import parse_archive,unpack_entry
+ raw,entries=parse_archive(ROOT/'game_files/6-01.ent')
+ bank=unpack_entry(raw,next(e for e in entries if e['name'].lower()==r'banks\setpiece\06-01\endofhostage.amp'))
+ assert hashlib.sha256(bank).hexdigest()=='991b3ce40255696a366f5fd9c29805c14a52e366c8f52ff099771d27df4e976a'
+ (AREA/'tv-audio-fixture.bin').write_bytes(bank)
+ run('build-tv-audio',['cmake','--build',AREA/'out-msvc','--target','test_tv_audio','-j','4'])
+ run('test-tv-audio',[AREA/'out-msvc/test_tv_audio.exe',AREA/'tv-audio-fixture.bin'])
  run('build-aim-diagnostic',['cmake','--build',AREA/'out-msvc','--target','test_aim_diagnostic','-j','4'])
  run('test-aim-diagnostic-off',['cmake','-E','env','--unset=BURNER_AIM_LOG',AREA/'out-msvc/test_aim_diagnostic.exe','off'])
  run('test-aim-diagnostic-on',['cmake','-E','env','BURNER_AIM_LOG='+str(AREA/'aim-fixture.log'),AREA/'out-msvc/test_aim_diagnostic.exe',AREA/'aim-fixture.log'])

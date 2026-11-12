@@ -25,6 +25,7 @@ constexpr uint32_t W=0x608000,STATE=0x609000,C=0x60c000,VT=0x60d000,DATA=0x60e00
 constexpr uint32_t NPC[]={C,0x60f000},HELP[]={0x610000,0x611000};
 static uint32_t queues[2];static float health[2];static bool medic_present,orders_available[2],throw_text;
 static unsigned clears[2];
+static unsigned scope_draws=0,ordinary_hud_tail=0;
 static uint32_t admitted[2]={P[0],P[1]},heap;static bool candidate,fail_copy,fail_action;
 static unsigned attached,chosen,complete[2],drawn[2],updated[2],made_sprites[2];
 static uint32_t control_owner;
@@ -45,6 +46,7 @@ bool TrialCoopDownedPosition(const uint8_t*,uint32_t,float (&)[3]){return false;
 unsigned TrialCoopPresentation(){return 0;}
 bool TrialCoopRevivePlayer(X86Context&,uint8_t*,uint32_t){assert(false);return false;}
 // ORIGINAL_DECLARATIONS
+X86_FUNC(Coop_HudScopeBranch);
 static uint32_t Allocate(uint32_t bytes){const uint32_t p=heap;heap+=(bytes+15)&~15u;assert(heap<0x700000);return p;}
 static uint32_t Find(uint32_t m,uint32_t id){const uint32_t h=Read(m+0xac);for(uint32_t n=Read(h);n!=h;n=Read(n))if(Read(n+8)==id)return n;return 0;}
 static unsigned Owner(uint32_t m){assert(m==M[0]||m==M[1]);return m==M[1];}
@@ -196,6 +198,7 @@ X86_FUNC(sub_001F90A0){
 void x86_resume(X86Context&,uint8_t*,const X86Resume&){std::abort();}
 void x86_icall(X86Context& c,uint8_t* b,uint32_t fn){
     switch(fn){
+    case 0x731e0:++scope_draws;c.esp+=8;return;
     case 0x1682b0:Coop_001682B0(c,b);return;
     case 0x184200:Coop_00184200(c,b);return;
     case 0x207d70:{const auto id=Read(c.esp+4),entry=STATE+0x3c+(id&1023)*8;c.eax=Read(entry)==id?Read(entry+4):0;c.esp+=8;return;}
@@ -481,7 +484,27 @@ static void HudVisibility(){
             trial_player_actions::hidden[slot]=true;
             auto mine=Context(H[slot]),other=Context(H[1-slot]);
             assert(!TrialPlayerHudVisible(mine,B())&&TrialPlayerHudVisible(other,B()));
+            const auto pair=Read(H[slot]+8),six=Read(pair+8),scope=Allocate(12);
+            Put(scope,0x4530bc);Put(scope+4,P[slot]);Put(six+0x10,scope);
+            Put(0x4530bc+8,0x731e0);
+            scope_draws=ordinary_hud_tail=0;
+            Coop_HudScopeBranch(mine,B());
+            assert(scope_draws==1&&ordinary_hud_tail==0&&Read(H[slot]+8)==pair);
+            mine=Context(H[slot]);
+            Put(H[slot]+12,123);Put(H[slot]+16,456);
+            try{
+                TrialHiddenHudScope hidden(mine,B());assert(hidden.draw);
+                assert(Read(H[slot]+8)==scope&&!Read(H[slot]+12)&&!Read(H[slot]+16));
+                {TrialHiddenHudScope nested(mine,B());assert(!nested.draw);}
+                assert(Read(H[slot]+8)==scope);
+                throw std::runtime_error("draw failed");
+            }catch(const std::runtime_error&){}
+            assert(Read(H[slot]+8)==pair&&Read(H[slot]+12)==123&&Read(H[slot]+16)==456);
+            Put(scope+4,P[1-slot]);
+            {TrialHiddenHudScope wrong(mine,B());assert(!wrong.draw&&Read(H[slot]+8)==pair);}
+            Put(scope+4,P[slot]);
             trial_player_actions::hidden[slot]=false;assert(TrialPlayerHudVisible(mine,B()));
+            {TrialHiddenHudScope visible(mine,B());assert(visible.draw&&Read(H[slot]+8)==pair);}
         }
     }
     auto unknown=Context(0);assert(TrialPlayerHudVisible(unknown,B()));

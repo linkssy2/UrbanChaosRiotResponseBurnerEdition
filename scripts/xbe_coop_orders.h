@@ -28,3 +28,9 @@ bool TrialCoopOrdersChoose(X86Context&,uint8_t*);
 bool TrialCoopMedicPrompt(const X86Context&,const uint8_t*,bool offer=false,bool decline=false);
 
 bool TrialPlayerHudVisible(const X86Context&,const uint8_t*);
+
+struct TrialHiddenHudScope {
+    uint8_t* base;uint32_t root=0,saved[3]{};bool draw=true;
+    TrialHiddenHudScope(const X86Context&,uint8_t*);
+    ~TrialHiddenHudScope();
+};
