@@ -91,6 +91,7 @@ def packed_vertices(source):
         return source
     source = once(source, '    out.decode = 0;', '    out.decode = 0;\n    out.repacked = false;')
     helper = Path(__file__).with_name('xbe_packed_vertices.inc').read_text()
+    source = once(source, '#include <cstring>', '#include <cstring>\n#include <tmmintrin.h>')
     source = once(source, '// converted on the CPU: each element', helper + '\n// converted on the CPU: each element')
     begin = source.index('    out.vertices.swap(out.converted_storage);')
     end_text = '    out.buffers[0] = {bytes, uint32_t(out.vertices.size() * 4), uint32_t(nregs * 16)};'
@@ -102,7 +103,21 @@ def packed_vertices(source):
 
 
 def transform(source):
-    return strip_pairs(index_dispatch(quad_index_fill(strip_index_fill(ranged_sequence(packed_vertices(converted_storage(format_dispatch(source))))))))
+    return converted_strips(strip_pairs(index_dispatch(quad_index_fill(strip_index_fill(ranged_sequence(packed_vertices(converted_storage(format_dispatch(source)))))))))
+
+
+def converted_strips(source):
+    if '// UC_CONVERTED_NATIVE_STRIPS' in source:
+        return source
+    old = function(source, 'bool AssembleConverted(')
+    new = once(old, '    if (native_list) {', '''    // UC_CONVERTED_NATIVE_STRIPS: preserve authored smooth strips after conversion.
+    // Flat shading and 0xFFFF keep the established triangle-list path.
+    if (ranged && d.prim == 6 && d.count >= 3 &&
+        s.simple[kMShadeMode >> 2] != 0x1D00u &&
+        (!d.ip || d.first + d.span <= 0xFFFFu))
+        return DrawNative(d, true, out);
+    if (native_list) {''')
+    return once(source, old, new)
 
 
 def strip_pairs(source):
@@ -207,7 +222,7 @@ def prepare(source, area, header):
     baseline = converted_storage(format_dispatch(source))
     before_dispatch = quad_index_fill(strip_index_fill(ranged_sequence(packed_vertices(baseline))))
     before_pairs = index_dispatch(before_dispatch)
-    result = strip_pairs(before_pairs)
+    result = converted_strips(strip_pairs(before_pairs))
     assert transform(result) == result
     target = Path(area) / 'src/gpu/vertex.h'
     target.parent.mkdir(parents=True, exist_ok=True)

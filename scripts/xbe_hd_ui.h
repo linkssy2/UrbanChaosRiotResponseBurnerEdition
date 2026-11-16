@@ -36,6 +36,15 @@ const Image* Match(uint32_t width, uint32_t height, uint32_t format,
                    const uint8_t* payload, size_t bytes);
 const Image* Font(const char* name);
 const Image* Buttons();
+// Fixed weapon portrait inventory. Both variants are derived from the user's
+// imported archives; optional restored art is used only for the HD variant.
+inline constexpr const char* kWeaponNames[]={
+    "pistol","pistol2","pistol3","policeassault","policeassault2","policeassault3",
+    "policeshotgun","policeshotgun2","policeshotgun3","taser","taser2","minigun",
+    "molotov","nailbomb","grenadelauncher","cleaver","chainsaw","magnum",
+    "machinepistol","gangshotgun","gangassault","smokegrenade","riotgrenade"
+};
+const Image* Weapon(const char* name,bool hd);
 bool Ready();
 Statistics Stats();
 }

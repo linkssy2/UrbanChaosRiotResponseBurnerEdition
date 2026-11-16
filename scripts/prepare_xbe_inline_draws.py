@@ -16,6 +16,36 @@ SYMBOLS = '''
 #define HAS_D3DDevice_EndPush 1
 '''
 
+PACK_OLD = '''    packed.clear();
+    for (uint32_t v = 0; v < count; v++)
+        for (uint32_t s = 0; s < 16; s++)
+            if (g_im_mask >> s & 1) packed.insert(packed.end(), &g_im_vertices[v * 64 + s * 4], &g_im_vertices[v * 64 + s * 4] + 4);'''
+PACK_NEW = '''    // UC_IMMEDIATE_PACK: derive the slot list once; preserve ascending attribute order.
+    uint32_t slots[16], slot_count = 0;
+    for (uint32_t s = 0; s < 16; ++s)
+        if (g_im_mask >> s & 1) slots[slot_count++] = s * 4;
+    packed.resize(size_t(count) * slot_count * 4);
+    if (slot_count == 16) {
+        std::memcpy(packed.data(), g_im_vertices.data(), packed.size() * sizeof(float));
+    } else {
+        for (uint32_t v = 0; v < count; ++v)
+            for (uint32_t s = 0; s < slot_count; ++s)
+                std::memcpy(packed.data() + (size_t(v) * slot_count + s) * 4,
+                            g_im_vertices.data() + size_t(v) * 64 + slots[s], 4 * sizeof(float));
+    }'''
+
+
+def immediate_pack(source):
+    if '// UC_IMMEDIATE_PACK:' in source:
+        assert source.count(PACK_NEW) == 1 and PACK_OLD not in source
+        return source
+    return replace_once(source, PACK_OLD, PACK_NEW)
+
+
+def packing_fixture():
+    text = Path(__file__).with_name('test_xbe_immediate_pack.cpp').read_text()
+    return text.replace('/* PACK_OLD */', PACK_OLD).replace('/* PACK_NEW */', PACK_NEW)
+
 
 def between(text, begin, end):
     start = text.index(begin)
@@ -59,7 +89,10 @@ def prepare(sdk, area):
     d3d = replace_once(d3d, '#include "xdk/hle.h"', '#include "xdk/hle.h"\n' + SYMBOLS)
     reference_push = between(d3d, 'HLE_STDCALL(D3DDevice_EndPush, 1)', '// frame buffer compression tiles')
     d3d = bulk_inline_packets(d3d)
+    d3d = immediate_pack(d3d)
+    assert immediate_pack(d3d) == d3d
     path.write_text(d3d)
+    (compat / 'test_immediate_pack.cpp').write_text(packing_fixture())
 
     # The shader selected by both producers is initialized from this XBE table.
     # Keep all original-code/data fixtures private to the generated test folder.

@@ -38,7 +38,7 @@ Result Read(const State& state,int stage,const TextureDesc& desc,Reader reader) 
     result.read_count=reads;result.hash_count=hashes;
     // A skipped palette leaves only va/hash observable; UploadTexture receives
     // nullptr. A read at physical address zero still hashes the full palette.
-    if(hashes)std::memcpy(result.colours.data(),palette.colours,sizeof(palette.colours));
+    if(reads)std::memcpy(result.colours.data(),palette.colours,sizeof(palette.colours));
     return result;
 }
 namespace before {
@@ -53,7 +53,8 @@ void W32(uint32_t address,uint32_t value) { CHECK(address<=memory.size()-4);std:
 unsigned checks=0;
 Result Compare(const State& state,int stage,uint32_t format) {
     const auto old=before::Run(state,stage,{format}),next=after::Run(state,stage,{format});
-    CHECK(old==next);++checks;return next;
+    CHECK(old.va==next.va && old.hash==next.hash && old.colours==next.colours && old.read_count==next.read_count);
+    CHECK(next.hash_count==old.hash_count);++checks;return next;
 }
 int main() {
     constexpr uint32_t header=0x2000;
@@ -68,10 +69,17 @@ int main() {
         CHECK(result.va==address&&result.hash_count==1&&result.read_count==3);
         CHECK(!std::memcmp(result.colours.data(),memory.data()+address,count*4));
         for(unsigned i=count;i<256;++i)CHECK(result.colours[i]==0);
+        CHECK(Compare(state,stage,0x0B).hash_count==1);
         const auto previous=result;
         memory[address+(count/2)*4]^=0x57;
         result=Compare(state,stage,0x0B);
         CHECK(result.colours[count/2]!=previous.colours[count/2]);
+        CHECK(result.hash_count==1);
+        for(unsigned byte=0;byte<count*4;++byte) {
+            memory[address+byte]^=0x81;
+            CHECK(Compare(state,stage,0x0B).hash_count==1);
+            CHECK(Compare(state,stage,0x0B).hash_count==1);
+        }
         // Non-P8 ignores even an invalid palette header, without touching memory.
         state.palettes[stage]=UINT32_MAX;
         for(uint32_t format:{0x00u,0x06u,0x12u,0x40u,0xFFFFu}) {

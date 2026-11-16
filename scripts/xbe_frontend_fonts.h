@@ -14,3 +14,6 @@ bool TrialLoadFrontendFonts(ImFontAtlas*,const std::filesystem::path& game,
 ImFont* TrialFrontendFontForUi(ImFont* original);
 // Virtual-key codes, or 0x101..0x105 for original A/B/d-pad/Y/X artwork.
 bool TrialMenuIconUV(unsigned code,float (&uv)[4]);
+// Weapon portraits share the already resident ImGui atlas. No decode/upload at draw time.
+bool TrialWeaponIconUV(const char* name,float (&uv)[4]);
+ImFont* TrialFrontendBodyFont();

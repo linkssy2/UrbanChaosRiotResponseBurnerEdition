@@ -1,4 +1,4 @@
-# Urban Chaos: Riot Response - Burner Edition 0.18
+# Urban Chaos: Riot Response - Burner Edition 0.19
 
 HD HUD is still a work in progress and has known prompt/display issues.
 Turn HD UI Off to use the original HUD, which works normally.
@@ -9,10 +9,22 @@ PC controls and menus. Original gameplay is statically recompiled from Xbox code
 XboxXBERecomp: https://github.com/TGP482/XboxXBERecomp
 
 ## This Update
-Keeps scope artwork visible with No HUD, restores dead-enemy blood pools with
-ledge clipping, and corrects the TV electrocution sound timing. Knocked-out
-enemies do not receive blood pools. Includes the updated launcher cover.
-Missions use their normal starting points; the hotel test spawn is excluded.
+
+- Dynamic lighting now has Off, Low, Medium and High coverage presets. The
+  separate lighting-resolution control is removed; internal render resolution
+  remains available.
+- Reduce repeated CPU work in geometry preparation, lighting transforms and
+  texture update tracking. These changes retain the effects and their density.
+- Add separate, rebindable Guns and Melee / throwables wheels using the existing
+  HUD weapon portraits. Their smaller translucent panels have no faint internal
+  seams. Single-player blurs the background and runs simulation at 20% speed
+  while choosing; co-op keeps normal time.
+- Add the approved compact ember-arrow pointer, with cursor dimensions reduced
+  by 25%.
+
+The No HUD scope fix, dead-enemy blood pools with ledge clipping, TV electrocution
+audio correction and updated launcher cover remain included. Knocked-out enemies
+do not receive blood pools. Missions start normally; the hotel test spawn is excluded.
 Manage > DLC / Prototypes remains visible, but import and play are not available.
 Prototype integration is paused. No original or prototype game files are included.
 See the release page for the complete change list:
@@ -74,6 +86,20 @@ the seed is compiled locally. Previously unseen shaders and other first-use
 work can still cause pauses; the seed does not cover every scene in the game.
 
 ## Settings And Saves
+
+Controls has separate Guns wheel and Melee / throwables wheel bindings for each
+player. Fresh keyboard defaults are Tab for Guns and G for Melee / throwables.
+On an existing profile, a missing assignment receives its default only when
+that key is unused; saved bindings and explicitly unbound choices are preserved.
+Controller wheel bindings start unbound: assign a holdable button in Controls.
+Hold the chosen wheel control, point with the mouse or physical right stick,
+then release to equip. Return to the centre before release to cancel. Holding
+both wheel controls cancels selection until both are released. Empty weapons
+remain visible but cannot be selected. Taser and chainsaw use Melee / throwables;
+the grenade launcher uses Guns. Each co-op player has an independent wheel.
+Single-player wheel blur and 20% simulation last only while a wheel is open;
+co-op stays at normal speed. The wheel remains available with No HUD enabled.
+
 Controls has separate Next Firearm and Previous Firearm keyboard/mouse bindings.
 Next keeps your existing Firearms assignment. Previous defaults to Wheel Down
 unless that input is already assigned in your saved profile; both are editable.
@@ -171,20 +197,34 @@ still pending. Mouse users get clickable level and rewards browsers.
 Requires Windows 10/11 x64 and a Direct3D12-capable GPU. The required Microsoft
 Visual C++ runtime DLLs are included beside the game; no system installer runs.
 Dynamic scenery lighting, character lighting, effects and retained ragdolls can
-affect performance. Graphics options include lighting controls, MSAA, internal
-resolution and ragdoll retention.
+affect performance. Graphics > Dynamic lighting controls coverage:
+
+| Preset | Lighting coverage |
+| --- | --- |
+| Off | World point lights disabled; gun, hands and flashlight remain lit. |
+| Low | Reduced character lighting; scenery point lights disabled. |
+| Medium | Reduced scenery light range and character lighting; flashlight and effects retained. |
+| High | Full scenery and character lighting. |
+
+Existing custom lighting combinations remain intact until a preset is chosen.
+MSAA, internal render resolution and ragdoll retention remain separate settings.
+Performance varies by scene, hardware and settings; no fixed FPS gain is promised.
 Normal gameplay writes no diagnostic logs or captures. A failed run can leave a
 bounded last-error.txt beside the imported data to explain the failure.
 
 ## Optional Hd Game Textures
-Download the separate Burner Edition HD texture pack ZIP. In Burner Edition
-Setup, choose MANAGE > Add-ons > INSTALL HD TEXTURE PACK and select that ZIP (do not extract it).
+Set up your Xbox game first and close the game. In Burner Edition Setup, choose
+MANAGE > Add-ons > DOWNLOAD HD TEXTURE PACK to download and install the compatible
+pack from the project's official GitHub releases. Windows and Proton use the
+same Setup button.
+For offline installation, choose INSTALL HD TEXTURE PACK and select a previously
+downloaded compatible ZIP (do not extract it).
 Then start the game and enable Graphics > HD game textures > Apply.
 The option is grayed out when the pack is not installed or is incomplete.
-The pack stays in portable GameData and is separate from HD HUD and menus.
+The pack stays in the selected installation's GameData and is separate from HD HUD and menus.
 HD textures use more video memory. Original textures remain available with Off.
 The separate 0.09 HD pack adds 565 texture mappings, for 1,803 total, on both
-platforms. Install that ZIP to receive the new coverage; updating the game does
+platforms. Download or install that pack to receive the new coverage; updating the game does
 not automatically replace the optional pack. The older 0.06 pack still works.
 The expanded coverage has offline checks but still needs in-game visual testing.
 HD game texture artwork: xXthe.RockoXx; converted from the PS2 HD texture pack.
@@ -211,6 +251,9 @@ original recording. In-game audio and lip synchronization need testing.
 ## Known Issues
 HD HUD still has prompt/display issues; the original HUD remains available.
 Co-op is experimental, with incomplete campaign/character/turret gameplay coverage.
+The user accepted the separate weapon wheels, ember-arrow pointer and removal
+of faint wheel seams on Windows. Canals lighting and rendering-preparation
+tests are recorded separately; they do not establish performance in every level.
 The Angel Heights officer placement fix was confirmed in a high-FPS Windows rescue test; full-campaign and Proton testing remain separate.
 The targeted stone-ledge mapping repair still needs confirmation at the reporter's exact wall.
 Spanish text and imported voice synchronization need community review.

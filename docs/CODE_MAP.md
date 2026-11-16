@@ -1,4 +1,4 @@
-# Burner Edition 0.18 source map
+# Burner Edition 0.19 source map
 
 - `scripts/build_xbe_game_trial.py`: maintained build, preparation order and tests.
 - `scripts/prepare_xbe_*.py`: pinned transformations of the XboxXBERecomp runtime
@@ -21,6 +21,28 @@
 - `scripts/prepare_xbe_simple_state_costs.py`, `prepare_xbe_lighting_bounds.py` and
   `prepare_xbe_sync_downsample_costs.py`: qualified render-state, lighting bounds
   and readback optimizations, with production-derived comparison fixtures.
+- `scripts/xbe_effect_settings.*` and `prepare_xbe_effect_settings.py`: Off/Low/
+  Medium/High dynamic-lighting coverage policy and native-pass gating. Particle
+  density is unchanged; the separate lighting-resolution option was removed.
+- `scripts/prepare_xbe_vertex_costs.py` and `xbe_packed_vertices.inc`: exact packed
+  vertex conversion and eligible smooth-strip preservation, with retained list
+  fallbacks and production-derived equivalence fixtures.
+- `scripts/xbe_receiver_inverse.h` and `prepare_xbe_receiver_inverse.py`: exact
+  inverse reuse only at the qualified receiver call, preserving other callers.
+- `scripts/xbe_dirty_epoch.h` and `prepare_xbe_dirty_epoch.py`: reuse unchanged
+  texture dirty epochs with original map ownership and write invalidation.
+- `scripts/xbe_weapon_wheel.*` and `prepare_xbe_weapon_wheel.py`: owned-inventory
+  snapshots, native weapon eligibility/selection and separate Guns versus
+  Melee/throwables groups. Host input latches wheel kind and source per player;
+  overlap, handoff, menus and invalid actors cancel rather than equip stale data.
+- `scripts/xbe_weapon_wheel_ui.*`, `xbe_frontend_fonts.*` and `xbe_hd_ui.*`:
+  viewport-clipped radial UI and existing original/restored HUD portraits in the
+  shared font atlas. The renderer reads copied snapshots, not guest pointers.
+- `scripts/xbe_weapon_wheel_time.*`, `xbe_weapon_wheel_blur.h` and their preparers:
+  qualified solo simulation at 20% speed and final-presentation background blur
+  while choosing. Co-op remains real-time; menu/audio/input clocks are unchanged.
+- `native/runtime/menu_cursor.h` and `scripts/prepare_xbe_cursor.py`: procedural
+  ember arrow, DPI-size cache, tip hotspot and window-owned cursor visibility.
 - `scripts/xbe_audio_dsp.inc` and `xbe_audio_filter.h`: environmental sends and
   per-voice filtering connected to the pinned runtime's audio processors.
 - `scripts/xbe_graffiti_alpha.h`: exact-identity graffiti opacity enhancement.
@@ -45,3 +67,10 @@ contracts and verification limits.
 
 - `scripts/xbe_blood_clip.h` and `xbe_blood_pools.cpp`: creation-time support sampling and reusable per-draw clipping scratch. Flat supported pools retain the original draw path.
 - `scripts/xbe_tv_audio.h`: exact bank/sample/command matching applies the accepted scene correction once during loading.
+
+- `launcher/burner-xbe/world_textures.py`: hash/size-pinned official pack download
+  through the existing bounded HTTPS helper, followed by verified installation.
+- `launcher/burner-xbe/import_game.py`: `download-textures` worker action;
+  `Launcher.cs`: Manage > Add-ons download/install button.
+- `launcher/burner-xbe/test_texture_download.py`: download, cancellation, failure
+  cleanup, installation, and preservation regression checks.

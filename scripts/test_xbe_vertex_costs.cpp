@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <cstring>
 #include <vector>
+#include <tmmintrin.h>
 #ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -98,6 +99,15 @@ std::vector<uint32_t> VertexOrder(const gpu::Assembled& a) {
     return order;
 }
 
+std::vector<uint32_t> PrimitiveOrder(const gpu::Assembled& a) {
+    auto order=VertexOrder(a);
+    if(!a.strip || a.topology!=gpu::Topology::Triangles)return order;
+    std::vector<uint32_t> triangles;
+    for(size_t i=0;i+2<order.size();++i)
+        triangles.insert(triangles.end(),{order[i+(i&1)],order[i+!(i&1)],order[i+2]});
+    return triangles;
+}
+
 void Check(gpu::State& s,uint32_t prim,uint32_t start,uint32_t count,const uint16_t* indices) {
     // Renderer reuses these outputs across raw, converted, and rejected draws.
     static gpu::Assembled before,after;
@@ -116,8 +126,18 @@ void Check(gpu::State& s,uint32_t prim,uint32_t start,uint32_t count,const uint1
     assert(before.regs==after.regs);
     if(!after.repacked)assert(before.decode==after.decode);
     assert(before.pretransformed==after.pretransformed && before.vertex_count==after.vertex_count);
-    assert(before.topology==after.topology && before.strip==after.strip);
-    if(!before.vertices.empty())
+    assert(before.topology==after.topology);
+    const bool native_strip=before.strip!=after.strip;
+    if(native_strip){
+        assert(prim==6&&!before.strip&&after.strip&&count>=3);
+        assert(s.simple[gpu::kMShadeMode>>2]!=0x1d00&&after.indices.empty());
+        assert(uint64_t(after.vertex_count)<=uint64_t(count)*2+64);
+        if(indices){
+            assert(gpu::IndexRange(data,count).last<65535);
+            assert(after.index16&&after.index_src==indices&&after.index_count==count);
+        }else assert(after.index_count==0&&after.draw_count==count);
+    }
+    if(!native_strip&&!before.vertices.empty())
         assert(before.index_count+before.draw_count==after.index_count+after.draw_count);
     if(!after.repacked){
         assert(before.buffer_count==after.buffer_count);
@@ -135,12 +155,14 @@ void Check(gpu::State& s,uint32_t prim,uint32_t start,uint32_t count,const uint1
             assert(uint64_t(after.vertex_count-1)*b.stride+e.offset+gpu::HostFormat(s.vs->inputs[r].type).bytes<=b.bytes);
         }
     }
-    assert(VertexOrder(before)==VertexOrder(after));
+    assert(PrimitiveOrder(before)==PrimitiveOrder(after));
     // Fallbacks keep their index bytes, including strip winding and degenerates.
-    if(prim!=1 && prim!=2 && prim!=5)assert(before.indices==after.indices);
+    if(!native_strip && prim!=1 && prim!=2 && prim!=5)assert(before.indices==after.indices);
 }
 
-void CheckDispatch(gpu::State& s,uint32_t prim,uint32_t start,uint32_t count,const uint8_t* ip) {
+void CheckDispatch(gpu::State s,uint32_t prim,uint32_t start,uint32_t count,const uint8_t* ip) {
+    // Keep this historical list-expansion/prefix oracle on its original route.
+    s.simple[gpu::kMShadeMode>>2]=0x1d00;
     Check(s,prim,start,count,reinterpret_cast<const uint16_t*>(ip));
     if(!count)return;
     const auto bounds=ip?gpu::IndexRange(ip,count):gpu::IndexBounds{start,start+count-1};
@@ -223,6 +245,25 @@ void CheckParticleQuads() {
 #endif
 }
 
+void CheckNativeStrips() {
+    const uint16_t dense[]={7,8,9,9,9,10,8,7,10,9,8,7};
+    const uint16_t sparse[]={7,3000,6000,6000,6000,7,3000,7,6000,3000,7,6000};
+    const uint16_t high[]={65533,65534,65535,65535,65534,65533,65533,65533,65535,65534,65533,65535};
+    for(auto s:{State(),PackedState(2)})for(bool flat:{false,true}){
+        s.simple[gpu::kMShadeMode>>2]=flat?0x1d00:0x1d01;
+        for(unsigned count=0;count<=12;++count)for(unsigned route=0;route<4;++route){
+            const uint16_t* indices=route==0?nullptr:route==1?dense:route==2?sparse:high;
+            s.base_vertex=route==3?uint32_t(0)-65530:3u;
+            Check(s,6,5,count,indices);
+            gpu::Assembled assembled;
+            const bool made=gpu::Assemble(s,6,5,count,reinterpret_cast<const uint8_t*>(indices),assembled);
+            assert(made==(count>=3));
+            if(made)assert(assembled.strip==(!flat&&route<2));
+            ++checks;
+        }
+    }
+}
+
 using AssembleFn=bool(*)(const gpu::State&,uint32_t,uint32_t,uint32_t,const uint8_t*,gpu::Assembled&);
 double Bench(AssembleFn assemble,const gpu::State& s,uint32_t prim,const std::vector<uint16_t>& indices,unsigned rounds,bool mixed) {
     gpu::Assembled output;
@@ -246,6 +287,7 @@ double Bench(AssembleFn assemble,const gpu::State& s,uint32_t prim,const std::ve
 void BenchIndexDispatch() {
     for(bool packed:{false,true})for(unsigned vertices:{34u,329u,1000u}){
         auto s=packed?PackedState(2):State();std::vector<uint16_t> indices(vertices*2-2);
+        s.simple[gpu::kMShadeMode>>2]=0x1d00; // isolate the historical index-dispatch change
         for(unsigned i=0;i<indices.size();++i)indices[i]=uint16_t(i%vertices);
         std::array<double,7> before{},after{};
         for(unsigned pass=0;pass<before.size();++pass){
@@ -278,6 +320,7 @@ void BenchStripPairs() {
     // Same full production assembler before and after only the strip loop change.
     for(unsigned layout=0;layout<3;++layout)for(unsigned vertices:{34u,329u,1000u}) {
         auto s=layout==0?PackedState(2):layout==1?State():ParticleState();
+        s.simple[gpu::kMShadeMode>>2]=0x1d00; // isolate the historical strip-loop change
         std::vector<uint16_t> indices(vertices*2-2);
         for(unsigned i=0;i<indices.size();++i)indices[i]=uint16_t(i%vertices);
         std::array<double,7> before{},after{};
@@ -431,7 +474,7 @@ int main(int argc,char** argv) {
     DWORD old_protect=0;
     assert(VirtualProtect(guarded+0x2000,0x1000,PAGE_NOACCESS,&old_protect));
     kernel::g_base=guarded;
-    for(bool normal:{false,true})for(unsigned count:{3u,34u}){
+    for(bool normal:{false,true})for(unsigned count=1;count<=65;++count){
         s={};s.vs_handle=1;s.vs=std::make_shared<gpu::VertexShader>();
         s.streams[0]={kHeader,10};s.vs->inputs[0]={0,0,0x31};
         if(normal)s.vs->inputs[1]={0,6,0x16};
@@ -444,6 +487,7 @@ int main(int argc,char** argv) {
     assert(VirtualFree(guarded,0,MEM_RELEASE));
 #endif
     CheckParticleQuads();
+    CheckNativeStrips();
     CheckIndexDispatch();
     CheckStripPairs();
     std::printf("PASS vertex assembly: %u previous/new cases, exact authored values and primitive order; packed padding, fallback, mutation, particle quads and independent storage preserved (GPU decode tested separately)\n",checks);
@@ -462,7 +506,7 @@ int main(int argc,char** argv) {
             }
             std::sort(before.begin(),before.end());std::sort(after.begin(),after.end());
             std::printf("BENCH actual Assemble %s %s (specialized baseline): %u converted vertices, %zu indices, 4 attributes | median before %.3f us after %.3f us (%.1f%%); synthetic per iteration, not FPS\n",
-                prim==5?"triangle-list":"strip fallback",mixed?"converted+raw":"converted",vertices,indices.size(),before[3],after[3],100*(before[3]-after[3])/before[3]);
+                prim==5?"triangle-list":"triangle-strip",mixed?"converted+raw":"converted",vertices,indices.size(),before[3],after[3],100*(before[3]-after[3])/before[3]);
         }
         for(unsigned layout=0;layout<5;++layout)for(unsigned vertices:{34u,329u,1000u}){
             s=PackedState(layout);std::vector<uint16_t> indices(vertices*2-2);

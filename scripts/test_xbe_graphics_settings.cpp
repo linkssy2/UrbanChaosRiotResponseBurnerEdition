@@ -153,6 +153,17 @@ int main() {
         (L"uc-graphics-fixture-"+std::to_wstring(GetCurrentProcessId())+L".toml");
     app::settings.join_ip="retained";
     trial_graphics::Initialize();assert(trial_graphics::Widescreen());
+    for(unsigned preset=0;preset<4;++preset) {
+        auto d=trial_graphics::Draft{};
+        trial_graphics::SetLightingPreset(d,preset);
+        assert(trial_graphics::LightingPreset(d)==preset);
+        assert(d.scenery==(preset>=2) && d.characters==(preset>=1));
+        assert(d.character_quality==((preset==1||preset==2)?1u:0u));
+        trial_graphics::SetLightingPreset(d,99);
+        assert(trial_graphics::LightingPreset(d)==preset);
+    }
+    { auto d=trial_graphics::Draft{};d.characters=false;
+      assert(trial_graphics::LightingPreset(d)==4); }
     CheckGameViewWidth();
     CheckAspectSettings();
     CheckFrameGhostingMigration();

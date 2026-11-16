@@ -42,6 +42,8 @@ def prepare(source, area):
          function(source, 'TrialMenuRightBack', 'bool ')),
         ('// GENERATED_CHANGED', function(source, 'TrialGraphicsInputChanged')),
         ('// GENERATED_CONTROLS', source[helpers_start:helpers_end]),
+        ('// GENERATED_WHEEL_INPUT', '\n'.join(function(source, name, prefix) for name,prefix in
+            (('WeaponWheelBlocks','static bool '),('WeaponWheelReleaseGuard','static void '),('WeaponWheelFilter','static void ')))),
         ('// GENERATED_PUBLISH', function(source, 'TrialInputPublish')),
         ('// GENERATED_MENU_KEYS', '\n'.join(function(source, name) for name in
             ('TrialMenuKeysBegin', 'TrialMenuKeysEnd', 'TrialGameplay', 'ucrr_host_menu_mode', 'TrialIntroMovie')) + '\nvoid TrialMenuKeysReset(){menu_key_taps.Clear();}'),

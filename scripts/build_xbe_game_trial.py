@@ -30,6 +30,10 @@ try:
  report['deferred_tests']=[]
  report['live_status']='New executable pending checks and live verification'
  save()
+ from prepare_xbe_weapon_wheel import unprepare as unprepare_weapon_wheel
+ unprepare_weapon_wheel(AREA)
+ from prepare_xbe_weapon_wheel_time import unprepare as unprepare_weapon_wheel_time
+ unprepare_weapon_wheel_time(AREA)
  from prepare_xbe_tv_audio import unprepare as unprepare_tv_audio
  unprepare_tv_audio(AREA)
  from prepare_xbe_blood_pools import unprepare as unprepare_blood_pools
@@ -213,6 +217,8 @@ try:
  prepare_event_callback(SDK, AREA)
  from prepare_xbe_effect_settings import prepare as prepare_effect_settings
  prepare_effect_settings(AREA)
+ from prepare_xbe_receiver_inverse import prepare as prepare_receiver_inverse
+ prepare_receiver_inverse(AREA)
  from prepare_xbe_ragdoll_force import prepare as prepare_ragdoll_force
  prepare_ragdoll_force(AREA)
  from prepare_xbe_ragdoll_recovery import prepare as prepare_ragdoll_recovery
@@ -416,6 +422,7 @@ int main(){uint32_t r=0;if(uc_ds_ref(r,false)!=0||uc_ds_ref(r,true)!=1||uc_ds_re
  from prepare_xbe_cursor import prepare as prepare_cursor
  from prepare_xbe_graphics_input import prepare as prepare_graphics_input
  for name in ('xbe_trial_menu_input.cpp','xbe_trial_hud.cpp','xbe_trial_graphics_ui.cpp','xbe_trial_graphics_ui.h',
+              'xbe_weapon_wheel_ui.cpp','xbe_weapon_wheel_ui.h',
               'xbe_coop_controls.cpp','xbe_coop_controls.h','xbe_player_actions.h',
               'xbe_coop_preview.h','xbe_coop_preview.cpp','xbe_coop_preview_assets.h','xbe_coop_preview_assets.cpp',
               'xbe_window_keys.h','xbe_menu_key_taps.h','xbe_controls.h','xbe_controls_backend.inc','xbe_controls_capture.h','xbe_controls_ui.inc','xbe_language_ui.inc','xbe_cheats_ui.inc',
@@ -437,6 +444,7 @@ int main(){uint32_t r=0;if(uc_ds_ref(r,false)!=0||uc_ds_ref(r,true)!=1||uc_ds_re
  prepare_coop_controls(AREA)
  from prepare_xbe_aim_mode import prepare as prepare_aim_mode
  prepare_aim_mode(AREA)
+ (AREA/'src/compat/test_weapon_wheel_ui.cpp').write_text((ROOT/'scripts/test_xbe_weapon_wheel_ui.cpp').read_text())
  from prepare_xbe_movement_inertia import prepare as prepare_movement_inertia
  prepare_movement_inertia(AREA)
  from prepare_xbe_controller_deadzone import prepare as prepare_controller_deadzone
@@ -534,6 +542,14 @@ int main(){uint32_t r=0;if(uc_ds_ref(r,false)!=0||uc_ds_ref(r,true)!=1||uc_ds_re
  finalize_draw_bindings(AREA)
  from prepare_xbe_draw_reuse import finalize_shader_lookup
  finalize_shader_lookup(AREA)
+ from prepare_xbe_dirty_epoch import prepare as prepare_dirty_epoch
+ prepare_dirty_epoch(AREA)
+ from prepare_xbe_weapon_wheel import prepare as prepare_weapon_wheel
+ prepare_weapon_wheel(AREA)
+ from prepare_xbe_weapon_wheel_time import prepare as prepare_weapon_wheel_time
+ prepare_weapon_wheel_time(AREA)
+ from prepare_xbe_weapon_wheel_blur import prepare as prepare_weapon_wheel_blur
+ prepare_weapon_wheel_blur(AREA)
  zlib_dll=Path(os.environ.get('UCRR_ZLIB_DLL','C:/Users/Administrator/.cache/codex-runtimes/codex-primary-runtime/dependencies/native/git/mingw64/bin/zlib1.dll'))
  assert zlib_dll.is_file(),f'Missing zlib dependency: {zlib_dll}'
  (AREA/'CMakeLists.txt').write_text('''cmake_minimum_required(VERSION 3.25)
@@ -621,6 +637,7 @@ add_executable(test_query_resolves src/compat/test_query_resolves.cpp)
 add_executable(test_query_resolves_gpu src/compat/test_query_resolves_gpu.cpp)
 target_link_libraries(test_query_resolves_gpu PRIVATE d3d12 dxgi d3dcompiler)
 add_executable(test_inline_draws src/compat/test_inline_draws.cpp)
+add_executable(test_immediate_pack src/compat/test_immediate_pack.cpp)
 target_include_directories(test_inline_draws PRIVATE "'''+(SDK/'runtime').as_posix()+'''" generated/game)
 add_executable(test_resource_refs src/compat/test_resource_refs.cpp)
 target_include_directories(test_resource_refs PRIVATE "'''+(SDK/'runtime').as_posix()+'''" generated/game)
@@ -671,6 +688,8 @@ add_executable(test_palette_init src/compat/test_xbe_palette_init.cpp)
 target_include_directories(test_palette_init PRIVATE src)
 add_executable(test_texture_constants src/compat/test_xbe_texture_constants.cpp)
 add_executable(test_target_lookup src/compat/test_xbe_target_lookup.cpp)
+add_executable(test_dirty_epoch src/compat/test_dirty_epoch.cpp)
+target_include_directories(test_dirty_epoch PRIVATE src/common)
 add_executable(test_texture_formats src/compat/test_xbe_texture_formats.cpp)
 target_include_directories(test_texture_formats PRIVATE src "'''+(SDK/'runtime').as_posix()+'''")
 add_executable(test_draw_batches src/compat/test_draw_batches.cpp)
@@ -682,6 +701,8 @@ target_include_directories(test_shader_cache PRIVATE src/compat "'''+(SDK/'runti
 target_link_libraries(test_shader_cache PRIVATE bcrypt d3d12 dxgi d3dcompiler)
 add_executable(test_effect_settings src/compat/test_effect_settings.cpp)
 target_include_directories(test_effect_settings PRIVATE src/common src/compat "'''+(SDK/'runtime').as_posix()+'''")
+add_executable(test_receiver_inverse src/compat/test_receiver_inverse.cpp)
+target_include_directories(test_receiver_inverse PRIVATE src/common src/compat "'''+(SDK/'runtime').as_posix()+'''")
 add_executable(test_ragdoll_force src/compat/test_ragdoll_force.cpp)
 target_include_directories(test_ragdoll_force PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
 add_executable(test_death_spasm src/compat/test_death_spasm.cpp)
@@ -828,6 +849,13 @@ add_executable(test_health_packs src/compat/test_health_packs.cpp)
 target_include_directories(test_health_packs PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
 add_executable(test_aim_mode src/compat/test_aim_mode.cpp)
 target_include_directories(test_aim_mode PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
+add_executable(test_weapon_wheel src/compat/test_weapon_wheel.cpp)
+target_include_directories(test_weapon_wheel PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
+add_executable(test_weapon_wheel_time src/compat/test_weapon_wheel_time.cpp)
+target_include_directories(test_weapon_wheel_time PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
+add_executable(test_weapon_wheel_blur_gpu src/compat/test_weapon_wheel_blur_gpu.cpp)
+target_include_directories(test_weapon_wheel_blur_gpu PRIVATE src/compat)
+target_link_libraries(test_weapon_wheel_blur_gpu PRIVATE d3d12 dxgi d3dcompiler)
 add_executable(test_camera_push src/compat/test_camera_push.cpp)
 add_executable(test_movement_inertia src/compat/test_movement_inertia.cpp)
 target_include_directories(test_movement_inertia PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
@@ -904,6 +932,9 @@ add_executable(test_frontend_fonts src/compat/test_frontend_fonts.cpp src/compat
     ${imgui_SOURCE_DIR}/imgui.cpp ${imgui_SOURCE_DIR}/imgui_draw.cpp ${imgui_SOURCE_DIR}/imgui_tables.cpp ${imgui_SOURCE_DIR}/imgui_widgets.cpp)
 target_include_directories(test_frontend_fonts PRIVATE src/compat "'''+ROOT.as_posix()+'''" "'''+(SDK/'runtime').as_posix()+'''" ${imgui_SOURCE_DIR})
 target_link_libraries(test_frontend_fonts PRIVATE uc_native_texture gdi32 windowscodecs ole32 bcrypt)
+add_executable(test_weapon_wheel_ui src/compat/test_weapon_wheel_ui.cpp src/common/xbe_weapon_wheel_ui.cpp
+    ${imgui_SOURCE_DIR}/imgui.cpp ${imgui_SOURCE_DIR}/imgui_draw.cpp ${imgui_SOURCE_DIR}/imgui_tables.cpp ${imgui_SOURCE_DIR}/imgui_widgets.cpp)
+target_include_directories(test_weapon_wheel_ui PRIVATE src/common src/compat "'''+(SDK/'runtime').as_posix()+'''" ${imgui_SOURCE_DIR})
 add_executable(test_menu_style src/compat/test_menu_style.cpp src/compat/xbe_audio_settings.cpp src/compat/xbe_health_settings.cpp src/compat/xbe_frontend_fonts.cpp src/compat/xbe_hd_ui.cpp src/compat/xbe_pc_prompt_art.cpp "'''+(ROOT/'native/font.c').as_posix()+'''"
     ${imgui_SOURCE_DIR}/imgui.cpp ${imgui_SOURCE_DIR}/imgui_draw.cpp ${imgui_SOURCE_DIR}/imgui_tables.cpp ${imgui_SOURCE_DIR}/imgui_widgets.cpp)
 target_include_directories(test_menu_style PRIVATE src/common src/compat "'''+ROOT.as_posix()+'''" "'''+(SDK/'runtime').as_posix()+'''" ${imgui_SOURCE_DIR})
@@ -958,7 +989,7 @@ target_include_directories(UrbanChaosXbeTrial PRIVATE "'''+ROOT.as_posix()+'''" 
  assert '#define HAVE_LIBUSB 1' in config,'Switch 2 USB driver would be silently omitted'
  run('build-game-msvc',['cmake','--build',AREA/'out-msvc','--target','UrbanChaosXbeTrial','test_device_refs','test_pc_keyboard','test_pc_camera','test_pc_memory','test_coroutines','test_voice_mode','test_stream_factory','test_io_apc','test_recorded_draws','test_visibility','test_query_resolves','test_query_resolves_gpu','test_inline_draws','test_resource_refs','test_shader_state','test_cursor','test_target60','test_signed_lighting','test_depth_alias','test_audio_rolloff','test_audio_cone','test_audio_factors','test_audio_pitch','test_stream_status','test_audio_loop','test_audio_routing','test_heap_probe','test_graphics_menu_context','test_graphics_input','test_graphics_settings','test_target_resize','test_smooth_fog','-j','4'])
  run('test-window-icon',[sys.executable,ROOT/'scripts/test_xbe_window_icon.py',AREA/'out-msvc/UrbanChaosXbeTrial.exe',ROOT/'launcher/burner/burner.ico'])
- run('build-interface-fixtures',['cmake','--build',AREA/'out-msvc','--target','test_world_textures','test_pistol_spin','test_firearm_cycle','test_release_assets','test_disc_files','test_language','test_audio_config','test_missing_texture','test_release','test_prompt_handoff','test_state_costs','test_event_callback','test_shader_cache','test_perf','test_controls','test_msaa','test_effect_settings','test_ragdoll_force','test_ragdoll_settings','test_ragdoll_contacts','test_filter','test_intro_skip','test_conversation_skip','test_health_pulse','test_health_upgrade_fade','test_view_layout','test_coop_input','test_coop_controls','test_pause_imgui','test_coop_guest','test_coop_resources','test_coop_body','test_coop_effects','test_coop_cinematics','test_coop_death','test_coop_downed_blur','test_coop_shields','test_coop_progression','test_coop_interactions','test_coop_rewards','test_coop_collectibles','test_coop_ko_rewards','test_coop_turrets','test_coop_turret_assets','test_coop_turret_view','test_health_packs','test_aim_mode','test_movement_inertia','test_controller_deadzone','test_coop_menu','test_pc_prompts','test_hd_ui_renderer','test_hd_ui_prompts','test_hd_ui_gpu','test_coop_blur_gpu','test_hd_ui','test_hd_ui_restored','test_hd_ui_reconstruct','test_frontend','test_cheats','test_level_details','test_frontend_fonts','test_menu_style','-j','4'])
+ run('build-interface-fixtures',['cmake','--build',AREA/'out-msvc','--target','test_world_textures','test_pistol_spin','test_firearm_cycle','test_release_assets','test_disc_files','test_language','test_audio_config','test_missing_texture','test_release','test_prompt_handoff','test_state_costs','test_event_callback','test_shader_cache','test_perf','test_controls','test_msaa','test_effect_settings','test_receiver_inverse','test_ragdoll_force','test_ragdoll_settings','test_ragdoll_contacts','test_filter','test_intro_skip','test_conversation_skip','test_health_pulse','test_health_upgrade_fade','test_view_layout','test_coop_input','test_coop_controls','test_pause_imgui','test_coop_guest','test_coop_resources','test_coop_body','test_coop_effects','test_coop_cinematics','test_coop_death','test_coop_downed_blur','test_coop_shields','test_coop_progression','test_coop_interactions','test_coop_rewards','test_coop_collectibles','test_coop_ko_rewards','test_coop_turrets','test_coop_turret_assets','test_coop_turret_view','test_health_packs','test_aim_mode','test_weapon_wheel','test_weapon_wheel_time','test_weapon_wheel_ui','test_weapon_wheel_blur_gpu','test_movement_inertia','test_controller_deadzone','test_coop_menu','test_pc_prompts','test_hd_ui_renderer','test_hd_ui_prompts','test_hd_ui_gpu','test_coop_blur_gpu','test_hd_ui','test_hd_ui_restored','test_hd_ui_reconstruct','test_frontend','test_cheats','test_level_details','test_frontend_fonts','test_menu_style','-j','4'])
  run('build-controller-device',['cmake','--build',AREA/'out-msvc','--target','test_controller_device','-j','4'])
  run('test-controller-device',[AREA/'out-msvc/test_controller_device.exe'])
  run('test-language',[AREA/'out-msvc/test_language.exe'])
@@ -977,13 +1008,14 @@ target_include_directories(UrbanChaosXbeTrial PRIVATE "'''+ROOT.as_posix()+'''" 
  run('test-shader-lookup',[AREA/'out-msvc/test_shader_lookup.exe'])
  run('build-draw-bindings',['cmake','--build',AREA/'out-msvc','--target','test_draw_bindings','-j','4'])
  run('test-draw-bindings',[AREA/'out-msvc/test_draw_bindings.exe'])
- run('build-helper-costs',['cmake','--build',AREA/'out-msvc','--target','test_simple_state_costs','test_vertex_constant_costs','test_lighting_bounds','test_sync_downsample','test_target_lookup','-j','4'])
+ run('build-helper-costs',['cmake','--build',AREA/'out-msvc','--target','test_simple_state_costs','test_vertex_constant_costs','test_lighting_bounds','test_sync_downsample','test_target_lookup','test_dirty_epoch','-j','4'])
  run('test-simple-state-costs',[AREA/'out-msvc/test_simple_state_costs.exe'])
  run('test-vertex-constant-costs',[AREA/'out-msvc/test_vertex_constant_costs.exe'])
  run('test-lighting-bounds',[AREA/'out-msvc/test_lighting_bounds.exe'])
  run('test-sync-downsample-warp',[AREA/'out-msvc/test_sync_downsample.exe'])
  run('test-sync-downsample-hardware',[AREA/'out-msvc/test_sync_downsample.exe','hardware'])
  run('test-target-lookup',[AREA/'out-msvc/test_target_lookup.exe'])
+ run('test-dirty-epoch',[AREA/'out-msvc/test_dirty_epoch.exe'])
  run('build-screen-sampling',['cmake','--build',AREA/'out-msvc','--target','test_screen_sampling','-j','4'])
  run('test-screen-sampling',[AREA/'out-msvc/test_screen_sampling.exe'])
  run('test-file-query-efficiency',[sys.executable,ROOT/'scripts/xbe_file_query_efficiency_checks.py','--run','--area',AREA,'--sdk',SDK])
@@ -1006,6 +1038,7 @@ target_include_directories(UrbanChaosXbeTrial PRIVATE "'''+ROOT.as_posix()+'''" 
  run('test-msaa',[AREA/'out-msvc/test_msaa.exe'])
  run('test-msaa-hardware',[AREA/'out-msvc/test_msaa.exe','hardware'])
  run('test-effect-settings',[AREA/'out-msvc/test_effect_settings.exe'])
+ run('test-receiver-inverse',[AREA/'out-msvc/test_receiver_inverse.exe'])
  run('test-ragdoll-force',[AREA/'out-msvc/test_ragdoll_force.exe'])
  run('build-death-spasm',['cmake','--build',AREA/'out-msvc','--target','test_death_spasm','-j','4'])
  run('test-death-spasm',[AREA/'out-msvc/test_death_spasm.exe',AREA/'assets/ragdoll-recovery/authored.bin'])
@@ -1088,6 +1121,11 @@ target_include_directories(UrbanChaosXbeTrial PRIVATE "'''+ROOT.as_posix()+'''" 
  run('test-coop-downed-camera',[AREA/'out-msvc/test_coop_downed_camera.exe'])
  run('test-health-packs',[AREA/'out-msvc/test_health_packs.exe'])
  run('test-aim-mode',[AREA/'out-msvc/test_aim_mode.exe'])
+ run('test-weapon-wheel',[AREA/'out-msvc/test_weapon_wheel.exe'])
+ run('test-weapon-wheel-time',[AREA/'out-msvc/test_weapon_wheel_time.exe'])
+ run('test-weapon-wheel-ui',[AREA/'out-msvc/test_weapon_wheel_ui.exe'])
+ run('test-weapon-wheel-blur-gpu',[AREA/'out-msvc/test_weapon_wheel_blur_gpu.exe'])
+ run('test-weapon-wheel-blur-warp',[AREA/'out-msvc/test_weapon_wheel_blur_gpu.exe','--warp'])
  run('test-movement-inertia',[AREA/'out-msvc/test_movement_inertia.exe'])
  run('test-controller-deadzone',[AREA/'out-msvc/test_controller_deadzone.exe'])
  run('build-camera-push',['cmake','--build',AREA/'out-msvc','--target','test_camera_push','-j','4'])
@@ -1161,6 +1199,8 @@ target_include_directories(UrbanChaosXbeTrial PRIVATE "'''+ROOT.as_posix()+'''" 
  run('test-heap-probe',[AREA/'out-msvc/test_heap_probe.exe'])
  run('test-heap-probe-disabled',[AREA/'out-msvc/test_heap_probe.exe','disabled'])
  run('test-inline-draws',[AREA/'out-msvc/test_inline_draws.exe'])
+ run('build-immediate-pack',['cmake','--build',AREA/'out-msvc','--target','test_immediate_pack'])
+ run('test-immediate-pack',[AREA/'out-msvc/test_immediate_pack.exe'])
  run('test-audio-rolloff',[AREA/'out-msvc/test_audio_rolloff.exe'])
  run('test-visibility',[AREA/'out-msvc/test_visibility.exe'])
  run('test-query-resolves',[AREA/'out-msvc/test_query_resolves.exe'])

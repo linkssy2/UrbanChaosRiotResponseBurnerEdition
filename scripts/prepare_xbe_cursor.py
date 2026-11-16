@@ -1,4 +1,4 @@
-"""Restore the existing shield cursor and give the window sole cursor ownership.
+"""Install the shared Burner cursor and give the window sole cursor ownership.
 
 The pinned ImGui Win32 backend otherwise consumes WM_SETCURSOR before the game
 hook and may replace the hidden gameplay cursor during NewFrame. Run on the
@@ -9,7 +9,7 @@ from pathlib import Path
 
 CURSOR = r'''
 static HCURSOR TrialMenuCursor() {
-    // Same procedural artwork/hotspot as the accepted native/CONTROL menus.
+    // Shared procedural artwork/hotspot with native/CONTROL menus.
     // Only the window thread calls this; DPI variants are cached by its owner.
     try { thread_local NativeMenuCursor cursor; return cursor.get(game_window); }
     catch (...) { return LoadCursor(nullptr, IDC_ARROW); }

@@ -40,6 +40,25 @@ static Golden Read(const wchar_t* path){
     CHECK(file.peek()==std::ifstream::traits_type::eof());return g;
 }
 static bool Near(float a,float b){return std::abs(a-b)<.0001f;}
+static void WeaponIconChecks(ImFontAtlas* atlas) {
+    const auto* pixels=atlas->TexPixelsRGBA32;const int width=atlas->TexWidth,height=atlas->TexHeight;
+    const int rectangles=atlas->CustomRects.Size;
+    CHECK(!uc_hd_ui::Weapon(nullptr,false)&&!uc_hd_ui::Weapon("missing",true));
+    float missing[4];CHECK(!TrialWeaponIconUV(nullptr,missing)&&!TrialWeaponIconUV("missing",missing));
+    for(const char* name:uc_hd_ui::kWeaponNames)for(bool hd:{false,true}) {
+        hd_selected=hd;float uv[4]{};CHECK(TrialWeaponIconUV(name,uv));
+        const auto* image=uc_hd_ui::Weapon(name,hd);CHECK(image);
+        const unsigned x=unsigned(std::lround(uv[0]*width)),y=unsigned(std::lround(uv[1]*height));
+        CHECK(unsigned(std::lround((uv[2]-uv[0])*width))==image->width);
+        CHECK(unsigned(std::lround((uv[3]-uv[1])*height))==image->height);
+        for(unsigned row=0;row<image->height;++row)for(unsigned col=0;col<image->width;++col) {
+            const auto* bgra=image->bgra.data()+(size_t(row)*image->width+col)*4;
+            CHECK(pixels[size_t(y+row)*width+x+col]==IM_COL32(bgra[2],bgra[1],bgra[0],bgra[3]));
+        }
+        CHECK(atlas->TexPixelsRGBA32==pixels&&atlas->TexWidth==width&&atlas->TexHeight==height&&atlas->CustomRects.Size==rectangles);
+    }
+    hd_selected=false;
+}
 static Golden HdGolden(const Golden& original,const char* name){
     const auto* image=uc_hd_ui::Font(name);CHECK(image);
     CHECK(image->width==original.width*4&&image->height==original.height*4);
@@ -132,6 +151,8 @@ int main(int argc,char** argv){
     Golden medium=Read(/* MEDIUM_PATH */),large=Read(/* LARGE_PATH */);
     CheckFont(atlas,body,medium);CheckFont(atlas,title,large);
     CHECK(uc_hd_ui::Ready());
+    WeaponIconChecks(atlas);
+    CHECK(TrialFrontendBodyFont()==body);
     hd_selected=true;
     auto* hd_body=TrialFrontendFontForUi(body);auto* hd_title=TrialFrontendFontForUi(title);
     CHECK(hd_body!=body&&hd_title!=title&&hd_body!=hd_title);
@@ -222,6 +243,7 @@ int main(int argc,char** argv){
     CHECK(!TrialLoadFrontendFonts(&missing_atlas,std::filesystem::path(/* GAME_PATH */)/"missing-font-test",missing_body,missing_title));
     CHECK(!missing_body&&!missing_title&&missing_atlas.Fonts.empty()&&missing_atlas.CustomRects.empty());
     float new_icon[4]{};CHECK(!TrialMenuIconUV(13,new_icon));
+    CHECK(!TrialWeaponIconUV("pistol",new_icon)&&!TrialFrontendBodyFont());
     CHECK(!TrialMenuIconUV(38,new_icon)&&!TrialMenuIconUV(40,new_icon));
     // A later successful startup publishes the newly packed coordinates;
     // failed startup cannot leave a previous GPU atlas's coordinates active.
@@ -229,6 +251,7 @@ int main(int argc,char** argv){
     CHECK(TrialLoadFrontendFonts(&rebuilt,/* GAME_PATH */,missing_body,missing_title));
     CHECK(TrialMenuIconUV(13,new_icon)&&std::memcmp(old_icon,new_icon,sizeof(old_icon)));
     CHECK(TrialMenuIconUV(38,new_icon)&&TrialMenuIconUV(40,new_icon));
+    WeaponIconChecks(&rebuilt);
     CHECK(!TrialLoadFrontendFonts(nullptr,/* GAME_PATH */,missing_body,missing_title));
     CHECK(!TrialMenuIconUV(13,new_icon));
     ImGui::DestroyContext();

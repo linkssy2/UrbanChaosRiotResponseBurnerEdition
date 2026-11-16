@@ -43,6 +43,19 @@ struct Draft {
     bool gameplay_blur = true;
     bool frame_ghosting = true;
 };
+// Presets reuse the persisted receiver controls; legacy custom combinations stay intact.
+inline uint32_t LightingPreset(const Draft& d) {
+    if(!d.scenery && !d.characters)return 0;
+    if(!d.scenery && d.characters && d.character_quality==1)return 1;
+    if(d.scenery && d.characters)return d.character_quality==1?2:3;
+    return 4;
+}
+inline void SetLightingPreset(Draft& d, uint32_t preset) {
+    if(preset>3)return;
+    d.scenery=preset>=2;
+    d.characters=preset>=1;
+    d.character_quality=(preset==1 || preset==2)?1:0;
+}
 Draft Snapshot();
 Draft Snapshot(unsigned player);
 void Initialize();

@@ -4,9 +4,35 @@ import hashlib
 import re
 import shutil
 import struct
+import tempfile
 import uuid
 import zipfile
 from disc import check_cancel, progress
+
+
+# Pin the compatible official pack; a newer launcher can select a new pack explicitly.
+OFFICIAL_PACK = {
+    'asset_url': 'https://github.com/linkssy2/UrbanChaosRiotResponseBurnerEdition/releases/download/v0.09/UrbanChaos-BurnerEdition-0.09-HD-Game-Textures.zip',
+    'asset_size': 207636056,
+    'asset_digest': 'sha256:0fb97f18e36e547925a0569522f53419886bb13705e38c73f54a0a2af5650e09',
+}
+
+
+def download_install(data, cancel):
+    from import_game import unlinked_path
+    from release_download import download
+    unlinked_path(data, root=data)
+    unlinked_path(data / 'xbe-runtime/world-textures', root=data)
+    check_cancel(cancel)
+    if shutil.disk_usage(data).free < OFFICIAL_PACK['asset_size'] + 1024*1024:
+        raise ValueError('Not enough free space to download HD textures.')
+    progress('Downloading the official HD texture pack from GitHub...', 0)
+    with tempfile.TemporaryDirectory(prefix='.hd-download-', dir=data) as temporary:
+        archive = Path(temporary) / 'textures.zip'
+        download(OFFICIAL_PACK, archive,
+                 lambda event, message, **fields: progress('Downloading HD textures from GitHub...', fields['percent'] * 100 // 65),
+                 lambda: check_cancel(cancel))
+        install(archive, data, cancel)
 
 
 def records(text):

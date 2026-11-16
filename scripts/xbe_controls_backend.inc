@@ -16,6 +16,8 @@ static bool aim_loaded[2]{};
 static unsigned aim_mode[2]{},scope_zoom[2][2][2]{},zoom_sensitivity[2]{100,100};
 static bool actions_loaded[2]{};
 static unsigned walk_mode[2]{},walk_binding[2][2][2]{},hud_binding[2][2][2]{};
+static bool wheel_loaded[2]{};
+static unsigned wheel_binding[2][2][2]{},melee_wheel_binding[2][2][2]{};
 static unsigned movement_inertia[2]{1,1};
 static unsigned mixed_input=0;
 static void LoadActions(unsigned player){
@@ -209,6 +211,33 @@ static void LoadPartner(){
         partner_binding[slot]=keyboard_valid(value)?value:0;
     }
 }
+static void LoadWheel(unsigned player){
+    if(wheel_loaded[player])return;wheel_loaded[player]=true;
+    std::memset(wheel_binding[player],0,sizeof(wheel_binding[player]));
+    std::memset(melee_wheel_binding[player],0,sizeof(melee_wheel_binding[player]));
+    if(!player){keyboard_init();LoadSpin();LoadFirearm();LoadHealth(0);LoadAim(0);LoadPartner();LoadActions(0);}
+    // Read both saved families before assigning missing-key defaults. Existing
+    // secondary slots and explicit unbound values must survive migration.
+    bool missing[2]{true,true};wchar_t path[MAX_PATH];
+    if(controller_path(path)){
+        const wchar_t* section=player?L"PlayerActions2":L"PlayerActions";
+        for(unsigned kind=0;kind<2;++kind)for(unsigned device=player;device<2;++device)for(unsigned slot=0;slot<2;++slot){
+            wchar_t key[32];swprintf(key,32,L"%s%u_%u",kind?L"MeleeWheel":L"Wheel",device,slot);
+            if(!device&&!slot){wchar_t value[2];missing[kind]=GetPrivateProfileStringW(section,key,L"",value,2,path)==0;}
+            const unsigned source=trial_input_profile::Read(path,section,key,0,device?24:UCRR_KEYBOARD_WHEEL_DOWN);
+            (kind?melee_wheel_binding:wheel_binding)[player][device][slot]=(device?source<=16:keyboard_valid(source)&&source<UCRR_KEYBOARD_WHEEL_UP)?source:0;
+        }
+    }
+    if(!player)for(unsigned kind=0;kind<2;++kind)if(missing[kind]){
+        const unsigned key=kind?'G':VK_TAB;bool free=true;
+        AcquireSRWLockShared(&keyboard_lock);
+        for(const auto& row:keyboard_config.binding)for(unsigned source:row)if(source==key)free=false;
+        ReleaseSRWLockShared(&keyboard_lock);
+        for(const auto* bindings:{spin_binding[0],previous_firearm,health_binding[0][0],scope_zoom[0][0],partner_binding,walk_binding[0][0],hud_binding[0][0],wheel_binding[0][0],melee_wheel_binding[0][0]})
+            for(unsigned slot=0;slot<2;++slot)if(bindings[slot]==key)free=false;
+        (kind?melee_wheel_binding:wheel_binding)[0][0][0]=free?key:0;
+    }
+}
 unsigned SecondProfileValue(unsigned setting,unsigned fallback){
     if(setting>=7)return fallback;
     std::lock_guard guard(input_lock);LoadSecond();return second_profile[setting];
@@ -221,6 +250,7 @@ Draft Defaults(){
     d.previous_firearm[0]=UCRR_KEYBOARD_WHEEL_DOWN;
     d.health_pack[0][0]='H';
     d.heal_partner[0]='U';
+    d.wheel_binding[0][0]=VK_TAB;d.melee_wheel_binding[0][0]='G';
     return d;
 }
 Draft Snapshot(unsigned player){
@@ -228,7 +258,9 @@ Draft Snapshot(unsigned player){
     std::lock_guard guard(input_lock);
     LoadActions(player);
     if(player){
-        LoadSecond();LoadHealth(1);LoadAim(1);auto d=Defaults();
+        LoadSecond();LoadHealth(1);LoadAim(1);LoadWheel(1);auto d=Defaults();
+        std::memcpy(d.wheel_binding[1],wheel_binding[1][1],sizeof(d.wheel_binding[1]));
+        std::memcpy(d.melee_wheel_binding[1],melee_wheel_binding[1][1],sizeof(d.melee_wheel_binding[1]));
         d.walk_mode=walk_mode[player];d.movement_inertia=movement_inertia[player];std::memcpy(d.walk_binding,walk_binding[player],sizeof(d.walk_binding));std::memcpy(d.hud_binding,hud_binding[player],sizeof(d.hud_binding));
         d.zoom_sensitivity=zoom_sensitivity[1];d.aim_mode=aim_mode[1];std::memcpy(d.scope_zoom[1],scope_zoom[1][1],sizeof(d.scope_zoom[1]));
         std::memcpy(d.health_pack[1],health_binding[1][1],sizeof(d.health_pack[1]));
@@ -243,6 +275,8 @@ Draft Snapshot(unsigned player){
     LoadSpin();LoadFirearm();LoadHealth(0);d.spin_mode=spin_mode;std::memcpy(d.spin_binding,spin_binding,sizeof(spin_binding));
     std::memcpy(d.health_pack,health_binding[0],sizeof(d.health_pack));
     LoadPartner();std::memcpy(d.heal_partner,partner_binding,sizeof(d.heal_partner));
+    LoadWheel(0);std::memcpy(d.wheel_binding,wheel_binding[0],sizeof(d.wheel_binding));
+    std::memcpy(d.melee_wheel_binding,melee_wheel_binding[0],sizeof(d.melee_wheel_binding));
     std::memcpy(d.previous_firearm,previous_firearm,sizeof(previous_firearm));
     AcquireSRWLockShared(&keyboard_lock);AcquireSRWLockShared(&controller_lock);
     std::memcpy(d.keyboard,keyboard_config.binding,sizeof(d.keyboard));
@@ -320,9 +354,9 @@ static bool Save(const Draft& d,unsigned player){
     swprintf(value,32,L"%u",d.walk_mode);ok=ok&&WritePrivateProfileStringW(actions_section,L"WalkMode",value,temp);
     swprintf(value,32,L"%u",d.movement_inertia);ok=ok&&WritePrivateProfileStringW(actions_section,L"MovementInertia",value,temp);
     if(!player){swprintf(value,32,L"%u",d.mixed_input);ok=ok&&WritePrivateProfileStringW(actions_section,L"MixedInput",value,temp);}
-    for(unsigned device=player;device<2;++device)for(unsigned slot=0;slot<2;++slot)for(unsigned action=0;action<2;++action){
-        wchar_t key[32];swprintf(key,32,L"%s%u_%u",action?L"Hud":L"Walk",device,slot);
-        swprintf(value,32,L"%u",(action?d.hud_binding:d.walk_binding)[device][slot]);
+    for(unsigned device=player;device<2;++device)for(unsigned slot=0;slot<2;++slot)for(unsigned action=0;action<4;++action){
+        wchar_t key[32];swprintf(key,32,L"%s%u_%u",action==3?L"MeleeWheel":action==2?L"Wheel":action?L"Hud":L"Walk",device,slot);
+        swprintf(value,32,L"%u",(action==3?d.melee_wheel_binding:action==2?d.wheel_binding:action?d.hud_binding:d.walk_binding)[device][slot]);
         ok=ok&&WritePrivateProfileStringW(actions_section,key,value,temp);
     }
     if(ok)WritePrivateProfileStringW(nullptr,nullptr,nullptr,temp);
@@ -338,6 +372,10 @@ bool Apply(const Draft& d,std::string& error,unsigned player){
     if(d.walk_mode>1){error="Invalid walking mode.";return false;}
     if(d.movement_inertia>1){error="Invalid movement inertia.";return false;}
     if(d.mixed_input>1||(player&&d.mixed_input)){error="Invalid controller and mouse mode.";return false;}
+    for(unsigned kind=0;kind<2;++kind)for(unsigned slot=0;slot<2;++slot){
+        const auto& binding=kind?d.melee_wheel_binding:d.wheel_binding;
+        if((!player&&(!keyboard_valid(binding[0][slot])||binding[0][slot]>=UCRR_KEYBOARD_WHEEL_UP))||binding[1][slot]>16){error="Weapon wheel needs a key or button that can be held.";return false;}
+    }
     for(unsigned action=0;action<2;++action)for(unsigned slot=0;slot<2;++slot){
         const auto& binding=action?d.hud_binding:d.walk_binding;
         if((!player&&!keyboard_valid(binding[0][slot]))||binding[1][slot]>24){error="Invalid walk or HUD binding.";return false;}
@@ -358,11 +396,14 @@ bool Apply(const Draft& d,std::string& error,unsigned player){
     std::lock_guard guard(input_lock);
     if(!player){keyboard_init();controller_init();}else LoadSecond();
     if(!Save(d,player)){error="Could not save controls. Your previous bindings are unchanged.";return false;}
+    wheel_loaded[player]=true;
     actions_loaded[player]=true;walk_mode[player]=d.walk_mode;movement_inertia[player]=d.movement_inertia;
     if(!player)mixed_input=d.mixed_input;
     for(unsigned device=player;device<2;++device){
         std::memcpy(walk_binding[player][device],d.walk_binding[device],sizeof(d.walk_binding[device]));
         std::memcpy(hud_binding[player][device],d.hud_binding[device],sizeof(d.hud_binding[device]));
+        std::memcpy(wheel_binding[player][device],d.wheel_binding[device],sizeof(d.wheel_binding[device]));
+        std::memcpy(melee_wheel_binding[player][device],d.melee_wheel_binding[device],sizeof(d.melee_wheel_binding[device]));
     }
     health_loaded[player]=true;std::memcpy(health_binding[player],d.health_pack,sizeof(d.health_pack));
     if(!player){partner_loaded=true;std::memcpy(partner_binding,d.heal_partner,sizeof(d.heal_partner));}
@@ -429,6 +470,16 @@ bool HudToggleDown(bool keyboard,const input::Pad& p,unsigned player,bool mouse_
     if(player>1||(player&&keyboard))return false;
     std::lock_guard guard(input_lock);LoadActions(player);
     return BindingDown(hud_binding[player][keyboard?0:1],keyboard,p,mouse_active);
+}
+bool WeaponWheelDown(bool keyboard,const input::Pad& p,unsigned player,bool mouse_active){
+    if(player>1||(player&&keyboard))return false;
+    std::lock_guard guard(input_lock);LoadWheel(player);
+    return BindingDown(wheel_binding[player][keyboard?0:1],keyboard,p,mouse_active);
+}
+bool MeleeWheelDown(bool keyboard,const input::Pad& p,unsigned player,bool mouse_active){
+    if(player>1||(player&&keyboard))return false;
+    std::lock_guard guard(input_lock);LoadWheel(player);
+    return BindingDown(melee_wheel_binding[player][keyboard?0:1],keyboard,p,mouse_active);
 }
 bool SpinButtonDown(bool keyboard,const input::Pad& p,unsigned player){
     if(player>1||(player&&keyboard))return false;

@@ -37,6 +37,11 @@ bool TrialTitleTake(){return title_gate.Take()&&test_focused&&!test_graphics;}
 void TrialGraphicsInputChanged(){++title_finishes;menu_key_taps.Clear();}
 void TrialRagdollDragInput(unsigned,bool){}
 namespace trial_controls {void SuspendControllerDeadzones(){}}
+namespace trial_weapon_wheel {
+static bool open[2]{};
+static unsigned cancellations[2]{};
+void Cancel(unsigned slot){assert(slot<2);open[slot]=false;++cancellations[slot];}
+}
 // GENERATED_HOST
 #include "../common/xbe_intro_skip.cpp"
 #ifdef UC_TEST_PREVIOUS_STARTUP
@@ -181,13 +186,17 @@ static void Physical(unsigned source,bool down){
 }
 static void MenuTapHandoff(){
     intro_gate={};menu_key_taps.Clear();
+    for(unsigned slot=0;slot<2;++slot){trial_weapon_wheel::open[slot]=true;trial_weapon_wheel::cancellations[slot]=0;}
     menu_key_taps.Event('F',true,false,true);menu_key_taps.Event('F',false,false,true);
     TrialIntroMovie(0,0,false,false); // An ownerless context must preserve menu input.
+    for(unsigned slot=0;slot<2;++slot)assert(trial_weapon_wheel::open[slot]&&!trial_weapon_wheel::cancellations[slot]);
     menu_key_taps.Begin();assert(menu_key_taps.Retained('F'));
     menu_key_taps.Event('W',true,false,true);menu_key_taps.Event('W',false,false,true);
     TrialIntroMovie(screen,1,true,false); // Clear both published F and queued W.
+    for(unsigned slot=0;slot<2;++slot)assert(!trial_weapon_wheel::open[slot]&&trial_weapon_wheel::cancellations[slot]==1);
     assert(!menu_key_taps.Retained('F'));
     TrialIntroClose(screen);menu_key_taps.Begin();
+    for(unsigned slot=0;slot<2;++slot)assert(!trial_weapon_wheel::open[slot]&&trial_weapon_wheel::cancellations[slot]==1);
     assert(!menu_key_taps.Retained('F')&&!menu_key_taps.Retained('W'));menu_key_taps.End();
     menu_key_taps.Event('F',true,false,true);menu_key_taps.Event('F',false,false,true);
     menu_key_taps.Begin();assert(menu_key_taps.Retained('F'));

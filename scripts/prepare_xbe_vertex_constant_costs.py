@@ -46,8 +46,22 @@ SETTERS = ('D3DDevice_SetVertexShaderConstant1Fast', 'D3DDevice_SetVertexShaderC
            'D3DDevice_SetVertexShaderConstant4', 'D3DDevice_SetVertexShaderConstantNotInlineFast')
 SHADER_OLD = '''            for (auto& [reg, v] : it->second->constants)
                 if (reg < 192) g_state.vsc[reg] = v;'''
-SHADER_NEW = SHADER_OLD + '''
+SHADER_PREVIOUS = SHADER_OLD + '''
             if (!it->second->constants.empty()) g_state.MarkVertexConstants(0, 192);'''
+SHADER_NEW = '''            // Dense declarations retain the cheaper bulk-dirty path.
+            if (it->second->constants.size() >= 48) {
+                for (auto& [reg, v] : it->second->constants)
+                    if (reg < 192) g_state.vsc[reg] = v;
+                g_state.MarkVertexConstants(0, 192);
+            } else {
+                uint64_t declared_dirty = 0;
+                for (auto& [reg, v] : it->second->constants)
+                    if (reg < 192) {
+                        g_state.vsc[reg] = v;
+                        declared_dirty |= uint64_t(1) << (reg >> 2);
+                    }
+                if (g_state.vsc_tracked) g_state.vsc_dirty |= declared_dirty;
+            }'''
 
 
 def transform_state(source):
@@ -74,6 +88,8 @@ def undo_thread(source):
 
 
 def transform_d3d(source):
+    if SHADER_PREVIOUS in source:
+        source = once(source, SHADER_PREVIOUS, SHADER_NEW)
     if '    g_state.TrackVertexConstants();\n' not in source:
         source = once(source, '    g_state.TrackSimple();\n',
                       '    g_state.TrackSimple();\n    g_state.TrackVertexConstants();\n')
@@ -88,8 +104,8 @@ def transform_d3d(source):
     assert source.count('g_state.MarkVertexConstants(') == 6
     # Fail closed if the exact audited production writer set changes.
     writes = re.findall(r'^.*\bg_state\.vsc\[[^\n]*$', source, re.M)
-    assert len(writes) == 7, writes
-    assert len(re.findall(r'\bg_state\s*\.\s*vsc\b', source)) == 7, 'unrecognized VSC reference or bulk writer'
+    assert len(writes) == 8, writes
+    assert len(re.findall(r'\bg_state\s*\.\s*vsc\b', source)) == 8, 'unrecognized VSC reference or bulk writer'
     assert source.count(SHADER_NEW) == 1
     assert source.count('    g_state = gpu::State{};\n') == 1
     for name in SETTERS:
@@ -103,7 +119,7 @@ def writers(d3d):
         body = function(d3d, 'HLE_FASTCALL(' + name + ',')
         body = re.sub(r'HLE_FASTCALL\([^\n]+\) \{', 'uint32_t ' + name + '(const uint32_t* a) {', body, count=1)
         result += '\n' + body
-    shader = (SHADER_NEW if SHADER_NEW in d3d else SHADER_OLD).replace('it->second->constants', 'constants')
+    shader = next(s for s in (SHADER_NEW, SHADER_PREVIOUS, SHADER_OLD) if s in d3d).replace('it->second->constants', 'constants')
     result += '\nvoid Shader(const decltype(VertexShader::constants)& constants) {\n'
     result += shader + '\n}\n'
     return result
@@ -133,8 +149,8 @@ def prepare(area):
     for name, transform in (('state', transform_state), ('thread', transform_thread), ('d3d', transform_d3d)):
         assert transform(result[name]) == result[name]
     before_d3d = result['d3d'].replace('    g_state.TrackVertexConstants();\n', '')
-    before_d3d = re.sub(r'^\s*g_state\.MarkVertexConstants\([^\n]+\);\n', '', before_d3d, flags=re.M)
     before_d3d = before_d3d.replace(SHADER_NEW, SHADER_OLD)
+    before_d3d = re.sub(r'^\s*g_state\.MarkVertexConstants\([^\n]+\);\n', '', before_d3d, flags=re.M)
     output = fixture(undo_thread(result['thread']), result['thread'], before_d3d, result['d3d'])
     for name, path in paths.items():
         path.write_text(result[name])

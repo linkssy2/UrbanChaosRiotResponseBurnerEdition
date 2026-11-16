@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 #include "imgui.h"
+#include "xbe_weapon_wheel_ui.h"
 #include "xbe_graphics_settings.h"
 #include "xbe_audio_output.h"
 #include "xbe_trial_graphics_ui.h"
@@ -940,23 +941,24 @@ void SettingsUi(const ImGuiViewport* view,bool paused){
         }
         RowStrip(canvas,labels,nullptr,3,257,confirmation,[&](unsigned i){confirmation=i;},activate);
     }else{
-        constexpr unsigned rows=23,total=rows+3;
-        constexpr unsigned order[]={0,1,2,5,6,7,20,3,4,9,8,21,22,10,11,12,19,13,14,15,18,16,17};
+        constexpr unsigned rows=23,selectable=21,total=selectable+3;
+        constexpr unsigned order[]={0,1,2,5,6,7,20,3,4,9,8,21,22,10,19,13,14,15,18,16,17};
         // Reserve a help band inside the frame, including glyphs and shadows.
         constexpr float top=78,bottom=344,step=18,heading=22;
-        constexpr float extent=rows*step+3*heading,max_scroll=extent-(bottom-top);
+        constexpr float extent=selectable*step+3*heading,max_scroll=extent-(bottom-top);
         auto position=[&](unsigned row){return unsigned(std::find(std::begin(order),std::end(order),row)-std::begin(order));};
-        auto row_y=[&](unsigned row){const auto i=position(row);return top+heading+i*step+(i>=7?heading:0)+(i>=19?heading:0);};
-        focus=std::min(focus,total-1);
+        auto row_y=[&](unsigned row){const auto i=position(row);return top+heading+i*step+(i>=7?heading:0)+(i>=17?heading:0);};
+        focus=std::min(focus,rows+2);
+        if(focus==11||focus==12)focus=10;
         int delta=0;
         if(ready){
             int move=0;
             if((events&1)||ImGui::IsKeyPressed(ImGuiKey_UpArrow))move=-1;
             if((events&2)||ImGui::IsKeyPressed(ImGuiKey_DownArrow)||ImGui::IsKeyPressed(ImGuiKey_Tab))move=1;
             if(move){
-                const unsigned current=focus<rows?position(focus):focus;
+                const unsigned current=focus<rows?position(focus):selectable+focus-rows;
                 const unsigned next=(current+total+move)%total;
-                focus=next<rows?order[next]:next;reveal=true;
+                focus=next<selectable?order[next]:rows+next-selectable;reveal=true;
             }
             if(focus<rows){
                 if(((events&16)||ImGui::IsKeyPressed(ImGuiKey_LeftArrow)))delta=-1;
@@ -976,7 +978,7 @@ void SettingsUi(const ImGuiViewport* view,bool paused){
             scroll=std::clamp(scroll,0.f,max_scroll);
         }
         const char* headings[]={"Display","Rendering quality","Camera and HUD"};
-        const unsigned starts[]={0,7,19};
+        const unsigned starts[]={0,7,17};
         for(unsigned group=0;group<3;++group){
             const float y=top+starts[group]*step+group*heading-scroll;
             if(y<top||y+heading>bottom)continue;
@@ -1032,10 +1034,11 @@ void SettingsUi(const ImGuiViewport* view,bool paused){
                 if(trial_graphics::MsaaSupported(samples[sample_index])){draft.msaa=samples[sample_index];break;}
             }
         }
-        choice("Dynamic scenery lighting",draft.scenery,flags,flag_names,10);
-        choice("World character lighting",draft.characters,flags,flag_names,11);
-        const uint32_t qualities[]={0,1};const char* quality_names[]={"Full","Simple"};
-        choice("Character lighting quality",draft.character_quality,qualities,quality_names,12);
+        const char* lighting_names[]={"Off","Low","Medium","High","Custom"};
+        const uint32_t lighting=trial_graphics::LightingPreset(draft);
+        const int lighting_delta=row("Dynamic lighting",lighting_names[lighting],10);
+        if(lighting_delta)trial_graphics::SetLightingPreset(draft,
+            lighting>3?(lighting_delta>0?0:3):(lighting+(lighting_delta>0?1:3))%4);
         const uint32_t amounts[]={0,1,2};const char* amount_names[]={"Default","More","Forever"};
         choice("Ragdoll amount",draft.ragdolls,amounts,amount_names,13);
         choice("Death convulsions",draft.death_convulsions,flags,flag_names,14);
@@ -1088,8 +1091,11 @@ void SettingsUi(const ImGuiViewport* view,bool paused){
                               draft_fog_mode==2?"Keeps the original fog range with smoother colour transitions.":
                                                 "A smooth far-distance fade that keeps the nearby scene clear."):
                     focus==9?"Smooths geometry edges. Higher settings increase GPU work.":
-                    focus==10||focus==11?"Your gun, hands and flashlight stay lit in every mode.":
-                    focus==12?"Simple reduces local light effects on world characters.":
+                    focus==10?(lighting==0?"World point lights off; gun, hands and flashlight stay lit.":
+                               lighting==1?"Reduced character lighting; scenery point lights off.":
+                               lighting==2?"Reduced scenery light range and character lighting; flashlight and effects retained.":
+                               lighting==3?"Full scenery and character lighting.":
+                                           "Previous custom lighting; choose a preset to replace it."):
                     focus==13?(draft.ragdolls==2?"Forever keeps bodies until mission exit; may reduce performance.":
                                "Default: 5 bodies / 30 seconds. More: 32 / 120 seconds."):
                     "Select a setting, then use the arrows to change it.",61,357,11,muted,518);
@@ -1310,6 +1316,7 @@ void TrialGraphicsUi() {
         const unsigned presentation=trial_coop::Active()?TrialCoopPresentation():0;
         const auto* hud_view=ImGui::GetMainViewport();
         if(presentation!=2&&hud_view->Size.x>0&&hud_view->Size.y>0){
+            TrialWeaponWheelUi();
             health_hud=true;
             BeginMenu("Stored health packs",hud_view,ImGuiWindowFlags_NoInputs);MenuCanvas c(hud_view,false);
             const bool split=presentation==1;

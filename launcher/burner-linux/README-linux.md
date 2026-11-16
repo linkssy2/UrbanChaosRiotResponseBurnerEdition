@@ -1,4 +1,4 @@
-# Urban Chaos: Riot Response - Burner Edition 0.18
+# Urban Chaos: Riot Response - Burner Edition 0.19
 ## Experimental Linux / Proton Package
 
 This runs the same Windows x64 game through Proton; this is not a native port.
@@ -102,13 +102,19 @@ For a damaged extracted installation, repeat import with the supported ISO.
 A broken installation is not silently replaced by a different image in assets/.
 
 ## Optional Hd Game Textures
-Download the separate compatible HD texture ZIP; do not extract it. Temporarily
-use, for example:
+Set up your Xbox game first and close the game. Running Burner Edition Setup
+through Proton offers the same MANAGE > Add-ons > DOWNLOAD HD TEXTURE PACK button
+as Windows. It downloads and installs the compatible pack from the project's
+official GitHub releases. Then enable Graphics > HD game textures > Apply.
+
+For offline installation, use INSTALL HD TEXTURE PACK in Setup and select a
+previously downloaded compatible ZIP without extracting it. The existing Steam
+command also accepts a local ZIP; temporarily use, for example:
   -B "tools/import_game.py" textures --pack "HD-Game-Textures.zip" --cancel ".cancel-textures" --interactive
 
 Restore the normal launch command after success, then enable Graphics > HD game
 textures > Apply. The separate 0.09 HD pack adds 565 mappings, for 1,803 total.
-Install the new ZIP to receive those additions; updating the game alone keeps
+Download or install the pack to receive those additions; updating the game alone keeps
 your existing pack. The 0.06 pack remains compatible. HD HUD artwork stays in
 the main package. Expanded texture coverage still needs in-game visual testing.
 

@@ -46,7 +46,7 @@ def prepare(area):
     area=Path(area); path=area/'src/compat/d3d12.cpp'
     source=transform(path.read_text());assert transform(source)==source
     source=texture_size_scope(source);assert texture_size_scope(source)==source
-    source=palette_initialization(source);assert palette_initialization(source)==source
+    source=retire_palette_hash_reuse(palette_initialization(source));assert retire_palette_hash_reuse(palette_initialization(source))==source
     source=texture_dimensions(source);assert texture_dimensions(source)==source
     source=texture_target_eligibility(source);assert texture_target_eligibility(source)==source
     source=descriptor_lifetime(source);assert descriptor_lifetime(source)==source
@@ -224,6 +224,30 @@ def palette_initialization(source):
         "// Bound P8 colours; the address and hash stay zero when no palette is used.")
     source=once(source,declaration,lazy)
     return once(source,old,once(old,gate,gate+'\n'+clear))
+
+_PALETTE_HASH = '    palette.hash = Hash(palette.colours, sizeof(palette.colours));'
+_PALETTE_REUSE = """    // Compare every byte: palettes may change between draws in the same frame.
+    struct CachedPalette { uint32_t colours[256]{}; uint64_t hash=0; bool valid=false; };
+    static thread_local CachedPalette previous[4];
+    auto& cached = previous[size_t(stage)];
+    if (cached.valid && !std::memcmp(cached.colours, palette.colours, sizeof(palette.colours))) {
+        palette.hash = cached.hash;
+    } else {
+        palette.hash = Hash(palette.colours, sizeof(palette.colours));
+        std::memcpy(cached.colours, palette.colours, sizeof(palette.colours));
+        cached.hash = palette.hash;
+        cached.valid = true;
+    }"""
+
+
+def retire_palette_hash_reuse(source):
+    # Remove the unproven cache from previously prepared trees before release.
+    if _PALETTE_REUSE in source:
+        source=once(source,_PALETTE_REUSE,_PALETTE_HASH)
+    reader=function(source,'void ReadStagePalette(')
+    assert reader.count(_PALETTE_HASH)==1 and 'CachedPalette' not in reader
+    return source
+
 
 def palette_fixture(source):
     start=source.index('struct StagePalette {')

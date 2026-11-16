@@ -26,6 +26,7 @@
 #include "xbe_ragdoll_drag.h"
 #include "xbe_menu_key_taps.h"
 #include "xbe_graphics_settings.h"
+#include "xbe_weapon_wheel.h"
 
 namespace {
 std::recursive_mutex input_lock;
@@ -42,6 +43,10 @@ bool partner_key_held=false;
 int firearm_direction=0;
 thread_local int firearm_sample_direction=0;
 thread_local bool controller_reload_sample=false;
+bool wheel_was_blocked[2]{},wheel_release_filter[2]{};
+bool wheel_keyboard[2]{true,false};
+bool wheel_input_held[2]{},wheel_wait_release[2]{};
+trial_weapon_wheel::Kind wheel_kind[2]{};
 float spin_x=0,spin_y=0;
 uint64_t spin_tick=0;
 unsigned order_phase=0,order_buttons=0,order_selection=0;
@@ -69,6 +74,54 @@ int controller_path(wchar_t* path){auto p=app::ExeDir()/L"xboxrecomp.ini";if(p.n
 #undef xbox_KeyboardMode
 int xbox_KeyboardMode(){const int owner=trial_coop::PauseOwner();return owner<0?TrialGameplayKeyboardMode():owner==0;}
 #include "xbe_controls_backend.inc"
+
+static bool WeaponWheelBlocks(unsigned slot){
+    return slot<2&&(trial_weapon_wheel::Blocked(slot)||wheel_release_filter[slot]);
+}
+static void WeaponWheelReleaseGuard(unsigned slot){
+    const auto profile=trial_controls::Snapshot(slot);
+    auto preserved=[&](unsigned source,bool keyboard){
+        const auto* bindings=keyboard?profile.keyboard:profile.controller;
+        for(unsigned action:{8u,9u,10u,16u,17u,18u,19u})
+            for(unsigned assigned:bindings[action])if(assigned==source)return true;
+        return false;
+    };
+    auto block=[&](unsigned source,bool keyboard){
+        if(!source||preserved(source,keyboard))return;
+        if(keyboard){if(source<256)release_keys[source]=(GetAsyncKeyState(source)&0x8000)!=0;}
+        else if(source<=8)release_pad[slot].analog[source-1]=last_pad[slot].analog[source-1];
+        else if(source<=16)release_pad[slot].buttons|=last_pad[slot].buttons&controller_digital[source-9];
+        else if(source<=24){
+            const short values[]={last_pad[slot].lx,last_pad[slot].ly,last_pad[slot].rx,last_pad[slot].ry};
+            short* held[]={&release_pad[slot].lx,&release_pad[slot].ly,&release_pad[slot].rx,&release_pad[slot].ry};
+            const unsigned direction=source-17,axis=direction/2;
+            const bool positive=bool(direction%2)!=bool(axis%2);
+            if((values[axis]>0)==positive)*held[axis]=values[axis];
+        }
+    };
+    for(unsigned action:{0u,1u,2u,3u,4u,5u,6u,7u,11u,12u,13u,14u,15u}){
+        for(unsigned source:profile.controller[action])block(source,false);
+        if(!slot)for(unsigned source:profile.keyboard[action])block(source,true);
+    }
+    for(unsigned device=slot;device<2;++device){
+        for(unsigned source:profile.spin_binding[device])block(source,!device);
+        for(unsigned source:profile.health_pack[device])block(source,!device);
+        for(unsigned source:profile.scope_zoom[device])block(source,!device);
+    }
+    if(!slot){
+        for(unsigned source:profile.keyboard[24])block(source,true);
+        for(unsigned source:profile.previous_firearm)block(source,true);
+        for(unsigned source:profile.heal_partner)block(source,true);
+        keyboard_wheel_clear();order_phase=order_buttons=0;order_held=false;dx=dy=spin_dx=spin_dy=0;
+    }
+}
+static void WeaponWheelFilter(unsigned slot,input::Pad& pad){
+    if(!WeaponWheelBlocks(slot))return;
+    // Movement, crouch, objectives and pause stay available while choosing.
+    pad.buttons&=16u|32u|64u;
+    std::memset(pad.analog,0,sizeof pad.analog);pad.rx=pad.ry=0;
+    if(!slot){firearm_sample_direction=0;controller_reload_sample=false;}
+}
 
 namespace {
 trial_controls::CaptureGate controls_capture[2];
@@ -164,7 +217,7 @@ bool TrialMenuRightBack(){
 }
 void TrialIntroMovie(uint32_t owner,uint32_t kind,bool opening,bool ready){
     std::lock_guard guard(input_lock);
-    if(owner){trial_controls::SuspendControllerDeadzones();menu_key_taps.Clear();for(unsigned slot=0;slot<2;++slot)TrialRagdollDragInput(slot,false);}
+    if(owner){trial_controls::SuspendControllerDeadzones();menu_key_taps.Clear();for(unsigned slot=0;slot<2;++slot){TrialRagdollDragInput(slot,false);trial_weapon_wheel::Cancel(slot);}}
     intro_gate.Context(owner,kind,opening,ready);
     if(owner)click_pending=false;
 }
@@ -216,6 +269,7 @@ void TrialGraphicsInputChanged(){
     click_pending=false;dx=dy=0;
     spin_dx=spin_dy=0;spin_tick=0;spin_button_held[0]=spin_button_held[1]=true;
     for(unsigned slot=0;slot<2;++slot){health_gesture[slot].Reset();TrialHealthPackInput(slot,false,false);TrialAimInput(slot,false,false);TrialRagdollDragInput(slot,false);trial_player_actions::Cancel(slot);}
+    for(unsigned slot=0;slot<2;++slot){trial_weapon_wheel::Cancel(slot);wheel_was_blocked[slot]=wheel_release_filter[slot]=wheel_input_held[slot]=wheel_wait_release[slot]=false;}
     firearm_direction=firearm_sample_direction=0;controller_reload_sample=false;
     partner_key_held=false;
     order_phase=order_buttons=0;order_held=false;keyboard_wheel_clear();
@@ -272,6 +326,7 @@ void TrialGameplay(){
 void TrialMouseTake(long* x,long* y,unsigned* sensitivity){
     // Raw accumulation is bounded; invert only look, never order/spin gestures.
     std::lock_guard guard(input_lock);*x=dx;*y=mouse_invert?-dy:dy;dx=dy=0;
+    if(WeaponWheelBlocks(0))*x=*y=0;
     *sensitivity=mouse_sensitivity;
 }
 int TrialSpinSample(float* x,float* y,unsigned player){
@@ -282,7 +337,7 @@ int TrialSpinSample(float* x,float* y,unsigned player){
     const bool down=trial_controls::SpinButtonDown(keyboard,last_pad[player],player)||
         (mixed&&trial_controls::SpinButtonDown(!keyboard,last_pad[player],player));
     const bool pressed=down&&!spin_button_held[player];spin_button_held[player]=down;
-    if(!focused()||!gameplay||menu_mode||TrialGraphicsOpen()||(player&&TrialCoopPresentation()==2)){
+    if(!focused()||!gameplay||menu_mode||TrialGraphicsOpen()||WeaponWheelBlocks(player)||(player&&TrialCoopPresentation()==2)){
         if(!player){spin_dx=spin_dy=0;spin_tick=0;}
         *x=*y=0;return 1;
     }
@@ -306,7 +361,7 @@ int TrialSpinSample(float* x,float* y,unsigned player){
 void ucrr_host_menu_mode(int enabled){
     std::lock_guard guard(input_lock);
     if(enabled)trial_controls::SuspendControllerDeadzones();
-    if(enabled)for(unsigned slot=0;slot<2;++slot)TrialRagdollDragInput(slot,false);
+    if(enabled)for(unsigned slot=0;slot<2;++slot){TrialRagdollDragInput(slot,false);trial_weapon_wheel::Cancel(slot);}
     if(menu_mode!=!!enabled){menu_key_taps.Clear();menu_mode=!!enabled;click_pending=false;dx=dy=0;PostMessage(game_window,kCapture,0,0);}
 }
 void TrialMenuKeysReset(){std::lock_guard guard(input_lock);menu_key_taps.Clear();}
@@ -338,20 +393,22 @@ void xbox_KeyboardSourceEvent(unsigned source,int down){
     if(trial_coop::PauseBlocksKeyboard())return;
     if(down)xbox_KeyboardNoteInput();
     int claimed=0;unsigned mask=keyboard_orders_source_mask(source,&claimed);
-    if(!mask||claimed||trial_controls::PreviousFirearmClaims(source)||!captured)return;
+    if(!mask||claimed||trial_controls::PreviousFirearmClaims(source)||!captured||WeaponWheelBlocks(0))return;
     if(down&&!order_phase){order_held=true;order_phase=1;order_x=order_y=0;}
     else if(!down&&order_held){order_held=false;order_selection=OrderDirection();}
     dx=dy=0;
 }
-void xbox_KeyboardWheel(int delta){if(captured)keyboard_wheel_record(delta);}
+void xbox_KeyboardWheel(int delta){if(captured&&!WeaponWheelBlocks(0))keyboard_wheel_record(delta);}
 void TrialInputPublish(){
     std::lock_guard guard(input_lock);
     // Keep direction with the guest's sampled press, not a later connection poll.
     firearm_direction=firearm_sample_direction;
     if(!focused()||!gameplay||menu_mode||TrialGraphicsOpen()||intro_gate.owner)trial_controls::SuspendControllerDeadzones();
     if(captured&&focused())keyboard_wheel_publish();else keyboard_wheel_clear();
-    TrialConversationPublish(ActionSourceDown(1),focused()&&!TrialGraphicsOpen()&&!menu_mode);
-    TrialReloadPublish(ActionSourceDown(0)||(controller_reload_sample&&!trial_coop::Active()&&trial_controls::MixedInput()),focused()&&!TrialGraphicsOpen()&&!menu_mode);
+    const bool actions_allowed=focused()&&!TrialGraphicsOpen()&&!menu_mode&&!WeaponWheelBlocks(0);
+    TrialConversationPublish(ActionSourceDown(1,actions_allowed),actions_allowed);
+    TrialReloadPublish(ActionSourceDown(0,actions_allowed)||(controller_reload_sample&&!trial_coop::Active()&&trial_controls::MixedInput()),actions_allowed);
+    for(unsigned slot=0;slot<2;++slot)trial_weapon_wheel::PublishInput(slot);
     if(!captured||!focused()){keyboard_wheel_clear();order_phase=order_buttons=0;order_held=false;return;}
     order_buttons=0;
     switch(order_phase){case 1:order_buttons=2;order_phase=2;break;case 2:order_phase=3;break;
@@ -374,6 +431,7 @@ bool TrialInputMessage(void*,uint32_t msg,uintptr_t wp,intptr_t lp,intptr_t* res
         title_gate.Context(false);
         spin_dx=spin_dy=0;spin_tick=0;spin_button_held[0]=spin_button_held[1]=true;
         for(unsigned slot=0;slot<2;++slot){TrialHealthPackInput(slot,false,false);TrialAimInput(slot,false,false);TrialRagdollDragInput(slot,false);trial_player_actions::Cancel(slot);}
+        for(unsigned slot=0;slot<2;++slot)trial_weapon_wheel::Cancel(slot);
         menu_right_pending=menu_right_down=false;menu_right_consumed=(GetAsyncKeyState(VK_RBUTTON)&0x8000)!=0;
         captured=false;dx=dy=0;order_phase=order_buttons=0;order_held=false;click_pending=false;keyboard_wheel_clear();ClipCursor(nullptr);
     }
@@ -417,7 +475,8 @@ bool TrialInputMessage(void*,uint32_t msg,uintptr_t wp,intptr_t lp,intptr_t* res
             if(!(raw.data.mouse.usFlags&MOUSE_MOVE_ABSOLUTE)){
                 if(raw.data.mouse.lLastX||raw.data.mouse.lLastY)xbox_KeyboardNoteInput();
                 auto add=[](long a,long b){return long(std::clamp(int64_t(a)+b,int64_t(-1000000),int64_t(1000000)));};
-                if(order_held){order_x=add(order_x,raw.data.mouse.lLastX);order_y=add(order_y,raw.data.mouse.lLastY);}
+                if(trial_weapon_wheel::MouseDelta(float(raw.data.mouse.lLastX),float(raw.data.mouse.lLastY))){dx=dy=spin_dx=spin_dy=0;}
+                else if(order_held){order_x=add(order_x,raw.data.mouse.lLastX);order_y=add(order_y,raw.data.mouse.lLastY);}
                 else{dx=add(dx,raw.data.mouse.lLastX);dy=add(dy,raw.data.mouse.lLastY);
                     spin_dx=add(spin_dx,raw.data.mouse.lLastX);spin_dy=add(spin_dy,raw.data.mouse.lLastY);}
             }
@@ -434,8 +493,15 @@ void TrialInputPad(int port,input::Pad& pad){
     const bool controller_connected=pad.connected;
     if(port==0){firearm_sample_direction=0;controller_reload_sample=false;}
     // Revoke an old drag on unplug, while keeping P1 available to the keyboard.
-    if(port<2&&last_pad[port].connected&&!controller_connected)TrialRagdollDragInput(port,false);
+    if(port<2&&last_pad[port].connected&&!controller_connected){
+        TrialRagdollDragInput(port,false);
+        if(!wheel_keyboard[port])trial_weapon_wheel::Cancel(unsigned(port));
+    }
     last_pad[port]=pad;
+    if(port<2&&(!focused()||!gameplay||menu_mode||TrialGraphicsOpen()||intro_gate.owner||
+       controls_capture[port].active||!trial_coop::PauseAllowsPlayer(unsigned(port))||
+       TrialCoopPresentation()==2||(port&&(!trial_coop::Active()||!controller_connected))))
+        trial_weapon_wheel::Cancel(unsigned(port));
     const int pause_owner=trial_coop::PauseOwner();
     if(input_pause_owner!=pause_owner){input_pause_owner=pause_owner;TrialGraphicsInputChanged();}
     auto health_use=TrialHealthPackUse::None;
@@ -512,7 +578,36 @@ void TrialInputPad(int port,input::Pad& pad){
         pad.buttons=pause.buttons&16u;return;
     }
     if(port<2){
-        const bool allowed=focused()&&gameplay&&!menu_mode&&!controls_capture[port].active&&(!port||trial_coop::Active());
+        const bool wheel_allowed=focused()&&gameplay&&!menu_mode&&!intro_gate.owner&&!controls_capture[port].active&&
+            TrialCoopPresentation()!=2&&(!port||(trial_coop::Active()&&controller_connected));
+        const bool keyboard_guns=!port&&trial_controls::WeaponWheelDown(true,pad,0,captured);
+        const bool controller_guns=controller_connected&&trial_controls::WeaponWheelDown(false,pad,unsigned(port));
+        const bool keyboard_melee=!port&&trial_controls::MeleeWheelDown(true,pad,0,captured);
+        const bool controller_melee=controller_connected&&trial_controls::MeleeWheelDown(false,pad,unsigned(port));
+        const bool guns=keyboard_guns||controller_guns,melee=keyboard_melee||controller_melee,wheel_down=guns||melee;
+        if(!wheel_input_held[port]&&wheel_down){
+            wheel_kind[port]=melee?trial_weapon_wheel::Kind::MeleeThrowables:trial_weapon_wheel::Kind::Guns;
+            wheel_keyboard[port]=melee?keyboard_melee:keyboard_guns;
+        }
+        const bool held_melee=wheel_kind[port]==trial_weapon_wheel::Kind::MeleeThrowables;
+        const bool owner_down=wheel_keyboard[port]?(held_melee?keyboard_melee:keyboard_guns):(held_melee?controller_melee:controller_guns);
+        // Overlapping wheel inputs or a source handoff must not equip a stale choice.
+        if((guns&&melee)||(wheel_input_held[port]&&wheel_down&&!owner_down))wheel_wait_release[port]=true;
+        if(wheel_wait_release[port])trial_weapon_wheel::Cancel(unsigned(port));
+        if(!wheel_down)wheel_wait_release[port]=false;
+        trial_weapon_wheel::Input(unsigned(port),wheel_down,wheel_allowed&&!wheel_wait_release[port],wheel_keyboard[port],
+            float(pad.rx)/32768.f,-float(pad.ry)/32768.f,wheel_kind[port]);
+        wheel_input_held[port]=wheel_down;
+        const bool blocked=trial_weapon_wheel::Blocked(unsigned(port));
+        wheel_release_filter[port]=wheel_was_blocked[port]&&!blocked;
+        if(wheel_release_filter[port])WeaponWheelReleaseGuard(unsigned(port));
+        wheel_was_blocked[port]=blocked;
+        const bool allowed=focused()&&gameplay&&!menu_mode&&!controls_capture[port].active&&
+            (!port||trial_coop::Active())&&!WeaponWheelBlocks(unsigned(port));
+        if(WeaponWheelBlocks(unsigned(port))){
+            health_use=TrialHealthPackUse::None;health_gesture[port].Reset();
+            if(!port){dx=dy=spin_dx=spin_dy=0;order_phase=order_buttons=0;order_held=false;keyboard_wheel_clear();}
+        }
         auto health_pad=pad;health_pad.buttons&=~2u; // Physical Down is reserved for the two health gestures.
         const bool down=trial_controls::HealthPackDown(false,health_pad,port)||
             (!port&&trial_controls::HealthPackDown(true,pad,0,captured));
@@ -537,8 +632,8 @@ void TrialInputPad(int port,input::Pad& pad){
     // original gameplay slots before keyboard/mouse contributions are merged.
     if(gameplay&&!menu_mode)trial_controls::Remap(pad,trial_coop::Active()&&port==1?1:0);
     if(port==1&&controller_connected&&focused()&&gameplay&&!menu_mode&&!controls_capture[port].active&&trial_coop::Active())
-        trial_controls::AllowControllerDeadzone(unsigned(port),15);
-    if(port!=0||!focused())return;
+        trial_controls::AllowControllerDeadzone(unsigned(port),WeaponWheelBlocks(unsigned(port))?3u:15u);
+    if(port!=0||!focused()){WeaponWheelFilter(unsigned(port),pad);return;}
     controller_reload_sample=gameplay&&!menu_mode&&pad.analog[0]>30;
     if(pad.buttons||std::abs(int(pad.rx))>8689||std::abs(int(pad.ry))>8689)InterlockedExchange(&keyboard_mode,0);
     if(menu_key_update)menu_key_taps.GuestPortPolled(port);
@@ -586,7 +681,9 @@ void TrialInputPad(int port,input::Pad& pad){
     if(keys.sThumbRX||(mixed&&(keyboard_axes&4)))pad.rx=keys.sThumbRX;if(keys.sThumbRY||(mixed&&(keyboard_axes&8)))pad.ry=keys.sThumbRY;
     // Mixed input preserves pad-owned axes; keyboard overrides never receive a stick curve.
     if(controller_connected&&gameplay&&!menu_mode&&!controls_capture[0].active)
-        trial_controls::AllowControllerDeadzone(0,mixed?(15u&~keyboard_axes):(TrialGameplayKeyboardMode()?0:15));
+        trial_controls::AllowControllerDeadzone(0,(mixed?(15u&~keyboard_axes):(TrialGameplayKeyboardMode()?0:15))&
+            (WeaponWheelBlocks(0)?3u:15u));
+    WeaponWheelFilter(0,pad);
 }
 int TrialFirearmDirection(){
     std::lock_guard guard(input_lock);

@@ -103,8 +103,21 @@ static void WritersAndReplay() {
         x.UpdateViewportConstants();y.UpdateViewportConstants();queue();
     }
     decltype(VertexShader::constants) declared;
+    // Dirty coverage is sparse, bounded, and accumulates with preceding writes.
+    for(unsigned reg=0;reg<194;++reg) {
+        decltype(VertexShader::constants) single{{reg,{1,2,3,4}}};
+        y.g_state.vsc_dirty=uint64_t(1)<<20;y.Shader(single);
+        assert(y.g_state.vsc_dirty==((uint64_t(1)<<20)|(reg<192?uint64_t(1)<<(reg>>2):0)));
+    }
+    y.g_state.vsc=x.g_state.vsc;y.g_state.MarkVertexConstants(0,192);queue();
     for(unsigned reg:{0u,3u,58u,59u,191u,192u,~0u,59u,0u})declared.emplace_back(reg,std::array<float,4>{1,2,3,float(declared.size())});
     x.Shader(declared);y.Shader(declared);queue();x.Shader(declared);y.Shader(declared);queue();
+    for(unsigned n:{0u,1u,47u,48u,49u,192u,256u}) {
+        declared.clear();
+        for(unsigned i=0;i<n;++i)declared.emplace_back((i*59)%197,std::array<float,4>{float(i),2,3,4});
+        x.Shader(declared);y.Shader(declared);queue();
+        x.Shader(declared);y.Shader(declared);queue();
+    }
     auto saved=x.g_state.vsc[17];
     x.g_state.vsc[17]=y.g_state.vsc[17]={9,8,7,6};y.g_state.MarkVertexConstants(17,1);
     x.g_state.vsc[17]=y.g_state.vsc[17]=saved;y.g_state.MarkVertexConstants(17,1);queue();
@@ -173,9 +186,8 @@ template<class Writer,class Transport> static double Bench(unsigned registers,un
     return std::chrono::duration<double,std::nano>(std::chrono::steady_clock::now()-start).count()/iterations;
 }
 static void Benchmark() {
-    for(unsigned mode=0;mode<3;++mode)for(unsigned n:{0u,1u,4u,12u,32u,64u,192u}) {
+    for(unsigned mode=0;mode<3;++mode)for(unsigned n:{0u,1u,4u,12u,32u,47u,48u,64u,192u}) {
         const bool all=mode==1,shader=mode==2;
-        if(shader&&n!=4&&n!=32&&n!=192)continue;
         Bench<OriginalWriters,baseline::Replay>(n,2000,all,shader);Bench<TrackedWriters,candidate::Replay>(n,2000,all,shader);
         std::array<double,9>a{},b{};
         for(unsigned r=0;r<9;++r) {

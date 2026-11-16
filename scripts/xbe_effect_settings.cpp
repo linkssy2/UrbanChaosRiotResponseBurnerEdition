@@ -3,6 +3,7 @@
 #include "cpu/x86_ops.h"
 #include "kernel/memory.h"
 #include "xbe_input_memory.h"
+#include <cmath>
 #include <cstring>
 
 namespace {
@@ -14,6 +15,39 @@ bool EmergencyPoint(uint32_t index) {
     // Exact 1-01 authored identities retained by the accepted Simple policy.
     return index == 65 || index == 66 || index == 67 || index == 70 ||
            index == 71 || index == 83 || index == 91 || index == 98;
+}
+bool OutsideMediumPointRange(const uint8_t* base, uint32_t light, uint32_t receiver) {
+    if(!TrialGuestReadable(light, 0x1C8) || base[light + 0x50]) return false;
+    // 457880+08/0C dispatch to 8EAF0/B5490: world matrix +20, local AABB +80.
+    // B2BA0/B2A40 use the B2D60-derived scale/offset and radius .5 volume.
+    float world[16], bounds[6], volume[6];
+    std::memcpy(world, base + receiver + 0x20, sizeof(world));
+    std::memcpy(bounds, base + receiver + 0x80, sizeof(bounds));
+    std::memcpy(volume, base + light + 0x1B0, sizeof(volume));
+    for(float value : world) if(!std::isfinite(value)) return false;
+    for(float value : bounds) if(!std::isfinite(value)) return false;
+    for(float value : volume) if(!std::isfinite(value)) return false;
+    if(world[3] != 0 || world[7] != 0 || world[11] != 0 || world[15] != 1) return false;
+    double center[3], extent[3];
+    for(unsigned i = 0; i < 3; ++i) {
+        if(bounds[i] > bounds[i + 3] || volume[i] <= 0) return false;
+        center[i] = (double(bounds[i]) + bounds[i + 3]) * .5;
+        extent[i] = (double(bounds[i + 3]) - bounds[i]) * .5;
+    }
+    double distance_squared = 0;
+    for(unsigned i = 0; i < 3; ++i) {
+        double middle = world[12 + i], radius = 0;
+        for(unsigned j = 0; j < 3; ++j) {
+            middle += world[j * 4 + i] * center[j];
+            radius += std::abs(double(world[j * 4 + i])) * extent[j];
+        }
+        const double low = (middle - radius) * volume[i] + volume[i + 3];
+        const double high = (middle + radius) * volume[i] + volume[i + 3];
+        const double nearest = low > 0 ? low : high < 0 ? high : 0;
+        distance_squared += nearest * nearest;
+    }
+    // Retain the entire receiver if any of its bounds touches 75% light range.
+    return distance_squared > .375 * .375;
 }
 }
 
@@ -42,8 +76,15 @@ bool TrialSkipLightingReceiver(const X86Context& ctx, const uint8_t* base) {
     if((type != 0x4573F0u && type != 0x457338u) || Word(base, receiver) != 0x457880u) return false;
     // B5D80/B5DD0 tag first-person depth/projection on the interface at +0C.
     if(Word(base, receiver + 0x60) & 0x180u) return false;
-    if(base[receiver + 0xB1]) return !scope->scenery_;
+    if(base[receiver + 0xB1]) {
+        if(!scope->scenery_) return true;
+        const uint32_t index = Word(base, light + 0x78);
+        return scope->simple_ && type == 0x4573F0u && int32_t(index) >= 0 &&
+               !(scope->westside_ && EmergencyPoint(index)) &&
+               OutsideMediumPointRange(base, light, receiver);
+    }
     if(!scope->characters_) return true;
     return scope->simple_ && type == 0x4573F0u &&
            !(scope->westside_ && EmergencyPoint(Word(base, light + 0x78)));
 }
+

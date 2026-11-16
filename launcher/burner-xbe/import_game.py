@@ -359,7 +359,7 @@ def import_iso(iso_path, data, cancel, *, direct=False):
             raise ValueError('Keep the source ISO outside the managed installed folder before selecting it.')
         source = iso_path.stat()
         marker = {'version': 1, 'disc_manifest': sha(ROOT / 'tools/disc-manifest.json'),
-                  'files': len(required), 'importer': 'burner-xbe-0.18',
+                  'files': len(required), 'importer': 'burner-xbe-0.19',
                   'source_mode': 'iso' if direct else 'extracted'}
         if direct:
             marker.update(iso_path=str(iso_path), iso_size=source.st_size,
@@ -903,7 +903,7 @@ def main():
             raise ValueError(message)
 
     parser = SetupParser()
-    parser.add_argument('action', choices=['import', 'use-iso', 'use-installation', 'verify', 'auto-setup', 'status', 'launch', 'textures', 'voices', 'language', 'diagnostics', 'startup', 'check-updates', 'update'])
+    parser.add_argument('action', choices=['import', 'use-iso', 'use-installation', 'verify', 'auto-setup', 'status', 'launch', 'textures', 'download-textures', 'voices', 'language', 'diagnostics', 'startup', 'check-updates', 'update'])
     parser.add_argument('--launcher-pid', type=int)
     parser.add_argument('--logging', choices=['on', 'off'])
     parser.add_argument('--skip-startup', choices=['on', 'off'])
@@ -930,9 +930,9 @@ def main():
                 setup_feedback.notify(state['message'])
             return 0
         data = ROOT / 'GameData' if action in ('use-installation', 'startup') else selected_data(args.data)
-        if args.interactive and action in ('import', 'use-iso', 'textures', 'voices'):
+        if args.interactive and action in ('import', 'use-iso', 'textures', 'download-textures', 'voices'):
             setup_feedback.notify('Press OK to start ' + {'import': 'ISO import.', 'use-iso': 'direct ISO setup. Keep the ISO in place for future play.',
-                'textures': 'HD texture installation.', 'voices': 'Spanish voice installation.'}[action] +
+                'textures': 'HD texture installation.', 'download-textures': 'HD texture download and installation from GitHub.', 'voices': 'Spanish voice installation.'}[action] +
                 '\n\nThis can take several minutes. Leave Steam running; another message will confirm success or explain any error.')
         read_only = (action == 'status' or (action == 'language' and args.language is None) or
                      (action == 'startup' and args.skip_startup is None))
@@ -1005,6 +1005,12 @@ def main():
                 state = auto_setup(data, args.cancel or ROOT / ('.cancel-auto-' + uuid.uuid4().hex), interactive=args.interactive)
                 print(json.dumps(state))
                 return 0 if state['ready'] else 2
+            elif action == 'download-textures':
+                if args.cancel is None or args.pack is not None:
+                    raise ValueError('Start the HD texture download from Manage > Add-ons in the launcher.')
+                check_installation(data)
+                from world_textures import download_install
+                download_install(data, args.cancel)
             elif action == 'textures':
                 if args.pack is None or args.cancel is None:
                     raise ValueError('Select the HD texture ZIP download.')
@@ -1031,6 +1037,7 @@ def main():
                 'use-installation': 'Existing installation selected. Your files and saves stay there without duplication.',
                 'verify': 'Game file verification completed successfully.',
                 'textures': 'HD textures installed successfully. Restore the normal play command in Steam.',
+                'download-textures': 'HD textures installed successfully. Enable them in Graphics after starting the game.',
                 'voices': 'Spanish voices installed. Select Spanish, then restore the normal play command in Steam.',
                 'diagnostics': 'Diagnostic logging is ' + ('on' if diagnostics.enabled(ROOT) else 'off') + '. Applies to the next game session. Local logs: ' + str(ROOT / 'GameData/logs'),
                 'startup': startup_settings()['message'],

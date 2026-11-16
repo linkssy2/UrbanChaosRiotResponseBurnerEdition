@@ -6,8 +6,8 @@
 #include <vector>
 
 // An OS cursor stays responsive independently of the game's frame rate.
-// Miniature riot shield: steel rim, dark body and glazed viewport. The red
-// upper-left rim marks the click hotspot; no conventional arrow is overlaid.
+// A compact ember pointer: charred outline, orange flame and dark inner core.
+// The sharp upper-left flame tip marks the click hotspot.
 class NativeMenuCursor {
     struct Cached {int size;HCURSOR handle;};
     std::vector<Cached> cursors_;
@@ -27,25 +27,14 @@ class NativeMenuCursor {
             SetDCBrushColor(dc,fill);return Polygon(dc,points.data(),(int)points.size())!=FALSE;
         };
         HGDIOBJ old_pen=SelectObject(dc,GetStockObject(DC_PEN)),old_brush=SelectObject(dc,GetStockObject(DC_BRUSH));
-        SetDCPenColor(dc,RGB(12,12,12));
-        bool drawn=polygon({{3,2},{23,2},{28,7},{27,23},{22,28},{14,31},{6,27},{3,22}},RGB(185,191,188));
-        SetDCPenColor(dc,RGB(83,91,94));
-        drawn=polygon({{5,4},{22,4},{26,8},{25,22},{20,26},{14,29},{8,25},{5,21}},RGB(43,51,55))&&drawn;
-        SetDCPenColor(dc,RGB(12,18,20));
-        drawn=polygon({{7,7},{22,7},{24,9},{23,16},{7,16}},RGB(89,119,126))&&drawn;
-        SetDCPenColor(dc,RGB(155,185,185));
-        drawn=polygon({{9,9},{19,9},{13,13},{9,13}},RGB(155,185,185))&&drawn;
-        SetDCPenColor(dc,RGB(220,40,0));
-        drawn=polygon({{3,2},{10,2},{10,4},{5,4},{5,8},{3,8}},RGB(220,40,0))&&drawn;
-        drawn=polygon({{9,25},{14,27},{20,24},{20,26},{14,29},{9,27}},RGB(220,40,0))&&drawn;
-        HFONT font=CreateFontW(-MulDiv(6,size,32),0,0,0,FW_BOLD,FALSE,FALSE,FALSE,DEFAULT_CHARSET,
-            OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,ANTIALIASED_QUALITY,FIXED_PITCH,L"Consolas");
-        if(font){
-            HGDIOBJ old_font=SelectObject(dc,font);SetBkMode(dc,TRANSPARENT);SetTextColor(dc,RGB(244,244,231));
-            RECT label{MulDiv(6,size,32),MulDiv(17,size,32),MulDiv(25,size,32),MulDiv(24,size,32)};
-            drawn=DrawTextW(dc,L"POLICE",6,&label,DT_CENTER|DT_VCENTER|DT_SINGLELINE|DT_NOPREFIX)!=0&&drawn;
-            SelectObject(dc,old_font);DeleteObject(font);
-        }else drawn=false;
+        SetDCPenColor(dc,RGB(15,12,10));
+        bool drawn=polygon({{3,2},{24,16},{17,17},{23,27},{17,30},{12,21},{6,26}},RGB(220,69,17));
+        SetDCPenColor(dc,RGB(255,158,42));
+        drawn=polygon({{4,4},{20,15},{14,15},{19,24},{16,25},{11,17},{7,21}},RGB(255,158,42))&&drawn;
+        SetDCPenColor(dc,RGB(51,25,16));
+        drawn=polygon({{7,10},{15,15},{12,16},{18,26},{17,27},{10,18},{8,21}},RGB(51,25,16))&&drawn;
+        SetDCPenColor(dc,RGB(255,220,126));
+        drawn=polygon({{4,4},{11,10},{8,10},{6,15}},RGB(255,220,126))&&drawn;
         GdiFlush();
         auto pixels=static_cast<uint32_t*>(bits);
         for(size_t i=0;i<size_t(size)*size;i++)if(pixels[i]&0xffffff) pixels[i]|=0xff000000u;
@@ -59,7 +48,7 @@ public:
     ~NativeMenuCursor(){for(const auto &cursor:cursors_)DestroyCursor(cursor.handle);}
     HCURSOR get(HWND window){
         const UINT dpi=window?GetDpiForWindow(window):GetDpiForSystem();
-        const int size=std::clamp(GetSystemMetricsForDpi(SM_CXCURSOR,dpi?dpi:96),32,128);
+        const int size=MulDiv(std::clamp(GetSystemMetricsForDpi(SM_CXCURSOR,dpi?dpi:96),32,128),3,4);
         for(const auto &cursor:cursors_)if(cursor.size==size)return cursor.handle;
         HCURSOR handle=create(size);try{cursors_.push_back({size,handle});}catch(...){DestroyCursor(handle);throw;}return handle;
     }

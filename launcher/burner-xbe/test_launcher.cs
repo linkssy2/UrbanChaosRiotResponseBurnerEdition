@@ -61,7 +61,7 @@ class LauncherChecks {
                 var manage=(Control)Field(form,"manage");Check(manage.Visible,"Manage navigation did not open");
                 string[] names={"Settings","Game files","Add-ons","DLC / Prototypes","Updates","Support"};
                 var sections=(TableLayoutPanel[])Field(form,"manageSections");Check(sections.Length==names.Length,"Manage navigation lost a section");
-                string[][] grouped={new[]{"language","skipStartup"},new[]{"verify","folder","saves"},new[]{"textures","voices"},new string[0],new[]{"updates"},new[]{"diagnostics"}};
+                string[][] grouped={new[]{"language","skipStartup"},new[]{"verify","folder","saves"},new[]{"downloadTextures","textures","voices"},new string[0],new[]{"updates"},new[]{"diagnostics"}};
                 for(int i=0;i<names.Length;i++){
                     ButtonNamed(manage,names[i]).PerformClick();
                     for(int j=0;j<sections.Length;j++)Check(sections[j].Visible==(i==j),"Manage section selection is inconsistent: "+names[i]);
@@ -99,6 +99,14 @@ class LauncherChecks {
                 Check(args.Length>4&&args[3]=="--skip-startup","Startup option not forwarded");
                 File.WriteAllText(startup,args[4]);
             }
+            if(args[2]=="textures"||args[2]=="download-textures"){
+                int cancelIndex=Array.IndexOf(args,"--cancel");
+                Check(cancelIndex>=3&&cancelIndex+1<args.Length,"Texture operation lost cancellation");
+                if(args[2]=="download-textures")Check(cancelIndex==3,"Download action unexpectedly requires a local ZIP");
+                else Check(args[3]=="--pack"&&args[4]=="fixture.zip","Local texture ZIP was not forwarded");
+                File.WriteAllText(Path.Combine(root,"texture-action"),args[2]);
+                Console.WriteLine("{\"message\":\"HD texture pack installed. Enable HD game textures in Graphics.\"}");return 0;
+            }
             if(args[2]=="language"){
                 File.WriteAllText(Path.Combine(root,"language-check-started"),"");
                 var timer=Stopwatch.StartNew();while(!File.Exists(Path.Combine(root,"language-check-release"))){if(timer.ElapsedMilliseconds>10000)return 2;Thread.Sleep(5);}
@@ -113,7 +121,9 @@ class LauncherChecks {
             form.Shown+=(s,e)=>form.BeginInvoke(new Action(()=>{
             try{
             var play=(Button)Field(form,"play");var select=(Button)Field(form,"select");
-            Check(select.Visible&&!play.Visible&&!((Button)Field(form,"textures")).Enabled,"Unprepared source exposed Play or add-ons");
+            var downloadTextures=(Button)Field(form,"downloadTextures");
+            Check(select.Visible&&!play.Visible&&!((Button)Field(form,"textures")).Enabled&&!downloadTextures.Enabled,"Unprepared source exposed Play or add-ons");
+            Check(downloadTextures.Text=="DOWNLOAD HD TEXTURE PACK"&&downloadTextures.AccessibleName==downloadTextures.Text,"Texture download label or accessible name missing");
             Check(((Button)Field(form,"diagnostics")).Text.EndsWith("OFF"),"Diagnostics must default off");
             var skipStartup=(Button)Field(form,"skipStartup");
             Check(skipStartup.Text=="SKIP STARTUP: OFF","Startup skipping must default off");
@@ -129,12 +139,13 @@ class LauncherChecks {
             Show(form,"home");
             Status(form,true,AppDomain.CurrentDomain.BaseDirectory);
             Check(play.Visible&&play.Enabled&&!select.Visible,"Verified source did not enable Play");
+            Check(downloadTextures.Enabled&&((Button)Field(form,"textures")).Enabled,"Verified source did not enable both texture actions");
             Check(((Label)Field(form,"description")).Text.Contains("Keep it in place"),"Direct ISO retention guidance missing");
             Status(form,true,AppDomain.CurrentDomain.BaseDirectory,"extracted");
             Check(((Label)Field(form,"description")).Text.Contains("No ISO is needed"),"Import-once guidance missing");
             typeof(BurnerLauncher).GetField("busy",BindingFlags.Instance|BindingFlags.NonPublic).SetValue(form,true);
             typeof(BurnerLauncher).GetMethod("SetEnabled",BindingFlags.Instance|BindingFlags.NonPublic).Invoke(form,null);
-            Check(!play.Enabled&&!((Control)Field(form,"pages")).Enabled,"Setup must prevent overlapping actions");
+            Check(!play.Enabled&&!((Control)Field(form,"pages")).Enabled&&!downloadTextures.Enabled&&!((Button)Field(form,"textures")).Enabled,"Setup must prevent overlapping actions");
             typeof(BurnerLauncher).GetField("busy",BindingFlags.Instance|BindingFlags.NonPublic).SetValue(form,false);
             Status(form,false,AppDomain.CurrentDomain.BaseDirectory);
             Check(!play.Visible&&select.Visible&&((Label)Field(form,"status")).Text.Contains("missing"),"Missing ISO should offer recovery, not Play");
@@ -155,6 +166,18 @@ class LauncherChecks {
                     File.WriteAllText(release,"");Until(()=>task.IsCompleted);task.GetAwaiter().GetResult();
                     Check(play.Enabled,"Controls did not recover after operation");
                 }
+                foreach(string action in new[]{"download-textures","textures"}){
+                    Show(form,"manage");ButtonNamed(manage,"Add-ons").PerformClick();
+                    if(action=="download-textures"){
+                        downloadTextures.PerformClick();Until(()=>!(bool)Field(form,"busy"));
+                    }else{
+                        var installed=(Task)typeof(BurnerLauncher).GetMethod("Operation",BindingFlags.Instance|BindingFlags.NonPublic).Invoke(form,new object[]{action," --pack "+BurnerLauncher.Quote("fixture.zip")});
+                        Until(()=>installed.IsCompleted);installed.GetAwaiter().GetResult();
+                    }
+                    Check(File.ReadAllText(Path.Combine(root,"texture-action"))==action,"Texture action did not reach its worker");
+                    Check(((Label)Field(form,"status")).Text=="HD texture pack installed. Enable HD game textures in Graphics.","Status refresh hid the texture activation hint");
+                    Check(((Control)Field(form,"home")).Visible&&downloadTextures.Enabled&&((Button)Field(form,"textures")).Enabled&&Field(form,"cancelPath")==null,"Texture completion did not restore controls and cleanup");
+                }
                 Show(form,"manage");ButtonNamed(manage,"Game files").PerformClick();
                 File.WriteAllText(Path.Combine(root,"fail-verify"),"");
                 var failed=(Task)typeof(BurnerLauncher).GetMethod("Operation",BindingFlags.Instance|BindingFlags.NonPublic).Invoke(form,new object[]{"verify",""});
@@ -174,7 +197,7 @@ class LauncherChecks {
                     Check(language.SelectedIndex==4&&!File.Exists(started),"Startup toggle overwrote unsaved Spanish selection");
                 }
             }finally{
-                File.WriteAllText(release,"");File.Delete(Path.Combine(python,"python.exe"));Directory.Delete(python);Directory.Delete(tools);File.Delete(started);File.Delete(release);File.Delete(Path.Combine(root,"startup-choice"));File.Delete(Path.Combine(root,"fail-verify"));
+                File.WriteAllText(release,"");File.Delete(Path.Combine(python,"python.exe"));Directory.Delete(python);Directory.Delete(tools);File.Delete(started);File.Delete(release);File.Delete(Path.Combine(root,"startup-choice"));File.Delete(Path.Combine(root,"fail-verify"));File.Delete(Path.Combine(root,"texture-action"));
             }
             }catch(Exception error){failure=error;Console.Error.WriteLine("Launcher check failed before cleanup: "+error);}
             finally{form.Close();Application.ExitThread();}
@@ -191,6 +214,6 @@ class LauncherChecks {
             for(int i=0;i<samples.Length;i++)Check(actual[i+1]==samples[i],"Windows argv corrupted path: "+samples[i]);
         }
         Check(!BurnerLauncher.Worker("status").Arguments.Contains("--data"),"Launcher overrides selected installation");
-        Console.WriteLine("Launcher grouped navigation, scaled layouts, keyboard reachability, worker recovery, saved startup/language behavior and real Windows argv round trips passed.");return 0;
+        Console.WriteLine("Launcher grouped navigation, scaled layouts, keyboard reachability, texture download/local install actions and activation hints, worker recovery, saved startup/language behavior and real Windows argv round trips passed.");return 0;
     }
 }

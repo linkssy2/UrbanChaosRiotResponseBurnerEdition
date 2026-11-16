@@ -13,6 +13,7 @@ struct Draft {
     unsigned aim_mode=0,scope_zoom[2][2]{}; // 0 toggle, 1 hold
     unsigned zoom_sensitivity=100; // Percent of this player's existing zoomed look speed.
     unsigned walk_mode=0,walk_binding[2][2]{},hud_binding[2][2]{};
+    unsigned wheel_binding[2][2]{},melee_wheel_binding[2][2]{}; // Held keyboard/mouse or controller buttons only.
     unsigned movement_inertia=1;
     unsigned mixed_input=0; // P1 only; simultaneous controller/mouse gameplay is opt-in.
     // Retail 63B70 defaults: vibration, invert, auto-centre, crouch, layout, X/Y.
@@ -44,4 +45,6 @@ unsigned MovementInertia(unsigned player=0);
 unsigned MixedInput();
 bool WalkDown(bool keyboard,const input::Pad&,unsigned player=0,bool mouse_active=false);
 bool HudToggleDown(bool keyboard,const input::Pad&,unsigned player=0,bool mouse_active=false);
+bool WeaponWheelDown(bool keyboard,const input::Pad&,unsigned player=0,bool mouse_active=false);
+bool MeleeWheelDown(bool keyboard,const input::Pad&,unsigned player=0,bool mouse_active=false);
 }

@@ -31,7 +31,7 @@ class BurnerLauncher : Form {
     readonly TableLayoutPanel[] manageSections;
     readonly Button[] manageNavigation;
     readonly ComboBox language=new ComboBox();
-    readonly Button play, select, textures, voices, verify, folder, saves, cancel, diagnostics, updates, skipStartup;
+    readonly Button play, select, downloadTextures, textures, voices, verify, folder, saves, cancel, diagnostics, updates, skipStartup;
     string data=Path.Combine(Root,"GameData"), cancelPath;
     bool busy, running, ready, spanishAvailable, diagnosticLogging, updatePrepared, skipStartupEnabled;
     Image cover;
@@ -137,7 +137,10 @@ class BurnerLauncher : Form {
         Add(manageFiles,MakeButton("SELECT GAME / REPAIR",(s,e)=>ShowPage(source)),48);
         verify=MakeButton("VERIFY FILES",async(s,e)=>await Operation("verify",""));Add(manageFiles,verify,48);
         folder=MakeButton("GAME FOLDER",(s,e)=>OpenFolder(data));saves=MakeButton("SAVES",(s,e)=>OpenFolder(Path.Combine(data,"xbe-runtime","hdd")));Add(manageFiles,folder,48);Add(manageFiles,saves,48);
+        manageAddons.Padding=new Padding(0,4,6+SystemInformation.VerticalScrollBarWidth,4);
         Add(manageAddons,TextLabel("OPTIONAL ADD-ONS",12),34);
+        downloadTextures=MakeButton("DOWNLOAD HD TEXTURE PACK",async(s,e)=>await Operation("download-textures",""));Add(manageAddons,downloadTextures,48);
+        Add(manageAddons,TextLabel("Download and install from official GitHub releases. Then enable HD game textures in Graphics.",9),62);
         textures=MakeButton("INSTALL HD TEXTURE PACK",async(s,e)=>await SelectAddon(false));Add(manageAddons,textures,48);
         Add(manageAddons,TextLabel("Select your downloaded HD texture ZIP.",9),38);
         voices=MakeButton("IMPORT SPANISH VOICES",async(s,e)=>await SelectAddon(true));Add(manageAddons,voices,48);
@@ -162,7 +165,7 @@ class BurnerLauncher : Form {
         var feedback=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=1,RowCount=3,Margin=new Padding(0,10,0,4)};feedback.RowStyles.Add(new RowStyle(SizeType.Absolute,20));feedback.RowStyles.Add(new RowStyle(SizeType.Percent,100));feedback.RowStyles.Add(new RowStyle(SizeType.Absolute,8));
         feedback.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
         var statusTitle=TextLabel("STATUS",8);statusTitle.ForeColor=Color.FromArgb(172,183,144);feedback.Controls.Add(statusTitle,0,0);status.Text="Checking game data...";status.Dock=DockStyle.Fill;status.Font=new Font("Segoe UI",9);status.Margin=Padding.Empty;feedback.Controls.Add(status,0,1);progress.Dock=DockStyle.Fill;progress.Visible=false;progress.Margin=Padding.Empty;feedback.Controls.Add(progress,0,2);layout.Controls.Add(feedback,0,2);
-        var footer=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=1,Margin=Padding.Empty};footer.RowStyles.Add(new RowStyle(SizeType.Percent,100));footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));footer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,122));footer.Controls.Add(TextLabel("v0.18  /  WINDOWS + PROTON\nOriginal disc files are not included.",9),0,0);
+        var footer=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=1,Margin=Padding.Empty};footer.RowStyles.Add(new RowStyle(SizeType.Percent,100));footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));footer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,122));footer.Controls.Add(TextLabel("v0.19  /  WINDOWS + PROTON\nOriginal disc files are not included.",9),0,0);
         cancel=MakeButton("QUIT",(s,e)=>{if(busy&&!running&&cancelPath!=null){File.WriteAllText(cancelPath,"");status.Text="Cancelling safely...";cancel.Enabled=false;}else if(!busy)Close();});footer.Controls.Add(cancel,1,0);layout.Controls.Add(footer,0,3);
         ApplyStatus(new Dictionary<string,object>{{"ready",false}});ShowPage(home);
 #if !LAUNCHER_PREVIEW
@@ -179,7 +182,7 @@ class BurnerLauncher : Form {
         description.Text=ready?(Field(row,"source_mode")=="iso"?"Your Xbox ISO is connected. Keep it in place for play and updates.":"Your installed game is ready. No ISO is needed to play."):"Choose your Xbox ISO or reuse an existing installation. You can also place one ISO/XISO in the assets folder for automatic setup.";
         status.Text=Field(row,"message",ready?"Ready to play.":"Select Game to get started.");SetEnabled();
     }
-    void SetEnabled(){pages.Enabled=!busy;play.Enabled=!busy&&ready;textures.Enabled=voices.Enabled=verify.Enabled=language.Enabled=!busy&&ready;folder.Enabled=saves.Enabled=!busy&&Directory.Exists(data);cancel.Text=busy&&!running?"CANCEL":"QUIT";cancel.Enabled=!busy||(!running&&cancelPath!=null);progress.Visible=busy&&!running;}
+    void SetEnabled(){pages.Enabled=!busy;play.Enabled=!busy&&ready;downloadTextures.Enabled=textures.Enabled=voices.Enabled=verify.Enabled=language.Enabled=!busy&&ready;folder.Enabled=saves.Enabled=!busy&&Directory.Exists(data);cancel.Text=busy&&!running?"CANCEL":"QUIT";cancel.Enabled=!busy||(!running&&cancelPath!=null);progress.Visible=busy&&!running;}
     async Task RefreshReady(bool refreshLanguage=true){
         var result=await ReadWorker("status");if(result.Item1!=0&&result.Item1!=2)throw new InvalidOperationException(Field(Row(result.Item2),"message","Unable to check installation. "+result.Item3));
         ApplyStatus(Row(result.Item2));
@@ -206,7 +209,7 @@ class BurnerLauncher : Form {
     }
     async Task Operation(string action,string extra){
         if(busy)return;cancelPath=Path.Combine(Root,".cancel-"+Guid.NewGuid().ToString("N"));busy=true;running=false;progress.Value=0;SetEnabled();status.Text="Checking and preparing game files...";
-        try{int code=await RunWorker(action,extra+" --cancel "+Quote(cancelPath));string message=status.Text;await RefreshReady(action!="startup");if(code!=0)status.Text=message;else{if(action=="voices")language.SelectedIndex=4;if(action=="verify")status.Text="File verification completed successfully.";else if(action=="diagnostics"||action=="startup")status.Text=message;else ShowPage(home);}}
+        try{int code=await RunWorker(action,extra+" --cancel "+Quote(cancelPath));string message=status.Text;await RefreshReady(action!="startup");if(code!=0)status.Text=message;else{if(action=="voices")language.SelectedIndex=4;if(action=="verify")status.Text="File verification completed successfully.";else if(action=="diagnostics"||action=="startup")status.Text=message;else{ShowPage(home);if(action=="textures"||action=="download-textures")status.Text=message;}}}
         catch(Exception ex){status.Text=ex.Message;}
         finally{busy=false;running=false;SetEnabled();if(File.Exists(cancelPath))File.Delete(cancelPath);cancelPath=null;}
     }

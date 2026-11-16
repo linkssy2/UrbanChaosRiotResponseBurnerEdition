@@ -27,6 +27,8 @@ bool MixedInput(){return mixed_input;}
 bool SpinButtonDown(bool keys,int,unsigned p){return p?second_button:(keys?button:controller_button);}
 }
 static uint32_t TrialCoopPlayer(unsigned slot){return coop&&slot==1?0x600000:0;}
+static bool wheel_blocked[2]{};
+static bool WeaponWheelBlocks(unsigned slot){return slot<2&&wheel_blocked[slot];}
 // PRODUCTION_HOST_SAMPLE
 static bool menu_pointer_readable(uint32_t a,uint32_t n){return a>=0x10000&&uint64_t(a)+n<=memory.size();}
 static bool MouseObject(uint32_t a){return menu_pointer_readable(a,0x694)&&G<uint32_t>(a+0x368)==0;}
@@ -58,6 +60,7 @@ static void reset(){
     mode=0;keyboard=focus=gameplay=true;menu_mode=ui=button=blocked=false;pistol=true;
     spin_dx=spin_dy=0;spin_tick=0;spin_button_held[0]=spin_button_held[1]=true;spins=0;pad_x=pad_y=0;
     coop=second_button=controller_button=mixed_input=false;second_mode=presentation=0;
+    wheel_blocked[0]=wheel_blocked[1]=false;
 }
 static void tick(){
     now+=8;X86Context c{};c.ecx=player;c.esp=stack;c.esi=0x12345678;c.ebx=0x87654321;
@@ -116,6 +119,35 @@ static void CheckMixedInputSpin(){
     assert(TrialSpinSample(&x,&y,1)==2&&TrialSpinSample(&x,&y,1)==1);
     std::puts("mixed-input spin: both gestures/bindings, ownership, hold edges, mouse expiry, gates and co-op isolation passed");
 }
+static void CheckWeaponWheelSpin(){
+    for(unsigned slot=0;slot<2;++slot){
+        reset();coop=true;W32(player+0x368,slot);mode=second_mode=1;tick();
+        bool& source=slot?second_button:button;
+        wheel_blocked[slot]=true;source=true;spin_dx=123;spin_dy=-456;spin_tick=now;
+        tick();assert(!spins&&!G<uint8_t>(0x51bdf4));
+        if(slot)assert(spin_dx==123&&spin_dy==-456&&spin_tick);
+        else assert(!spin_dx&&!spin_dy&&!spin_tick);
+        wheel_blocked[slot]=false;tick();assert(!spins&&!G<uint8_t>(0x51bdf4));
+        source=false;tick();source=true;tick();assert(spins==1&&G<uint8_t>(0x51bdf4));
+
+        // Wheel ownership must override native stick fallback and discard mouse
+        // gestures, while leaving the other local player's input independent.
+        reset();coop=true;W32(player+0x368,slot);wheel_blocked[slot]=true;
+        for(unsigned i=0;i<67;++i){
+            const double angle=i*6.283185307179586/32;
+            if(slot){pad_x=float(std::cos(angle));pad_y=float(std::sin(angle));}
+            else{spin_dx=long(std::cos(angle)*1000);spin_dy=long(-std::sin(angle)*1000);}
+            tick();assert(!spins&&!G<uint8_t>(0x51bdf4));
+        }
+        wheel_blocked[slot]=false;pad_x=pad_y=0;tick();
+        assert(!spins&&!G<uint8_t>(0x51bdf4));
+
+        reset();coop=true;W32(player+0x368,slot);mode=second_mode=1;tick();
+        wheel_blocked[1-slot]=true;(slot?second_button:button)=true;tick();
+        assert(spins==1&&G<uint8_t>(0x51bdf4));
+    }
+    std::puts("weapon-wheel spin: both players blocked, no delayed button/gesture, fresh release and ownership isolation passed");
+}
 int main(){
     for(bool mouse:{true,false})for(int direction:{-1,1}){
         reset();keyboard=mouse;
@@ -167,5 +199,6 @@ int main(){
     reset();coop=true;keyboard=false;spin_dx=500;spin_dy=100;tick();
     assert(spin_dx==0&&spin_dy==0); // P2 input-device activity cannot disable P1's mouse gesture.
     CheckMixedInputSpin();
+    CheckWeaponWheelSpin();
     std::puts("pistol spin: retail two-circle detector, both devices/directions, button edges, gameplay gates and original reward passed");
 }

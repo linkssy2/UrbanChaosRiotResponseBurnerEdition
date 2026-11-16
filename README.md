@@ -1,4 +1,4 @@
-# Urban Chaos: Riot Response — Burner Edition 0.18
+# Urban Chaos: Riot Response - Burner Edition 0.19
 
 Windows and experimental Linux/Proton share a statically recompiled Xbox game
 runtime built on XboxXBERecomp, with maintained Urban Chaos adapters. Linux uses
@@ -11,9 +11,18 @@ original disc data, generated game code, private captures and player state.
 
 A fresh checkout does not yet reproduce the complete executable. See
 [build status](docs/BUILDING.md), [source map](docs/CODE_MAP.md),
-[changes](docs/CHANGES-0.18.md) and
+[changes](docs/CHANGES-0.19.md) and
 [runtime maintenance](docs/XBE-RUNTIME-MAINTENANCE.md) for the supported scope.
 Dependency identities and backports are recorded in `dependencies.lock.json`.
 
+Version 0.19 adds dynamic-lighting coverage presets, lower repeated rendering
+work, separate weapon wheels, single-player wheel slow time/background blur,
+and the compact ember cursor. Existing scope, blood-pool and TV-audio fixes
+remain included. See the changes document for behavior and acceptance limits.
+
 Supply your own supported Xbox disc. Optional Spanish voices are prepared from
 your European multilingual PS2 disc. No original game audio is distributed.
+
+The launcher can now download and install the pinned official 0.09 HD texture
+pack from Manage > Add-ons. Existing local-ZIP installation remains available.
+The pack is downloaded separately; it is not added to either game package.

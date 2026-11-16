@@ -139,6 +139,13 @@ int main(int argc,char** argv) {
             CHECK(uc_texture_decode(bytes.data,bytes.size,&t)==UC_TEXTURE_OK);
             const uint32_t format=t.format==UC_TEXTURE_BC1_UNORM?12:15;
             const auto* image=uc_hd_ui::Match(t.width,t.height,format,t.storage,t.storage_bytes);CHECK(image);
+            for(const char* weapon:uc_hd_ui::kWeaponNames)if(name==std::string("hud\\hud_weapons_o_")+weapon+".tga=nomipmap") {
+                const auto* original=uc_hd_ui::Weapon(weapon,false);CHECK(original);
+                CHECK(original->width==64&&original->height==32&&original->bgra.size()==64*32*4);
+                std::vector<uint8_t> pixels;
+                CHECK(uc_hd_ui::filter::DecodeNative(t.width,t.height,format,{t.mips[0].data,t.mips[0].slice_pitch},pixels));
+                CHECK(original->bgra==pixels&&uc_hd_ui::Weapon(weapon,true)==image);
+            }
             if(equipment) {
                 CHECK(is_hud&&t.width==64&&t.height==32&&format==15&&t.storage_bytes==2048);
                 CHECK(image->width==256&&image->height==128);

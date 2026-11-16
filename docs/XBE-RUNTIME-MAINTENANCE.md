@@ -2102,6 +2102,8 @@ use the same adopted shared-runtime changes.
 
 ## Where to edit
 
+Unpublished November 14 lighting/particle setup improvements are documented in `build/lighting-particle-performance-20261114/README.md`. The shared release-mode runtime and both candidate package audits pass; live Windows/Proton acceptance remains pending. Published 0.18 and `current-build` remain unchanged.
+
 | Area | Maintained source |
 | --- | --- |
 | Build and verification order | `scripts/build_xbe_game_trial.py` |
@@ -2993,3 +2995,398 @@ User accepted the No HUD scope fix. Blood-pool flag4 bypasses surface-intersecti
 Paired unpublished Windows/Proton v0.17 candidates, source snapshots, launch dependency validation and offline test evidence: build/reported-issues-20261112/ledge-candidates. Private runnable stage: ledge-live. Live ledge pixels, performance and Proton execution remain unverified. Audio unchanged and deferred.
 
 The first ledge candidate regressed pool visibility: its half-unit support ray did not reach the floor beneath the original one-unit raised quad. The corrected private ledge-height candidate restores the original two-unit ray reach. A raised-quad/segment-floor regression fails before and passes after; Windows intro launch observed, but corrected pool pixels and Proton execution still require acceptance.
+
+
+## November 14 Canals packed vertex copies
+
+`build/canals-bottleneck-20261114/README.md` records live CPU/thread sampling, packed-copy disassembly witnesses, guarded-end equivalence tests and paired candidate packaging. `scripts/xbe_packed_vertices.inc` batches two stride-10 position records into aligned host slots, retaining scalar tails and declaration fallbacks. The existing x86-64-v2 requirement supplies SSSE3 on both Windows and Proton. No content, quality, caching lifetime or simulation changes. Whole-game FPS gain requires a matched live comparison; synthetic assembly savings are not frame-rate gains.
+
+
+## November 14 palette hash experiment
+
+`build/palette-performance-20261114/README.md` records an uninstalled candidate
+that compares all palette bytes before reusing the prior per-stage hash. Both
+Windows and Proton packages pass offline audits and 15 integration suites;
+124,036 palette comparisons pass. Repeated-palette fixture reads improve, while
+continually changing palettes regress by approximately 3-10%. Live hit frequency,
+Windows acceptance and Proton acceptance are pending. Do not describe these
+fixture timings as FPS gains or promote this candidate without a matched live
+comparison. `current-build` remains the previously tested packed-vertex candidate.
+
+
+## November 15 lighting shading-resolution integration
+
+The latest installation supersedes historical installation statements above.
+See `build/lighting-resolution-integration-20261115/README.md`. Full / Half
+(hardware) is independent of the four lighting coverage presets. The original
+separate-buffer reconstruction prototype remains isolated. The integrated path
+uses qualified guest receiver tags carried in immutable renderer state, followed
+by host eligibility and capability checks before D3D12 2x2 VRS. Reset to 1x1 after
+each admitted draw; retain full depth/coverage and unsupported-device fallback.
+Keep the initialized reserved word in serialized state: implicit tail padding
+previously broke exact state comparisons.
+
+All 18 offline suites, the GPU state/coverage fixture and paired package audits
+pass. Live Windows Canals co-op verified activation and Apply/save/restore, but
+Half sampled about 74.91 FPS against Full 77.43 and 78.16 FPS. Full remains the
+default and restored local setting. Do not promote Half as an FPS improvement
+from these results. Diagnostics are Off; public 0.18 is unchanged. Proton live
+acceptance and Half restart reload are outstanding. This runtime inherits the
+palette experiment; its live reuse and miss-heavy tradeoff remain unaccepted.
+
+## November 15 incremental lighting and ambient particles
+
+`build/ambient-tiers-20261115/README.md` supersedes the installation statement
+above. The paired unpublished candidates add an Ambient particles Off/Low/Medium/
+High setting, default High, and reduce Medium lighting's static point-light
+scenery coverage to 75% of authored radius. Receiver bounds that touch the inner
+range, essential/dynamic lights, first-person receivers and unsupported data keep
+their original path. High/Low/Off lighting policies are otherwise unchanged.
+
+Particle scope is deliberately eleven exact Canals snowfall template names;
+unknown effects, fire, smoke and scripted snow bursts remain. Low/Medium retain
+approximately 25%/50% using immutable birth seeds. Original simulation, RNG,
+lifetimes, materials and source records remain untouched. The source-index map
+is fixed-capacity and falls back on unsupported inputs. Preserve function-local
+producer hooks and the unprepare ordering before co-op's pinned consumer hash.
+
+All 19 integration suites pass. The original producer differential matches
+14,336 selected records across 384 chunks and 24 mode/quality pairs. Both package
+variants pass allowlist, shared-payload and setup checks on Windows; this is not
+live Proton acceptance. The package setup fixture needs the main launcher closed.
+
+Live Windows Canals horizontal co-op sampled 76.99 FPS High lighting, 82.44
+Medium, 95.72 Low and 103.36 Off with High snow. Thirteen phases and 79 sparse
+samples are retained. Low snow adds about 1.08 FPS with High lighting and only
+0.19 with Medium, within round variation. Do not promise a general particle FPS
+gain or equate these samples with frame-time/1% low results. Full lighting
+resolution remains the default; the prior Half regression is unchanged.
+
+Normal candidate runtime is
+`ff8ea03fc07504cf0630c3117baff073b6867aa6f41804197884e844c3bd2959`.
+Private control/counter probes are excluded from packages. The existing palette
+experiment remains an inherited acceptance limitation. Public v0.18 is unchanged;
+Proton gameplay, other maps and moving-camera transitions remain untested.
+
+The normal runtime is installed in `current-build`. Windows restart verified
+the UI-saved Low ambient tier, then High was restored through Apply/save. Clean
+exit and diagnostics Off are recorded in `final-install.json` and the normal
+restart log. The co-op comparison used the identified private counter build;
+normal-runtime live acceptance covers startup/menu persistence.
+
+## November 15 selected lighting-only integration
+
+The user excluded the ambient-particle experiment. Latest installed and paired
+candidate runtime:
+`b1ef422e8a0b3c12f92cafa3322905bc1cdb75499713b3b6221e6c969bbf0d8c`.
+`build/lighting-only-20261115/README.md` supersedes the combined candidate above.
+The improved Medium lighting policy/tests are hash-identical. Particle setting,
+menu/help, registration, runtime helper and generated hooks are removed; original
+particle getter/producer body hashes match. Archived experiments are retained.
+
+All 18 applicable suites and both package/setup checks pass. Windows startup/menu
+verification confirms the removed row and remaining Medium/High selection; clean
+exit 0, diagnostics Off, other settings preserved. No new gameplay/FPS result is
+claimed. Proton remains offline-checked only; public v0.18 is unchanged.
+
+Explosion-specific frame drops remain unisolated. Stationary lighting comparisons
+and earlier CPU assembly/submission/wait samples do not identify the exact event
+at an explosion. A future diagnosis needs an explosion-aligned capture separating
+temporary lighting, particle rendering and simulation/physics.
+
+## November 15 converted triangle-strip submission
+
+`build/explosion-trace-20261115` records the Canals scripted ambulance explosion
+trace and a subsequent matched stationary Windows co-op comparison. The maintained
+vertex preparation now retains authored smooth triangle strips after vertex
+conversion, using the existing native draw route. Flat shading, indexed `0xFFFF`,
+sparse ranges and other primitives retain their established paths. Vertex data,
+triangle winding/degenerates, lights, particle density and draw calls are preserved;
+no new geometry cache or simulation change is introduced.
+
+The four instrumented stationary phases (8, 9, 11, 10), equally weighted after
+discarding two seconds and trimming to equal duration, measured mean frame
+interval 13.501 -> 13.336 ms and throughput 74.07 -> 74.99 FPS (about 1.24% higher).
+Converted-strip index bytes fell 83.1%; total host assembly time fell about 13%.
+These are modest scene-specific results, not a general FPS promise or proof that
+all explosion stalls are resolved. See `matched-8-9-11-10.json`; the earlier blast
+windows are observational and are not the matched comparison.
+
+The private assembler fixture passed 25,488 checks. Offscreen D3D12 original-list
+versus candidate-strip comparisons passed 576 cases each on NVIDIA and WARP,
+including culling, smooth perspective interpolation, split viewport/scissor,
+depth/blending and 1x/2x/4x/8x MSAA. The debug layer was unavailable. The maintained
+runtime is token-identical to that GPU-tested candidate apart from comments and
+whitespace; its normal release build and all 18 integration suites pass, including
+12,037 maintained vertex cases. Normal runtime SHA256:
+`1f1ceda05237dad5be9b7b57ceaa83125317d00e13454e36aad5ad12275da539`.
+
+Private trace hooks and the experimental runtime toggle are excluded. Both paired
+candidate packages passed allowlist, shared-file and setup checks with no game
+assets bundled. The normal runtime is installed in both current-build locations;
+Windows profile selection, main menu and clean exit passed. Full Canals gameplay
+was tested in the private executable with identical candidate vertex code, not
+repeated in the final uninstrumented executable. Live Proton remains untested;
+Windows offscreen WARP is not Proton verification. Original settings, startup
+preference and save bytes are restored, diagnostics are Off, and v0.18 remains
+unpublished by this task. See `final-verification.json` for the separate gates.
+
+## November 15 receiver-inverse and dirty-epoch integration
+
+The latest paired candidate supersedes the installation/build status above.
+Normal release runtime SHA256:
+`f89f8d933ee948309745b33c5cbff55987b1d393b8d2ddf24e4bc3d70401b626`.
+`build/render-preparation-20261115/result.json` records the maintained source
+hashes, successful normal build and all 20 integration suites, including
+`test_receiver_inverse` and `test_dirty_epoch`. Private probe markers, capture
+controls, counters and timing hooks are excluded from this runtime.
+
+`scripts/prepare_xbe_receiver_inverse.py` changes only B3370's pinned B33FF
+inverse call. `scripts/xbe_receiver_inverse.h` retains a bounded per-thread
+cache keyed by exact matrix bytes and host MXCSR, with full guest ABI/scratch
+replay. Preserve the complete inverse-body and caller-prefix pins, committed
+guest-stack/page checks, floating-point admission and original-call fallbacks.
+Original provider callbacks still run before the matrix key is read. The
+maintained header is byte-identical to the production header used by the
+corrected live comparison and its 12,600-check full-state fixture.
+
+`scripts/prepare_xbe_dirty_epoch.py` and `scripts/xbe_dirty_epoch.h` remove
+repeated dirty-map lock/lookups through one numeric TLS entry. All mutations
+and fallback reads remain owned by the existing mutex. Writers bracket the
+original epoch increment/map assignment with odd/even revision publication;
+exception recovery still publishes the completed revision. Readers require
+an exact key and matching even revision, then recheck before using the numeric
+value. Exhaustion forces permanent fallback. Preserve the named-access/source
+census: a new map mutator must participate in publication or disable reuse.
+No map pointer escapes and no new resource/content lifetime is assumed.
+
+The accepted live evidence is separate for each change:
+
+| Change | Equal-phase mean frame interval | Reciprocal throughput | Evidence |
+|---|---|---|---|
+| Receiver inverse | 13.048211 -> 12.983351 ms | 76.6389 -> 77.0220 FPS, +0.50% | `build/inverse-confirmation-20261115/matched-56-58-66-64.json` |
+| Dirty epoch, inverse already enabled in both arms | 12.798717 -> 12.549185 ms | 78.1330 -> 79.6864 FPS, +1.99% | `build/dirty-epoch-performance-20261115/matched-2-3-5-4.json` |
+
+Both comparisons retain a fixed Canals co-op camera, discard the first two
+seconds and compare equal-duration counterbalanced phases. Both pairs improve
+mean and p95 intervals with closely matched draw/vertex work. The corrected
+inverse test removes the inner 2D4360 timing scope in both arms while retaining
+the common B3370 scope; older combined/inverse traces are biased by skipped
+leaf clocks and are not production-gain evidence. The epoch test is host-only,
+reports 95.34% read hits and 17 writes per frame, and includes the candidate's
+writer publication cost. Its private Off path retains small counter/check
+overhead, documented against the original helper; no assumed overhead is
+subtracted. Do not add these percentages, compare absolute FPS across the
+different probes, or claim that every explosion stall is resolved. These are
+modest scene-specific CPU-work improvements, not GPU timestamp measurements.
+
+For future cache comparisons, time the common caller and keep measurement cost
+balanced between arms. A timer only inside an original leaf that cache hits
+skip can manufacture an apparent gain. Remove that leaf instrumentation from
+both arms before final acceptance; do not subtract an assumed clock cost.
+
+Feedback reuse, upload-address memoization, bounds fusion and the alternate
+inline-inverse experiment remain private after slower or inconclusive live/
+fixture results. No new particle-density reduction or lighting-quality change
+is part of this integration. Previously accepted strip and lighting behavior
+is retained.
+
+Paired candidates are in
+`build/render-preparation-20261115/Performance-Candidate-Windows-x64` and
+`build/render-preparation-20261115/Performance-Candidate-Linux-Proton`.
+Their audit/allowlist receipts, `paired-package-check.json`,
+`Windows-x64-setup.json` and `Linux-Proton-setup.json` verify identical shared
+payload/runtime hashes, original-game-file exclusion and import/update/setup
+behavior. These setup fixtures do not launch gameplay. Proton uses the same
+Windows runtime; it is not a native Linux build.
+
+Final uninstrumented Windows acceptance passes for profile/main-menu selection,
+Elite Canals co-op briefing and helicopter cinematic, both gameplay views with
+visible snow/fire/lighting, firing (ammunition 15 -> 14), pause, return to the
+front end and clean quit. The normal session ends at 475.914 seconds with
+`Exit (0)` / process code `0x0`; its log has no error/fatal/failed/assert/warning
+matches. Evidence under `build/render-preparation-20261115`:
+`normal-canals-cinematic.png`, `normal-canals-coop.png`,
+`normal-canals-fired.png` and `normal-startup-game.log`.
+
+`final-verification.json` confirms both installed runtime copies/manifests match
+the final SHA, original settings/startup preference are restored, save hashes
+are unchanged, diagnostics are Off and private capture is stopped. This is
+scoped Windows gameplay acceptance, separate from the instrumented performance
+comparisons. Live Proton acceptance/performance remains untested. No version
+bump or public release was performed, and published v0.18 remains unchanged.
+
+## November 15 weapon wheel integration
+
+The installed Windows/Proton candidate supersedes the runtime above; shared
+runtime SHA256 is
+`536fc1bf40073aace5ec29737ce6c6f1a921356d8a8485bfb0e664a151e3338d`.
+See the [candidate notes](../build/weapon-wheel-20261115/README.md),
+[normal build/source receipt](../build/weapon-wheel-20261115/result.json) and
+[paired-package check](../build/weapon-wheel-20261115/paired-package-check.json).
+Both packages retain the same runtime/shared files and exclude original game
+files. Published v0.18 is unchanged; Proton uses the Windows runtime.
+
+Maintained implementation lives in `scripts/xbe_weapon_wheel.*`,
+`xbe_weapon_wheel_ui.*`, `xbe_weapon_wheel_time.*` and
+`xbe_weapon_wheel_blur.h`, with controls persistence in `xbe_controls*` and
+host routing in `xbe_trial_menu_input.cpp`. `build_xbe_game_trial.py` removes
+wheel/time hooks before other guest preparers export their original-function
+fixtures, then applies `prepare_xbe_weapon_wheel.py`,
+`prepare_xbe_weapon_wheel_time.py` and `prepare_xbe_weapon_wheel_blur.py`.
+Keep this ordering, source/guest-byte pins and the focused fixture targets.
+
+The guest hooks snapshot actor inventory at D2AB0, consume a validated selection
+at C4D4B before the original C4E03 transition tail, and suppress look at BFD86.
+Native 42DA0 eligibility and 42230 pending selection remain authoritative;
+current-weapon-zero handling calls the original BC560 leaf. Snapshots are copied
+per player, expire when stale and revalidate identity, ownership and availability
+before selection. Portraits come from the imported HUD archives; approved HD
+artwork is reused. Closed wheels make no inventory-eligibility calls. Tab is the
+fresh keyboard default only when unclaimed in migrated profiles; controllers
+start unbound. Held keys/buttons are rebindable per player. Explicit Allow Shared
+movement/combat bindings resume their shared actions after closing; ordinary held
+attacks remain release-gated.
+
+Slow time changes only 55610's first argument for the qualified 5D214 campaign
+caller: 20% simulation while P1's fresh wheel is open and available in that same
+world. It additionally requires the original campaign world, enabled/unpaused
+update, one view, the native non-network query and neither active nor requested
+co-op. The borrowed argument and host MXCSR are restored, including unwinding;
+nested scopes cannot compound scaling. Original 208F80 publishes the scaled
+world +14 delta while +18 and outer clocks remain unchanged. Global 4E7D38,
+audio sample clocks and pitch controls are not changed. Blur uses the same solo
+wheel state, replaces the final presentation draw, retains crop/gamma and draws
+UI afterward; it adds no scene copy or render target.
+
+Offline evidence includes the strengthened [159-check native selection oracle](../build/weapon-wheel-20261115/core-notes.md),
+[637-check original world-frame timing oracle](../build/weapon-wheel-20261115/time/result.json),
+and [UI/GPU checks](../build/weapon-wheel-20261115/ui-checks/result.json).
+Hardware and WARP each pass 48 blur cases; the D3D debug layer was unavailable.
+The normal integration receipt also covers controls, input/menu layout and the
+retained performance fixes. These results do not establish live wheel behavior,
+audio acceptance, controller feel, FPS impact or Linux/Proton gameplay. Record
+live Windows observations separately; live Proton remains unverified.
+
+### Weapon wheel visual tuning
+
+The follow-up visual candidate uses radius 0.32 of the shorter viewport axis
+(previously 0.43), with reduced backing/segment/center alpha. UI-only source
+change; shared runtime `dc82de3c96befec4571d7ae4f8e8576c9e06557e079eb38d6fb26bc3845958ac`.
+Focused UI and paired package/setup checks pass; see
+[visual tuning evidence](../build/wheel-visual-tuning-20261115/README.md).
+Selection/time/blur behavior is inherited unchanged. Live visual and Proton
+acceptance are separate; low-resolution split-screen text needs review.
+
+### Lighting resolution retirement
+
+Removed the independent Full/Half option after the matched Canals result showed
+no benefit. The maintained build omits prepare_xbe_light_resolution; normal SDK
+regeneration removes GPU state/capture/rate hooks. Receiver preparation still
+strips legacy tag scopes idempotently but no longer installs them. Settings no
+longer register lighting_resolution, so existing Half keys are ignored and later
+normal saves omit them. Lighting tiers retain their original predicates.
+See [removal evidence](../build/lighting-resolution-removal-20261115/README.md)
+for the paired runtime, focused regression checks, preserved settings and limits.
+
+### Separate weapon wheel groups
+
+Wheel bindings remain Guns (native category0), while new MeleeWheel bindings
+select melee/throwables (categories1/2). Existing values and explicit0 persist;
+missing G defaults are assigned only if no native/secondary/wheel action owns G.
+Snapshot and pending selection carry Kind, with revision checks across native
+eligibility calls. Host input latches source/kind until release; overlap/handoff
+cancels. No guest calls occur under the wheel mutex. UI headings, profile IDs
+48/49, Spanish labels and actual adapter fixtures are integrated.
+See [split-wheel evidence](../build/split-weapon-wheels-20261115/README.md).
+Normal build and native/input/UI/time/co-op/package checks pass; live acceptance
+is still separate. The lighting-resolution retirement remains in the same build.
+
+
+## November 15: translucent wheel seams and Burner pointer
+
+The user confirmed both split wheels work, then reported faint radial lines in
+`UrbanChaosXbeTrial_gOR89HlgD9.mp4`. Each annular wedge used independent ImGui
+quad fills with antialiased shared edges. `Wedge` now temporarily disables only
+AA fill for those quads and restores the incoming draw flags. Real weapon
+dividers, circle outlines, panel opacity, HUD portraits and input remain intact.
+The new final-draw-data regression fails on the previous renderer and passes
+on the corrected one; it checks wedge alpha and later center-disk AA behavior
+across existing aspect, viewport and group fixtures. See
+`build/wheel-seams-20261115` for the original clip frames and raw old-fail log.
+
+At the user's request, `NativeMenuCursor` now draws a compact ember arrow with
+charred edges and orange/red/gold accents. Its dimensions are three quarters
+of the prior DPI-clamped dimensions (24-96 pixels); artwork and click hotspot
+scale together. The shared native/CONTROL and XBE callers retain the existing
+cursor ownership, caching, standard-arrow fallback and gameplay/controller
+hiding. The fixture covers real GDI artwork at 96-384 DPI, zero-DPI fallback,
+hotspot/cache, and focus/menu/capture transitions. No font or original game
+asset is needed to create the new pointer.
+
+Final runtime `f61040562395bf7090fd21c961fa15da0407c85df434ed7b85cb4d681ad67cf3`
+is installed in both local paths. Paired package allowlist/setup audits pass;
+shared payloads match and contain no game files. Settings/saves are unchanged
+and diagnostics remain Off. `build/burner-pointer-20261115` records the final
+checks. Windows launch verification was stopped by the user's physical Escape;
+new live visual acceptance and Proton gameplay remain unverified. No release
+was published.
+
+
+The subsequent flame-shaped pointer variant was rejected by the user. The
+previous ember-arrow header, runtime `f61040562395bf7090fd21c961fa15da0407c85df434ed7b85cb4d681ad67cf3`,
+matching symbols and manifests were restored. Both paired candidate payloads
+were rechecked and the cursor fixture rebuilt/passed. See
+`build/flame-pointer-20261115/revert.json`; that directory's flame packages are
+rejected historical evidence, not the current candidate.
+
+
+After the restored ember-arrow candidate was relaunched, the user confirmed
+on November 15 that the pointer looks good and the faint wheel lines are gone.
+This is Windows user visual acceptance of runtime
+`f61040562395bf7090fd21c961fa15da0407c85df434ed7b85cb4d681ad67cf3`;
+see `build/burner-pointer-20261115/user-acceptance.json`. Live Proton remains
+unverified and no release was published.
+
+
+## November 15: 0.19 release preparation
+
+Use published 0.18 as the source/export and updater baseline. The paired 0.19
+release preparation is in `build/release-0.19`; source and release metadata are
+in `publication/0.19`. Include Off/Low/Medium/High dynamic lighting coverage,
+accepted renderer preparation improvements, both split weapon wheels and the
+Windows-user-approved compact ember-arrow pointer. The ineffective lighting
+resolution option, ambient-particle tiers, rejected flame-shaped pointer and
+private scene/probe changes stay excluded.
+
+The palette-hash reuse experiment has exact-output tests but no confirmed live
+benefit, and its changing-palette synthetic case regressed. Retire that reuse
+insertion for 0.19, preserving lazy palette initialization and the original hash
+calculation. Keep its historical measurements; do not advertise an FPS gain from
+removing it. Lighting/performance measurements remain scene-specific.
+
+Package instructions retain their compatibility TXT pointers with the detailed
+Markdown documents under tools/. Replay the published 0.18 updater on Windows
+and native Linux against both new archives; keep original payloads immutable.
+Preparation does not authorize publication. Record final build, package/source
+hashes and user/live acceptance separately in the release evidence.
+
+## November 15: official HD texture download in Setup
+
+Manage > Add-ons can download the compatible optional v0.09 pack from the
+project's GitHub release. The pinned URL, size and SHA256 live in
+`launcher/burner-xbe/world_textures.py`; reuse the release downloader's HTTPS,
+size, digest and cancellation checks, then the existing transactional texture
+installer. Keep the manual ZIP route. The worker holds both package and selected
+installation locks, including when game data is outside the package. Enable HD
+game textures in Graphics after installation; do not change user settings or
+bundle the optional pack into the main archives.
+
+The real Windows download/install check is recorded in
+`build/hd-texture-download-20261115/live-download-verification.json`: 207636056
+verified bytes, 1800 texture payloads, 1803 mappings, preserved test save/settings
+and cleaned temporary downloads. Paired launcher-only revision evidence and
+source exports belong in `build/release-0.19-hd-download` and
+`publication/0.19-hd-download`. Reuse the already verified 0.19 game runtime;
+preserve its original source/build receipts separately from this launcher source
+revision. Offline/Linux checks do not establish live Proton acceptance.

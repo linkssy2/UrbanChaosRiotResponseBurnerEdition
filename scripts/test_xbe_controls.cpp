@@ -43,12 +43,15 @@ int main(){
     assert(defaults.previous_firearm[0]==257&&defaults.previous_firearm[1]==0);
     assert(defaults.health_pack[0][0]=='H'&&!defaults.health_pack[1][0]);
     assert(defaults.heal_partner[0]=='U'&&!defaults.heal_partner[1]);
+    assert(defaults.wheel_binding[0][0]==VK_TAB&&!defaults.wheel_binding[0][1]&&!defaults.wheel_binding[1][0]&&!defaults.wheel_binding[1][1]);
+    assert(defaults.melee_wheel_binding[0][0]=='G'&&!defaults.melee_wheel_binding[0][1]&&!defaults.melee_wheel_binding[1][0]&&!defaults.melee_wheel_binding[1][1]);
     assert(!defaults.aim_mode&&!defaults.scope_zoom[0][0]&&!defaults.scope_zoom[1][0]);
     assert(!defaults.invert_mouse&&defaults.zoom_sensitivity==100);
     assert(defaults.movement_inertia==1&&trial_controls::MovementInertia()==1&&trial_controls::MovementInertia(1)==1);
     assert(!defaults.mixed_input&&!trial_controls::MixedInput());
     assert(trial_controls::ZoomSensitivity()==100&&trial_controls::ZoomSensitivity(1)==100);
     assert(GetFileAttributesW(profile)==INVALID_FILE_ATTRIBUTES);
+    assert(trial_controls::Snapshot().wheel_binding[0][0]==VK_TAB&&trial_controls::Snapshot().melee_wheel_binding[0][0]=='G');
     assert(trial_controls::Apply(defaults,error));
     assert(WritePrivateProfileStringW(L"Other",L"Unrelated",L"keep",profile));
     assert(WritePrivateProfileStringW(L"Graphics",L"Resolution",L"2560",profile));
@@ -63,6 +66,8 @@ int main(){
     changed.heal_partner[0]='L';changed.walk_mode=1;changed.walk_binding[0][0]='Z';changed.hud_binding[0][0]='I';
     changed.movement_inertia=0;
     changed.mixed_input=1;
+    changed.wheel_binding[0][0]='Q';changed.wheel_binding[0][1]=VK_XBUTTON2;changed.wheel_binding[1][0]=15;
+    changed.melee_wheel_binding[0][0]='R';changed.melee_wheel_binding[0][1]=VK_MBUTTON;changed.melee_wheel_binding[1][0]=13;
     changed.zoom_sensitivity=45;changed.aim_mode=1;changed.scope_zoom[0][0]='T';changed.scope_zoom[0][1]=256;changed.scope_zoom[1][0]=11;
     assert(trial_controls::Apply(changed,error));
     assert(Same(changed,trial_controls::Snapshot()));
@@ -75,6 +80,12 @@ int main(){
     assert(GetPrivateProfileIntW(L"Firearms",L"Previous1",0,profile)=='B');
     assert(GetPrivateProfileIntW(L"PlayerActions",L"MovementInertia",99,profile)==0&&trial_controls::MovementInertia()==0);
     assert(GetPrivateProfileIntW(L"PlayerActions",L"MixedInput",99,profile)==1&&trial_controls::MixedInput()==1);
+    assert(GetPrivateProfileIntW(L"PlayerActions",L"Wheel0_0",0,profile)=='Q');
+    assert(GetPrivateProfileIntW(L"PlayerActions",L"Wheel0_1",0,profile)==VK_XBUTTON2);
+    assert(GetPrivateProfileIntW(L"PlayerActions",L"Wheel1_0",0,profile)==15);
+    assert(GetPrivateProfileIntW(L"PlayerActions",L"MeleeWheel0_0",0,profile)=='R');
+    assert(GetPrivateProfileIntW(L"PlayerActions",L"MeleeWheel0_1",0,profile)==VK_MBUTTON);
+    assert(GetPrivateProfileIntW(L"PlayerActions",L"MeleeWheel1_0",0,profile)==13);
     keyboard_defaults(&keyboard_config);controller_defaults(&controller_config);
     assert(keyboard_load(nullptr,nullptr,nullptr));assert(controller_load(nullptr,nullptr,nullptr));
     mouse_sensitivity=GetPrivateProfileIntW(L"Graphics",L"MouseSensitivity",400,profile);
@@ -84,11 +95,18 @@ int main(){
     trial_controls::health_loaded[0]=false;
     trial_controls::aim_loaded[0]=false;
     trial_controls::partner_loaded=false;trial_controls::actions_loaded[0]=false;
+    trial_controls::wheel_loaded[0]=false;
     assert(Same(changed,trial_controls::Snapshot()));
     assert(trial_controls::MovementInertia()==0&&trial_controls::MovementInertia(1)==1);
     assert(trial_controls::MixedInput()==1&&!trial_controls::Snapshot(1).mixed_input);
     keys['Z']=true;assert(trial_controls::WalkMode()==1&&trial_controls::WalkDown(true,input::Pad{})&&!trial_controls::WalkDown(true,input::Pad{},1));keys['Z']=false;
     keys['I']=true;assert(trial_controls::HudToggleDown(true,input::Pad{})&&!trial_controls::HudToggleDown(true,input::Pad{},1));keys['I']=false;
+    keys['Q']=true;assert(trial_controls::WeaponWheelDown(true,input::Pad{})&&!trial_controls::WeaponWheelDown(true,input::Pad{},1));keys['Q']=false;
+    keys[VK_XBUTTON2]=true;assert(!trial_controls::WeaponWheelDown(true,input::Pad{})&&trial_controls::WeaponWheelDown(true,input::Pad{},0,true));keys[VK_XBUTTON2]=false;
+    keyboard_wheel_active=256;assert(!trial_controls::WeaponWheelDown(true,input::Pad{},0,true));keyboard_wheel_active=0;
+    keys['R']=true;assert(trial_controls::MeleeWheelDown(true,input::Pad{})&&!trial_controls::MeleeWheelDown(true,input::Pad{},1)&&!trial_controls::WeaponWheelDown(true,input::Pad{}));keys['R']=false;
+    keys[VK_MBUTTON]=true;assert(!trial_controls::MeleeWheelDown(true,input::Pad{})&&trial_controls::MeleeWheelDown(true,input::Pad{},0,true));keys[VK_MBUTTON]=false;
+    keyboard_wheel_active=256;assert(!trial_controls::MeleeWheelDown(true,input::Pad{},0,true));keyboard_wheel_active=0;
     assert(trial_controls::AimMode()==1&&trial_controls::ZoomSensitivity()==45);
     assert(GetPrivateProfileIntW(L"Aim",L"ZoomSensitivity",0,profile)==45);
     assert(GetPrivateProfileIntW(L"Aim",L"Mode",0,profile)==1);
@@ -115,6 +133,12 @@ int main(){
          bad=changed;bad.heal_partner[0]=source;assert(!trial_controls::Apply(bad,error));}
      for(unsigned source:{unsigned(VK_ESCAPE),unsigned(VK_LWIN),258u}){
          bad=changed;bad.previous_firearm[0]=source;assert(!trial_controls::Apply(bad,error));}}
+    for(unsigned kind=0;kind<2;++kind)for(unsigned source:{unsigned(VK_ESCAPE),unsigned(VK_LWIN),unsigned(VK_RWIN),256u,257u,258u}){
+        auto bad=changed;(kind?bad.melee_wheel_binding:bad.wheel_binding)[0][0]=source;assert(!trial_controls::Apply(bad,error)&&Same(changed,trial_controls::Snapshot()));
+    }
+    for(unsigned kind=0;kind<2;++kind)for(unsigned source:{17u,24u,25u}){
+        auto bad=changed;(kind?bad.melee_wheel_binding:bad.wheel_binding)[1][1]=source;assert(!trial_controls::Apply(bad,error)&&Same(changed,trial_controls::Snapshot()));
+    }
     for(unsigned bad=0;bad<6;++bad){
         auto d=defaults;
         if(bad==0)d.keyboard[0][0]=VK_ESCAPE;
@@ -182,12 +206,14 @@ int main(){
     second.deadzone[0]=20;second.spin_mode=1;second.spin_binding[1][0]=9;
     second.health_pack[1][0]=12;
     second.scope_zoom[1][0]=10;second.zoom_sensitivity=130;
+    second.wheel_binding[1][0]=16;second.melee_wheel_binding[1][0]=14;
     const unsigned native_options[]={0,1,0,0,0,15,85};
     std::memcpy(second.native_profile,native_options,sizeof(native_options));
     auto submitted=second;submitted.keyboard[0][0]=VK_ESCAPE;submitted.sensitivity=0;submitted.invert_mouse=99;
     submitted.previous_firearm[0]=258;submitted.spin_binding[0][0]=VK_ESCAPE;
     submitted.scope_zoom[0][0]=VK_ESCAPE; // P2 cannot modify P1's keyboard settings.
     submitted.heal_partner[0]=VK_ESCAPE;
+    submitted.wheel_binding[0][0]=VK_ESCAPE;submitted.melee_wheel_binding[0][0]=VK_ESCAPE;
     assert(trial_controls::Apply(submitted,error,1));
     assert(Same(second,trial_controls::Snapshot(1))&&Same(first,trial_controls::Snapshot()));
     submitted.mixed_input=1;assert(!trial_controls::Apply(submitted,error,1));
@@ -196,6 +222,10 @@ int main(){
     assert(GetPrivateProfileIntW(L"PlayerActions2",L"MixedInput",99,profile)==99);
     assert(GetPrivateProfileIntW(L"ControllerPlayer2",L"Binding0_0",0,profile)==2);
     assert(GetPrivateProfileIntW(L"PistolSpinPlayer2",L"Binding1_0",0,profile)==9);
+    assert(GetPrivateProfileIntW(L"PlayerActions2",L"Wheel1_0",0,profile)==16);
+    assert(GetPrivateProfileIntW(L"PlayerActions2",L"Wheel0_0",99,profile)==99);
+    assert(GetPrivateProfileIntW(L"PlayerActions2",L"MeleeWheel1_0",0,profile)==14);
+    assert(GetPrivateProfileIntW(L"PlayerActions2",L"MeleeWheel0_0",99,profile)==99);
     for(unsigned i=0;i<7;++i){
         assert(GetPrivateProfileIntW(L"ControllerOptionsPlayer2",trial_controls::profile_keys[i],999,profile)==native_options[i]);
         assert(trial_controls::SecondProfileValue(i,999)==native_options[i]);
@@ -209,6 +239,7 @@ int main(){
     assert(GetPrivateProfileIntW(L"HealthPacks",L"Partner0",0,profile)==first.heal_partner[0]);
     trial_controls::second_loaded=false;assert(Same(second,trial_controls::Snapshot(1)));
     trial_controls::aim_loaded[1]=false;assert(Same(second,trial_controls::Snapshot(1)));
+    trial_controls::wheel_loaded[1]=false;assert(Same(second,trial_controls::Snapshot(1)));
     assert(trial_controls::AimMode(1)==0&&trial_controls::AimMode()==1);
     assert(GetPrivateProfileIntW(L"AimPlayer2",L"ScopeZoom1_0",0,profile)==10);
     assert(GetPrivateProfileIntW(L"AimPlayer2",L"ZoomSensitivity",0,profile)==130);
@@ -237,10 +268,18 @@ int main(){
     p.buttons=32;assert(trial_controls::ScopeZoomDown(false,p,1)&&!trial_controls::ScopeZoomDown(false,p));
     p.buttons=64;assert(trial_controls::ScopeZoomDown(false,p)&&!trial_controls::ScopeZoomDown(false,p,1));
     p.connected=false;assert(!trial_controls::ScopeZoomDown(false,p));p.connected=true;
+    p.buttons=4;assert(trial_controls::WeaponWheelDown(false,p)&&!trial_controls::WeaponWheelDown(false,p,1));
+    p.buttons=8;assert(trial_controls::WeaponWheelDown(false,p,1)&&!trial_controls::WeaponWheelDown(false,p));
+    p.connected=false;assert(!trial_controls::WeaponWheelDown(false,p,1));p.connected=true;
+    p.buttons=1;assert(trial_controls::MeleeWheelDown(false,p)&&!trial_controls::MeleeWheelDown(false,p,1)&&!trial_controls::WeaponWheelDown(false,p));
+    p.buttons=2;assert(trial_controls::MeleeWheelDown(false,p,1)&&!trial_controls::MeleeWheelDown(false,p));
+    p.connected=false;assert(!trial_controls::MeleeWheelDown(false,p,1));p.connected=true;
     trial_controls::health_loaded[1]=false;assert(Same(second,trial_controls::Snapshot(1)));
     assert(GetPrivateProfileIntW(L"HealthPacksPlayer2",L"Binding1_0",0,profile)==12);
     {auto bad=second;bad.health_pack[1][0]=25;assert(!trial_controls::Apply(bad,error,1));}
     {auto bad=second;bad.scope_zoom[1][0]=25;assert(!trial_controls::Apply(bad,error,1));}
+    {auto bad=second;bad.wheel_binding[1][0]=17;assert(!trial_controls::Apply(bad,error,1));}
+    {auto bad=second;bad.melee_wheel_binding[1][0]=17;assert(!trial_controls::Apply(bad,error,1));}
     fail_replace=true;assert(!trial_controls::Apply(defaults,error,1)&&!error.empty());fail_replace=false;
     assert(Same(second,trial_controls::Snapshot(1))&&Same(first,trial_controls::Snapshot()));
     trial_controls::second_loaded=false;assert(Same(second,trial_controls::Snapshot(1)));
@@ -249,6 +288,8 @@ int main(){
     auto invalid_pad=p;trial_controls::Remap(invalid_pad,2);assert(!std::memcmp(&p,&invalid_pad,sizeof(p)));
     assert(!trial_controls::SpinMode(2)&&!trial_controls::SpinButtonDown(false,p,2));
     assert(!trial_controls::AimMode(2)&&!trial_controls::ScopeZoomDown(false,p,2));
+    assert(!trial_controls::WeaponWheelDown(false,p,2)&&!trial_controls::WeaponWheelDown(true,p,1));
+    assert(!trial_controls::MeleeWheelDown(false,p,2)&&!trial_controls::MeleeWheelDown(true,p,1));
     assert(trial_controls::MovementInertia(2)==1);
     const trial_controls::Draft empty{};assert(Same(empty,trial_controls::Snapshot(2)));
     for(unsigned bad=0;bad<8;++bad){
@@ -361,6 +402,59 @@ int main(){
             assert(trial_controls::Snapshot(player).deadzone[0]==31);
         }
     }
+    // Missing defaults cannot steal any action family or either wheel's secondary slot.
+    for(unsigned kind=0;kind<2;++kind)for(unsigned owner=0;owner<10;++owner){
+        auto legacy=defaults;const unsigned key=kind?'G':VK_TAB;
+        unsigned* bindings[]={legacy.keyboard[7],legacy.spin_binding[0],legacy.previous_firearm,legacy.health_pack[0],legacy.scope_zoom[0],legacy.heal_partner,legacy.walk_binding[0],legacy.hud_binding[0],legacy.wheel_binding[0],legacy.melee_wheel_binding[0]};
+        bindings[owner][1]=key;
+        assert(trial_controls::Apply(legacy,error));
+        assert(WritePrivateProfileStringW(L"PlayerActions",kind?L"MeleeWheel0_0":L"Wheel0_0",nullptr,profile));
+        trial_controls::wheel_loaded[0]=false;(kind?legacy.melee_wheel_binding:legacy.wheel_binding)[0][0]=0;
+        assert(Same(legacy,trial_controls::Snapshot()));
+    }
+    // All original keyboard action rows and both slots participate too.
+    for(unsigned kind=0;kind<2;++kind)for(unsigned action=0;action<25;++action)for(unsigned slot=0;slot<2;++slot){
+        auto legacy=defaults;legacy.keyboard[action][slot]=kind?'G':VK_TAB;
+        assert(trial_controls::Apply(legacy,error));
+        assert(WritePrivateProfileStringW(L"PlayerActions",kind?L"MeleeWheel0_0":L"Wheel0_0",nullptr,profile));
+        trial_controls::wheel_loaded[0]=false;(kind?legacy.melee_wheel_binding:legacy.wheel_binding)[0][0]=0;
+        assert(Same(legacy,trial_controls::Snapshot()));
+    }
+    for(unsigned kind=0;kind<2;++kind){
+        assert(trial_controls::Apply(defaults,error));
+        assert(WritePrivateProfileStringW(L"PlayerActions",kind?L"MeleeWheel0_0":L"Wheel0_0",nullptr,profile));
+        trial_controls::wheel_loaded[0]=false;assert(Same(defaults,trial_controls::Snapshot()));
+        auto cleared=defaults;(kind?cleared.melee_wheel_binding:cleared.wheel_binding)[0][0]=0;
+        assert(trial_controls::Apply(cleared,error));trial_controls::wheel_loaded[0]=false;
+        assert(Same(cleared,trial_controls::Snapshot()));
+        for(unsigned player:{0u,1u})for(const wchar_t* invalid:{L"17",L"24",L"25",L"-1",L"1junk"}){
+            assert(WritePrivateProfileStringW(player?L"PlayerActions2":L"PlayerActions",kind?L"MeleeWheel1_0":L"Wheel1_0",invalid,profile));
+            trial_controls::wheel_loaded[player]=false;auto loaded=trial_controls::Snapshot(player);
+            assert(!(kind?loaded.melee_wheel_binding:loaded.wheel_binding)[1][0]);
+        }
+        for(const wchar_t* invalid:{L"27",L"91",L"92",L"256",L"257",L"-1",L"1junk"}){
+            assert(WritePrivateProfileStringW(L"PlayerActions",kind?L"MeleeWheel0_0":L"Wheel0_0",invalid,profile));
+            trial_controls::wheel_loaded[0]=false;auto loaded=trial_controls::Snapshot();
+            assert(!(kind?loaded.melee_wheel_binding:loaded.wheel_binding)[0][0]);
+        }
+    }
+    // Existing middle mouse Guns and V orders survive a missing second wheel key.
+    auto legacy_wheels=defaults;legacy_wheels.wheel_binding[0][0]=VK_MBUTTON;legacy_wheels.keyboard[24][0]='V';
+    assert(trial_controls::Apply(legacy_wheels,error));
+    assert(WritePrivateProfileStringW(L"PlayerActions",L"MeleeWheel0_0",nullptr,profile));
+    trial_controls::wheel_loaded[0]=false;assert(Same(legacy_wheels,trial_controls::Snapshot()));
+    // A saved other-wheel primary also claims its key, in either migration order.
+    for(unsigned kind=0;kind<2;++kind){
+        legacy_wheels=defaults;(kind?legacy_wheels.wheel_binding:legacy_wheels.melee_wheel_binding)[0][0]=kind?'G':VK_TAB;
+        assert(trial_controls::Apply(legacy_wheels,error));
+        assert(WritePrivateProfileStringW(L"PlayerActions",kind?L"MeleeWheel0_0":L"Wheel0_0",nullptr,profile));
+        (kind?legacy_wheels.melee_wheel_binding:legacy_wheels.wheel_binding)[0][0]=0;
+        trial_controls::wheel_loaded[0]=false;assert(Same(legacy_wheels,trial_controls::Snapshot()));
+    }
+    assert(trial_controls::Apply(defaults,error));
+    auto failed=defaults;failed.wheel_binding[0][0]='Q';failed.melee_wheel_binding[0][0]='R';fail_replace=true;
+    assert(!trial_controls::Apply(failed,error));fail_replace=false;
+    trial_controls::wheel_loaded[0]=false;assert(Same(defaults,trial_controls::Snapshot()));
     WritePrivateProfileStringW(nullptr,nullptr,nullptr,profile);DeleteFileW(profile);RemoveDirectoryW(directory);
     puts("Controls: atomic save/failure, validation, defaults, capture, remapping, identity parity and player isolation passed.");
 }

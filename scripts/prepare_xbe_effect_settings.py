@@ -39,6 +39,10 @@ def prepare(area):
     include = '#include "xbe_effect_settings.h"\n'
     scope = '\tTrialLightingScope trial_lighting_scope(ctx, base);\n'
     gate = '\tif (TrialSkipLightingReceiver(ctx, base)) goto loc_00099128;\n'
+    tag_begin = '\t{ TrialLightingReceiverTag trial_receiver_tag(ctx,base);\n'
+    tag_end = '\t} // UC_LIGHT_RESOLUTION_TAG\n'
+    # Retire the old resolution-only tag on existing stages without reinserting it.
+    text=text.replace(tag_begin,'').replace(tag_end,'')
     # Rebuilds may retain this chunk; remove only our own additions.
     clean = text.replace(include, '').replace(scope, '').replace(gate, '')
     scheduler = 'X86_FUNC(__imp__sub_00099240) {\n'
@@ -52,7 +56,7 @@ def prepare(area):
     assert changed.replace(include, '').replace(scope, '').replace(gate, '') == clean
     path.write_text(changed)
 
-    block = between(changed, gate+receiver, 'loc_00099128:')+'loc_00099128:\n'
+    block = between(changed, gate, 'loc_00099128:')+'loc_00099128:\n'
     models = (area/'generated/game/x86_recomp.18.cpp').read_text()
     originals = '\n'.join(between(models, f'X86_FUNC(__imp__sub_{a}) {{', f'\nX86_WEAK_FUNC(sub_{a}')
                           for a in ('000B5D80', '000B5DD0'))

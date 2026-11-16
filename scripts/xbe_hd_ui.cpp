@@ -29,11 +29,15 @@ struct Asset {
     std::vector<uint8_t> source;
     Image image;
     bool restored=false;
+    Image original_weapon;
 };
 struct Store {
     std::vector<Asset> assets;
     std::array<size_t,6> fonts{kMissing,kMissing,kMissing,kMissing,kMissing,kMissing};
     size_t buttons=kMissing;
+    std::array<size_t,std::size(kWeaponNames)> weapons=[] {
+        std::array<size_t,std::size(kWeaponNames)> indices{};indices.fill(kMissing);return indices;
+    }();
     Statistics stats;
 };
 Store store;
@@ -180,6 +184,18 @@ void Add(Store& out,const UCArchive* archive,size_t index,const std::string& nam
     }
     if(font>=0&&out.fonts[font]==kMissing){out.fonts[font]=found;++out.stats.fonts;}
     if(buttons)out.buttons=found;
+    for(unsigned i=0;i<std::size(kWeaponNames);++i) {
+        if(name!=std::string("hud\\hud_weapons_o_")+kWeaponNames[i]+".tga=nomipmap")continue;
+        if(found==kMissing||t.width!=64||t.height!=32||format!=15)break;
+        auto& original=out.assets[found].original_weapon;
+        if(original.bgra.empty()) {
+            std::vector<uint8_t> decoded;
+            if(!filter::DecodeNative(t.width,t.height,format,{t.mips[0].data,t.mips[0].slice_pitch},decoded))break;
+            if(out.stats.source_bytes+out.stats.pixel_bytes+decoded.size()>kMemoryLimit)break;
+            out.stats.pixel_bytes+=decoded.size();original={t.width,t.height,std::move(decoded)};
+        }
+        out.weapons[i]=found;break;
+    }
 }
 void Prepare(Store& out,const std::filesystem::path& game) {
     auto metrics=Open(game,"dialoguefonts.lst");
@@ -222,6 +238,14 @@ const Image* Font(const char* name) {
     return nullptr;
 }
 const Image* Buttons(){return store.buttons==kMissing?nullptr:&store.assets[store.buttons].image;}
+const Image* Weapon(const char* name,bool hd) {
+    if(!name)return nullptr;
+    for(unsigned i=0;i<std::size(kWeaponNames);++i)if(!std::strcmp(name,kWeaponNames[i])) {
+        const auto index=store.weapons[i];if(index==kMissing)return nullptr;
+        const auto& asset=store.assets[index];return hd?&asset.image:&asset.original_weapon;
+    }
+    return nullptr;
+}
 bool Ready(){return !store.assets.empty();}
 Statistics Stats(){return store.stats;}
 }

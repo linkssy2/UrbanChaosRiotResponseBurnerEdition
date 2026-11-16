@@ -95,7 +95,22 @@ bool PackStride10Position(const State& s, const Inputs& inputs, const DrawRange&
         constexpr unsigned target_stride = Normal ? 12 : 8;
         const uint8_t* source = first;
         uint8_t* target = packed.data();
-        for (uint32_t v = 0; v < out.vertex_count; ++v, source += 10, target += target_stride) {
+        uint32_t v = 0;
+        // Two records share bounded loads; the scalar tail never reads padding.
+        for (; v + 1 < out.vertex_count; v += 2, source += 20, target += target_stride * 2) {
+            const auto a = _mm_loadu_si128(reinterpret_cast<const __m128i*>(source));
+            if constexpr (Normal) {
+                const auto b = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(source + 12));
+                const auto head = _mm_shuffle_epi8(a, _mm_setr_epi8(0,1,2,3,4,5,-1,-1,6,7,8,9,10,11,12,13));
+                const auto tail = _mm_shuffle_epi8(_mm_alignr_epi8(_mm_srli_si128(b,4),a,14), _mm_setr_epi8(0,1,-1,-1,2,3,4,5,-1,-1,-1,-1,-1,-1,-1,-1));
+                _mm_storeu_si128(reinterpret_cast<__m128i*>(target), head);
+                _mm_storel_epi64(reinterpret_cast<__m128i*>(target + 16), tail);
+            } else {
+                const auto positions = _mm_shuffle_epi8(a, _mm_setr_epi8(0,1,2,3,4,5,-1,-1,10,11,12,13,14,15,-1,-1));
+                _mm_storeu_si128(reinterpret_cast<__m128i*>(target), positions);
+            }
+        }
+        for (; v < out.vertex_count; ++v, source += 10, target += target_stride) {
             // A position-only stream is authored through byte five of its last vertex.
             std::memcpy(target, source, 6);
             std::memset(target + 6, 0, 2);

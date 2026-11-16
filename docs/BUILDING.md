@@ -1,4 +1,4 @@
-# Burner Edition 0.18 build status
+# Burner Edition 0.19 build status
 
 This is an inspection/contribution snapshot of the active source closure, not a
 self-contained clean-build kit. The current builder still requires qualified
@@ -23,6 +23,13 @@ reports, setup progress, saves and normal shader caches remain available.
 output directory. Compile Setup/Play with its `build.ps1`, run all setup tests
 and `test_setup.py --package`, then audit the exact allowlist. Linux adds
 `launcher/burner-linux/burner.sh` and its README to the identical shared payload.
+Keep Windows as `Windows-x64.zip` and Linux/Proton as `Linux-Proton.tar.gz`;
+the published updater selects those exact suffixes. Preserve executable mode
+0755 for `burner.sh`. Full instructions are Markdown under `tools/`; retain
+`README.txt`, `assets/README.txt` and `README-linux.txt` as compatibility pointers.
+Test the published 0.18 updater against both final archives, including a native
+Linux replay for permissions and unchanged user state.
+
 Use the same Steam shortcut and prefix for setup/play. The terminal wrapper is
 an advanced direct-Proton route; it does not provide Steam's Linux Runtime.
 
@@ -35,6 +42,20 @@ The body-shield recipe likewise derives its models from authenticated local
 `shield.lst`, `40-01.ent` and `12-01.ent`; neither the source archive nor the
 binary packages contain those original models or the derived model archive.
 
+The current feature fixtures cover lighting tiers, exact receiver-inverse and
+dirty-epoch reuse, vertex/strip equivalence, separate per-player wheels, scoped
+single-player time, background blur, existing HUD portrait reuse, translucent
+wedge geometry, and the DPI-aware menu cursor. GPU checks distinguish hardware
+from WARP. Private profiling traces/toggles and rejected experiments are excluded
+from the release; diagnostic source may remain where release guards remove it.
+
 Native Linux wrapper tests do not establish Proton video, audio, controls or
 gameplay. Automated checks and user acceptance of particular Windows fixes are
 recorded separately from full-campaign and platform coverage.
+
+This launcher-only revision reuses the qualified v0.19 game runtime unchanged.
+Its separate source freeze records updated launcher, tests and documentation;
+the original runtime-build freeze and qualification remain referenced by hash.
+The HD download/install fixtures exercise the pinned archive and failure paths.
+A real Windows Python worker-function download/install was also checked; this
+is separate from a WinForms click, gameplay, or live Proton acceptance.

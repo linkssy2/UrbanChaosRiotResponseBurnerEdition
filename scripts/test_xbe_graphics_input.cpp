@@ -16,6 +16,7 @@
 #include <thread>
 #include "core/input.h"
 #include "xbe_controls.h"
+#include "xbe_weapon_wheel.h"
 #include "xbe_health_packs.h"
 #include "xbe_health_settings.h"
 #include "xbe_controls_capture.h"
@@ -40,6 +41,11 @@ TrialHealthPackStatus test_health_status[2]{};
 TrialHealthPackUse requested_health[2]{};unsigned health_requests[2]{};
 uint64_t test_ticks=1000;
 uint64_t TestTicks(){return test_ticks;}
+struct WheelInput {bool down=false,allowed=false,keyboard=false;float x=0,y=0;trial_weapon_wheel::Kind kind=trial_weapon_wheel::Kind::Guns;};
+WheelInput wheel_inputs[2];
+bool test_wheel_blocked[2]{},test_wheel_mouse=false;
+unsigned wheel_publications[2]{};
+float wheel_mouse_x=0,wheel_mouse_y=0;
 
 bool aim_cycle[2]{},aim_allowed[2]{};
 void TrialAimInput(unsigned slot,bool down,bool allowed){assert(slot<2);aim_cycle[slot]=down;aim_allowed[slot]=allowed;}
@@ -67,6 +73,17 @@ BOOL TestPostMessage(HWND,UINT,WPARAM,LPARAM){++capture_posts;return TRUE;}
 TrialHealthPackStatus TrialHealthPackSnapshot(unsigned slot){return test_health_status[slot];}
 void TrialHealthPackRequest(unsigned slot,TrialHealthPackUse use){requested_health[slot]=use;++health_requests[slot];}
 void TrialHealthPackInput(unsigned slot,bool down,bool allowed){assert(slot<2);health_down[slot]=down;health_allowed[slot]=allowed;}
+// The core/native fixture owns wheel state transitions; this fixture checks the real adapter.
+namespace trial_weapon_wheel {
+void Input(unsigned slot,bool down,bool allowed,bool keyboard,float x,float y,Kind kind){
+    assert(slot<2);wheel_inputs[slot]={down,allowed,keyboard,x,y,kind};
+    if(!allowed)test_wheel_blocked[slot]=false;
+}
+bool Blocked(unsigned slot){return slot<2&&test_wheel_blocked[slot];}
+void Cancel(unsigned slot){assert(slot<2);test_wheel_blocked[slot]=false;}
+void PublishInput(unsigned slot){assert(slot<2);++wheel_publications[slot];}
+bool MouseDelta(float x,float y){wheel_mouse_x=x;wheel_mouse_y=y;return test_wheel_mouse;}
+}
 #define GetAsyncKeyState TestAsyncKeyState
 #define GetTickCount64 TestTicks
 #undef PostMessage
@@ -78,6 +95,7 @@ void TrialHealthPackInput(unsigned slot,bool down,bool allowed){assert(slot<2);h
 #include "xbe_controls_backend.inc"
 
 // GENERATED_CONTROLS
+// GENERATED_WHEEL_INPUT
 // GENERATED_CHANGED
 // GENERATED_RIGHT_BACK
 // GENERATED_PUBLISH
@@ -300,6 +318,117 @@ static void CheckRagdollDragInput(){
     Poll(2,pad);Poll(3,pad);assert(drag_allowed[0]&&drag_allowed[1]);
     gameplay=false;poll();assert(!drag_allowed[0]&&!drag_allowed[1]);gameplay=true;
     trial_coop::Reset();ReleaseAll();assert(drag_allowed[0]&&!drag_allowed[1]);
+}
+static void CheckWeaponWheelInput(){
+    trial_coop::Reset();ReleaseAll();menu_mode=false;gameplay=true;captured=true;intro_gate={};
+    keyboard_defaults(&keyboard_config);controller_defaults(&controller_config);controller_publish();
+    for(unsigned p=0;p<2;++p){
+        trial_controls::wheel_loaded[p]=true;
+        std::memset(trial_controls::wheel_binding[p],0,sizeof trial_controls::wheel_binding[p]);
+        std::memset(trial_controls::melee_wheel_binding[p],0,sizeof trial_controls::melee_wheel_binding[p]);
+    }
+    trial_controls::wheel_binding[0][0][0]=VK_TAB;
+    physical_keys[VK_TAB]=true;Poll(0);
+    assert(wheel_inputs[0].down&&wheel_inputs[0].allowed&&wheel_inputs[0].keyboard&&wheel_inputs[0].kind==trial_weapon_wheel::Kind::Guns);
+    test_wheel_blocked[0]=true;
+    for(int key:{int('W'),int('R'),int('F'),int('C'),VK_LBUTTON,VK_RBUTTON,VK_MBUTTON})physical_keys[key]=true;
+    dx=12;dy=24;spin_dx=17;spin_dy=19;order_phase=2;order_buttons=1;order_held=true;
+    auto p=Poll(0);assert(p.ly==32767&&!p.rx&&!p.ry&&!p.buttons);
+    for(auto v:p.analog)assert(!v);
+    assert(!health_allowed[0]&&!aim_allowed[0]&&!drag_allowed[0]);
+    assert(!dx&&!dy&&!spin_dx&&!spin_dy&&!order_phase&&!order_buttons&&!order_held);
+    const auto publication=wheel_publications[0];TrialInputPublish();
+    assert(!reload_enabled&&!conversation_enabled&&wheel_publications[0]==publication+1);
+    RAWINPUT raw{};raw.header.dwType=RIM_TYPEMOUSE;raw.data.mouse.lLastX=80;raw.data.mouse.lLastY=-25;
+    test_wheel_mouse=true;TestMouseMessage(WM_INPUT,reinterpret_cast<intptr_t>(&raw));
+    assert(wheel_mouse_x==80&&wheel_mouse_y==-25&&!dx&&!dy);
+    physical_keys[VK_ESCAPE]=true;p=Poll(0);assert(p.buttons&16);physical_keys[VK_ESCAPE]=false;
+    // Closing must keep held attacks/reload out until their real release, without blocking movement.
+    test_wheel_blocked[0]=false;physical_keys[VK_TAB]=false;test_wheel_mouse=false;
+    p=Poll(0);for(auto v:p.analog)assert(!v);assert(p.ly==32767);
+    p=Poll(0);TrialInputPublish();for(auto v:p.analog)assert(!v);
+    assert(!reload_down&&!conversation_down&&p.ly==32767);
+    ReleaseAll();captured=true;physical_keys[VK_LBUTTON]=true;p=Poll(0);assert(p.analog[7]==255);
+    // P2 selects with its physical right stick; P1 input and movement remain independent.
+    ReleaseAll();trial_coop::SetActive(true);trial_controls::LoadSecond();
+    controller_defaults(&trial_controls::second_controller);
+    trial_controls::wheel_binding[1][1][0]=12;
+    input::Pad pad;pad.connected=true;pad.buttons=128;pad.analog[7]=255;
+    pad.lx=22000;pad.ly=18000;pad.rx=-25000;pad.ry=20000;
+    test_wheel_blocked[1]=true;p=Poll(1,pad);
+    assert(wheel_inputs[1].down&&wheel_inputs[1].allowed&&!wheel_inputs[1].keyboard);
+    assert(wheel_inputs[1].x<-.7f&&wheel_inputs[1].y<-.6f);
+    assert(p.lx==pad.lx&&p.ly==pad.ly&&!p.rx&&!p.ry&&!p.analog[7]&&!p.buttons);
+    physical_keys[VK_LBUTTON]=true;assert(Poll(0).analog[7]==255);
+    test_wheel_blocked[1]=false;pad.buttons=0;Poll(1,pad);p=Poll(1,pad);assert(!p.analog[7]);
+    pad.analog[7]=0;Poll(1,pad);pad.analog[7]=255;assert(Poll(1,pad).analog[7]==255);
+    for(unsigned reason=0;reason<5;++reason){
+        ReleaseAll();captured=true;test_wheel_blocked[0]=test_wheel_blocked[1]=true;
+        if(reason==0)test_focused=false;
+        if(reason==1)test_open=true;
+        if(reason==2)test_presentation=2;
+        if(reason==3)ucrr_host_menu_mode(1);
+        if(reason==4)TrialIntroMovie(99,0,true,true);
+        Poll(0);Poll(1,pad);assert(!test_wheel_blocked[0]&&!test_wheel_blocked[1]);
+        test_focused=true;test_open=false;test_presentation=0;ucrr_host_menu_mode(0);TrialIntroMovie(0,0,false,false);
+    }
+    test_wheel_blocked[1]=true;Poll(1);assert(!test_wheel_blocked[1]);
+    // Disconnecting a selecting controller cancels, never acts as a release-to-select.
+    ReleaseAll();captured=true;trial_controls::wheel_binding[0][1][0]=12;
+    pad.buttons=128;Poll(0,pad);test_wheel_blocked[0]=true;Poll(0);
+    assert(!test_wheel_blocked[0]);
+    physical_keys[VK_TAB]=true;Poll(0,pad);test_wheel_blocked[0]=true;Poll(0);
+    assert(test_wheel_blocked[0]);trial_weapon_wheel::Cancel(0);
+    ReleaseAll();captured=true;
+    auto saved_controller=trial_controls::second_controller;
+    trial_controls::second_controller.binding[7][0]=22;
+    pad={};pad.connected=true;pad.rx=25000;test_wheel_blocked[1]=true;Poll(1,pad);
+    test_wheel_blocked[1]=false;Poll(1,pad);assert(!Poll(1,pad).analog[7]);
+    pad.rx=0;Poll(1,pad);pad.rx=25000;assert(Poll(1,pad).analog[7]>30);
+    trial_controls::second_controller=saved_controller;
+    // Explicit Allow Shared keeps movement active and resumes its shared action after closing.
+    trial_coop::Reset();ReleaseAll();captured=true;
+    auto saved_keyboard=keyboard_config;keyboard_config.binding[7][0]='W';
+    physical_keys['W']=true;test_wheel_blocked[0]=true;p=Poll(0);
+    assert(p.ly==32767&&!p.analog[7]);test_wheel_blocked[0]=false;
+    p=Poll(0);assert(p.ly==32767&&!p.analog[7]);p=Poll(0);assert(p.ly==32767&&p.analog[7]==255);
+    keyboard_config=saved_keyboard;
+    // Each action selects its own group. Overlap or a sampled source handoff
+    // cancels the old selection and requires all wheel inputs to be released.
+    trial_coop::Reset();ReleaseAll();captured=true;
+    trial_controls::melee_wheel_binding[0][0][0]='G';
+    physical_keys['G']=true;Poll(0);test_wheel_blocked[0]=true;
+    assert(wheel_inputs[0].allowed&&wheel_inputs[0].keyboard&&wheel_inputs[0].kind==trial_weapon_wheel::Kind::MeleeThrowables);
+    physical_keys[VK_TAB]=true;Poll(0);assert(!wheel_inputs[0].allowed&&!test_wheel_blocked[0]);
+    physical_keys[VK_TAB]=false;Poll(0);assert(!wheel_inputs[0].allowed);
+    physical_keys['G']=false;Poll(0);physical_keys['G']=true;Poll(0);
+    assert(wheel_inputs[0].allowed&&wheel_inputs[0].kind==trial_weapon_wheel::Kind::MeleeThrowables);
+    test_wheel_blocked[0]=true;physical_keys['G']=false;physical_keys[VK_TAB]=true;Poll(0);
+    assert(!wheel_inputs[0].allowed&&!test_wheel_blocked[0]);
+    ReleaseAll();captured=true;physical_keys[VK_TAB]=true;Poll(0);
+    assert(wheel_inputs[0].allowed&&wheel_inputs[0].kind==trial_weapon_wheel::Kind::Guns);
+    ReleaseAll();captured=true;
+    trial_controls::melee_wheel_binding[0][1][0]=12;
+    pad={};pad.connected=true;pad.buttons=128;
+    trial_controls::wheel_binding[0][1][0]=0;
+    physical_keys['G']=true;Poll(0,pad);test_wheel_blocked[0]=true;
+    assert(wheel_inputs[0].allowed&&wheel_inputs[0].keyboard);
+    physical_keys['G']=false;Poll(0,pad);
+    assert(!wheel_inputs[0].allowed&&!test_wheel_blocked[0]);
+    pad.buttons=0;Poll(0,pad);pad.buttons=128;Poll(0,pad);
+    assert(wheel_inputs[0].allowed&&!wheel_inputs[0].keyboard&&wheel_inputs[0].kind==trial_weapon_wheel::Kind::MeleeThrowables);
+    test_wheel_blocked[0]=true;Poll(0);assert(!test_wheel_blocked[0]);
+    // Co-op players can hold different groups independently.
+    ReleaseAll();captured=true;trial_coop::SetActive(true);
+    trial_controls::wheel_binding[1][1][0]=0;
+    trial_controls::melee_wheel_binding[1][1][0]=12;
+    physical_keys[VK_TAB]=true;Poll(0);pad.buttons=128;Poll(1,pad);
+    assert(wheel_inputs[0].allowed&&wheel_inputs[0].kind==trial_weapon_wheel::Kind::Guns);
+    assert(wheel_inputs[1].allowed&&wheel_inputs[1].kind==trial_weapon_wheel::Kind::MeleeThrowables&&!wheel_inputs[1].keyboard);
+    physical_keys[VK_TAB]=false;Poll(0);Poll(1,pad);assert(wheel_inputs[1].down&&wheel_inputs[1].allowed);
+    for(unsigned player=0;player<2;++player)std::memset(trial_controls::melee_wheel_binding[player],0,sizeof trial_controls::melee_wheel_binding[player]);
+    trial_coop::Reset();ReleaseAll();
+    std::puts("weapon wheel adapter: separate groups, source ownership, overlap cancellation, per-player selection, mouse routing and held-action release passed");
 }
 static void CheckMouseLook(){
     constexpr uint32_t first=0x10000,second=0x11000;
@@ -1124,4 +1253,5 @@ int main(){
     CheckRagdollDragInput();
     CheckMenuDeviceHandoff();
     CheckCaptureMessages();
+    CheckWeaponWheelInput();
 }

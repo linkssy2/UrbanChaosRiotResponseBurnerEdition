@@ -27,6 +27,8 @@ std::array<std::array<float,4>,std::size(icon_codes)> icon_uv{};
 std::array<std::array<float,4>,5> hd_icon_uv{};
 ImFont* original_fonts[2]{},*hd_fonts[2]{};
 bool icons_ready=false,hd_icons_ready=false;
+std::array<std::array<std::array<float,4>,2>,std::size(uc_hd_ui::kWeaponNames)> weapon_uv{};
+std::array<std::array<bool,2>,std::size(uc_hd_ui::kWeaponNames)> weapon_ready{};
 using Archive=std::unique_ptr<UCArchive,decltype(&uc_archive_close)>;
 struct Bytes {UCArchiveBytes value{};~Bytes(){uc_archive_bytes_free(&value);}};
 struct Texture {UCTextureAsset value{};~Texture(){uc_texture_free(&value);}};
@@ -92,6 +94,7 @@ bool Load(const UCArchive* metrics,const UCArchive* art,const char* name,FontDat
 bool TrialLoadFrontendFonts(ImFontAtlas* atlas,const std::filesystem::path& game,ImFont*& body,ImFont*& title){
     body=title=nullptr;
     icons_ready=hd_icons_ready=false;
+    weapon_ready={};
     std::fill(std::begin(original_fonts),std::end(original_fonts),nullptr);
     std::fill(std::begin(hd_fonts),std::end(hd_fonts),nullptr);
     if(!atlas||atlas->Locked)return false;
@@ -155,6 +158,15 @@ bool TrialLoadFrontendFonts(ImFontAtlas* atlas,const std::filesystem::path& game
         rectangles[i]=atlas->AddCustomRectRegular(d.width*scale,d.height*scale);
     }
     for(unsigned i=0;i<icon_count;++i)icon_rectangles[i]=atlas->AddCustomRectRegular((i<9||i>=14)?128:32,(i<9||i>=14)?128:32);
+    std::array<std::array<int,2>,std::size(uc_hd_ui::kWeaponNames)> weapon_rectangles;
+    for(unsigned i=0;i<weapon_rectangles.size();++i)for(unsigned hd=0;hd<2;++hd) {
+        auto& rectangle=weapon_rectangles[i][hd];rectangle=-1;
+        const auto* image=uc_hd_ui::Weapon(uc_hd_ui::kWeaponNames[i],hd!=0);
+        const unsigned scale=hd?4:1;
+        if(image&&image->width==64*scale&&image->height==32*scale&&
+           image->bgra.size()==size_t(image->width)*image->height*4)
+            rectangle=atlas->AddCustomRectRegular(image->width,image->height);
+    }
     // Reserve packing room for the largest atlas plus its padding.
     atlas->TexDesiredWidth=std::max(atlas->TexDesiredWidth,have_hd?4096:1024);
     if(!atlas->Build())return false;
@@ -193,6 +205,17 @@ bool TrialLoadFrontendFonts(ImFontAtlas* atlas,const std::filesystem::path& game
         uv={float(r->X)/width,float(r->Y)/height,float(r->X+r->Width)/width,float(r->Y+r->Height)/height};
     }
     for(unsigned i=0;i<2;++i){original_fonts[i]=fonts[i];hd_fonts[i]=fonts[i+2];}
+    for(unsigned i=0;i<weapon_rectangles.size();++i)for(unsigned hd=0;hd<2;++hd) {
+        if(weapon_rectangles[i][hd]<0)continue;
+        const auto* image=uc_hd_ui::Weapon(uc_hd_ui::kWeaponNames[i],hd!=0);
+        const auto* r=atlas->GetCustomRectByIndex(weapon_rectangles[i][hd]);
+        for(unsigned y=0;y<r->Height;++y)for(unsigned x=0;x<r->Width;++x) {
+            const uint32_t c=HdPixel(*image,size_t(y)*r->Width+x);
+            reinterpret_cast<ImU32*>(pixels)[size_t(r->Y+y)*width+r->X+x]=IM_COL32((c>>16)&255,(c>>8)&255,c&255,c>>24);
+        }
+        weapon_uv[i][hd]={float(r->X)/width,float(r->Y)/height,float(r->X+r->Width)/width,float(r->Y+r->Height)/height};
+        weapon_ready[i][hd]=true;
+    }
     hd_icons_ready=have_hd_buttons;
     icons_ready=true;body=fonts[0];title=fonts[1];return true;
 }
@@ -214,4 +237,15 @@ bool TrialMenuIconUV(unsigned code,float (&uv)[4]){
     }
     return false;
 }
+
+bool TrialWeaponIconUV(const char* name,float (&uv)[4]) {
+    if(!name)return false;
+    for(unsigned i=0;i<std::size(uc_hd_ui::kWeaponNames);++i)if(!std::strcmp(name,uc_hd_ui::kWeaponNames[i])) {
+        const unsigned hd=trial_graphics::HdUi()&&weapon_ready[i][1]?1u:0u;
+        if(!weapon_ready[i][hd])return false;
+        std::copy(weapon_uv[i][hd].begin(),weapon_uv[i][hd].end(),uv);return true;
+    }
+    return false;
+}
+ImFont* TrialFrontendBodyFont(){return TrialFrontendFontForUi(original_fonts[0]);}
 
