@@ -7,6 +7,9 @@ struct X86Context;
 // 0: no admitted co-op frame, 1: two gameplay views, 2: shared cinematic.
 unsigned TrialCoopPresentation();
 
+void TrialCoopCameraPlayer(X86Context&,const uint8_t*); // 17343B/173374, authored slot
+void TrialCoopCutscenePlayer(X86Context&,const uint8_t*); // 114F5E, slot-zero pitch reset
+
 // These caller-local corrections retain the original campaign rewards and gates.
 void TrialCoopDamagePlayer(X86Context&,const uint8_t*); // DFE07, original 4A6E0 result
 void TrialCoopKillcamKiller(X86Context&,const uint8_t*); // 387B7, original 338B0 result

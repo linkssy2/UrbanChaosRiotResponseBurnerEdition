@@ -1,9 +1,10 @@
 """Derive co-op rendezvous gates from exact, local campaign ENT scripts.
 
-This is a build-time census, not a replacement script interpreter. Only PLAYER
+This is a build-time census, not a replacement script interpreter. PLAYER
 volume-enter groups whose decoded commands operate a checkpoint, install a path
 barrier/teleport/cinematic, or remove a checkpoint are selected. ScriptController
 startup and satisfiable condition groups follow the original bounded selector.
+Two exact Hope Street actor-list events also close a barrier behind the players.
 Ordinary pickups, combat waves and hazards are not gates. Unproved paths are
 reported; the runtime leaves every original condition and command intact.
 """
@@ -24,6 +25,26 @@ ENSURE_PROGRESS = frozenset(("SolidCollisionBlock", "PlayerTeleport",
 # Opcode 23 enables opening; 43 locks. Retirement roots also remove ladders and
 # earlier areas, so keep their rendezvous until that cleanup is proved safe.
 DOOR_PROGRESS_OPERATIONS = frozenset((16, 17, 43))
+# This 30cm cinematic tripwire closes a rear door after both players have passed
+# its checkpoint. Its partner can wait safely beyond that checkpoint's entry
+# plane instead of occupying the thin tripwire simultaneously with PLAYER.
+HOSTAGE_RENDEZVOUS_PINS = (
+    ("trigger", 66, "5071d8c30c847c32340563c1957cedf39a63bbd8495ac5f96c4be7a19af57365"),
+    ("trigger", 67, "66ea5dae23ab6704f97863ff1cfa17ff7a026fe6b22e6fa25bba79ff8d7dddb3"),
+    ("entity", 1089, "dce8c507543f86a4d2b558ad5b5bede682c3b5afde3ba3163cef4971e41037b2"),
+    ("entity", 1119, "ab32bf8603b232f76ec222eb782725928c1501f4308f04a2d3b6d59a3bd09636"),
+    ("entity", 1121, "0b9beb3a9861aef30800843e53a0c7a58c828dbaa435af279de9468b099a1981"),
+    ("entity", 1272, "2b99524d71f00f9f5419fb821994ebd8b16178df7f68cac17bcf01350b6aafc8"),
+)
+# Both captured/killed endings use this same barrier and retirement contract.
+# Actor-list triggers require the authored NPCs and P1; retail never tests P2.
+HOSTAGE_EXIT_PINS = (
+    ("trigger", 75, "34d2e6b35110d630b0a90148163be2f15f3803c5739cb8974af037a3fe5c6da9"),
+    ("trigger", 78, "bbe2042eabb3320da5c1ad14640d67d95207b63004e938c3c93b9415cc9f71b6"),
+    ("entity", 1296, "ee602281f5f6e5e73936d48524cddb10517b919c173bee8f5675bef0f384255f"),
+    ("entity", 1260, "ef2d1c194c9c412341197f4248ddd477006b939c876e75672ca738e9d9b852bc"),
+    ("entity", 1283, "fef98e455a2209af7558ba0e1fab12d9a13f5592f414908e89139a5eba21299b"),
+)
 # The original selector, condition scheduler and controller startup are the
 # contracts used below. The runtime preparer separately pins command decoding
 # and the custom-trigger append routine.
@@ -39,6 +60,11 @@ BRANCH_PINS = (
     (0x217e84, 95, "84a5d3652c1aeade98c2d1e7fa28213c2ce5f9a80c87d994d7adbe69f675e71a"),
     (0x20a140, 38, "90ace56f24034b7e7014d411b752ed9e0e22bb23243aa13b80d243a7c6bcdb22"),
     (0x1b05d0, 89, "c813db155dd2c02a949e3dd507777c684add431ddb38a90515b8fe49b718fd9b"),
+    # SolidCollisionBlock uses scaled half-extents and centimeters-to-meters.
+    (0x111200, 1033, "601da8ef85e93276b7d7affad8eaef925cc3d1cfc057aa3d7c499fa1982d1720"),
+    (0x44c1f8, 4, "d99e58435243d9fef9c88273b8d553b4fba4d0baf8009d29eae74fa99e0d9f57"),
+    (0x44c5e8, 4, "0c05e73c2748cbfd2e38c0afaf9cb594f78e14fefa3c24190ebc121d45dbee4f"),
+    (0x44d024, 4, "0d66bd808e9247acb560fe33efaa62ad6f11ee6f85cc4f61bd17673263de04ee"),
 )
 
 
@@ -229,6 +255,46 @@ def read_level(path):
     return reader, triggers
 
 
+def hostage_partner_boundary(reader, triggers, total, source, ordinal, group):
+    if (total, source, ordinal, group) != (1710, 1699, 67, 1):
+        return {}
+    for kind, index, digest in HOSTAGE_RENDEZVOUS_PINS:
+        rows = triggers if kind == "trigger" else reader.entities
+        if index >= len(rows):
+            return {}
+        row = rows[index]
+        if hashlib.sha256(reader.data[row["offset"]:row["end"]]).hexdigest() != digest:
+            return {}  # Changed authored content keeps the strict overlap rule.
+    min_x, min_y, _min_z, _max_x, max_y, max_z = struct.unpack("<6f", triggers[66]["boxes"])
+    return {"partner_min_x": min_x, "partner_min_y": min_y,
+            "partner_max_y": max_y, "partner_max_z": max_z,
+            "partner_volume_hash": fnv1a64(triggers[67]["boxes"])}
+
+
+def hostage_exit_boundary(reader, triggers, total, source, ordinal, group):
+    if (total, source, ordinal, group) not in ((1710, 1706, 75, 1), (1710, 1709, 78, 1)):
+        return {}
+    if struct.unpack_from("<I", reader.data, 4)[0] <= 177:
+        return {}
+    for kind, index, digest in HOSTAGE_EXIT_PINS:
+        rows = triggers if kind == "trigger" else reader.entities
+        if index >= len(rows):
+            return {}
+        row = rows[index]
+        if hashlib.sha256(reader.data[row["offset"]:row["end"]]).hexdigest() != digest:
+            return {}  # Unproved actor-list roots retain retail behavior.
+    trigger = triggers[ordinal]
+    barrier = reader.entities[1296]
+    matrix = barrier["matrix"]
+    return {"trigger_kind": 17, "completion_flag": 177,
+            "subject_count": len(trigger["subjects"]),
+            "subject_hash": fnv1a64(struct.pack("<3I", *trigger["subjects"])),
+            "partner_volume_hash": fnv1a64(trigger["boxes"]),
+            "barrier_front_z": matrix[14] + 50.0 * abs(matrix[10]),
+            "barrier_source": 1296,
+            "barrier_matrix_hash": fnv1a64(struct.pack("<16f", *matrix))}
+
+
 def census_level(path):
     reader, triggers = read_level(path)
     entities = reader.entities
@@ -310,7 +376,8 @@ def census_level(path):
             continue
         source = source_index
         source_index += 1
-        if trigger["kind"] != 37 or not trigger["scripts"]:
+        exit_boundary = hostage_exit_boundary(reader, triggers, total, source, ordinal, 1)
+        if (trigger["kind"] != 37 and not exit_boundary) or not trigger["scripts"]:
             continue
         descriptor = {"volume_ordinal": ordinal, "source_index": source}
         try:
@@ -337,6 +404,8 @@ def census_level(path):
                            "sha256": hashlib.sha256(raw).hexdigest()}
                           for index, (_name, raw) in enumerate(trigger["scripts"])]
                 report["gates"].append({**descriptor, "enter_group": group,
+                                        **hostage_partner_boundary(reader, triggers, total, source, ordinal, group),
+                                        **(exit_boundary if group == 1 else {}),
                                         "shape": trigger["shape"], "box_count": len(trigger["boxes"]) // 24,
                                         "provider_slot_count": total, "script_count": len(proofs),
                                         "proofs": proofs, "reasons": reasons,
@@ -366,21 +435,28 @@ def build(area):
             raise DecodeError(f"original branch contract changed at {va:#x}")
     levels = [census_level(area / "assets" / f"{level}-01.ent") for level in CAMPAIGN_LEVELS]
     proofs, gates = [], []
-    for level in levels:
-        for gate in level["gates"]:
-            begin = len(proofs)
-            proofs.extend(gate["proofs"])
-            gates.append((gate, begin))
+    # Preserve the existing PLAYER rows/proof indexes; append the two pinned
+    # actor-list roots without changing other campaign policies.
+    ordered = [gate for level in levels for gate in level["gates"]]
+    ordered.sort(key=lambda gate: gate.get("trigger_kind", 37) != 37)
+    for gate in ordered:
+        begin = len(proofs)
+        proofs.extend(gate["proofs"])
+        gates.append((gate, begin))
     header = ["// Generated from exact original campaign ENT scripts; see coop_progression_assets.py.",
               "#pragma once", "#include <array>", "#include <cstdint>", "namespace coop_progression_assets {",
               "struct ScriptProof { uint32_t index, byte_count; uint64_t hash; };",
-              "struct Gate { uint32_t provider_slot_count, source_index, volume_ordinal, enter_group; uint32_t script_count, proof_begin, proof_count; };",
+              "struct Gate { uint32_t provider_slot_count, source_index, volume_ordinal, enter_group; uint32_t script_count, proof_begin, proof_count; float partner_min_x, partner_min_y, partner_max_y, partner_max_z; uint64_t partner_volume_hash; uint32_t trigger_kind, completion_flag, subject_count; float barrier_front_z; uint64_t subject_hash; uint32_t barrier_source; uint64_t barrier_matrix_hash; };",
               f"inline constexpr std::array<ScriptProof,{len(proofs)}> kProofs={{{{"]
     header += [f'    {{{p["index"]}u,{p["byte_count"]}u,0x{p["hash"]:016x}ull}},' for p in proofs]
     header += ["}};", f"inline constexpr std::array<Gate,{len(gates)}> kGates={{{{"]
-    header += ["    {%du,%du,%du,%du,%du,%du,%du}," % (
+    header += ["    {%du,%du,%du,%du,%du,%du,%du,%.1ff,%.1ff,%.1ff,%.1ff,0x%016xull,%du,%du,%du,%.9ff,0x%016xull,%du,0x%016xull}," % (
         g["provider_slot_count"], g["source_index"], g["volume_ordinal"], g["enter_group"],
-        g["script_count"], begin, len(g["proofs"])) for g, begin in gates]
+        g["script_count"], begin, len(g["proofs"]), g.get("partner_min_x", 0),
+        g.get("partner_min_y", 0), g.get("partner_max_y", 0), g.get("partner_max_z", 0),
+        g.get("partner_volume_hash", 0), g.get("trigger_kind", 37), g.get("completion_flag", 0xffffffff),
+        g.get("subject_count", 0), g.get("barrier_front_z", 0), g.get("subject_hash", 0),
+        g.get("barrier_source", 0xffffffff), g.get("barrier_matrix_hash", 0)) for g, begin in gates]
     header += ["}};", "}", ""]
     local = Path(__file__).resolve().parent
     sources = (Path(__file__).resolve(), local / "native_level_checks/inspect_level.py",
@@ -388,11 +464,15 @@ def build(area):
     report = {"scope": __doc__, "sources": {p.relative_to(local).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest() for p in sources},
               "branch_contracts": [{"address": hex(va), "size": size, "sha256": digest}
                                    for va, size, digest in BRANCH_PINS],
+              "hostage_rendezvous_contracts": [{"kind": kind, "index": index, "sha256": digest}
+                                                for kind, index, digest in HOSTAGE_RENDEZVOUS_PINS],
+              "hostage_exit_contracts": [{"kind": kind, "index": index, "sha256": digest}
+                                         for kind, index, digest in HOSTAGE_EXIT_PINS],
               "levels": levels, "gate_count": len(gates), "proof_count": len(proofs),
               "limitations": ["Static command lineage; no mission-playthrough claim.",
                               "Potentially selected random/conditional branches are enumerated conservatively; actual live conditions remain unchanged.",
                               "Indirect flag-driven events and non-ScriptController creation side effects are outside this census; no universal traversal proof is claimed.",
-                              "Only PLAYER enter events are admitted; non-PLAYER, startup/exit, ordinary combat/pickup/hazard paths are unchanged.",
+                              "PLAYER enter events plus two fingerprinted Hope Street actor-list barrier roots are admitted; other non-PLAYER, startup/exit, ordinary combat/pickup/hazard paths are unchanged.",
                               "The presence of a proved progression operation admits a root even if a separate child branch is unproved; such branches remain explicit in the report."]}
     return {"header": "\n".join(header), "gates": [dict(g, proof_begin=i, proof_count=len(g["proofs"])) for g, i in gates],
             "proofs": proofs, "report": report}

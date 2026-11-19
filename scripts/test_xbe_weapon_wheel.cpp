@@ -11,6 +11,8 @@
 #include "kernel/kernel.h"
 namespace kernel {static std::array<uint8_t,0x800000> memory{};uint8_t* g_base=memory.data();}
 static bool mapped=true;
+static bool conversation_locked=false;
+bool TrialCoopInteractionWeaponsBlocked(const uint8_t*,uint32_t){return conversation_locked;}
 namespace mem {bool IsCommitted(uint32_t a){return mapped&&a>=0x10000&&a<kernel::memory.size();}}
 static constexpr uint32_t P=0x600000,Q=0x602000,W=0x610000,L=0x620000,I=0x630000,O=0x640000,R=0x650000,S=0x700000;
 uint32_t TrialCoopPlayer(unsigned slot){return slot<2?(slot?Q:P):0;}
@@ -58,7 +60,7 @@ namespace kernel {
 static X86Context Context(uint32_t owner=P){X86Context c{};c.ecx=owner;c.esi=owner;c.esp=S;c.ebx=17;c.edi=23;c.ebp=29;W32(S,0x123456);return c;}
 static uint32_t ItemAt(unsigned slot,unsigned id){return I+slot*0x2000+id*0x5c;}
 static void Reset(){
-    memory.fill(0);mapped=true;publications=transitions=shield=eligibility_calls=query_action=0;fail_publish=native_press=false;
+    memory.fill(0);mapped=true;conversation_locked=false;publications=transitions=shield=eligibility_calls=query_action=0;fail_publish=native_press=false;
     trial_coop::Reset();trial_coop::SetActive(true);
     for(unsigned slot=0;slot<2;++slot){
         players[slot]={};const uint32_t p=slot?Q:P,id=100+slot,inventory=p+0x498;
@@ -90,7 +92,38 @@ static void Queue(unsigned index,unsigned slot=0,Kind kind=Kind::Guns){Open(slot
 static void Consume(unsigned slot=0){auto c=Context(slot?Q:P);WheelConsumer(c,g_base);assert(c.esp==S+4&&c.ebx==17&&c.edi==23&&c.ebp==29);}
 static unsigned checks=0;
 static void Check(bool value){assert(value);++checks;}
+static void ConversationRestrictions(){
+    // The interaction fixture owns the authored lock predicate. Here it is an
+    // explicit boundary: both wheel groups must honor it for either actor.
+    for(Kind kind:{Kind::Guns,Kind::MeleeThrowables})for(unsigned slot=0;slot<2;++slot){
+        const uint32_t actor=slot?Q:P,other=slot?P:Q;
+        const unsigned index=kind==Kind::Guns?1:2;
+        const uint32_t chosen=kind==Kind::Guns?2:1;
+        Reset();Open(slot,false,kind);Choose(index,slot);
+        conversation_locked=true;auto c=Context(actor);GuestUpdate(c,g_base);
+        Check(!GetSnapshot(slot).available&&!GetSnapshot(slot).open);
+        Input(slot,false,true,false,0,0,kind);Input(slot,true,true,false,0,0,kind);
+        Check(!GetSnapshot(slot).open);Consume(slot);
+        Check(!publications&&!transitions&&R32(actor+0x500)==17&&R32(other+0x500)==17);
+        conversation_locked=false;GuestUpdate(c,g_base);
+        Check(GetSnapshot(slot).available);Input(slot,false,true,false,0,0,kind);
+        Queue(index,slot,kind);Consume(slot);
+        Check(publications==1&&transitions==1&&R32(actor+0x500)==chosen&&R32(other+0x500)==17);
+
+        // Start the conversation after release queued a selection, without a
+        // UI refresh. The native consumer must reject and discard that command.
+        Reset();Queue(index,slot,kind);Check(Blocked(slot));
+        conversation_locked=true;Consume(slot);
+        Check(!publications&&!transitions&&R32(actor+0x500)==17&&R32(other+0x500)==17);
+        conversation_locked=false;Consume(slot);
+        Check(!publications&&!transitions&&R32(actor+0x500)==17);
+        c=Context(actor);GuestUpdate(c,g_base);Input(slot,false,true,false,0,0,kind);
+        Queue(index,slot,kind);Consume(slot);
+        Check(publications==1&&transitions==1&&R32(actor+0x500)==chosen&&R32(other+0x500)==17);
+    }
+}
 int main(){
+    ConversationRestrictions();
     Reset();Check(GetSnapshot(0).available&&eligibility_calls==0);Open();auto s=GetSnapshot(0);Check(s.available&&s.kind==Kind::Guns&&s.count==4&&s.entries[0].slot==17&&s.entries[1].slot==2&&s.entries[3].slot==10&&s.current==0&&eligibility_calls==4);
     Reset();Open(0,false,Kind::MeleeThrowables);s=GetSnapshot(0);Check(s.kind==Kind::MeleeThrowables&&s.count==4&&s.current==-1&&s.entries[0].slot==8&&s.entries[1].slot==11&&s.entries[2].slot==1&&s.entries[3].slot==9&&eligibility_calls==4);
     for(Kind kind:{Kind::Guns,Kind::MeleeThrowables})for(unsigned slot=0;slot<2;++slot)for(unsigned index=0;index<4;++index){
@@ -190,5 +223,5 @@ int main(){
     Reset();Open();Check(!SlowTimeActive());Cancel(0);Input(0,false,true,true,0,0);trial_coop::SetActive(false);c=Context();GuestUpdate(c,g_base);Open();Check(SlowTimeActive()&&SlowTimeActive(W)&&!SlowTimeActive(W+4));Cancel(0);Check(!SlowTimeActive());
     Input(0,false,true,true,0,0);trial_coop::Request();GuestUpdate(c,g_base);Open();Check(!SlowTimeActive());
     Reset();trial_coop::SetActive(false);c=Context();GuestUpdate(c,g_base);Open(0,true,Kind::MeleeThrowables);Check(SlowTimeActive()&&SlowTimeActive(W));Cancel(0);Check(!SlowTimeActive());
-    std::printf("weapon wheel: %u checks passed (two groups, native consumer, ammo, co-op, cancellation, reentrancy, concurrency)\n",checks);
+    std::printf("weapon wheel: %u checks passed (two groups, native consumer, ammo, co-op, conversation locks, cancellation, reentrancy, concurrency)\n",checks);
 }

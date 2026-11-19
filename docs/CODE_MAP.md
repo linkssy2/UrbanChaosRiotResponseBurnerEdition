@@ -1,4 +1,4 @@
-# Burner Edition 0.19 source map
+# Burner Edition 0.20 source map
 
 - `scripts/build_xbe_game_trial.py`: maintained build, preparation order and tests.
 - `scripts/prepare_xbe_*.py`: pinned transformations of the XboxXBERecomp runtime
@@ -40,7 +40,8 @@
   shared font atlas. The renderer reads copied snapshots, not guest pointers.
 - `scripts/xbe_weapon_wheel_time.*`, `xbe_weapon_wheel_blur.h` and their preparers:
   qualified solo simulation at 20% speed and final-presentation background blur
-  while choosing. Co-op remains real-time; menu/audio/input clocks are unchanged.
+  while choosing. Co-op wheels add no time scaling; authored hostage slow motion
+  is shared by both players. Menu/audio/input clocks are unchanged.
 - `native/runtime/menu_cursor.h` and `scripts/prepare_xbe_cursor.py`: procedural
   ember arrow, DPI-size cache, tip hotspot and window-owned cursor visibility.
 - `scripts/xbe_audio_dsp.inc` and `xbe_audio_filter.h`: environmental sends and
@@ -74,3 +75,21 @@ contracts and verification limits.
   `Launcher.cs`: Manage > Add-ons download/install button.
 - `launcher/burner-xbe/test_texture_download.py`: download, cancellation, failure
   cleanup, installation, and preservation regression checks.
+
+- `scripts/prepare_xbe_entity_records.py` and `test_xbe_entity_records.cpp`:
+  repair empty-bucket unlink/reuse and retain the original failure witness.
+- `scripts/xbe_coop_cinematics.*`: keep authored cinematic control and release
+  on the intended player without replacing the campaign-wide player manager.
+- `scripts/xbe_coop_hostage.*`: select a valid living co-op target consistently
+  through hostage aim, facing and proximity behavior.
+- `scripts/xbe_coop_hostage_time.*`: admit either living player through the
+  original hostage time-control path; both players use the original shared
+  world clock and view feedback. Native ramp and restoration remain intact.
+- `scripts/xbe_coop_progression.*` and `coop_progression_assets.py`: verified
+  authored trigger census, Hope Street tripwire admission and police-barrier
+  progression guards. Main checkpoint assets are not modified.
+- `scripts/xbe_coop_interactions.*`: owned conversation admission and control
+  release, both-player weapon lowering/suppression, and native restoration.
+  The companion's movement remains available; already committed actions finish
+  through native animation state machines. The weapon wheel checks the same
+  conversation predicate before opening or consuming a queued selection.

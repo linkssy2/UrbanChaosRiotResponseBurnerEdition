@@ -1,4 +1,4 @@
-# Urban Chaos: Riot Response - Burner Edition 0.19
+# Urban Chaos: Riot Response - Burner Edition 0.20
 ## Experimental Linux / Proton Package
 
 This runs the same Windows x64 game through Proton; this is not a native port.

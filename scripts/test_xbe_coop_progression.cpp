@@ -3,6 +3,7 @@
 // volumes come from the current original campaign archives during preparation.
 #undef NDEBUG
 #include <array>
+#include <algorithm>
 #include <cassert>
 #include <cstdio>
 #include "kernel/kernel.h"
@@ -26,13 +27,16 @@ using legacy_progression_assets::kProofs;
 constexpr uint32_t P[2]={0x610000,0x612000},W=0x620000,S=0x624000,Q=0x650000;
 constexpr uint32_t V=0x700000,L=0x690000,E=0x681000,D=0x682000,A=0x683000;
 constexpr uint32_t C=0x800000,BX=0x685000,T=0x686000,R=0x687000,N=0x692000,SP=0xfe0000;
+constexpr uint32_t SUBJECTS=0x6a0000,FLAGMAP=0x6a1000,FLAGS=0x6a2000,ENTRIES=0x6a3000,BARRIER_DESC=0x6a4000;
+constexpr uint32_t NPC[2]={0x614000,0x616000};
 static unsigned started=0,scheduled=0,overlaps=0,last_group=0,entered=0;
 static uint32_t enter_group=0;
-enum class Control {None,GaragePopulation,ShieldPickup};
+enum class Control {None,GaragePopulation,ShieldPickup,HostageTripwire,HostageBarrier};
 struct Sample {
     uint32_t count,source,ordinal,group,script_count;
     const uint8_t*const* codes;const uint32_t* sizes;
     const uint8_t* rows;const uint8_t* boxes;uint32_t box_count;bool selected;Control control;
+    uint32_t kind,subject_count;const uint8_t* subjects;const uint8_t* barrier_matrix;
 };
 // AUTHORED_SAMPLES
 uint8_t* B(){return kernel::memory.data();}
@@ -54,7 +58,8 @@ X86_FUNC(sub_001F7EA0){assert(Read(base,ctx.esp+4)==0x44b828);ctx.eax=1;ctx.esp+
 X86_FUNC(sub_001F7DA0){ctx.eax=1;ctx.esp+=4;}
 X86_FUNC(sub_001F7E00){assert(Read(base,ctx.esp+4)==0);ctx.eax=N;ctx.esp+=8;}
 X86_FUNC(sub_001F8FC0){assert(Read(base,ctx.esp+4)==100);ctx.eax=P[0];ctx.esp+=4;}
-X86_FUNC(sub_00207D70){assert(false);}
+// ORIGINAL_00207D70
+X86_FUNC(sub_00207D70){__imp__sub_00207D70(ctx,base);}
 // ORIGINAL_002D3830
 X86_FUNC(sub_002D3830){__imp__sub_002D3830(ctx,base);}
 X86_FUNC(sub_00214490){assert(false);}
@@ -97,7 +102,7 @@ X86Context Context(){
 }
 void Position(unsigned slot,bool inside){
     for(unsigned axis=0;axis<3;++axis)
-        Real(P[slot]+0x40+axis*4,(Value(BX+axis*4)+Value(BX+12+axis*4))*0.5f+(inside?0.f:1000000.f));
+        Real(P[slot]+0x40+axis*4,(Value(BX+axis*4)+Value(BX+12+axis*4))*0.5f-(inside?0.f:1000000.f));
 }
 void Setup(const Sample& sample){
     kernel::memory.fill(0);trial_coop::Reset();TrialCoopProgressionReset();legacy::TrialCoopProgressionReset();
@@ -115,13 +120,28 @@ void Setup(const Sample& sample){
         Put(A+0x20+i*4,at);std::memcpy(B()+at,sample.codes[i],sample.sizes[i]);at+=sample.sizes[i]+16;
     }
     assert(at<0x900000);
-    Put(vol+0x50,37);Put(vol+0x54,3);B()[vol+0x6c]=16;Put(vol+0x74,BX);Put(vol+0x78,BX+sample.box_count*48);
+    Put(vol+0x50,sample.kind);Put(vol+0x54,3);B()[vol+0x6c]=sample.kind==17?57:16;Put(vol+0x74,BX);Put(vol+0x78,BX+sample.box_count*48);
     for(unsigned i=0;i<sample.box_count;++i)std::memcpy(B()+BX+i*48,sample.boxes+i*24,24);
     uint32_t rows;std::memcpy(&rows,sample.rows,4);assert(rows<=64);
     Put(T+0xd8,rows);Put(T+0xdc,R);std::memcpy(B()+R,sample.rows+4,rows*8);
     for(unsigned i=0;i<2;++i){
         Put(P[i],0x46fbe8);Put(P[i]+0x54,100+i);Put(P[i]+0x368,i);Real(P[i]+0x9c,100);Real(P[i]+0x88,100);
         Position(i,true);
+    }
+    if(sample.kind==17){
+        assert(sample.subject_count==3);Put(vol+0x94,SUBJECTS);Put(vol+0x98,SUBJECTS+12);
+        std::memcpy(B()+SUBJECTS,sample.subjects,12);
+        for(unsigned i=0;i<3;++i){
+            const auto actor=i?NPC[i-1]:P[0],id=i?299+i:100,entry=ENTRIES+i*0x20;
+            Put(L+Read(B(),SUBJECTS+i*4)*4,entry);Put(entry+4,id);Put(entry+8,8);
+            Put(S+0x3c+(id&1023)*8,id);Put(S+0x40+(id&1023)*8,actor);
+            if(i){Put(actor,0x46fbe8);Put(actor+0x54,id);Real(actor+0x88,100);std::memcpy(B()+actor+0x40,B()+P[0]+0x40,12);}
+        }
+        // Authored script177 is local, separate from global18 ->local171.
+        Put(Q+0x30,179);Put(Q+0x38,23);Put(Q+0x34,FLAGMAP);Put(Q+0x2c,FLAGS);
+        Put(FLAGMAP,18);Put(FLAGMAP+4,171);B()[FLAGS+18]=B()[FLAGS+171]=1;
+        Put(L+1296*4,ENTRIES+0x80);Put(ENTRIES+0x8c,BARRIER_DESC);
+        std::memcpy(B()+BARRIER_DESC,sample.barrier_matrix,64);
     }
 }
 void Update(bool patched,bool old_census=false){
@@ -158,9 +178,137 @@ X86Context HookContext(const Sample& sample){
         if(Read(B(),R+c.edi*8)==1&&Read(B(),R+c.edi*8+4)==sample.group)return c;
     assert(false);return c;
 }
+void HostageRendezvous(const Sample& sample){
+    assert(sample.count==1710&&sample.source==1699&&sample.ordinal==67&&sample.group==1);
+    // Native PLAYER enters alone after its partner has crossed the rear door.
+    // Replay both walking orders; the thin tripwire never contains both actors.
+    for(bool old_policy:{true,false})for(bool p2_first:{false,true}){
+        Setup(sample);
+        const auto clear=[&](unsigned slot,bool ahead){
+            Position(slot,true);Real(P[slot]+0x48,Value(BX+(ahead?20:8))+(ahead?200.f:-200.f));
+        };
+        clear(0,false);clear(1,false);Update(true,old_policy);assert(!entered);
+        for(unsigned step=0;step<2;++step){
+            const unsigned slot=p2_first?1-step:step;
+            Position(slot,true);Update(true,old_policy);
+            clear(slot,true);Update(true,old_policy);
+        }
+        assert(entered==unsigned(!old_policy));
+    }
+    Setup(sample);Position(1,false);Real(P[1]+0x40,1500);Real(P[1]+0x44,-400);Real(P[1]+0x48,-2800);
+    Update(true);assert(entered==1); // safe room, outside cinematic tripwire
+    // Earlier checkpoint832 is on the wrong floor/side despite x>1060.
+    Setup(sample);Real(P[1]+0x40,2400);Real(P[1]+0x44,2);Real(P[1]+0x48,-200);Update(true);assert(!entered);
+    Real(P[1]+0x44,-400);Update(true);assert(!entered); // near-side corridor guard
+    Real(P[1]+0x48,-2900);Real(P[1]+0x44,2);Update(true);assert(!entered); // floor guard
+    Real(P[1]+0x44,-393.954f);Real(P[1]+0x48,-3200);Update(true);assert(entered==1); // P2 crossed first
+    for(float x:{622.224f,1000.f,1060.f,1070.f}){
+        Setup(sample);Real(P[1]+0x40,x);Update(true);assert(!entered);
+    }
+    Setup(sample);Real(P[1]+0x40,1070.01f);Update(true);assert(entered==1);
+    Setup(sample);Real(P[1]+0x40,1200);Real(P[1]+0x88,200.f*200.f);Update(true);assert(!entered);
+    Real(P[1]+0x40,1260);Update(true);assert(!entered); // sphere tangent to safe plane
+    Real(P[1]+0x40,1261);Update(true);assert(entered==1);
+    for(unsigned offset:{0x40u,0x44u,0x48u,0x88u})for(uint32_t bad:{0x7f800000u,0xff800000u,0x7fc00000u}){
+        Setup(sample);Put(P[1]+offset,bad);Update(true);assert(!entered);
+    }
+    Setup(sample);Real(P[1]+0x88,-1.f);Update(true);assert(!entered);
+    Setup(sample);Real(P[1]+0x40,1500);Real(P[1]+0x9c,0);Update(true);assert(!entered);
+    Real(P[1]+0x9c,100);Update(true);assert(entered==1);
+    Setup(sample);Real(P[1]+0x40,1500);Put(P[1]+0x170,12);Update(true);assert(!entered);
+    // Live volume drift disables only the wider partner predicate, retaining
+    // both actors' native overlap. Single-player remains the original routine.
+    Setup(sample);Real(P[1]+0x40,1500);Real(BX,Value(BX)+1);Update(true);assert(!entered);
+    Position(1,true);Update(true);assert(entered==1);
+    Setup(sample);Real(P[1]+0x40,500);trial_coop::SetActive(false);Update(true);assert(entered==1);
+    Setup(sample);Real(P[1]+0x40,1500);auto context=HookContext(sample);auto expected=context;
+    const auto csr=_mm_getcsr();_mm_setcsr(0x3f80);TrialCoopProgressionEnter(context,B());
+    assert(!std::memcmp(&context,&expected,sizeof context)&&_mm_getcsr()==0x3f80);
+    Real(P[1]+0x40,500);TrialCoopProgressionEnter(context,B());expected.eax&=0xffffff00;
+    assert(!std::memcmp(&context,&expected,sizeof context)&&_mm_getcsr()==0x3f80);_mm_setcsr(csr);
+    // Preserve original exit group2 (KillCop script0); camera owns P1 containment.
+    Setup(sample);Update(true);assert(entered==1);
+    Position(0,false);Update(true);assert(entered==1&&last_group==2&&Read(B(),T+0xd4)==2);
+    puts("Hope Street hostage tripwire: old strict overlap 0/2 sequential entries; safe-side rendezvous 2/2; rear boundary, sphere, down/revive, finite, volume drift and native exit controls passed");
+}
+void HostageBarrier(const Sample& sample){
+    assert(sample.count==1710&&sample.kind==17&&sample.subject_count==3);
+    const auto gate=std::find_if(kGates.begin(),kGates.end(),[&](const auto& g){return g.source_index==sample.source&&g.provider_slot_count==sample.count;});
+    assert(gate!=kGates.end()&&gate->completion_flag==177&&gate->barrier_source==1296);
+    // Exact original ALL-subject predicate includes P1 and both authored NPCs.
+    // P2 is not a native subject: retail creates the barrier while it is behind.
+    for(bool fixed:{false,true}){
+        Setup(sample);Real(P[1]+0x48,-2437);Update(fixed);assert(entered==unsigned(!fixed));
+        if(fixed){
+            Position(1,true);Update(true);assert(entered==1);Update(true);assert(entered==1);
+            Position(0,false);Update(true);assert(Read(B(),T+0xd4)==2&&(B()[V+sample.ordinal*0xc0+0x6c]&2));
+            Position(0,true);Update(true);assert(entered==1); // native once-on-exit rule
+        }
+    }
+    for(bool p2_first:{false,true}){
+        Setup(sample);Real(P[0]+0x48,-2437);Real(P[1]+0x48,-2437);Update(true);assert(!entered);
+        Position(p2_first?1:0,true);Update(true);assert(!entered);
+        Position(p2_first?0:1,true);Update(true);assert(entered==1);
+    }
+    for(unsigned npc=0;npc<2;++npc){
+        Setup(sample);Real(NPC[npc]+0x48,-4000);Update(true);assert(!entered);
+        std::memcpy(B()+NPC[npc]+0x40,B()+P[0]+0x40,12);Update(true);assert(entered==1);
+        Setup(sample);Put(ENTRIES+(npc+1)*0x20+8,0);Update(true);assert(!entered);
+    }
+    for(unsigned slot=0;slot<2;++slot){
+        Setup(sample);Real(P[slot]+0x88,6400);Real(P[slot]+0x48,gate->barrier_front_z+60);Update(true);assert(!entered);
+        Real(P[slot]+0x48,gate->barrier_front_z+80);Update(true);assert(!entered); // tangent still overlaps
+        Real(P[slot]+0x48,gate->barrier_front_z+81);Update(true);assert(entered==1);
+        Setup(sample);Real(P[slot]+0x9c,0);Update(true);assert(!entered);Real(P[slot]+0x9c,100);Update(true);assert(entered==1);
+        Setup(sample);Put(P[slot]+0x170,12);Update(true);assert(!entered);
+        for(unsigned offset:{0x40u,0x44u,0x48u,0x88u})for(uint32_t bad:{0x7fc00000u,0x7f800000u,0xff800000u}){
+            Setup(sample);Put(P[slot]+offset,bad);auto c=HookContext(sample);TrialCoopProgressionEnter(c,B());assert(!(c.eax&255));
+        }
+    }
+    // No late wall after the original Wolf script has retired it/set local177,
+    // including completion while P2 is still outside the pending entry.
+    for(bool pending:{false,true}){
+        Setup(sample);if(pending){Real(P[1]+0x48,-2437);Update(true);assert(!entered);}
+        auto flag_call=Context();flag_call.ecx=Q;Put(SP+4,177);__imp__sub_00210770(flag_call,B());assert(B()[FLAGS+177]==1);Position(1,true);Update(true);Update(true);assert(!entered);
+        Position(0,false);Update(true);Position(0,true);Update(true);assert(!entered);
+    }
+    // The original script's local177 differs from its global flag map. Mapping
+    // count23 must not reject179-byte storage; an equal local bound must reject.
+    Setup(sample);assert(Read(B(),Q+0x30)==179&&Read(B(),Q+0x38)==23);Update(true);assert(entered==1);
+    for(uint32_t size:{0u,177u,65537u}){Setup(sample);Put(Q+0x30,size);Update(true);assert(!entered);}
+    Setup(sample);Put(Q+0x2c,0xfffffff0u);Update(true);assert(!entered);
+    for(unsigned drift=0;drift<6;++drift){
+        Setup(sample);
+        if(drift==0)B()[BARRIER_DESC]^=1;
+        if(drift==1)Real(BX,Value(BX)+1);
+        if(drift==2)Put(V+sample.ordinal*0xc0+0x98,SUBJECTS+8);
+        if(drift==3)Put(V+sample.ordinal*0xc0+0x54,0);
+        if(drift==4)Put(ENTRIES+0x8c,0);
+        if(drift==5)Put(SUBJECTS+8,999);
+        auto c=HookContext(sample);TrialCoopProgressionEnter(c,B());assert(!(c.eax&255));
+    }
+    // Unknown roots/scripts/kinds remain retail; recognized blocking roots with
+    // changed geometry withhold only their sole create command.
+    for(unsigned drift=0;drift<3;++drift){
+        Setup(sample);Real(P[1]+0x48,-2437);
+        if(drift==0)Put(T+0x50,sample.source+1);
+        if(drift==1)B()[C]^=1;
+        if(drift==2)Put(V+sample.ordinal*0xc0+0x50,37);
+        auto c=HookContext(sample);const auto expected=c;TrialCoopProgressionEnter(c,B());assert(!std::memcmp(&c,&expected,sizeof c));
+    }
+    Setup(sample);Real(P[1]+0x48,-2437);trial_coop::SetActive(false);Update(true);assert(entered==1);
+    Setup(sample);auto c=HookContext(sample),expected=c;const auto csr=_mm_getcsr();
+    std::array<uint8_t,0x890> snapshots[2];for(unsigned i=0;i<2;++i)std::memcpy(snapshots[i].data(),B()+P[i],snapshots[i].size());
+    TrialCoopProgressionEnter(c,B());assert(!std::memcmp(&c,&expected,sizeof c)&&_mm_getcsr()==csr);
+    for(unsigned i=0;i<2;++i)assert(!std::memcmp(snapshots[i].data(),B()+P[i],snapshots[i].size()));
+    Real(P[1]+0x48,-2437);TrialCoopProgressionEnter(c,B());expected.eax&=0xffffff00;
+    assert(!std::memcmp(&c,&expected,sizeof c)&&_mm_getcsr()==csr);
+    std::printf("Hope Street barrier%u: native kind17 separation witness, both crossing orders, NPC requirements, full-sphere clearance, local177 completion, provenance and single-player controls passed\n",sample.ordinal);
+}
 int main(){
     unsigned selected=0,ordinary=0,removed=0,garage=0,pickup=0;
     for(const auto& sample:samples){
+        if(sample.control==Control::HostageBarrier){HostageBarrier(sample);++selected;continue;}
         Setup(sample);Position(1,false);Update(false);
         assert(started==1&&Read(B(),T+0xd4)==1); // original one-player lockout witness
         Setup(sample);Position(1,false);Update(true);
@@ -203,6 +351,7 @@ int main(){
         Real(P[0]+0x88,radius*radius);Real(P[1]+0x88,radius*radius);
         Real(P[0]+0x40+axis*4,center-radius);Real(P[1]+0x40+axis*4,center+radius);
         Update(true);assert(started==1);
+        if(sample.control==Control::HostageTripwire)HostageRendezvous(sample);
     }
     assert(selected==std::size(kGates)&&selected+ordinary==std::size(samples)&&garage==1&&pickup==1);
     assert(selected+removed==std::size(legacy_progression_assets::kGates)&&ordinary==removed+pickup);

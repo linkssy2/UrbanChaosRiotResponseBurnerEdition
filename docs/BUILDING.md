@@ -1,4 +1,4 @@
-# Burner Edition 0.19 build status
+# Burner Edition 0.20 build status
 
 This is an inspection/contribution snapshot of the active source closure, not a
 self-contained clean-build kit. The current builder still requires qualified
@@ -27,7 +27,7 @@ Keep Windows as `Windows-x64.zip` and Linux/Proton as `Linux-Proton.tar.gz`;
 the published updater selects those exact suffixes. Preserve executable mode
 0755 for `burner.sh`. Full instructions are Markdown under `tools/`; retain
 `README.txt`, `assets/README.txt` and `README-linux.txt` as compatibility pointers.
-Test the published 0.18 updater against both final archives, including a native
+Test the published 0.19 updater against both final archives, including a native
 Linux replay for permissions and unchanged user state.
 
 Use the same Steam shortcut and prefix for setup/play. The terminal wrapper is
@@ -53,9 +53,23 @@ Native Linux wrapper tests do not establish Proton video, audio, controls or
 gameplay. Automated checks and user acceptance of particular Windows fixes are
 recorded separately from full-campaign and platform coverage.
 
-This launcher-only revision reuses the qualified v0.19 game runtime unchanged.
-Its separate source freeze records updated launcher, tests and documentation;
-the original runtime-build freeze and qualification remain referenced by hash.
-The HD download/install fixtures exercise the pinned archive and failure paths.
-A real Windows Python worker-function download/install was also checked; this
-is separate from a WinForms click, gameplay, or live Proton acceptance.
+Version 0.20 reuses the tested conversation-fix runtime
+`bec60e91c83e1d358da6a354e5aae9489ca9e21fecbfda0b844d179e5c7b2812`.
+Its normal release build passed 231 stages, including 188 test steps. The
+source export checks runtime inputs against that build's frozen source receipt
+and records release-only launcher/documentation changes separately. The clean
+pinned SDK and the ordered title preparers remain the reconstruction path;
+this audit does not establish a fresh-disc clean bootstrap.
+
+New fixtures execute original collection removal/update, cinematic ownership,
+hostage target and native time-control paths. Conversation fixtures execute
+native weapon dispatch, lowering/raising and animation completion; weapon
+admission guards use pinned original instruction slices. These are bounded
+semantic checks, not a complete projectile/physics or campaign replay. The
+issue #32 reporter's complete object history was unavailable.
+
+Windows user acceptance covers the corrected Hope Street hostage sequence,
+shared slow motion, police-barrier passage and both-player weapon suppression
+and restoration. Other encounters and live Proton remain unverified. The
+normal import and main launcher retain original checkpoints and positions;
+private replay spawns, saves and game files are excluded from exports.

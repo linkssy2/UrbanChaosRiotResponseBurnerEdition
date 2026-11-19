@@ -30,6 +30,8 @@ try:
  report['deferred_tests']=[]
  report['live_status']='New executable pending checks and live verification'
  save()
+ from prepare_xbe_entity_records import unprepare as unprepare_entity_records
+ unprepare_entity_records(AREA)
  from prepare_xbe_weapon_wheel import unprepare as unprepare_weapon_wheel
  unprepare_weapon_wheel(AREA)
  from prepare_xbe_weapon_wheel_time import unprepare as unprepare_weapon_wheel_time
@@ -74,6 +76,8 @@ try:
  from prepare_xbe_blink import unprepare as unprepare_blink
  unprepare_blink(AREA)
  from prepare_xbe_coop_cinematics import unprepare as unprepare_coop_cinematics
+ from prepare_xbe_coop_hostage_time import unprepare as unprepare_coop_hostage_time
+ from prepare_xbe_coop_hostage import unprepare as unprepare_coop_hostage
  from prepare_xbe_coop_spin import unprepare as unprepare_coop_spin
  from prepare_xbe_coop_pickups import unprepare as unprepare_coop_pickups
  from prepare_xbe_coop_orders import unprepare as unprepare_coop_orders
@@ -111,6 +115,8 @@ try:
  unprepare_prompt_context(AREA)
  unprepare_coop_downed_blur(AREA)
  unprepare_coop_cinematics(AREA)
+ unprepare_coop_hostage_time(AREA)
+ unprepare_coop_hostage(AREA)
  unprepare_coop_downed_camera(AREA)
  unprepare_coop_death(AREA)
  unprepare_health_packs(AREA)
@@ -197,6 +203,10 @@ try:
  prepare_coop_effects(AREA)
  from prepare_xbe_coop_cinematics import prepare as prepare_coop_cinematics
  prepare_coop_cinematics(AREA)
+ from prepare_xbe_coop_hostage import prepare as prepare_coop_hostage
+ prepare_coop_hostage(AREA)
+ from prepare_xbe_coop_hostage_time import prepare as prepare_coop_hostage_time
+ prepare_coop_hostage_time(AREA)
  from prepare_xbe_coop_downed_blur import prepare as prepare_coop_downed_blur
  prepare_coop_downed_blur(AREA)
  from prepare_xbe_coop_rewards import prepare as prepare_coop_rewards
@@ -550,6 +560,8 @@ int main(){uint32_t r=0;if(uc_ds_ref(r,false)!=0||uc_ds_ref(r,true)!=1||uc_ds_re
  prepare_weapon_wheel_time(AREA)
  from prepare_xbe_weapon_wheel_blur import prepare as prepare_weapon_wheel_blur
  prepare_weapon_wheel_blur(AREA)
+ from prepare_xbe_entity_records import prepare as prepare_entity_records
+ prepare_entity_records(AREA)
  zlib_dll=Path(os.environ.get('UCRR_ZLIB_DLL','C:/Users/Administrator/.cache/codex-runtimes/codex-primary-runtime/dependencies/native/git/mingw64/bin/zlib1.dll'))
  assert zlib_dll.is_file(),f'Missing zlib dependency: {zlib_dll}'
  (AREA/'CMakeLists.txt').write_text('''cmake_minimum_required(VERSION 3.25)
@@ -808,6 +820,10 @@ target_include_directories(test_road_barrier PRIVATE src src/compat "'''+(SDK/'r
 target_link_libraries(test_road_barrier PRIVATE d3d11 d3dcompiler bcrypt windowscodecs ole32)
 add_executable(test_coop_cinematics src/compat/test_coop_cinematics.cpp)
 target_include_directories(test_coop_cinematics PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
+add_executable(test_coop_hostage src/compat/test_coop_hostage.cpp)
+target_include_directories(test_coop_hostage PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
+add_executable(test_coop_hostage_time src/compat/test_coop_hostage_time.cpp)
+target_include_directories(test_coop_hostage_time PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
 add_executable(test_coop_spin src/compat/test_coop_spin.cpp)
 target_include_directories(test_coop_spin PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
 add_executable(test_coop_pickups src/compat/test_coop_pickups.cpp)
@@ -853,6 +869,8 @@ add_executable(test_weapon_wheel src/compat/test_weapon_wheel.cpp)
 target_include_directories(test_weapon_wheel PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
 add_executable(test_weapon_wheel_time src/compat/test_weapon_wheel_time.cpp)
 target_include_directories(test_weapon_wheel_time PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
+add_executable(test_entity_records src/compat/test_entity_records.cpp)
+target_include_directories(test_entity_records PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
 add_executable(test_weapon_wheel_blur_gpu src/compat/test_weapon_wheel_blur_gpu.cpp)
 target_include_directories(test_weapon_wheel_blur_gpu PRIVATE src/compat)
 target_link_libraries(test_weapon_wheel_blur_gpu PRIVATE d3d12 dxgi d3dcompiler)
@@ -1096,6 +1114,10 @@ target_include_directories(UrbanChaosXbeTrial PRIVATE "'''+ROOT.as_posix()+'''" 
  run('test-road-barrier',[AREA/'out-msvc/test_road_barrier.exe',AREA/'src/compat/road_barrier_fixture.bin'])
  run('test-road-barrier-warp',[AREA/'out-msvc/test_road_barrier.exe',AREA/'src/compat/road_barrier_fixture.bin','--warp'])
  run('test-coop-cinematics',[AREA/'out-msvc/test_coop_cinematics.exe'])
+ run('build-coop-hostage',['cmake','--build',AREA/'out-msvc','--target','test_coop_hostage','-j','4'])
+ run('test-coop-hostage',[AREA/'out-msvc/test_coop_hostage.exe'])
+ run('build-coop-hostage-time',['cmake','--build',AREA/'out-msvc','--target','test_coop_hostage_time','-j','4'])
+ run('test-coop-hostage-time',[AREA/'out-msvc/test_coop_hostage_time.exe'])
  run('build-coop-spin',['cmake','--build',AREA/'out-msvc','--target','test_coop_spin','-j','4'])
  run('test-coop-spin',[AREA/'out-msvc/test_coop_spin.exe'])
  run('build-coop-pickups',['cmake','--build',AREA/'out-msvc','--target','test_coop_pickups','-j','4'])
@@ -1123,6 +1145,8 @@ target_include_directories(UrbanChaosXbeTrial PRIVATE "'''+ROOT.as_posix()+'''" 
  run('test-aim-mode',[AREA/'out-msvc/test_aim_mode.exe'])
  run('test-weapon-wheel',[AREA/'out-msvc/test_weapon_wheel.exe'])
  run('test-weapon-wheel-time',[AREA/'out-msvc/test_weapon_wheel_time.exe'])
+ run('build-entity-records',['cmake','--build',AREA/'out-msvc','--target','test_entity_records','-j','4'])
+ run('test-entity-records',[AREA/'out-msvc/test_entity_records.exe'])
  run('test-weapon-wheel-ui',[AREA/'out-msvc/test_weapon_wheel_ui.exe'])
  run('test-weapon-wheel-blur-gpu',[AREA/'out-msvc/test_weapon_wheel_blur_gpu.exe'])
  run('test-weapon-wheel-blur-warp',[AREA/'out-msvc/test_weapon_wheel_blur_gpu.exe','--warp'])

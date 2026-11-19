@@ -10,6 +10,20 @@ unsigned TrialCoopInteractionPlayer(const uint8_t*,uint32_t behavior);
 void TrialCoopInteractionLookup(X86Context&,const uint8_t*);
 void TrialCoopInteractionInput(X86Context&,uint8_t*);
 void TrialCoopInteractionClose(X86Context&,uint8_t*,uint32_t behavior);
+bool TrialCoopInteractionWeaponsBlocked(const uint8_t*,uint32_t actor);
+bool TrialCoopInteractionWeaponInputBlocked(uint32_t actor);
+
+// Restrict only the native weapon update; movement/look runs outside this scope.
+class TrialCoopInteractionWeaponScope {
+public:
+    TrialCoopInteractionWeaponScope(X86Context&,uint8_t*);
+    ~TrialCoopInteractionWeaponScope();
+private:
+    uint8_t* base_;uint32_t actor_=0,id_=0,world_=0;
+    uint8_t lock_=0,fire_=0;bool blocked_=false;
+    TrialCoopInteractionWeaponScope* previous_;
+    friend bool TrialCoopInteractionWeaponInputBlocked(uint32_t);
+};
 
 class TrialCoopInteractionScope {
 public:

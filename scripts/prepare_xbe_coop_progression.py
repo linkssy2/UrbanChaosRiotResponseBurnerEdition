@@ -11,6 +11,9 @@ INCLUDE='#include "xbe_coop_progression.h"\n'
 HOOK='\tTrialCoopProgressionEnter(ctx,base);\n'
 ANCHORS=('\t// 0021169B test al, al','\t// 002117BC test al, al')
 PINS=(
+    (0x210350,59,'85ce1924245605aa12f466e35e4d2253d248329abea4b9d7f89eb16317d6af79'),
+    (0x210760,13,'621f971d37ba26c386d18eb5a7d0ef07545976cfac4440deee4c76c205430365'),
+    (0x207d70,39,'77e4292727d8c6a57d8403523d0c547c85054ccb4ba1a4a8da0a1e9df3b81993'),
     (0x211610,524,'088494dd33c410bb7c2c75c2827d5897b6a33341a617afae173b10a6df9be38b'),
     # Original command-width dispatch, its two jump tables and appended custom
     # trigger slots underpin the build-time census and source-index identity.
@@ -34,16 +37,19 @@ def gate_key(gate):
     return (gate['provider_slot_count'],gate['source_index'],gate['volume_ordinal'],gate['enter_group'])
 
 def legacy_census(area):
-    """Private regression witness for the former creation/unlock policy."""
+    """Private witnesses for creation/unlock and strict hostage tripwire policies."""
     current=coop_progression_assets.ENSURE_PROGRESS
     operations=coop_progression_assets.DOOR_PROGRESS_OPERATIONS
+    boundary=coop_progression_assets.hostage_partner_boundary
     try:
         coop_progression_assets.ENSURE_PROGRESS=current|{'DoorProp'}
         coop_progression_assets.DOOR_PROGRESS_OPERATIONS=operations|{23}
+        coop_progression_assets.hostage_partner_boundary=lambda *args:{}
         return coop_progression_assets.build(area)
     finally:
         coop_progression_assets.ENSURE_PROGRESS=current
         coop_progression_assets.DOOR_PROGRESS_OPERATIONS=operations
+        coop_progression_assets.hostage_partner_boundary=boundary
 
 def samples(area,result,legacy):
     """Private fixture embeds original inputs; runtime header contains hashes only."""
@@ -79,14 +85,17 @@ def samples(area,result,legacy):
                 out.append('static constexpr uint8_t '+name+label+'[]={'+','.join(str(v)for v in data)+'};')
             for i,(_label,code)in enumerate(t['scripts']):raw(f'code{i}',code)
             raw('boxes',t['boxes']);raw('rows',t['properties'])
+            raw('subjects',struct.pack('<'+'I'*len(t['subjects']),*t['subjects']) if t['subjects'] else bytes(4))
+            if gate.get('completion_flag',0xffffffff)!=0xffffffff:raw('barrier_matrix',struct.pack('<16f',*reader.entities[1296]['matrix']))
             out.append('static constexpr const uint8_t* '+name+'codes[]={'+','.join(name+f'code{i}'for i in range(len(t['scripts'])))+'};')
             out.append('static constexpr uint32_t '+name+'sizes[]={'+','.join(str(len(code))for _,code in t['scripts'])+'};')
             control='GaragePopulation'if level['file']=='12-01.ent'and gate['volume_ordinal']==29 else (
-                'ShieldPickup'if level['file']=='12-01.ent'and gate['volume_ordinal']==30 else'None')
-            entries.append('{%du,%du,%du,%du,%du,%s,%s,%s,%s,%du,%s,Control::%s},'%(
+                'ShieldPickup'if level['file']=='12-01.ent'and gate['volume_ordinal']==30 else (
+                'HostageTripwire'if gate.get('partner_min_x')else('HostageBarrier'if gate.get('completion_flag',0xffffffff)!=0xffffffff else'None')))
+            entries.append('{%du,%du,%du,%du,%du,%s,%s,%s,%s,%du,%s,Control::%s,%du,%du,%s,%s},'%(
                 gate['provider_slot_count'],gate['source_index'],gate['volume_ordinal'],gate['enter_group'],
                 len(t['scripts']),name+'codes',name+'sizes',name+'rows',name+'boxes',len(t['boxes'])//24,
-                'true'if selected else'false',control))
+                'true'if selected else'false',control,t['kind'],len(t['subjects']),name+'subjects',name+'barrier_matrix'if gate.get('completion_flag',0xffffffff)!=0xffffffff else'nullptr'))
     out.append('static constexpr Sample samples[]={\n'+ '\n'.join(entries)+'\n};')
     return '\n'.join(out)
 
@@ -118,6 +127,10 @@ def prepare(area):
         assert hashlib.sha256(original.encode()).hexdigest()==digest,address
         marker='// ORIGINAL_'+address;assert test.count(marker)==1,marker
         test=test.replace(marker,original)
+    lookup=(area/'generated/game/x86_recomp.52.cpp').read_text()
+    lookup=re.search(r'X86_FUNC\(__imp__sub_00207D70\) \{.*?^\}',lookup,re.M|re.S).group()
+    assert hashlib.sha256(lookup.encode()).hexdigest()=='eb0d2bbe96976c5c36636763698a136b93e103bf36f932f8222e643033933c6b'
+    test=test.replace('// ORIGINAL_00207D70',lookup)
     result=coop_progression_assets.build(area)
     legacy=legacy_census(area)
     test=test.replace('// LEGACY_CENSUS',legacy['header'].replace('#pragma once\n','')

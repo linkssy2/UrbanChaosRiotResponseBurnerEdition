@@ -1,6 +1,7 @@
 #include "xbe_weapon_wheel.h"
 #include "xbe_coop.h"
 #include "xbe_coop_guest.h"
+#include "xbe_coop_interactions.h"
 #include "cpu/x86_ops.h"
 #include "kernel/kernel.h"
 #include "kernel/memory.h"
@@ -65,6 +66,7 @@ bool Available(const uint8_t* b,const Identity& p){
     // weapons retain the retail raise path rather than acquiring a queued wheel request.
     return health>0&&health<0x7f800000u&&!(Read(b,p.world+0x10)&0x800u)&&
         current<25&&!b[a+0x304]&&!b[a+0x202]&&!b[a+0x2ac]&&!b[a+0x2ad]&&
+        !TrialCoopInteractionWeaponsBlocked(b,a)&&
         state!=3&&state!=7&&state!=11&&state!=12&&state!=13&&
         (state!=8||Read(b,a+0x174)==2);
 }

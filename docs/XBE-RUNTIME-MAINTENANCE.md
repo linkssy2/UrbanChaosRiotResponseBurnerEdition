@@ -1,5 +1,65 @@
 # Burner Edition: current runtime
 
+## November 18: 0.20 paired release preparation
+
+Prepare Windows and Linux/Proton from the accepted co-op conversation runtime
+`bec60e91c83e1d358da6a354e5aae9489ca9e21fecbfda0b844d179e5c7b2812`.
+Its complete normal release build passed 231 stages, including 188 test steps,
+with diagnostics removed. Preserve the immutable build/source evidence under
+`build/coop-hostage-20261118`; packaging-only version changes must be recorded
+separately from those compiled inputs. Release preparation belongs in
+`build/release-0.20`, source/notes in `publication/0.20`.
+
+Include the entity-bucket reuse correction, shared cinematic ownership, hostage
+targeting, both native slow-motion windows and both-player conversation weapon
+restrictions. Preserve Hope Street's narrowly qualified tripwire and police-barrier
+corrections. The user accepted both-player weapon suppression and restoration in
+the live Windows Hope Street replay. The targeting, slow-motion and conversation
+helpers have no Hope Street mission filter; existing census/fixtures cover the
+shared shipped behavior classes. Other encounters and live Proton remain
+individually unverified. Co-op remains experimental.
+
+Main Hope Street must retain original checkpoint IDs and positions: entity 594
+is checkpoint 0, and entity 1093 is checkpoint 3. The original 12-01.ent SHA-256
+is `2e1b94e8e5b46777ef6e01ad266b16154a44b91f893dda0210f8cb8ca6489b22`.
+The altered replay archive and copied saves remain isolated under the private
+evidence directory; never package them or redirect the normal launcher there.
+Keep the original disc manifest and normal import paths for both platforms.
+
+Reuse the published v0.19 source/updater baseline and verify updates separately
+on Windows and native Linux. Keep the HD texture download separate and retain
+the approved cover, lighting tiers, weapon wheels and pointer. Preparation does
+not authorize publishing; leave published v0.19 artifacts unchanged.
+
+## November 18: entity-bucket reuse correction (issue 32)
+
+Issue 32 reports an Angel Heights final-minigun crash in published v0.19.
+The matching executable/PDB and stack layout identify the world entity update
+at guest 00209228, reading virtual-table slot +30 from a zero table. The reporter's
+full object history is unavailable; the user believes this was single-player.
+
+`prepare_xbe_entity_records.py` repairs the original 00221D00 empty-bucket
+unlink. Both neighbors are updated independently and the retired descriptor's
+links are cleared before reuse. Previously, removing the first bucket left the
+successor's previous link stale; subsequent removal/reinsertion could expose an
+empty bucket or create a cycle. Keep the world traversal, entity eligibility,
+callbacks and capacity unchanged. This is a constant-time removal correction,
+with no per-frame scan, null-object skip or additional runtime logging.
+
+The normal build reverses this patch before existing source pins, reapplies it
+after other preparation, and runs `test_entity_records`. That fixture executes
+the actual generated collection routines and world traversal. It retains the
+original failure witness, checks reuse/order/capacity and models a self-retiring
+entity callback that reproduces the reported guest read at 00000030. This model
+does not establish the reporter's exact invalidating event. The independent
+retail-instruction proof in `scripts/native_entity_record_checks` intentionally
+continues to preserve original behavior.
+
+Build, paired package and live-test evidence belongs in
+`build/issue-32-angel-heights-20261118`. Private checkpoint assets and copied saves
+must stay outside distributable packages. Live Windows and Proton acceptance
+remain separate from the semantic regression and package checks.
+
 ## November 12: scope, blood pools, hotel audio and launcher cover
 
 The user accepted scope artwork remaining visible with No HUD, restored blood
@@ -3390,3 +3450,168 @@ source exports belong in `build/release-0.19-hd-download` and
 `publication/0.19-hd-download`. Reuse the already verified 0.19 game runtime;
 preserve its original source/build receipts separately from this launcher source
 revision. Offline/Linux checks do not establish live Proton acceptance.
+
+## November 18: first-mission local co-op hostage repair
+
+Hope Street Police Station is `12-01`, the first campaign menu entry. Canals is
+the second mission; keep its evidence separate. The report describes local
+split-screen with an unknown build version. Evidence and paired candidate
+receipts are under `build/coop-hostage-20261118`.
+
+The shared entity-record correction already integrated for issue #32 also
+prevents silent update omission. The maintained `SelectiveOmission` witness
+executes three complete original world ticks with two live records: original
+unlinking updates only one, while the corrected unlinking updates both. This
+establishes an engine failure mechanism, not the reporter's exact entity history.
+
+Hope Street trigger 67 uses a 30 cm deep tripwire to start the hostage event.
+Keep the original P1 overlap and both actors alive. For this fingerprinted event,
+allow P2's collision sphere wholly past the earlier checkpoint's x=1060 plane,
+with its center in that checkpoint's lower-floor y band and beyond its rear z
+boundary. There is no forward z limit. This admits sequential passage while
+excluding the earlier route and the rear door/deletion area. The 43-gate census
+and other rendezvous rules remain intact; changed provenance or volume data
+keeps the strict original overlap rule.
+
+Retail `4ACD0` returns the last registered player despite the camera's authored
+Player Num. Scoped postlookup hooks in bone-camera acquisition/release honor
+that slot; SimpleCutscene's completion pitch reset returns to its default P1.
+The original player lock and the existing P2 shared-cinematic input suppression
+then complement one another. No global manager rewrite, mission-script rewrite,
+new logging or per-frame entity scan is added. Camera retirement must still
+release control, so a pending-removal flag alone does not reject that lookup.
+
+Normal release preparation regenerates both helpers and their actual-body
+fixtures. Private checkpoint/spawn changes, profiles, game assets, probes and
+symbols are excluded from both distributables. Native Linux fixture execution
+and Windows package tests do not establish live Proton gameplay; record scene
+acceptance and remaining limits in the candidate receipts.
+
+The follow-up report that a hostage taker ignores the other player is separate
+from cinematic ownership. Retail ShootingHostageTaker overwrites its player
+target with manager `4ACD0` on each update; facing independently queries the
+same singleton. Scoped `xbe_coop_hostage` hooks select the nearer living player
+and keep facing on the update's cached target. DragHostage's corresponding
+player lookup uses the same selection for its original firing/proximity checks.
+IdleUntil's authored LookAtPlayer branch also considers either living player;
+its stored hostage ID and original wait conditions remain unchanged. These
+hooks belong to shared behavior classes and are not limited to Hope Street.
+The private asset census covers all 27 local ENT archives (17 campaign): 25
+generic combat phases, 21 dragging phases and 13 idle phases, five with player
+watching enabled. Seven explicit NPC shooting phases are intentionally unchanged.
+See `build/coop-hostage-20261118/hostage-coverage-census.json`; this establishes
+source coverage, not live acceptance of every encounter.
+Equal distances retain a valid previous target, otherwise the original lookup.
+The original warning distances, timers, weapon checks, explicit ShootAtEntity
+victim and mission scripts remain intact. The helper validates both co-op
+players and the exact behavior classes; single-player retains retail behavior.
+There is no manager mutation, allocation, entity scan or extra logging.
+
+The private shortcut also originally overlapped the event trigger while P1
+was raising the pistol. Moving only its checkpoint Z from -2890 to -2800
+allowed equipment setup to finish. Read-only snapshots and the user's Windows
+test confirmed pistol firing and shield raising afterward. This is private
+replay preparation, not a change to the normal mission spawn. Preserve the
+new `equipment-refined-*.json` evidence and never ship the modified archive.
+
+Hostage slow motion has a separate singleton dependency. The shared goal's
+`160310` request calls `1600D0`, whose visibility and aim-line checks both obtain
+the last registered player through `338B0` / `4ACD0`. Consequently a taker can
+react to P1 while P2's position or facing prevents the original slow-motion
+request. Keep both native checks paired to the same living player; the second
+check measures distance from the taker to that player's aiming line, not a
+simple distance between the characters.
+
+The original reload and throw handlers request scale 0.25 with interpolation
+rate 0.5 through event `0x60`. The three death/aftermath behavior variants request
+0.1 with rate 1 through the same event. Both reach `160810` / `160310`, shared by
+the generic, Saint and Patriot hostage goals. Event `0x5F` has the same registered
+handler, but no direct retail-code producer was found. Do not invent an immediate
+post-cutscene timer: Hope Street's opening camera animation contains sounds and
+motion blur, while its following combat phase supplies the first native reload
+opportunity. First and later reloads and the death aftermath need separate live
+observations.
+
+The original global scale `4E7D38` already feeds the common world timestep and
+therefore both players. `191890` also adjusts the shared audio categories.
+Separately, event `0xA8` carries the original field-of-view feedback to one player;
+both views need that feedback without applying the world scale twice. Preserve
+the authored speed-up and instant-restore events, hostage incapacitation reset,
+and goal teardown's unconditional `191890(1.0)`. The display-cadence enhancement
+does not replace this clock, and weapon-wheel slow time remains single-player
+only. The `xbe_coop_hostage_time` helper retries the original admission for the
+other living player only when needed, substitutes that player consistently in
+both native checks, and delivers the original view-feedback payload to both
+views. Its living-player guards keep a dead partner from vetoing a survivor's
+window. It adds no independent clock, window timer or manager rewrite. Keep its
+pinned preparer and actual-body fixtures together with the targeting helper.
+Offline Windows/native Linux results, live Windows scene
+acceptance, and live Proton acceptance must remain separate; a census of shared
+goal classes does not prove every encounter has been played.
+
+Hope Street's post-rescue police barrier has two separate actor-list triggers,
+75 and 78, for the killed/captured branches. Their original kind-17 condition
+requires P1 and the two authored officers, but omits P2. A Windows snapshot
+confirmed SolidCollisionBlock 1296 between the players after the rescue. This
+is unwanted separation, not proof of an impossible conversation: P2 was still
+inside Wolf's 300 cm interaction radius. These scripts are unchanged in the
+private checkpoint replay and also belong to the normal campaign.
+
+Keep the fix in the existing progression helper. Its two additional fingerprinted
+gates retain the original actor-list condition, then require both living players
+to overlap the original volume and have their full collision spheres past the
+barrier's forward plane. Validate the loaded subject list, volume and barrier
+descriptor's complete 64-byte matrix before using that plane. The matrix starts
+at descriptor+0; the actor constructor copies it to actor+10. Preserve all 43
+previous gates and their proof indexes; these two additions produce 45 gates.
+
+The only delayed command is creation of barrier 1296. Wolf's later scripts 1260
+and 1283 complete Objective 1298, retire that barrier, then set local flag 177.
+Once 177 is set, suppress delayed creation permanently for that level instance;
+otherwise an already-completed conversation could be followed by a late barrier.
+Use the local flag allocation at provider+2C, bounded by provider+30. The separate
+2107F0 global-ID map is not the script's flag namespace. Original trigger exit
+latches and level-reset behavior remain intact. No teleport, officer removal or
+conversation-radius change is part of this correction. Paired offline checks and
+live Windows/Proton passage tests remain distinct acceptance steps.
+
+The user confirmed passage in the updated Windows replay. The private
+`barrier-live-result.json` records 66 samples with the rescue complete, P2 still
+behind the plane and no barrier; later samples show barrier creation after both
+players crossed. These are unsynchronized 10 Hz observations, not exact creation
+frame timing. The Windows and native Linux progression fixtures, six asset
+tests, preparer idempotence and reversal passed in
+`progression-regression/20261119T035224.968286Z/result.json`. Final removal after
+the officer conversation and live Proton gameplay remain separate, unverified
+acceptance steps. The subsequent weapon-restriction report is a distinct issue.
+
+Officer dialogue uses `InteractiveScriptedBehaviour`'s temporary player lock,
+not inventory removal. Hope Street's killed/captured Wolf variants 1261 and 1284
+both author LockPlayerWhenInteract=1; other dialogue deliberately sets it to zero.
+The existing `xbe_coop_interactions` helper now restricts both players' weapons
+only while a valid current conversation has that authored property (+119) and
+actually owns its lock (+129). Admission waits and unlocked dialogue do not
+acquire the restriction. The original initiator retains conversation control;
+the companion remains free to move and look.
+
+Keep weapon suppression inside the original D25B0 weapon-update scope. It borrows
+the actor's control byte and sampled fire bit only for that call, restores both
+before movement/look processing, and rejects manual holster input within the
+same scope. Both weapon wheels use the same restriction, close when it begins,
+and discard queued selections rather than replaying them after release. Already
+committed attack and equipment animations finish normally; no new attack is
+admitted. Native D2830 lowering and D23E0 raising run only in a settled state.
+Raise only the same weapon this helper lowered, after the conversation and any
+other native lock release. Preserve an already holstered weapon, health,
+inventory and unrelated control state. Ownership checks prevent stale behavior,
+actor or world records from restoring a replacement; teardown forgets them.
+
+Conversation completion, skip/abort, waiting recovery and owner death release
+the shared restriction when the original owned lock ends; another live locked
+conversation retains it. Focused Windows and native Linux execution passed
+144 original weapon-dispatch ticks, the existing interaction regressions and
+278 weapon-wheel checks, plus preparer idempotence and reversal, in
+`conversation-checks/20261119T042308.456114Z/result.json`. The fixture covers both
+initiators, both wheel groups, unlocked dialogue, in-progress equipment actions,
+prior holster ownership and temporary-state restoration. This establishes
+offline behavior, not live dialogue visuals or Proton gameplay acceptance.

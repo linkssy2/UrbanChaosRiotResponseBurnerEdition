@@ -79,27 +79,76 @@ bool Authored(const uint8_t* b,size_t index,uint32_t actor,uint32_t desc){
     }
     saved.matches=true;return true;
 }
-bool GateFor(const uint8_t* b,const X86Context& c){
+const coop_progression_assets::Gate* GateFor(const uint8_t* b,const X86Context& c){
     if(!Pair(b)||!TrialGuestReadable(c.esi,0xe0)||Read(b,c.esi)!=0x480888||
-       (Read(b,c.esi+0x5c)&1)||!TrialGuestReadable(c.ebp,0xc0)||Read(b,c.ebp+0x50)!=37)return false;
+       (Read(b,c.esi+0x5c)&1)||!TrialGuestReadable(c.ebp,0xc0))return nullptr;
+    const auto kind=Read(b,c.ebp+0x50);if(kind!=37&&kind!=17)return nullptr;
     const uint32_t rows=Read(b,c.esi+0xd8),list=Read(b,c.esi+0xdc),phase=Read(b,c.esi+0xd4);
     if((phase!=0&&phase!=2)||rows>64||c.edi>=rows||!TrialGuestReadable(list,rows*8)||
-       Read(b,list+c.edi*8)!=1)return false;
+       Read(b,list+c.edi*8)!=1)return nullptr;
     const uint32_t group=Read(b,list+c.edi*8+4),source=Read(b,c.esi+0x50);
     const uint32_t count=Read(b,provider+0x10),slots=Read(b,provider+4),definitions=Read(b,provider+0x1c);
     if(count>16384||source>=count||!TrialGuestReadable(slots,count*4)||c.ebp<definitions||
-       (c.ebp-definitions)%0xc0)return false;
+       (c.ebp-definitions)%0xc0)return nullptr;
     const uint32_t ordinal=(c.ebp-definitions)/0xc0,entry=Read(b,slots+source*4);
     if(!TrialGuestReadable(entry,0x14)||Read(b,entry+4)!=Read(b,c.esi+0x54)||
-       !(b[entry+8]&8)||Read(b,entry+0x10)!=c.ebp)return false;
+       !(b[entry+8]&8)||Read(b,entry+0x10)!=c.ebp)return nullptr;
     const uint32_t desc=Read(b,entry+0xc);
-    if(!TrialGuestReadable(desc,0x68))return false;
+    if(!TrialGuestReadable(desc,0x68))return nullptr;
     for(size_t i=0;i<std::size(kGates);++i){
         const auto& gate=kGates[i];
         if(gate.provider_slot_count==count&&gate.source_index==source&&
-           gate.volume_ordinal==ordinal&&gate.enter_group==group&&Authored(b,i,c.esi,desc))return true;
+           gate.volume_ordinal==ordinal&&gate.enter_group==group&&
+           Read(b,c.ebp+0x50)==gate.trigger_kind&&Authored(b,i,c.esi,desc)){
+            return &gate;
+        }
     }
-    return false;
+    return nullptr;
+}
+bool PartnerPastRear(const uint8_t* b,const coop_progression_assets::Gate& gate){
+    for(unsigned axis=0;axis<3;++axis)
+        if((Read(b,players[1]+0x40+axis*4)&0x7f800000)==0x7f800000)return false;
+    const uint32_t xbits=Read(b,players[1]+0x40),radiusbits=Read(b,players[1]+0x88);
+    if(radiusbits>=0x7f800000)return false;
+    float x,y,z,radius_squared;std::memcpy(&x,&xbits,4);std::memcpy(&radius_squared,&radiusbits,4);
+    std::memcpy(&y,b+players[1]+0x44,4);std::memcpy(&z,b+players[1]+0x48,4);
+    if(y<gate.partner_min_y||y>gate.partner_max_y||z>gate.partner_max_z)return false;
+    const double distance=double(x)-gate.partner_min_x;
+    return distance>0&&distance*distance>double(radius_squared);
+}
+bool BarrierMetadata(const uint8_t* b,const X86Context& c,const coop_progression_assets::Gate& gate){
+    const auto subjects=Read(b,c.ebp+0x94),end=Read(b,c.ebp+0x98);
+    const auto boxes=Read(b,c.ebp+0x74),last=Read(b,c.ebp+0x78);
+    if(gate.trigger_kind!=17||gate.subject_count!=3||
+       end<subjects||end-subjects!=gate.subject_count*4||
+       !TrialGuestReadable(subjects,gate.subject_count*4)||
+       Hash(b+subjects,gate.subject_count*4)!=gate.subject_hash||
+       Read(b,c.ebp+0x54)!=3||last<boxes||last-boxes!=48||
+       !TrialGuestReadable(boxes,48)||Hash(b+boxes,24)!=gate.partner_volume_hash)return false;
+    const auto count=Read(b,provider+0x10),slots=Read(b,provider+4);
+    if(gate.barrier_source>=count||!TrialGuestReadable(slots+gate.barrier_source*4,4))return false;
+    const auto entry=Read(b,slots+gate.barrier_source*4);
+    if(!TrialGuestReadable(entry,0x10))return false;
+    const auto desc=Read(b,entry+0xc);
+    // The immutable descriptor starts with its 64-byte original transform.
+    // 20BEAE..20BEC9 copies it to actor+10 before 111200 builds the box.
+    return TrialGuestReadable(desc,64)&&Hash(b+desc,64)==gate.barrier_matrix_hash;
+}
+bool Completed(const uint8_t* b,uint32_t flag,bool& completed){
+    // Script commands use local byte indices (217C81 -> 210770), not the
+    // separate 2107F0 global-ID map. Provider+30 is the flag allocation length.
+    const auto size=Read(b,provider+0x30),data=Read(b,provider+0x2c);
+    if(!size||size>65536||flag>=size||!TrialGuestReadable(data,size))return false;
+    completed=b[data+flag]!=0;return true;
+}
+
+bool PastBarrier(const uint8_t* b,uint32_t actor,float front){
+    for(unsigned axis=0;axis<3;++axis)
+        if((Read(b,actor+0x40+axis*4)&0x7f800000)==0x7f800000)return false;
+    const auto radiusbits=Read(b,actor+0x88);if(radiusbits>=0x7f800000)return false;
+    float z,radius_squared;std::memcpy(&z,b+actor+0x48,4);std::memcpy(&radius_squared,&radiusbits,4);
+    const double distance=double(z)-front;
+    return distance>0&&distance*distance>double(radius_squared);
 }
 }
 
@@ -107,19 +156,39 @@ void TrialCoopProgressionReset(){
     world=provider=0;players[0]=players[1]=ids[0]=ids[1]=0;cache.fill({});
 }
 void TrialCoopProgressionEnter(X86Context& c,uint8_t* b){
-    if(!(c.eax&255)||!GateFor(b,c))return;
+    if(!(c.eax&255))return;
+    const auto* gate=GateFor(b,c);if(!gate)return;
+    HostRestore host;
+    const bool barrier=gate->completion_flag!=0xffffffffu;
+    if(barrier){
+        bool completed=false;
+        if(!BarrierMetadata(b,c,*gate)||!Completed(b,gate->completion_flag,completed)||completed||
+           !PastBarrier(b,players[0],gate->barrier_front_z)||
+           !PastBarrier(b,players[1],gate->barrier_front_z)){c.eax&=0xffffff00;return;}
+    }
     if(!Alive(b,players[0])||!Alive(b,players[1])){c.eax&=0xffffff00;return;}
     if(c.esp<0x18000||!TrialGuestReadable(c.esp-0x7000,0x7004)||
-       Read(b,0x46fbe8+0x48)!=0x2187a0)return;
+       Read(b,0x46fbe8+0x48)!=0x2187a0){if(barrier)c.eax&=0xffffff00;return;}
     const uint32_t shape=Read(b,c.ebp+0x54);
     if(shape>3)return;
     if(shape==3){
         const uint32_t first=Read(b,c.ebp+0x74),last=Read(b,c.ebp+0x78);
         if(last<=first||last-first>65536||(last-first)%48||!TrialGuestReadable(first,last-first))return;
     }
-    HostRestore host;X86Context temporary=c;
+    X86Context temporary=c;
     const uint32_t sp=(c.esp-0x600)&~15u;
+    const bool rear_boundary=gate->partner_min_x>0&&shape==3&&
+        Read(b,c.ebp+0x78)-Read(b,c.ebp+0x74)==48&&
+        Hash(b+Read(b,c.ebp+0x74),24)==gate->partner_volume_hash;
     for(unsigned i=0;i<2;++i){
+        // Hope Street's hostage tripwire is only 30cm deep. Keep P1's native
+        // overlap, but admit P2 wholly beyond the rear checkpoint entry plane.
+        // Its floor/near-side limits exclude earlier areas, while no far-side
+        // Z limit prevents a partner who crossed first from blocking the scene.
+        if(i==1&&rear_boundary){
+            if(!PartnerPastRear(b,*gate)){c.eax&=0xffffff00;return;}
+            continue;
+        }
         temporary.esp=sp;temporary.ecx=players[i];temporary.df=0;
         if(!(kernel::CallGuest(temporary,0x2187a0,{c.ebp})&255)){c.eax&=0xffffff00;return;}
     }

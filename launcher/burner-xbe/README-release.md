@@ -1,4 +1,4 @@
-# Urban Chaos: Riot Response - Burner Edition 0.19
+# Urban Chaos: Riot Response - Burner Edition 0.20
 
 HD HUD is still a work in progress and has known prompt/display issues.
 Turn HD UI Off to use the original HUD, which works normally.

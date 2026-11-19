@@ -20,6 +20,9 @@ std::atomic<unsigned> published[2]{};
 uint32_t world=0,players[2]{},ids[2]{};
 thread_local TrialCoopInteractionScope* scope=nullptr;
 thread_local uint32_t lookup_owner=0;
+thread_local TrialCoopInteractionWeaponScope* weapon_scope=nullptr;
+struct Holster {uint32_t actor=0,id=0,world=0,selected=0;bool owned=false;};
+Holster holsters[2];
 struct HostRestore {unsigned csr=_mm_getcsr();~HostRestore(){_mm_setcsr(csr);}};
 // Original range/property routines use less than 1 KiB; keep both their stack
 // and out-parameters off the live translated frame, and restore every byte.
@@ -133,7 +136,7 @@ void Prune(const X86Context& c,uint8_t* b){
 using namespace interactions;
 
 TrialCoopInteractionStatus TrialCoopInteractionSnapshot(unsigned slot){const unsigned v=slot<2?published[slot].load(std::memory_order_relaxed):0;return {bool(v&1),bool(v&2)};}
-void TrialCoopInteractionReset(){records={};world=0;lookup_owner=0;Publish();}
+void TrialCoopInteractionReset(){records={};holsters[0]=holsters[1]={};world=0;lookup_owner=0;Publish();}
 unsigned TrialCoopInteractionPlayer(const uint8_t* b,uint32_t behavior){
     if(!Pair(b))return 0;const auto* r=Find(b,behavior);return r&&Current(b,*r)?unsigned(r->slot+1):0;
 }
@@ -231,4 +234,54 @@ void TrialCoopInteractionClose(X86Context& c,uint8_t* b,uint32_t behavior){
         b[behavior+0x148]=0;Lock(call,*r,false);
     }
     *r={};Publish();
+}
+
+bool TrialCoopInteractionWeaponsBlocked(const uint8_t* b,uint32_t actor){
+    if(!Pair(b)||(actor!=players[0]&&actor!=players[1])||!Alive(b,actor))return false;
+    for(const auto& r:records)if(r.behavior&&Valid(b,r)&&Current(b,r)&&
+        Alive(b,players[r.slot])&&b[r.behavior+0x119]&&b[r.behavior+0x129])return true;
+    return false;
+}
+bool TrialCoopInteractionWeaponInputBlocked(uint32_t actor){
+    return weapon_scope&&weapon_scope->blocked_&&weapon_scope->actor_==actor;
+}
+TrialCoopInteractionWeaponScope::TrialCoopInteractionWeaponScope(X86Context& c,uint8_t* b):base_(b),previous_(weapon_scope){
+    if(Pair(b)&&(c.ecx==players[0]||c.ecx==players[1])){
+        actor_=c.ecx;const unsigned slot=actor_==players[1];
+        id_=ids[slot];world_=world;auto& saved=holsters[slot];
+        if(saved.actor!=actor_||saved.id!=id_||saved.world!=world_){saved={actor_,id_,world_};}
+        const uint32_t selected=Word(b,actor_+0x4fc);
+        if(!Alive(b,actor_)||(saved.owned&&saved.selected!=selected))saved.owned=false;
+        blocked_=TrialCoopInteractionWeaponsBlocked(b,actor_);
+        const bool settled=Alive(b,actor_)&&Word(b,actor_+0x170)==0&&!b[actor_+0x2ad]&&!b[actor_+0x2ae]&&selected<25;
+        if(settled&&Stack(c)){
+            // Use the original animation on the ordinary guest call stack. Do
+            // not interrupt a raise, reload, shield or other pending action.
+            HostRestore host;X86Context call=c;call.ecx=actor_;
+            if(blocked_&&!b[actor_+0x2ac]){
+                saved.selected=selected;saved.owned=true;
+                kernel::CallGuest(call,0xd2830,{0,0});
+                if(!b[actor_+0x2ac])saved.owned=false;
+            }else if(!blocked_&&saved.owned&&!b[actor_+0x202]&&!b[actor_+0x848]){
+                if(b[actor_+0x2ac])kernel::CallGuest(call,0xd23e0,{});
+                saved.owned=false;
+            }
+        }
+        if(blocked_){
+            // +202 guards the native weapon/shield branches. Sampled fire can
+            // otherwise raise a holstered gun despite that guard. Both values
+            // are restored before the later native movement/look update.
+            lock_=b[actor_+0x202];fire_=b[actor_+0x4ac]&1;
+            b[actor_+0x202]=1;b[actor_+0x4ac]&=uint8_t(~1u);
+        }
+    }else holsters[0]=holsters[1]={};
+    weapon_scope=this;
+}
+TrialCoopInteractionWeaponScope::~TrialCoopInteractionWeaponScope(){
+    if(blocked_&&TrialGuestReadable(0x51c4dc,4)&&Word(base_,0x51c4dc)==world_&&
+       TrialGuestReadable(actor_,0x890)&&Word(base_,actor_)==0x46fbe8&&Word(base_,actor_+0x54)==id_){
+        base_[actor_+0x202]=lock_;
+        base_[actor_+0x4ac]=uint8_t((base_[actor_+0x4ac]&~1u)|fire_);
+    }
+    weapon_scope=previous_;
 }

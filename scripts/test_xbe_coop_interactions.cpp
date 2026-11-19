@@ -22,6 +22,9 @@ static bool candidate=true,keyboard_mode=true,faces[2]{true,true},pressed[2]{},s
 static unsigned speech_starts=0,script_calls=0,transitions=0,fade_calls=0,query_ports[2]{};
 static uint32_t last_property_owner=0;
 static bool mixed_input=false;
+static bool weapon_done=true,manual_holster=false,fail_weapon=false,nested_weapon=false;
+static unsigned lowered=0,raised=0,weapon_animations=0,weapon_checks=0,attack_sinks[4]{};
+static constexpr uint32_t weapon_item=0x60f600,weapon_definition=0x60f680,weapon_animation=0x60f800;
 namespace trial_controls {unsigned MixedInput(){return mixed_input;}}
 int xbox_KeyboardMode(){return keyboard_mode;}
 #include "../common/xbe_coop_interactions.cpp"
@@ -43,6 +46,15 @@ extern "C" void OriginalSkip(X86Context&,uint8_t*);
 extern "C" void CoopSkip(X86Context&,uint8_t*);
 extern "C" void OriginalTurn(X86Context&,uint8_t*);
 extern "C" void CoopTurn(X86Context&,uint8_t*);
+extern "C" void OriginalWeaponDispatch(X86Context&,uint8_t*);
+extern "C" void CoopWeaponDispatch(X86Context&,uint8_t*);
+extern "C" void OriginalManualHolster(X86Context&,uint8_t*);
+extern "C" void CoopManualHolster(X86Context&,uint8_t*);
+extern "C" void OriginalForceHolster(X86Context&,uint8_t*);
+extern "C" void OriginalToggleHolster(X86Context&,uint8_t*);
+extern "C" void OriginalFireOrRaise(X86Context&,uint8_t*);
+extern "C" void OriginalEquipAnimation(X86Context&,uint8_t*);
+// WEAPON_GUARD_DECLARATIONS
 [[noreturn]] void x86_trap(X86Context&,uint32_t,const char*){std::abort();}
 static bool scratch_throw=false,scratch_nested=false;
 static unsigned scratch_calls=0;
@@ -56,18 +68,21 @@ void x86_icall(X86Context& c,uint8_t* b,uint32_t target){
     }
     if(target==0x33b60){sub_00033B60(c,b);return;}
     if(target==0x1f90a0){sub_001F90A0(c,b);return;}
+    if(target==0xd2830){OriginalForceHolster(c,b);return;}
+    if(target==0xd23e0){OriginalToggleHolster(c,b);return;}
     if(target==0xf0001){
-        assert(c.ecx==test_world);const auto slot=R32(c.esp+4),action=R32(c.esp+8),mode=R32(c.esp+12);
+        assert(c.ecx==R32(0x51c4dc));const auto slot=R32(c.esp+4),action=R32(c.esp+8),mode=R32(c.esp+12);
         assert(slot<2);++query_ports[slot];
-        assert((action==24&&mode==2)||(action==22&&mode==1));
-        x87_push(c,action==24?pressed[slot]:skip_edge[slot]);c.esp+=16;return;
+        assert((action==24&&mode==2)||(action==22&&mode==1)||(action==31&&mode==1));
+        x87_push(c,action==31?manual_holster:action==24?pressed[slot]:skip_edge[slot]);c.esp+=16;return;
     }
     if(target==0xf0002){if(fail_position)throw std::runtime_error("position boundary");assert(c.ecx==proxy);c.eax=npc+0x40;c.esp+=8;return;}
     if(target==0xf0003){assert(c.ecx==proxy);c.eax=animation;c.esp+=4;return;}
     if(target==0xf0004){assert(c.ecx==animation);c.esp+=4;return;}
     if(target==0xf0005){assert(c.ecx==fade);++fade_calls;c.esp+=32;return;}
     if(target==0xf0006){assert(c.ecx==fade);++fade_calls;TrialConversationPrompt(c,b);c.esp+=8;return;}
-    assert(false);
+    if(target==0xf0007){c.eax=1;c.esp+=4;return;}
+    std::fprintf(stderr,"unexpected indirect service %x at weapon tick %u ecx %x esp %x\n",target,weapon_checks,c.ecx,c.esp);assert(false);
 }
 X86_FUNC(sub_0004A840){ctx.eax=manager;ctx.esp+=4;}
 X86_FUNC(sub_0004ACD0){assert(ctx.ecx==manager&&R32(ctx.esp+4)==0);ctx.eax=R32(manager+0x834);ctx.esp+=8;}
@@ -112,14 +127,56 @@ X86_FUNC(sub_001F90A0){
 namespace kernel {
 // PRODUCTION_CALL_GUEST
 }
+// Weapon animation/property services are explicit boundaries. The dispatcher,
+// manual toggle, force-lower and holster/raise completion bodies are retail.
+X86_FUNC(sub_000D23E0){OriginalToggleHolster(ctx,base);}
+X86_FUNC(sub_000D2510){if(candidate)CoopManualHolster(ctx,base);else OriginalManualHolster(ctx,base);}
+X86_FUNC(sub_000D1AE0){OriginalFireOrRaise(ctx,base);}
+X86_FUNC(sub_000CF8A0){OriginalEquipAnimation(ctx,base);}
+X86_FUNC(sub_00041F80){ctx.eax=weapon_item;ctx.esp+=4;}
+X86_FUNC(sub_000422C0){ctx.eax=weapon_item;ctx.esp+=4;}
+X86_FUNC(sub_000442D0){ctx.eax=weapon_definition;ctx.esp+=4;}
+X86_FUNC(sub_00043C00){ctx.eax=0;ctx.esp+=4;}
+X86_FUNC(sub_000BFE00){W32(ctx.ecx+0x170,R32(ctx.esp+4));W32(ctx.ecx+0x174,R32(ctx.esp+8));ctx.esp+=12;}
+X86_FUNC(sub_000C1E60){++weapon_animations;ctx.esp+=16;}
+X86_FUNC(sub_00216BD0){const auto name=R32(ctx.esp+8);if(name==0x458d78)++lowered;else if(name==0x458d80)++raised;ctx.esp+=16;}
+X86_FUNC(sub_001FB4E0){ctx.eax=weapon_done;ctx.esp+=4;}
+X86_FUNC(sub_000C8930){ctx.esp+=4;}
+X86_FUNC(sub_000BE230){ctx.esp+=4;}
+X86_FUNC(sub_000C5510){ctx.esp+=4;}
+X86_FUNC(sub_000CF770){ctx.eax=0;ctx.esp+=4;}
+X86_FUNC(sub_000643E0){ctx.eax=0x60f900;ctx.esp+=4;}
+X86_FUNC(sub_002084E0){ctx.eax=0x60fa00;ctx.esp+=4;}
+X86_FUNC(sub_002107C0){ctx.eax=0;ctx.esp+=12;}
+X86_FUNC(sub_000BC5B0){ctx.esp+=4;}
+X86_FUNC(sub_000BE7D0){ctx.esp+=4;}
+X86_FUNC(sub_000BE870){ctx.esp+=4;}
+X86_FUNC(sub_000D1A20){auto gate=ctx;gate.esi=ctx.ecx;if(NativeAttackGuard(gate,base))++attack_sinks[0];ctx.esp+=4;}
+X86_FUNC(sub_000D0C30){auto gate=ctx;gate.esi=ctx.ecx;ctx.eax=NativeShieldAndAlternateGuard(gate,base);if(ctx.eax)++attack_sinks[1];ctx.esp+=4;}
+X86_FUNC(sub_000C4CB0){auto gate=ctx;gate.esi=ctx.ecx;if(NativeSwitchGuard(gate,base))++attack_sinks[2];ctx.esp+=4;}
+X86_FUNC(sub_000CA930){auto gate=ctx;gate.esi=ctx.ecx;gate.edi=0;if(NativeInteractionGuard(gate,base))++attack_sinks[3];ctx.esp+=4;}
+X86_FUNC(sub_000C64D0){
+    if(nested_weapon){nested_weapon=false;const auto lock=base[ctx.ecx+0x202],fire=base[ctx.ecx+0x4ac];
+        X86Context inner=ctx;{TrialCoopInteractionWeaponScope scope(inner,base);assert(base[ctx.ecx+0x202]&&!(base[ctx.ecx+0x4ac]&1));}
+        assert(base[ctx.ecx+0x202]==lock&&base[ctx.ecx+0x4ac]==fire);}
+    if(fail_weapon)throw std::runtime_error("weapon update boundary");ctx.esp+=4;
+}
+bool TrialHealthPackInjectionContact(X86Context&,uint8_t*){std::abort();}
+void TrialHealthPackInjectionClip(X86Context&,uint8_t*){std::abort();}
+void TrialLadderHands(X86Context&,uint8_t*){std::abort();}
+// WEAPON_GUARD_BODIES
 // ORIGINAL_INTERACTIONS
 
 static void Seed(){
     std::memset(g_base+0x600000,0,0x100000);TrialCoopInteractionReset();trial_coop::Reset();trial_coop::Request();trial_coop::ResourcesReady(true);trial_coop::SetActive(true);candidate=true;
     keyboard_mode=true;faces[0]=faces[1]=true;pressed[0]=pressed[1]=skip_edge[0]=skip_edge[1]=false;
     playing=busy=fail_position=fail_lock=false;flags_ready=true;speech_starts=script_calls=transitions=fade_calls=query_ports[0]=query_ports[1]=0;
+    weapon_done=true;manual_holster=fail_weapon=nested_weapon=false;lowered=raised=weapon_animations=0;for(auto& count:attack_sinks)count=0;
     for(unsigned i=0;i<2;++i){const auto p=i?p2:p1;W32(p,0x46fbe8);W32(p+0x54,i?22:11);W32(p+0x368,i);G<float>(p+0x9c)=1000;G<float>(p+0x40)=float(i*10);}
     W32(0x51c4dc,test_world);W32(test_world,0x60f000);W32(0x60f008,0xf0001);W32(manager+0x834,22);
+    W32(manager,0x60f700);W32(0x60f720,0xf0007);W32(weapon_item+4,2);
+    W32(weapon_animation,weapon_animation+16);
+    for(const auto p:{p1,p2}){W32(p+0x4fc,2);W32(p+0x180,weapon_animation);W32(p+0x4ac,1);}
     W32(behavior,0x471060);W32(behavior+0x54,33);W32(behavior+0x50,66);W32(behavior+0xd0,controller);W32(behavior+0xd4,npc);
     W32(controller+0xc,npc);W32(npc+0x54,44);W32(npc+0x118,proxy);G<float>(npc+0x48)=100;
     W32(proxy,0x60f100);W32(0x60f12c,0xf0002);W32(0x60f1a8,0xf0003);
@@ -353,6 +410,85 @@ static void ScratchContracts(){
         assert(bool(g_base[p1+0x202])==(!throwing&&value));
     }
 }
+static void WeaponTick(uint32_t actor){
+    auto c=Context();c.ecx=actor;
+    if(candidate)CoopWeaponDispatch(c,g_base);else OriginalWeaponDispatch(c,g_base);
+    if(c.esp!=stack+4||c.esi!=0x1234||c.edi!=0x9876||c.ebx!=0x7777||c.ebp!=0x8888)
+        std::fprintf(stderr,"weapon tick %u actor %x phase %u/%u esp %x esi %x edi %x ebx %x ebp %x\n",weapon_checks,actor,R32(actor+0x170),R32(actor+0x174),c.esp,c.esi,c.edi,c.ebx,c.ebp);
+    assert(c.esp==stack+4&&c.esi==0x1234&&c.edi==0x9876&&c.ebx==0x7777&&c.ebp==0x8888);++weapon_checks;
+}
+static void StartWeapons(unsigned owner){Seed();faces[1-owner]=false;Tick();assert(g_base[behavior+0x129]);}
+static void EndWeapons(){auto c=Context();CoopConversationEnd(c,g_base);assert(!g_base[behavior+0x129]);W32(p1+0x4ac,0);W32(p2+0x4ac,0);}
+static void WeaponRestrictions(){
+    // Original local co-op protects only the initiator. The second actor reaches
+    // the real native weapon gates with fire and switch still admitted.
+    StartWeapons(0);candidate=false;WeaponTick(p2);assert(!lowered&&attack_sinks[0]&&attack_sinks[1]&&attack_sinks[2]);
+    for(unsigned owner=0;owner<2;++owner)for(unsigned selected:{0u,1u,8u,17u}){
+        StartWeapons(owner);for(const auto p:{p1,p2})W32(p+0x4fc,selected);
+        WeaponTick(p1);WeaponTick(p2);assert(lowered==2&&!raised);
+        for(const auto p:{p1,p2})assert(g_base[p+0x2ac]&&!g_base[p+0x2ad]&&!g_base[p+0x2ae]&&R32(p+0x170)==0&&R32(p+0x4fc)==selected);
+        manual_holster=true;
+        for(unsigned frame=0;frame<4;++frame){WeaponTick(p1);WeaponTick(p2);}
+        assert(lowered==2&&!raised);for(auto count:attack_sinks)assert(!count);
+        assert(g_base[(owner?p2:p1)+0x202]&&!g_base[(owner?p1:p2)+0x202]);
+        assert(R32(p1+0x4ac)==1&&R32(p2+0x4ac)==1); // Movement sees original lock and input.
+        manual_holster=false;EndWeapons();WeaponTick(p1);WeaponTick(p2);
+        assert(raised==2);for(const auto p:{p1,p2})assert(!g_base[p+0x2ac]&&!g_base[p+0x2ad]&&!g_base[p+0x2ae]&&R32(p+0x4fc)==selected&&G<float>(p+0x9c)==1000);
+    }
+    // A locked conversation is required; admission waits and deliberately
+    // unlocked conversations must not acquire a companion weapon restriction.
+    Seed();g_base[behavior+0x119]=0;Tick();WeaponTick(p1);WeaponTick(p2);assert(!lowered&&!TrialCoopInteractionWeaponsBlocked(g_base,p1));
+    Seed();G<float>(p2+0x40)=1000;Tick();WeaponTick(p1);WeaponTick(p2);assert(!lowered&&!TrialCoopInteractionWeaponsBlocked(g_base,p2));
+    StartWeapons(0);trial_coop::SetActive(false);WeaponTick(p2);assert(!lowered); // Native single-player path.
+    // Both in-progress native animation directions finish normally. Ending a
+    // talk during holster defers the owned raise until the next settled tick.
+    for(unsigned slot=0;slot<2;++slot){
+        const auto p=slot?p2:p1;
+        StartWeapons(1-slot);weapon_done=false;WeaponTick(p);assert(g_base[p+0x2ae]&&R32(p+0x170)==8);
+        EndWeapons();WeaponTick(p);assert(!raised&&g_base[p+0x2ae]);
+        weapon_done=true;WeaponTick(p);assert(!raised&&!g_base[p+0x2ae]);WeaponTick(p);assert(raised==1&&!g_base[p+0x2ac]&&!g_base[p+0x2ad]);
+        StartWeapons(1-slot);W32(p+0x170,8);W32(p+0x174,2);g_base[p+0x2ac]=g_base[p+0x2ad]=1;weapon_done=false;
+        WeaponTick(p);assert(!lowered&&g_base[p+0x2ad]);weapon_done=true;WeaponTick(p);
+        assert(!lowered&&!g_base[p+0x2ad]&&!g_base[p+0x2ac]);WeaponTick(p);assert(lowered==1&&g_base[p+0x2ac]&&!g_base[p+0x2ae]);
+    }
+    // Restore only the weapon this scope lowered, after unrelated/native locks
+    // release. Already-holstered, changed, dead or replaced actors stay owned
+    // by their original lifecycle rather than a stale conversation record.
+    for(unsigned mode=0;mode<8;++mode){
+        StartWeapons(0);if(mode==0)g_base[p2+0x2ac]=1;
+        WeaponTick(p2);assert(lowered==unsigned(mode!=0));EndWeapons();
+        if(mode==1)g_base[p2+0x202]=1;
+        if(mode==2)g_base[p2+0x848]=1;
+        if(mode==3)W32(p2+0x4fc,5);
+        if(mode==4){G<float>(p2+0x9c)=0;W32(p2+0x170,12);}
+        if(mode==5)W32(p2+0x54,99);
+        if(mode==6){std::memcpy(g_base+test_world+0x100,g_base+test_world,0x38);W32(0x51c4dc,test_world+0x100);}
+        if(mode==7)TrialCoopInteractionReset();
+        WeaponTick(p2);assert(!raised);
+        if(mode==1||mode==2){g_base[p2+0x202]=g_base[p2+0x848]=0;WeaponTick(p2);assert(raised==1);}
+    }
+    // Waiting/revive recovery, abort and an invalid NPC all drop the shared
+    // restriction. Another live locked interaction retains it until its end.
+    for(unsigned mode=0;mode<5;++mode){
+        StartWeapons(0);WeaponTick(p2);
+        if(mode==0){Tick();Tick();playing=false;G<float>(p2+0x40)=1000;Tick();}
+        if(mode==1){G<float>(p1+0x9c)=0;W32(p1+0x170,12);Tick();}
+        if(mode==2)EndWeapons();
+        if(mode==3)W32(npc+0x5c,1);
+        if(mode==4){OtherConversation();auto* other=interactions::Find(g_base,other_behavior,true);assert(other);other->slot=1;g_base[other_behavior+0x129]=1;EndWeapons();}
+        assert(TrialCoopInteractionWeaponsBlocked(g_base,p2)==(mode==4));WeaponTick(p2);assert(raised==unsigned(mode!=4));
+    }
+    for(bool throwing:{false,true})for(uint8_t prior_lock:{uint8_t(0),uint8_t(1)}){
+        StartWeapons(0);g_base[p2+0x202]=prior_lock;W32(p2+0x4ac,0xa7);g_base[p2+0x2ac]=1;
+        fail_weapon=throwing;nested_weapon=!throwing;auto c=Context();c.ecx=p2;
+        const auto csr=_mm_getcsr();try{CoopWeaponDispatch(c,g_base);assert(!throwing);}catch(const std::runtime_error&){assert(throwing);}
+        assert(g_base[p2+0x202]==prior_lock&&R32(p2+0x4ac)==0xa7&&!TrialCoopInteractionWeaponInputBlocked(p2)&&_mm_getcsr()==csr);
+    }
+    // The original kind-2 interaction exception remains available inside the
+    // scoped native lock, while firearm/shield/switch action gates reject it.
+    StartWeapons(0);auto c=Context();c.ecx=p2;{TrialCoopInteractionWeaponScope scope(c,g_base);auto gate=c;gate.esi=p2;gate.edi=2;
+        assert(!NativeAttackGuard(gate,g_base)&&!NativeShieldAndAlternateGuard(gate,g_base)&&!NativeSwitchGuard(gate,g_base)&&NativeInteractionGuard(gate,g_base));}
+}
 int main(int argc,char** argv){
     if(argc==2){
         if(!std::strcmp(argv[1],"--waiting-admission"))WaitingAdmission();
@@ -363,6 +499,7 @@ int main(int argc,char** argv){
     }
     assert(argc==1);CallBoundary();Ownership();RendezvousRecovery();Admission();SkipAndTurn();LifecycleAndSafety();
     WaitingAdmission();WaitingRevival();WaitingRecords();
-    ScratchContracts();
+    ScratchContracts();WeaponRestrictions();
+    std::printf("PASS %u actual weapon-dispatch ticks; native lower/raise animations, both-player weapon gates, scoped control/fire restoration, manual-toggle denial, lifecycle and ownership recovery\n",weapon_checks);
     std::puts("PASS production CallGuest return/restore ABI and stale EAX isolation, original NPC range/facing and conversation lifecycle, either actor initiation, original per-actor lock/unlock, independent input/skip/turn target, partner-free movement with deferred script commitment, owner released to revive/retrieve a missing partner without repeated speech, current-update waiting after busy/condition/revival branches, stale record retirement and owned-lock/replacement guards, native single-player fallback, abort/down/revive/reset, context/stack/MXCSR guards, lazy scratch capture with pre-call arguments and nested/throwing callbacks; live dialogue visuals pending");
 }

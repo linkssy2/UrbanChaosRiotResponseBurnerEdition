@@ -66,6 +66,30 @@ unsigned TrialCoopPresentation(){
     return trial_coop::Active()?presentation.load(std::memory_order_relaxed):0;
 }
 
+void TrialCoopCameraPlayer(X86Context& c,const uint8_t* b){
+    uint32_t ids[2];
+    // Retail 4ACD0 ignores Player Num and returns the last registered actor.
+    // Resolve both control acquisition and release through the authored slot.
+    if(!PlayerIds(b,ids)||!TrialGuestReadable(c.esi,0x1e4)||
+       Word(b,c.esi)!=0x46fd70u||Word(b,c.esi+0xd0)!=0x478d20u||
+       Word(b,c.esi+0x54)==0xffffffffu||!TrialGuestReadable(c.ecx,0x838)||
+       c.ecx!=Word(b,0x509a60)||Word(b,c.ecx+0x834)!=c.eax||
+       (c.eax!=ids[0]&&c.eax!=ids[1]))return;
+    const uint32_t slot=Word(b,c.esi+0x1dc);
+    if(slot<2)c.eax=ids[slot];
+}
+
+void TrialCoopCutscenePlayer(X86Context& c,const uint8_t* b){
+    uint32_t ids[2];
+    // SimpleCutscene creates its bone camera without Player Num (slot zero).
+    // Its completion pitch reset must return to that same campaign player.
+    if(!PlayerIds(b,ids)||!TrialGuestReadable(c.esi,0x150)||
+       Word(b,c.esi)!=0x465910u||Word(b,c.esi+0x54)==0xffffffffu||
+       !TrialGuestReadable(c.ecx,0x838)||c.ecx!=Word(b,0x509a60)||
+       Word(b,c.ecx+0x834)!=c.eax||(c.eax!=ids[0]&&c.eax!=ids[1]))return;
+    c.eax=ids[0];
+}
+
 void TrialCoopDamagePlayer(X86Context& c,const uint8_t* b){
     uint32_t ids[2];
     // DFE02 resolved the hit's weapon and asked whether its parent is a player.

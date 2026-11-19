@@ -1,4 +1,4 @@
-# Urban Chaos: Riot Response - Burner Edition 0.19
+# Urban Chaos: Riot Response - Burner Edition 0.20
 
 Windows and experimental Linux/Proton share a statically recompiled Xbox game
 runtime built on XboxXBERecomp, with maintained Urban Chaos adapters. Linux uses
@@ -11,14 +11,17 @@ original disc data, generated game code, private captures and player state.
 
 A fresh checkout does not yet reproduce the complete executable. See
 [build status](docs/BUILDING.md), [source map](docs/CODE_MAP.md),
-[changes](docs/CHANGES-0.19.md) and
+[changes](docs/CHANGES-0.20.md) and
 [runtime maintenance](docs/XBE-RUNTIME-MAINTENANCE.md) for the supported scope.
 Dependency identities and backports are recorded in `dependencies.lock.json`.
 
-Version 0.19 adds dynamic-lighting coverage presets, lower repeated rendering
-work, separate weapon wheels, single-player wheel slow time/background blur,
-and the compact ember cursor. Existing scope, blood-pool and TV-audio fixes
-remain included. See the changes document for behavior and acceptance limits.
+Version 0.20 fixes the entity-bucket unlink defect associated with issue #32
+and improves local co-op hostage targeting, cinematic ownership, shared native
+slow motion, conversation weapon restrictions and Hope Street progression.
+The user accepted the corrected Hope Street encounter on Windows; other
+encounters and live Proton remain unverified. Co-op remains experimental.
+All v0.19 features remain, including lighting presets, both weapon wheels,
+the ember pointer, scope, blood pools and TV-audio correction.
 
 Supply your own supported Xbox disc. Optional Spanish voices are prepared from
 your European multilingual PS2 disc. No original game audio is distributed.

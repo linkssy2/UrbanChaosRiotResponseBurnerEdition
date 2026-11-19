@@ -27,6 +27,12 @@ PINS=(
     (0x4a780,42,'7ed0295eacfc935c7d62322f41d5632b89ef70ce8f7bade3dc378a31f734922a'),
     (0x1726c4,16,'f043b1d5708fde1dd368adabb7ebeb12c9360740f65485e31c1c4636b9186671'),
     (0x44bf2c,4,'929ed883892128192e0c44e99fcd80778a6e40e4b75e07d49a0d21e5900b92f1'),
+    (0x173428,62,'fef4540eeade3f61dc4ce5d569bbf16c9271bfb8769789a0f7e94f326bf46a3c'),
+    (0x173361,60,'de64c400c76ddfe0c3e20c71cbfe918d1816ca6849ee3cbf74faece1e5055e5e'),
+    (0x114f48,57,'23dcc1b30235952f677519f53604abdf1c5d4867910ae1a0df88df91a20b9b9c'),
+    (0xc2670,199,'4432b22127f3a4f7e9c859af58f6fd08f04cb971ee68b6aebc631d3ab9c6c746'),
+    (0xcc240,172,'1b8a16c85083373fe274ef7f43110a6de09674c9160b9783959f369872b61ece'),
+    (0xbd3f0,67,'abb61c42d77ee5afc7c261a6b6e6e143a49ceaa1f68c48df6e05aa9870309186'),
 )
 INCLUDE='#include "xbe_coop_cinematics.h"\n'
 SCENE_SCOPE='\tTrialCoopCinematicView trial_coop_cinematic(ctx,base,true);\n'
@@ -35,11 +41,13 @@ SCENE_HOOK='\tif(trial_coop_cinematic.Scene()){ctx.esi=ctx.edi;goto loc_0021532D
 HUD_HOOK='\tif(trial_coop_cinematic.Hud())goto loc_00215429;\n'
 DAMAGE_HOOK='\tTrialCoopDamagePlayer(ctx,base);\n'
 KILLER_HOOK='\tTrialCoopKillcamKiller(ctx,base);\n'
-HOOKS=(INCLUDE,SCENE_SCOPE,HUD_SCOPE,SCENE_HOOK,HUD_HOOK,DAMAGE_HOOK,KILLER_HOOK)
+CAMERA_HOOK='\tTrialCoopCameraPlayer(ctx,base);\n'
+CUTSCENE_HOOK='\tTrialCoopCutscenePlayer(ctx,base);\n'
+HOOKS=(INCLUDE,SCENE_SCOPE,HUD_SCOPE,SCENE_HOOK,HUD_HOOK,DAMAGE_HOOK,KILLER_HOOK,CAMERA_HOOK,CUTSCENE_HOOK)
 
 def unprepare(area):
     """Remove only our hooks before earlier preparers pin original source."""
-    for unit in (4,22,54):
+    for unit in (4,22,28,37,54):
         path=Path(area)/f'generated/game/x86_recomp.{unit}.cpp'
         if not path.exists():continue
         old=path.read_text();source=old
@@ -90,9 +98,17 @@ def prepare(area):
         (4,0x36760,'52db1909aa903af7495a96e541c1a2861f82e41980d38ab0a0570ca82a5a02e0'),
         (6,0x4a780,'68f5aefbda65aeea9fd3d9db3518b810f2fcf1cd5ee689b930bc7249bbefaa0e'),
         (0,0x128f0,'c6823c239ade3b2527ea4cbbc6e2716f33fffcbca3a75a46ca0f9606ee1c14cb'),
+        (19,0xc2670,'462ff53eed81055d7af0239d74d2c59a43ace8023de67d5d8bba07f39b7d7617'),
+        (20,0xcc240,'8e55ce67557a7077679d38a1a6521481c780942be578574fed56f02169b542c5'),
+        (19,0xbd3f0,'0cd65eb4eb376508941e192e419a822aad24955eab9b34bafdacde8bd1d95e02'),
     ):
         s=(area/f'generated/game/x86_recomp.{unit}.cpp').read_text()
         a=s.index(f'X86_FUNC(__imp__sub_{va:08X})');z=s.index('\nX86_WEAK_FUNC',a);part=s[a:z]
+        if va==0x4acd0:
+            # Re-running this fixture after later caller-scoped preparers still
+            # compares and executes the pinned original singleton getter.
+            part=part.replace('\tTrialHealthPackMedicPlayer(ctx,base,false);\n','')
+            part=part.replace('\tTrialCoopHazardPlayer(ctx,base);\n','')
         assert hashlib.sha256(part.encode()).hexdigest()==digest,hex(va)
         rewards.append(part.replace(f'__imp__sub_{va:08X}',f'sub_{va:08X}',1))
     # The real startup registration is last-writer-wins, not a fixed P1 ID.
@@ -100,6 +116,23 @@ def prepare(area):
     a=s.index('\t// 001726C4 ');z=s.index('\t// 001726D4 ',a);part=s[a:z]
     assert hashlib.sha256(part.encode()).hexdigest()=='ba8fbd67a3fef0c52a71a1b69867d5c79d224f37d8d08214fa9d26cbb1283400'
     rewards.append('void OriginalPlayerRegistration(X86Context& ctx,uint8_t* base) {\n'+part+'}\n')
+    camera_units={}
+    for name,unit,first,last,digest,anchor,hook in (
+        ('CameraAcquire',37,0x173428,0x173466,'f293e54f174e9a3e69f6f9c13dc797b1283b1449eec21389b8ae7c1eb6102de3',0x17343b,CAMERA_HOOK),
+        ('CameraRelease',37,0x173361,0x17339d,'8a9e02ee244056b7e5b02982d10c65f3ff02db58350f388b7265732b21f96a04',0x173374,CAMERA_HOOK),
+        ('CutscenePitch',28,0x114f48,0x114f81,'c3b3909b5d047097caec06c4fd9d08c08a33f088ff7345860b2203a77f14e5de',0x114f5e,CUTSCENE_HOOK),
+    ):
+        if unit not in camera_units:
+            s=(area/f'generated/game/x86_recomp.{unit}.cpp').read_text()
+            for h in HOOKS:s=s.replace(h,'')
+            camera_units[unit]=s
+        s=camera_units[unit];a=s.index(f'\t// {first:08X} ');z=s.index(f'\t// {last:08X} ',a)
+        part=s[a:z];assert hashlib.sha256(part.encode()).hexdigest()==digest,name
+        marker=f'\t// {anchor:08X} ';assert part.count(marker)==1
+        for fixed in (False,True):
+            body=part.replace(marker,hook+marker,1) if fixed else part
+            rewards.append(f'void {"Coop" if fixed else "Original"}{name}(X86Context& ctx,uint8_t* base) {{\n\tX86_LOAD_FLAGS();\n\tuint32_t ca=0,cb=0;\n'+body+';\n}\n')
+        camera_units[unit]=s.replace(marker,hook+marker,1)
     reward_units={}
     for name,unit,first,last,digest,anchor,hook,finish in (
         ('DamagePlayer',22,0xdfdf7,0xdfe24,'a4822e2fe58731fae93a47da8ce4e46502b2643e6e1a79f3b114b7025ecb4e3c',0xdfe07,DAMAGE_HOOK,''),
@@ -143,5 +176,10 @@ def prepare(area):
     path.write_text(source)
     for unit,s in reward_units.items():
         for hook in (DAMAGE_HOOK,KILLER_HOOK):assert s.count(hook)==int((unit==22)==(hook==DAMAGE_HOOK))
+        s=s.replace('#include "x86_recomp_shared.h"\n','#include "x86_recomp_shared.h"\n'+INCLUDE,1)
+        (area/f'generated/game/x86_recomp.{unit}.cpp').write_text(s)
+    for unit,s in camera_units.items():
+        assert s.count(CAMERA_HOOK)==(2 if unit==37 else 0)
+        assert s.count(CUTSCENE_HOOK)==(1 if unit==28 else 0)
         s=s.replace('#include "x86_recomp_shared.h"\n','#include "x86_recomp_shared.h"\n'+INCLUDE,1)
         (area/f'generated/game/x86_recomp.{unit}.cpp').write_text(s)

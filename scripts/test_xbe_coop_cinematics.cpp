@@ -18,11 +18,13 @@ constexpr uint32_t half[2]={0x650000,0x651000},full=0x652000;
 constexpr uint32_t graphics=0x660000,graphics_table=0x661000,provider=0x662000,provider_table=0x663000;
 constexpr uint32_t callback[2]={0x664000,0x665000},callback_table=0x666000;
 constexpr uint32_t manager=0x670000,profile=0x672000,weapon=0x673000,controller=0x674000;
+constexpr uint32_t cutscene=0x675000,acquire_event=0x70001,release_event=0x70002;
 uint8_t* Bytes(){return kernel::memory.data();}
 uint32_t Word(uint32_t a){uint32_t v;std::memcpy(&v,Bytes()+a,4);return v;}
 void Put(uint32_t a,uint32_t v){std::memcpy(Bytes()+a,&v,4);}
 std::vector<std::array<uint32_t,2>> hud;
 std::vector<uint32_t> begins,ends;
+std::vector<uint32_t> acquired,released,focused;
 std::vector<std::array<uint32_t,4>> popups;
 unsigned setter_calls=0;
 X86Context Setup(int cinematic=-1,uint32_t type=0x46fd70){
@@ -33,18 +35,24 @@ X86Context Setup(int cinematic=-1,uint32_t type=0x46fd70){
     Put(manager,0x44bf20);Put(0x44bf2c,0x128f0);
     Put(weapon+0x54,50);Put(weapon+0x58,8);Put(controller,0x44d9c0);
     Put(controller+0xb8,8);Bytes()[controller+0x91]=1;Put(controller+0xd8,0x3f800000);
+    Put(0x4f9e90,acquire_event);Put(0x4f9f64,release_event);Put(0x4f9d54,0x22);
+    Put(0x46fd70+0x94,0xf1040);Put(cutscene,0x465910);Put(cutscene+0x54,19);
+    Bytes()[0x44df20]='E'; // Distinguish the special end-level camera class query.
     Put(state+0x10,provider);Put(provider,provider_table);Put(provider_table+0x10,0xf1030);
     Put(0x5150b0,graphics);Put(graphics,graphics_table);Put(graphics_table+0x58,0xf1000);
     Put(callback_table+8,0xf1010);Put(callback_table+12,0xf1020);
     for(unsigned s=0;s<2;++s){
         Put(owner[s],0x46fbe8);Put(owner[s]+0x54,7+s);Put(owner[s]+0x368,s);
+        Bytes()[owner[s]+0x2ac]=1;Bytes()[owner[s]+0x848]=1;
         Put(layers+s*4,layer[s]);Put(layer[s],callback[s]);Put(callback[s],callback_table);
         Put(layer[s]+4,owner[s]);Put(layer[s]+8,chain[s]);Put(layer[s]+0x20,half[s]);Put(layer[s]+0x24,s);
         Put(chain[s]+8,1);Put(chain[s]+4,chain[s]+0x20);Put(chain[s]+0x24,chain[s]+0x40);
         Put(chain[s]+0x48,camera[s]);Put(camera[s],int(s)==cinematic?type:0x47c780);
         Put(camera[s]+0x54,17+s);Put(camera[s]+0xd0,0x478d20);Put(camera[s]+0xe8,half[s]);
+        Bytes()[camera[s]+0x1e3]=1;
     }
     hud.clear();begins.clear();ends.clear();popups.clear();setter_calls=0;
+    acquired.clear();released.clear();focused.clear();
     X86Context c{};c.ecx=world;c.esp=stack;c.eax=12;c.edx=23;c.ebx=34;c.esi=45;c.edi=56;c.ebp=67;
     c.cf=c.of=c.zf=c.sf=c.pf=1;c.df=1;c.fcw=0x37f;c.mxcsr=0x1f80;
     for(unsigned i=0;i<8;++i){c.xmm[i].q[0]=i+1;c.xmm[i].q[1]=i+9;c.st[i]=i+.25;}
@@ -54,20 +62,59 @@ X86Context Setup(int cinematic=-1,uint32_t type=0x46fd70){
 uint32_t TrialCoopPlayer(unsigned slot){return slot<2?cinematic_test::owner[slot]:0;}
 [[noreturn]] void x86_trap(X86Context&,uint32_t,const char*){std::abort();}
 extern "C" void sub_000128F0(X86Context&,uint8_t*);
+extern "C" void sub_000C2670(X86Context&,uint8_t*);
+extern "C" void sub_000CC240(X86Context&,uint8_t*);
+extern "C" void sub_000BD3F0(X86Context&,uint8_t*);
 void x86_icall(X86Context& c,uint8_t* base,uint32_t target){
     using namespace cinematic_test;
     if(target==0x128f0){assert(c.ecx==manager);sub_000128F0(c,base);return;}
     if(target==0xf1000){assert(c.ecx==graphics);c.eax=full;c.esp+=4;return;}
     if(target==0xf1010){begins.push_back(Word(c.esp+4));c.esp+=8;return;}
     if(target==0xf1020){ends.push_back(c.ecx);c.esp+=4;return;}
+    if(target==0xf1040){focused.push_back(Word(c.esp+4));c.esp+=8;return;}
     assert(target==0xf1030&&c.ecx==provider);hud.push_back({Word(c.esp+4),Word(c.esp+8)});c.esp+=12;
 }
 X86_FUNC(sub_0008BD60){ctx.eax=cinematic_test::Word(ctx.ecx+0x18);ctx.esp+=4;}
 X86_FUNC(sub_0006BA40){ctx.esp+=4;} // logging/stat label only, not the goal counter
 X86_FUNC(sub_001F8FC0){
     using namespace cinematic_test;const uint32_t id=Word(ctx.esp+4);
-    assert(id==7||id==8);ctx.eax=owner[id-7];ctx.esp+=4;
+    assert((id>=7&&id<=8)||(id>=17&&id<=18));
+    ctx.eax=id<17?owner[id-7]:camera[id-17];ctx.esp+=4;
 }
+// Event routing and unrelated weapon services are boundaries; retained retail
+// C2670/CC240/BD3F0 perform the actual lock/unlock and pitch-reset branches.
+void CameraEvent(X86Context& c,uint8_t* b,uint32_t id,uint32_t event,uint32_t sender){
+    using namespace cinematic_test;assert(id==7||id==8);
+    const uint32_t sp=c.esp;c.esp-=0x100;c.ecx=owner[id-7];
+    Put(c.esp+4,0);Put(c.esp+8,c.esp+0x40);Put(c.esp+0x40,sender);
+    if(event==acquire_event){acquired.push_back(id);sub_000C2670(c,b);}
+    else if(event==release_event){released.push_back(id);sub_000CC240(c,b);}
+    else{assert(event==0x22);sub_000BD3F0(c,b);}
+    assert(c.esp==sp-0x100+12);c.esp=sp;
+}
+X86_FUNC(sub_001AB150){
+    using namespace cinematic_test;
+    const uint32_t id=Word(ctx.esp+4),event=Word(ctx.esp+8),sender=Word(ctx.ecx+0x54);
+    CameraEvent(ctx,base,id,event,sender);ctx.esp+=16;
+}
+X86_FUNC(sub_001F90A0){
+    using namespace cinematic_test;
+    const uint32_t id=Word(ctx.esp+4),event=Word(ctx.esp+8),sender=Word(Word(ctx.esp+20));
+    CameraEvent(ctx,base,id,event,sender);ctx.esp+=24;
+}
+X86_FUNC(sub_000BFE00){
+    using namespace cinematic_test;assert(ctx.ecx==owner[0]||ctx.ecx==owner[1]);
+    Put(ctx.ecx+0x170,Word(ctx.esp+4));ctx.esp+=12;
+} // Existing player-state machine boundary; its requested state remains retail.
+X86_FUNC(sub_000423E0){ctx.esp+=12;}
+X86_FUNC(sub_000BDDD0){ctx.esp+=4;}
+X86_FUNC(sub_000C8930){ctx.esp+=4;}
+X86_FUNC(sub_000C1E60){std::abort();}
+X86_FUNC(sub_00041F80){std::abort();}
+X86_FUNC(sub_00216060){std::abort();}
+X86_FUNC(sub_00042140){std::abort();}
+X86_FUNC(sub_002107C0){std::abort();}
+X86_FUNC(sub_002084E0){std::abort();}
 X86_FUNC(sub_0020A6D0){
     using namespace cinematic_test;assert(ctx.ecx==owner[0]||ctx.ecx==owner[1]);
     assert(Word(ctx.esp+4)==0x44bf84&&Word(ctx.esp+8)==0);ctx.esp+=12;
@@ -274,5 +321,67 @@ void CheckRewards(){
     }
     std::puts("co-op rewards: original last-player registration negative, both registration orders/players, shared headshot counter/dedup, popup publication and killer comparison passed; collision, camera animation and popup pixels remain live checks");
 }
+void CheckCameraOwnership(){
+    // P2 starts last. Retail locks/focuses P2 even though the authored camera
+    // requests slot zero, leaving the PLAYER-trigger owner P1 in movement state.
+    auto c=Setup(0);RegisterPlayers(c,1);c.esp=stack;c.esi=camera[0];
+    OriginalCameraAcquire(c,Bytes());
+    assert(acquired==std::vector<uint32_t>{8}&&focused==std::vector<uint32_t>{8});
+    assert(Word(owner[0]+0x170)==0&&Word(owner[1]+0x170)==13&&c.esp==stack);
+    c.esp=stack;c.esi=camera[0];OriginalCameraRelease(c,Bytes());
+    assert(released==std::vector<uint32_t>{8}&&Word(owner[1]+0x170)==0&&c.esp==stack);
+    for(unsigned last=0;last<2;++last)for(unsigned slot=0;slot<2;++slot){
+        c=Setup(0);RegisterPlayers(c,last);Put(camera[0]+0x1dc,slot);
+        c.esp=stack;c.esi=camera[0];CoopCameraAcquire(c,Bytes());
+        assert(acquired==std::vector<uint32_t>{7+slot}&&focused==acquired&&c.esp==stack);
+        assert(Word(owner[slot]+0x170)==13&&Word(owner[1-slot]+0x170)==0);
+        // Retirement is allowed to have marked the camera before releasing it.
+        Put(camera[0]+0x5c,1);c.esp=stack;c.esi=camera[0];CoopCameraRelease(c,Bytes());
+        assert(released==acquired&&Word(owner[slot]+0x170)==0&&c.esp==stack);
+        assert(Word(manager+0x834)==7+last);
+    }
+    c=Setup(0);RegisterPlayers(c,1);Bytes()[camera[0]+0x1e3]=0;
+    c.esp=stack;c.esi=camera[0];CoopCameraAcquire(c,Bytes());
+    assert(acquired.empty()&&focused==std::vector<uint32_t>{7});
+    assert(Word(owner[0]+0x170)==0&&Word(owner[1]+0x170)==0);
+    for(bool fixed:{false,true}){
+        c=Setup(0);RegisterPlayers(c,1);
+        Put(owner[0]+0x688,0x3f800000);Put(owner[1]+0x688,0x3f800000);
+        c.esp=stack;c.esi=cutscene;c.edi=0x22;
+        (fixed?CoopCutscenePitch:OriginalCutscenePitch)(c,Bytes());
+        assert(Word(owner[fixed?0:1]+0x688)==0);
+        assert(Word(owner[fixed?1:0]+0x688)==0x3f800000&&c.esp==stack);
+    }
+    for(unsigned invalid=0;invalid<15;++invalid){
+        c=Setup(0);c.ecx=manager;c.eax=7;c.esi=camera[0];Put(camera[0]+0x1dc,1);
+        switch(invalid){
+            case 0:trial_coop::Reset();break;
+            case 1:trial_coop::SetActive(false);break;
+            case 2:trial_coop::SetAvailable(false);break;
+            case 3:Put(owner[1]+0x54,0xffffffffu);break;
+            case 4:Put(owner[1]+0x5c,1);break;
+            case 5:Put(layer[1]+4,owner[0]);break;
+            case 6:Put(state+8,layers+4);break;
+            case 7:Put(manager+0x834,99);break;
+            case 8:Put(camera[0],0x47c780);break;
+            case 9:Put(camera[0]+0xd0,0);break;
+            case 10:Put(camera[0]+0x54,0xffffffffu);break;
+            case 11:Put(camera[0]+0x1dc,2);break;
+            case 12:c.ecx=manager+4;break;
+            case 13:c.eax=8;break;
+            case 14:c.esi=0xfffffff0u;break;
+        }
+        const auto expected=c;TrialCoopCameraPlayer(c,Bytes());assert(!std::memcmp(&c,&expected,sizeof c));
+    }
+    c=Setup(0);c.ecx=manager;c.eax=7;c.esi=camera[0];Put(camera[0]+0x1dc,1);
+    auto expected=c;expected.eax=8;
+    const std::vector<uint8_t> saved(kernel::memory.begin(),kernel::memory.end());const auto csr=_mm_getcsr();
+    TrialCoopCameraPlayer(c,Bytes());assert(!std::memcmp(&c,&expected,sizeof c));
+    assert(!std::memcmp(Bytes(),saved.data(),saved.size())&&_mm_getcsr()==csr);
+    c.ecx=manager;c.eax=7;c.esi=cutscene;Put(manager+0x834,7);
+    expected=c;TrialCoopCutscenePlayer(c,Bytes());assert(!std::memcmp(&c,&expected,sizeof c));
+    Put(cutscene,0x47c780);expected=c;TrialCoopCutscenePlayer(c,Bytes());assert(!std::memcmp(&c,&expected,sizeof c));
+    std::puts("co-op camera ownership: retail P2 lock/focus negative, both authored slots/registration orders, release after retirement, no-control focus, original pitch reset and guarded context preservation passed; trigger traversal and scene timing remain live checks");
 }
-int main(){cinematic_test::CheckOriginalAndShared();cinematic_test::CheckGuards();cinematic_test::CheckRewards();}
+}
+int main(){cinematic_test::CheckOriginalAndShared();cinematic_test::CheckGuards();cinematic_test::CheckRewards();cinematic_test::CheckCameraOwnership();}
