@@ -1,5 +1,105 @@
 # Burner Edition: current runtime
 
+## November 20: 0.21 paired release preparation
+
+Prepare Windows and Linux/Proton 0.21 from the fully tested capacity-fix runtime
+`df46572720fd9cdaf1d40b49af19de09ff382d9330c79aaef03f285966e74fb1`.
+The full build passed 241 stages and 193 test steps; four new emitted fixtures
+also passed on native Linux. Preserve the original build/source binding under
+`build/issue32-followup-20261119`. Only launcher version metadata and release
+documentation change for this preparation; compiled runtime inputs stay identical.
+
+Use `build/release-0.21` and `publication/0.21`, with published v0.20 as the source
+and updater baseline. Prepare Windows, Proton, source ZIP and SHA-256 files in
+`releases`, preserving every published artifact. Verify both actual published
+updater paths with the final packages, launcher/setup checks, matching shared
+files, source closure and protected installed state. Keep existing README pointer
+filenames compatible with older updaters. No game payloads, test saves or private
+spawn assets enter the release.
+
+The tester confirmed only that disabling Forever prevented the earlier crash.
+The new runtime's complete replay with Forever enabled, long-session/save-load
+acceptance and live Proton gameplay remain unverified. Carry those limits into
+release evidence and notes; do not inherit v0.20's exact-runtime user acceptance.
+Preparation does not authorize publication.
+
+## November 19: entity capacity after the second Windows crash
+
+The reporter's Windows runtime `cb7f86d50bf5e1c1173ac03a3c5467323c6652e71a76a06d1174c0d08e1e7232`
+still failed in Angel Heights. Its matching EXE/PDB maps the new guest read at
+`00000040` to `00022D22`, in mandatory character physics-body attachment.
+CharacterPatriotAssault forwards its registration ID through the base constructor;
+an exhausted 1,024-entry registry returns `FFFFFFFF`, which cannot resolve to a
+position. The emitted original allocator and attachment reproduce that fault.
+The tester subsequently confirmed that turning Forever ragdolls off prevented the
+crash in their replay. This supports retained-body capacity pressure as the trigger;
+their actual live occupancy was not captured. It does not establish that every
+crash in this scene has the same cause.
+
+`prepare_xbe_entity_registry.py` preserves the original inline table and generation
+IDs, then extends storage only when its scan is exhausted. Full IDs remain unique
+across both stores, including counter wrap and inline-slot reuse. All qualified
+inline lookup, retirement, initialization and duplicate teardown paths participate;
+the eight native direct-lookup helpers use the same registry. An atomic empty
+check keeps ordinary inline lookups out of the overflow map's mutex. World teardown
+clears overflow entries after callbacks, and construction clears reused ownership.
+
+IDs alone are insufficient: the two ordered update/render pools, live-entity list
+and pending-retirement list also have fixed node storage. `prepare_xbe_entity_pool.py`
+adds 1,024-node slabs only to exhausted current-world pools. Existing node addresses,
+priority order, callbacks and original insertion/removal logic remain unchanged.
+Slabs use the original guest allocation/free pair, are tracked by pool lifetime,
+and are released through all active destructor paths. Extra guest calls preserve
+the complete CPU context and MXCSR. Invalid lifetime or allocation failures remain
+explicit failures; they never publish an untracked entity or overwrite a live ID.
+
+The optional-flash parent validation remains, but a full original table no longer
+rejects a valid flash owner: extended registration supplies its ID. No corpse
+eviction, retention-setting change, diagnostic logging or private spawn is added.
+The normal build reverses pool/registry hooks before earlier source pins and
+reapplies them after entity records and parent validation. Keep registry, pool,
+combined lifecycle and body-attachment regressions in the normal test pipeline.
+
+Preserve the original failed binaries, symbols, both failure witnesses, native
+helper checks, full-build receipts and paired candidate hashes under
+`build/issue32-followup-20261119`. Offline lifecycle tests and native Linux fixtures
+do not establish a complete reporter replay, save/load acceptance or live Proton
+gameplay. Published v0.20 archives remain immutable; deliver this as a private test.
+
+## November 19: optional muzzle-flash parent validation
+
+The new v0.20 Angel Heights report identifies GunFlare placement at guest
+0020AD8B, reading a missing parent's matrix at 00000010. This is separate from
+the earlier entity-bucket traversal fault. Original registration returns -1 when
+all 1,024 IDs are occupied, and construction can continue with that invalid ID.
+This reproduces a path to the report; the reporter's actual occupancy is unknown.
+
+`prepare_xbe_entity_parent.py` adds a preflight to the shared 0020A230/0020A260
+child creation helpers, scoped to the four retail GunFlare call sites. Their
+type argument is a pointer to a name wrapper, not the string pointer itself.
+The first private candidate rejected a missing/stale/mismatched owner registration
+or unavailable entity ID before allocation and creation-context changes, returning
+the existing absent-child ID. The capacity follow-up above supersedes its full-table
+rejection; invalid-owner rejection remains. No fallback transform, entity eviction
+or diagnostic logging is added.
+
+The player's transform updater also needs a missing-child branch. Both generated
+entries 000D0920 and 000D09D9 contain the same original block: after lookup,
+skip only the missing flash's matrix update, balance the cdecl argument and
+advance the barrel index and ID pointer. The other qualified weapon consumers
+already check absent IDs or null lookups. This prevents moving the failure from
+construction into the next player update.
+
+The normal build reverses this patch before other source pins, reapplies it
+after entity-record preparation and runs `test_entity_parent`. The regression
+executes emitted creation, allocation, lookup, placement and transform blocks;
+the factory remains an explicit completing boundary without game assets. It
+covers full slots, invalid parents, unchanged valid creation, recovery after a
+slot is freed, generation reuse/wrap, and missing-first/valid-second flash updates.
+Keep results, paired package hashes and install receipts under
+`build/issue32-parent-fix-20261119`. Offline checks do not establish a full
+reporter replay or live Proton acceptance. Published v0.20 archives stay immutable.
+
 ## November 18: 0.20 paired release preparation
 
 Prepare Windows and Linux/Proton from the accepted co-op conversation runtime

@@ -1,4 +1,4 @@
-# Burner Edition 0.20 source map
+# Burner Edition 0.21 source map
 
 - `scripts/build_xbe_game_trial.py`: maintained build, preparation order and tests.
 - `scripts/prepare_xbe_*.py`: pinned transformations of the XboxXBERecomp runtime
@@ -87,9 +87,25 @@ contracts and verification limits.
   world clock and view feedback. Native ramp and restoration remain intact.
 - `scripts/xbe_coop_progression.*` and `coop_progression_assets.py`: verified
   authored trigger census, Hope Street tripwire admission and police-barrier
-  progression guards. Main checkpoint assets are not modified.
+  progression guards.
 - `scripts/xbe_coop_interactions.*`: owned conversation admission and control
   release, both-player weapon lowering/suppression, and native restoration.
   The companion's movement remains available; already committed actions finish
   through native animation state machines. The weapon wheel checks the same
   conversation predicate before opening or consuming a queued selection.
+
+- `scripts/xbe_entity_registry.h` and `prepare_xbe_entity_registry.py`: extend
+  full-generation entity handles after the original inline table fills; cover
+  generated lookup, retirement/reset paths and native helper consumers. Original
+  inline IDs remain intact. `xbe_entity_registry_pins.json` binds emitted bodies.
+- `scripts/xbe_entity_pool.h` and `prepare_xbe_entity_pool.py`: add stable slabs
+  to the four current-world node pools only when exhausted, and release them
+  through the original guest allocator/free lifecycle. Existing nodes and order
+  remain intact; guest calls preserve the full CPU context and MXCSR.
+- `scripts/xbe_entity_parent.h` and `prepare_xbe_entity_parent.py`: validate
+  optional muzzle-flash owner identity and handle missing flash transforms in
+  both generated player-update entries.
+- `scripts/prepare_xbe_entity_capacity.py`: extract final emitted routines into
+  `test_entity_capacity` and `test_entity_body`. Together with registry, pool and
+  parent fixtures, these cover overflow IDs, generation reuse, combined world
+  list ownership, retirement and the reported character-attachment failure.

@@ -1,4 +1,4 @@
-# Urban Chaos: Riot Response - Burner Edition 0.20
+# Urban Chaos: Riot Response - Burner Edition 0.21
 
 HD HUD is still a work in progress and has known prompt/display issues.
 Turn HD UI Off to use the original HUD, which works normally.
@@ -10,21 +10,17 @@ XboxXBERecomp: https://github.com/TGP482/XboxXBERecomp
 
 ## This Update
 
-- Dynamic lighting now has Off, Low, Medium and High coverage presets. The
-  separate lighting-resolution control is removed; internal render resolution
-  remains available.
-- Reduce repeated CPU work in geometry preparation, lighting transforms and
-  texture update tracking. These changes retain the effects and their density.
-- Add separate, rebindable Guns and Melee / throwables wheels using the existing
-  HUD weapon portraits. Their smaller translucent panels have no faint internal
-  seams. Single-player blurs the background and runs simulation at 20% speed
-  while choosing; co-op keeps normal time.
-- Add the approved compact ember-arrow pointer, with cursor dimensions reduced
-  by 25%.
+- Extend entity storage and its update, render and cleanup lists when their
+  original limits fill, addressing additional Angel Heights minigun crash paths.
+- Guard muzzle-flash creation and updates against missing or stale entities.
+- Keep Forever ragdolls available without changing corpse-retention settings.
+
+The capacity fix passed automated stress checks with 3,075 registered entities.
+The tester's replay with Forever enabled and live Proton gameplay remain pending.
 
 The No HUD scope fix, dead-enemy blood pools with ledge clipping, TV electrocution
 audio correction and updated launcher cover remain included. Knocked-out enemies
-do not receive blood pools. Missions start normally; the hotel test spawn is excluded.
+do not receive blood pools. Missions start normally.
 Manage > DLC / Prototypes remains visible, but import and play are not available.
 Prototype integration is paused. No original or prototype game files are included.
 See the release page for the complete change list:

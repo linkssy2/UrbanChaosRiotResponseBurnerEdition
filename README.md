@@ -1,31 +1,35 @@
-# Urban Chaos: Riot Response - Burner Edition 0.20
+# Urban Chaos: Riot Response - Burner Edition 0.21
 
 Windows and experimental Linux/Proton share a statically recompiled Xbox game
-runtime built on XboxXBERecomp, with maintained Urban Chaos adapters. Linux uses
-Proton and is not native. Single-player and local split-screen co-op use one
-launcher and main menu.
+runtime built on XboxXBERecomp, with maintained Urban Chaos adapters. Linux runs
+the Windows runtime through Proton; it is not native. Single-player and local
+split-screen co-op use one launcher and main menu.
 
-This source snapshot contains the current build/setup dependency closure,
-regression tests and shared asset recipes. It excludes the retired runtime,
-original disc data, generated game code, private captures and player state.
-
+This source snapshot contains the active build/setup dependency closure,
+regression tests and shared asset recipes. It excludes original disc data,
+generated game code, private captures, player state and the retired runtime.
 A fresh checkout does not yet reproduce the complete executable. See
 [build status](docs/BUILDING.md), [source map](docs/CODE_MAP.md),
-[changes](docs/CHANGES-0.20.md) and
-[runtime maintenance](docs/XBE-RUNTIME-MAINTENANCE.md) for the supported scope.
+[changes](docs/CHANGES-0.21.md) and
+[runtime maintenance](docs/XBE-RUNTIME-MAINTENANCE.md).
 Dependency identities and backports are recorded in `dependencies.lock.json`.
 
-Version 0.20 fixes the entity-bucket unlink defect associated with issue #32
-and improves local co-op hostage targeting, cinematic ownership, shared native
-slow motion, conversation weapon restrictions and Hope Street progression.
-The user accepted the corrected Hope Street encounter on Windows; other
-encounters and live Proton remain unverified. Co-op remains experimental.
-All v0.19 features remain, including lighting presets, both weapon wheels,
-the ember pointer, scope, blood pools and TV-audio correction.
+Version 0.21 addresses additional Angel Heights minigun-sequence crash paths
+by extending entity registration and the matching update, render and cleanup
+lists beyond their original limits. It also guards optional muzzle flashes
+against missing or stale owners. Forever ragdolls remain available without
+changing the selected retention setting or forcibly removing retained bodies.
+The tester reported that turning Forever off prevented the crash; a replay of
+this candidate with Forever enabled remains unconfirmed.
+
+The runtime passed 193 automated test steps, including registration and cleanup
+of 3,075 entities. New capacity fixtures also passed on native Linux. These
+checks do not establish a complete gameplay replay, long-session/save-load
+acceptance or live Proton/Steam Deck compatibility. Co-op remains experimental.
+Previous fixes and features remain included.
 
 Supply your own supported Xbox disc. Optional Spanish voices are prepared from
 your European multilingual PS2 disc. No original game audio is distributed.
-
-The launcher can now download and install the pinned official 0.09 HD texture
-pack from Manage > Add-ons. Existing local-ZIP installation remains available.
-The pack is downloaded separately; it is not added to either game package.
+The launcher can download and install the pinned official 0.09 HD texture pack
+from Manage > Add-ons, or install an existing local ZIP. The pack remains a
+separate download and is not included in either game package.

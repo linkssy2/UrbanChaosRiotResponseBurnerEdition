@@ -6,6 +6,7 @@
 #include "kernel/kernel.h"
 #include "kernel/memory.h"
 #include "xbe_input_memory.h"
+#include "xbe_entity_registry.h"
 #include <atomic>
 #include <cmath>
 #include <cstring>
@@ -34,8 +35,7 @@ Identity Identify(const uint8_t* b,uint32_t owner){
        (slot&&(!trial_coop::Active()||TrialCoopPlayer(1)!=owner)))return {};
     const uint32_t level=Read(b,world+4);
     if(!TrialGuestReadable(level,0x203c))return {};
-    const uint32_t entry=level+0x3c+(id&1023)*8;
-    if(Read(b,entry)!=id||Read(b,entry+4)!=owner)return {};
+    if(trial_entity_registry::LookupWorld(b,id)!=owner)return {};
     return {int(slot),id,world,level};
 }
 bool Available(const uint8_t* b,uint32_t owner,uint32_t world){

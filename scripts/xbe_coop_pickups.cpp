@@ -5,6 +5,7 @@
 #include <array>
 #include "kernel/memory.h"
 #include "xbe_input_memory.h"
+#include "xbe_entity_registry.h"
 #include "cpu/x86_ops.h"
 #include <cmath>
 #include <cstring>
@@ -26,9 +27,7 @@ bool TrialCoopPickupAllowed(const X86Context& c,const uint8_t* b){
     if(id==0xffffffffu||!TrialGuestReadable(state,0x203c))return false;
     // 207D70 keeps pending-deletion actors in this ID table until world cleanup.
     // 20A140 marks +5C immediately, before a second local player can collect.
-    const uint32_t entry=state+0x3c+(id&0x3ff)*8;
-    if(word(entry)!=id)return false;
-    const uint32_t item=word(entry+4);
+    const uint32_t item=trial_entity_registry::LookupWorld(b,id);
     return TrialGuestReadable(item,0x60)&&word(item+0x54)==id&&!(word(item+0x5c)&1);
 }
 

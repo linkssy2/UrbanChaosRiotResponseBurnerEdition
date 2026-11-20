@@ -5,6 +5,7 @@
 #include "cpu/x86_context.h"
 #include "kernel/memory.h"
 #include "xbe_input_memory.h"
+#include "xbe_entity_registry.h"
 #include <cstring>
 
 // BEF80: only the ordinary locomotion output, after presentation blend and before
@@ -24,8 +25,7 @@ inline void TrialMovementInertia(const X86Context& ctx,uint8_t* base){
     if(!TrialGuestReadable(world,0x18)||(read(world+0x10)&0x800u))return;
     const uint32_t delta=read(world+0x14),level=read(world+4);
     if(!delta||delta>=0x7f800000u||!TrialGuestReadable(level,0x203c))return;
-    const uint32_t entry=level+0x3c+(id&1023)*8;
-    if(read(entry)!=id||read(entry+4)!=owner)return;
+    if(trial_entity_registry::LookupWorld(base,id)!=owner)return;
     const uint32_t sideways=read(owner+0x1d4),forward=read(owner+0x1e0);
     // BC4B0 has already clamped the resolved axes and applied this player's Walk.
     // Integer bit checks and copies preserve guest flags, x87, SSE and host MXCSR.

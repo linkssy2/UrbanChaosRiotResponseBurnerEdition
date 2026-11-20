@@ -7,6 +7,7 @@
 #include "cpu/x86_ops.h"
 #include "kernel/memory.h"
 #include "xbe_input_memory.h"
+#include "xbe_entity_registry.h"
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -45,8 +46,7 @@ bool ReadVector(const uint8_t* b,uint32_t p,Vector& v){
 }
 bool Entity(const uint8_t* b,uint32_t level,uint32_t actor,uint32_t id){
     if(id==UINT32_MAX||!TrialGuestReadable(level,0x203c)||!TrialGuestReadable(actor,0x60))return false;
-    const uint32_t entry=level+0x3c+(id&1023)*8;
-    return Word(b,entry)==id&&Word(b,entry+4)==actor&&Word(b,actor+0x54)==id&&!(Word(b,actor+0x5c)&1);
+    return trial_entity_registry::Lookup(b,level+0x3c,id)==actor&&Word(b,actor+0x54)==id&&!(Word(b,actor+0x5c)&1);
 }
 bool Identity(const uint8_t* b,uint32_t owner,unsigned& slot,uint32_t& world,uint32_t& level){
     if(!b||!TrialGuestReadable(owner,0x890)||Word(b,owner)!=0x46fbe8||!TrialGuestReadable(0x51c4dc,4))return false;

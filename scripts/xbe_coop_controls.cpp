@@ -4,6 +4,7 @@
 #include "xbe_controls.h"
 #include "kernel/memory.h"
 #include "xbe_input_memory.h"
+#include "xbe_entity_registry.h"
 #include <cstring>
 
 namespace {
@@ -20,8 +21,7 @@ bool Second(const uint8_t* base,uint32_t actor){
     const uint32_t world=World(base);if(!world)return false;
     const uint32_t state=Read(base,world+4),id=Read(base,actor+0x54);
     if(id==0xffffffffu||!TrialGuestReadable(state,0x203c))return false;
-    const uint32_t entry=state+0x3c+(id&1023)*8;
-    return Read(base,entry)==id&&Read(base,entry+4)==actor;
+    return trial_entity_registry::LookupWorld(base,id)==actor;
 }
 }
 unsigned TrialCoopControlValue(const uint8_t* base,uint32_t actor,unsigned setting,unsigned original){

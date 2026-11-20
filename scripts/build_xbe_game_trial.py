@@ -30,6 +30,12 @@ try:
  report['deferred_tests']=[]
  report['live_status']='New executable pending checks and live verification'
  save()
+ from prepare_xbe_entity_pool import unprepare as unprepare_entity_pool
+ unprepare_entity_pool(AREA)
+ from prepare_xbe_entity_registry import unprepare as unprepare_entity_registry
+ unprepare_entity_registry(AREA)
+ from prepare_xbe_entity_parent import unprepare as unprepare_entity_parent
+ unprepare_entity_parent(AREA)
  from prepare_xbe_entity_records import unprepare as unprepare_entity_records
  unprepare_entity_records(AREA)
  from prepare_xbe_weapon_wheel import unprepare as unprepare_weapon_wheel
@@ -562,6 +568,14 @@ int main(){uint32_t r=0;if(uc_ds_ref(r,false)!=0||uc_ds_ref(r,true)!=1||uc_ds_re
  prepare_weapon_wheel_blur(AREA)
  from prepare_xbe_entity_records import prepare as prepare_entity_records
  prepare_entity_records(AREA)
+ from prepare_xbe_entity_parent import prepare as prepare_entity_parent
+ prepare_entity_parent(AREA)
+ from prepare_xbe_entity_registry import prepare as prepare_entity_registry
+ prepare_entity_registry(AREA)
+ from prepare_xbe_entity_pool import prepare as prepare_entity_pool
+ prepare_entity_pool(AREA)
+ from prepare_xbe_entity_capacity import prepare as prepare_entity_capacity
+ prepare_entity_capacity(AREA)
  zlib_dll=Path(os.environ.get('UCRR_ZLIB_DLL','C:/Users/Administrator/.cache/codex-runtimes/codex-primary-runtime/dependencies/native/git/mingw64/bin/zlib1.dll'))
  assert zlib_dll.is_file(),f'Missing zlib dependency: {zlib_dll}'
  (AREA/'CMakeLists.txt').write_text('''cmake_minimum_required(VERSION 3.25)
@@ -871,6 +885,16 @@ add_executable(test_weapon_wheel_time src/compat/test_weapon_wheel_time.cpp)
 target_include_directories(test_weapon_wheel_time PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
 add_executable(test_entity_records src/compat/test_entity_records.cpp)
 target_include_directories(test_entity_records PRIVATE src/common "'''+(SDK/'runtime').as_posix()+'''")
+add_executable(test_entity_parent src/compat/test_entity_parent.cpp)
+target_include_directories(test_entity_parent PRIVATE src/compat src/common "'''+(SDK/'runtime').as_posix()+'''")
+add_executable(test_entity_registry src/compat/test_entity_registry.cpp)
+target_include_directories(test_entity_registry PRIVATE src/compat src/common "'''+(SDK/'runtime').as_posix()+'''")
+add_executable(test_entity_pool src/compat/test_entity_pool.cpp)
+target_include_directories(test_entity_pool PRIVATE src/compat src/common "'''+(SDK/'runtime').as_posix()+'''")
+add_executable(test_entity_capacity src/compat/test_entity_capacity.cpp)
+target_include_directories(test_entity_capacity PRIVATE src/compat src/common "'''+(SDK/'runtime').as_posix()+'''")
+add_executable(test_entity_body src/compat/test_entity_body.cpp)
+target_include_directories(test_entity_body PRIVATE src/compat src/common "'''+(SDK/'runtime').as_posix()+'''")
 add_executable(test_weapon_wheel_blur_gpu src/compat/test_weapon_wheel_blur_gpu.cpp)
 target_include_directories(test_weapon_wheel_blur_gpu PRIVATE src/compat)
 target_link_libraries(test_weapon_wheel_blur_gpu PRIVATE d3d12 dxgi d3dcompiler)
@@ -1147,6 +1171,16 @@ target_include_directories(UrbanChaosXbeTrial PRIVATE "'''+ROOT.as_posix()+'''" 
  run('test-weapon-wheel-time',[AREA/'out-msvc/test_weapon_wheel_time.exe'])
  run('build-entity-records',['cmake','--build',AREA/'out-msvc','--target','test_entity_records','-j','4'])
  run('test-entity-records',[AREA/'out-msvc/test_entity_records.exe'])
+ run('build-entity-parent',['cmake','--build',AREA/'out-msvc','--target','test_entity_parent','-j','4'])
+ run('test-entity-parent',[AREA/'out-msvc/test_entity_parent.exe'])
+ run('build-entity-registry',['cmake','--build',AREA/'out-msvc','--target','test_entity_registry','-j','4'])
+ run('test-entity-registry',[AREA/'out-msvc/test_entity_registry.exe'])
+ run('build-entity-pool',['cmake','--build',AREA/'out-msvc','--target','test_entity_pool','-j','4'])
+ run('test-entity-pool',[AREA/'out-msvc/test_entity_pool.exe'])
+ run('build-entity-capacity',['cmake','--build',AREA/'out-msvc','--target','test_entity_capacity','-j','4'])
+ run('test-entity-capacity',[AREA/'out-msvc/test_entity_capacity.exe'])
+ run('build-entity-body',['cmake','--build',AREA/'out-msvc','--target','test_entity_body','-j','4'])
+ run('test-entity-body',[AREA/'out-msvc/test_entity_body.exe'])
  run('test-weapon-wheel-ui',[AREA/'out-msvc/test_weapon_wheel_ui.exe'])
  run('test-weapon-wheel-blur-gpu',[AREA/'out-msvc/test_weapon_wheel_blur_gpu.exe'])
  run('test-weapon-wheel-blur-warp',[AREA/'out-msvc/test_weapon_wheel_blur_gpu.exe','--warp'])

@@ -8,6 +8,7 @@
 #include "kernel/kernel.h"
 #include "kernel/memory.h"
 #include "xbe_input_memory.h"
+#include "xbe_entity_registry.h"
 #include <array>
 #include <algorithm>
 #include <atomic>
@@ -238,8 +239,8 @@ uint32_t Entity(const uint8_t* b,uint32_t id){
        !TrialGuestReadable(world,8))return 0;
     const uint32_t state=Read(b,world+4);
     if(!TrialGuestReadable(state,0x203c))return 0;
-    const uint32_t entry=state+0x3c+(id&1023)*8,p=Read(b,entry+4);
-    return Read(b,entry)==id&&TrialGuestReadable(p,0x60)&&Read(b,p+0x54)==id&&!(Read(b,p+0x5c)&1)?p:0;
+    const uint32_t p=trial_entity_registry::LookupWorld(b,id);
+    return TrialGuestReadable(p,0x60)&&Read(b,p+0x54)==id&&!(Read(b,p+0x5c)&1)?p:0;
 }
 bool LiveMedic(const uint8_t* b,uint32_t actor){
     return b&&TrialGuestReadable(actor,0x160)&&Entity(b,Read(b,actor+0x54))==actor;

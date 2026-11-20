@@ -7,6 +7,7 @@
 #include "kernel/kernel.h"
 #include "kernel/memory.h"
 #include "xbe_input_memory.h"
+#include "xbe_entity_registry.h"
 #include <array>
 #include <cmath>
 #include <cstring>
@@ -23,8 +24,8 @@ uint32_t Entity(const uint8_t* b,uint32_t id){
     if(!TrialGuestReadable(world,8))return 0;
     const uint32_t state=Word(b,world+4);
     if(!TrialGuestReadable(state,0x203c))return 0;
-    const uint32_t entry=state+0x3c+(id&1023)*8,p=Word(b,entry+4);
-    return Word(b,entry)==id&&TrialGuestReadable(p,0x60)&&Word(b,p+0x54)==id&&!(Word(b,p+0x5c)&1)?p:0;
+    const uint32_t p=trial_entity_registry::LookupWorld(b,id);
+    return TrialGuestReadable(p,0x60)&&Word(b,p+0x54)==id&&!(Word(b,p+0x5c)&1)?p:0;
 }
 uint32_t Manager(const uint8_t* b,unsigned slot){
     if(!b||!trial_coop::Active()||slot>1)return 0;
